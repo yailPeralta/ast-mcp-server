@@ -2,6 +2,28 @@
   "name": "ast-mcp-server",
   "version": "0.3.0",
   "description": "Structural code MCP server and batch CLI for compact TypeScript/JavaScript reads and hash-bound AST edits.",
+  "keywords": [
+    "mcp",
+    "typescript",
+    "javascript",
+    "ast",
+    "ts-morph",
+    "coding-agent",
+    "refactoring"
+  ],
+  "license": "ISC",
+  "author": "Yail Peralta",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yailPeralta/ast-mcp-server.git"
+  },
+  "homepage": "https://github.com/yailPeralta/ast-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/yailPeralta/ast-mcp-server/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "packageManager": "yarn@4.15.0",
   "main": "dist/index.js",
@@ -12,7 +34,8 @@
   "files": [
     "dist",
     "skills",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=20.19"

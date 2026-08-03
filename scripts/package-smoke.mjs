@@ -10,7 +10,11 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
+const releaseMetadata = JSON.parse(
+  await readFile(path.join(repositoryRoot, "package.json"), "utf8"),
+);
 const yarnExecutable = process.platform === "win32" ? "yarn.cmd" : "yarn";
+const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ast-package-smoke-"));
 const packageDirectory = path.join(temporaryRoot, "package");
 const consumerDirectory = path.join(temporaryRoot, "consumer");
@@ -20,6 +24,9 @@ const hermesRoot = path.join(temporaryRoot, "hermes");
 const fakeBin = path.join(temporaryRoot, "bin");
 const fakeClaudeState = path.join(temporaryRoot, "fake-claude-state.json");
 const fakeHermesState = path.join(temporaryRoot, "fake-hermes-state.json");
+const globalPrefix = path.join(temporaryRoot, "global");
+const globalClaudeRoot = path.join(temporaryRoot, "global-claude");
+const globalHermesRoot = path.join(temporaryRoot, "global-hermes");
 
 async function executeFile(file, args, options = {}) {
   return execFileAsync(file, args, {
@@ -96,6 +103,25 @@ try {
     throw new Error(`consumer lifecycle scripts are enabled: ${scriptPolicy.stdout}`);
   }
 
+  const installedPackageRoot = path.join(consumerDirectory, "node_modules", "ast-mcp-server");
+  const installedMetadata = JSON.parse(
+    await readFile(path.join(installedPackageRoot, "package.json"), "utf8"),
+  );
+  const installedChangelog = await readFile(
+    path.join(installedPackageRoot, "CHANGELOG.md"),
+    "utf8",
+  );
+  if (
+    installedMetadata.name !== releaseMetadata.name ||
+    installedMetadata.version !== releaseMetadata.version ||
+    installedMetadata.license !== releaseMetadata.license ||
+    installedMetadata.repository?.url !== releaseMetadata.repository?.url ||
+    installedMetadata.publishConfig?.access !== releaseMetadata.publishConfig?.access ||
+    !installedChangelog.includes(`## [${releaseMetadata.version}]`)
+  ) {
+    throw new Error("installed tarball release metadata is incomplete");
+  }
+
   const executable =
     process.platform === "win32"
       ? path.join(consumerDirectory, "node_modules", ".bin", "ast-tool.cmd")
@@ -159,11 +185,38 @@ try {
     throw new Error("installed tarball skills do not match");
   }
 
+  await executeFile(
+    npmExecutable,
+    ["install", "--global", "--prefix", globalPrefix, "--ignore-scripts", archivePath],
+    { cwd: temporaryRoot },
+  );
+  const globalExecutable =
+    process.platform === "win32"
+      ? path.join(globalPrefix, "ast-tool.cmd")
+      : path.join(globalPrefix, "bin", "ast-tool");
+  const globalInstall = await executeFile(globalExecutable, ["install-skill", "all"], {
+    cwd: temporaryRoot,
+    env: {
+      ...process.env,
+      CLAUDE_CONFIG_DIR: globalClaudeRoot,
+      HERMES_HOME: globalHermesRoot,
+    },
+  });
+  const globalInstallResult = parseJsonOutput(globalInstall.stdout);
+  if (
+    globalInstallResult.installations?.length !== 2 ||
+    !globalInstallResult.installations.every((item) => item.status === "installed")
+  ) {
+    throw new Error(`global tarball install did not expose ast-tool: ${globalInstall.stdout}`);
+  }
+
   console.log(
     JSON.stringify({
       status: "ok",
       transport: "yarn-tarball",
       lifecycle_scripts: false,
+      package_version: installedMetadata.version,
+      global_install: true,
       agent_setup: setupSupported,
       installed_targets: firstItems.length,
       idempotent_targets: secondItems.length,

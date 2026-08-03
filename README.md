@@ -1,6 +1,7 @@
 # ast-mcp-server
 
 [![CI](https://github.com/yailPeralta/ast-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/yailPeralta/ast-mcp-server/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/ast-mcp-server.svg)](https://www.npmjs.com/package/ast-mcp-server)
 [![Node.js 20.19+](https://img.shields.io/badge/Node.js-20.19%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 
@@ -46,9 +47,20 @@ The included batch benchmark records a 50% reduction in model round-trips and a 
 - Corepack with Yarn 4.15.0 (pinned by `packageManager`)
 - A target project with a `tsconfig.json`
 
-## Install from source
+## Install
 
-The package is not published yet. Build the current release from GitHub:
+Install the published CLI globally while keeping dependency lifecycle scripts disabled:
+
+```bash
+npm install --global ast-mcp-server --ignore-scripts
+ast-tool setup
+```
+
+`--ignore-scripts` prevents dependencies from running `preinstall`, `install`, or `postinstall` hooks. The package and its current runtime dependencies do not require those hooks.
+
+### Install from source
+
+To build the current source instead:
 
 ```bash
 git clone https://github.com/yailPeralta/ast-mcp-server.git
@@ -67,7 +79,13 @@ The package exposes two executables when installed:
 
 ## Guided agent setup
 
-The recommended setup command builds the package and opens an interactive wizard:
+The installed package opens the interactive wizard with:
+
+```bash
+ast-tool setup
+```
+
+From a source checkout, use the Yarn script; it builds first and then opens the same wizard:
 
 ```bash
 yarn setup
@@ -85,11 +103,11 @@ Existing matching registrations and skill files are unchanged. Conflicting MCP r
 For automation, make the target set and confirmation explicit:
 
 ```bash
-yarn setup --agents all --yes
-yarn setup --agents claude --yes
+ast-tool setup --agents all --yes
+ast-tool setup --agents claude --yes
 ```
 
-After installing the package elsewhere, use the equivalent `ast-tool setup` command.
+From a source checkout, replace `ast-tool` with `yarn setup` in those commands.
 
 ## Install the agent skill
 
