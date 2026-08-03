@@ -13,7 +13,14 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const cliPath = path.join(repositoryRoot, "dist/cli.js");
 const fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "ast-tool-cli-"));
 const stateDirectory = path.join(fixtureRoot, "state");
-const environment = { ...process.env, AST_TOOL_STATE_DIR: stateDirectory };
+const claudeConfigDirectory = path.join(fixtureRoot, "claude");
+const hermesHome = path.join(fixtureRoot, "hermes");
+const environment = {
+  ...process.env,
+  AST_TOOL_STATE_DIR: stateDirectory,
+  CLAUDE_CONFIG_DIR: claudeConfigDirectory,
+  HERMES_HOME: hermesHome,
+};
 
 async function invoke(args) {
   const { stdout, stderr } = await executeFile(process.execPath, [cliPath, ...args], {
@@ -239,8 +246,64 @@ try {
     throw new Error(`Expected persisted receipt replay: ${JSON.stringify(replay)}`);
   }
 
+  const installedSkill = await invoke(["install-skill", "all"]);
+  if (
+    installedSkill.installations?.length !== 2 ||
+    !installedSkill.installations.every((installation) => installation.status === "installed")
+  ) {
+    throw new Error(`Unexpected skill installation output: ${JSON.stringify(installedSkill)}`);
+  }
+  const installedSkillFiles = await Promise.all([
+    readFile(
+      path.join(claudeConfigDirectory, "skills", "structural-code-editing", "SKILL.md"),
+      "utf8",
+    ),
+    readFile(
+      path.join(
+        hermesHome,
+        "skills",
+        "software-development",
+        "structural-code-editing",
+        "SKILL.md",
+      ),
+      "utf8",
+    ),
+  ]);
+  if (!installedSkillFiles.every((content) => content.includes("name: structural-code-editing"))) {
+    throw new Error("Installed skill files do not contain the bundled skill.");
+  }
+  const skillReplay = await invoke(["install-skill", "all"]);
+  if (!skillReplay.installations.every((installation) => installation.status === "unchanged")) {
+    throw new Error(`Skill installation was not idempotent: ${JSON.stringify(skillReplay)}`);
+  }
+
+  const claudeProject = path.join(fixtureRoot, "claude-project");
+  await mkdir(claudeProject);
+  const projectSkill = await invoke([
+    "install-skill",
+    "claude",
+    "--scope",
+    "project",
+    "--project-root",
+    claudeProject,
+  ]);
+  const expectedProjectSkillPath = path.join(
+    claudeProject,
+    ".claude",
+    "skills",
+    "structural-code-editing",
+    "SKILL.md",
+  );
+  if (
+    projectSkill.installations?.length !== 1 ||
+    projectSkill.installations[0]?.path !== expectedProjectSkillPath ||
+    projectSkill.installations[0]?.status !== "installed"
+  ) {
+    throw new Error(`Unexpected project skill installation: ${JSON.stringify(projectSkill)}`);
+  }
+
   process.stdout.write(
-    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, persisted_apply: true, lock_contention: true, replay: true })}\n`,
+    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, persisted_apply: true, lock_contention: true, replay: true, skill_installation: true })}\n`,
   );
 } finally {
   await rm(fixtureRoot, { recursive: true, force: true });

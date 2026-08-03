@@ -67,6 +67,42 @@ The package exposes two executables:
 - `ast-mcp-server`: MCP stdio server.
 - `ast-tool`: one-shot declarative batch CLI for Bash-capable agents.
 
+## Install the agent skill
+
+The package bundles a `structural-code-editing` skill that teaches an agent when to use the AST tools, how to minimize context, and how to review mutations safely. Install it for both Claude Code and Hermes with one command:
+
+```bash
+ast-tool install-skill all
+```
+
+Or install one target at a time:
+
+```bash
+ast-tool install-skill claude
+ast-tool install-skill hermes
+```
+
+The default is user scope. It writes to Claude Code's personal skill directory and to the active `HERMES_HOME`:
+
+| Target      | Destination                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------------- |
+| Claude Code | `$CLAUDE_CONFIG_DIR/skills/structural-code-editing/SKILL.md`, or `~/.claude/skills/...` by default         |
+| Hermes      | `$HERMES_HOME/skills/software-development/structural-code-editing/SKILL.md`, or `~/.hermes/...` by default |
+
+To commit the skill into one project for Claude Code, use project scope:
+
+```bash
+ast-tool install-skill claude --scope project --project-root /absolute/project
+```
+
+This writes `.claude/skills/structural-code-editing/SKILL.md` below that project. Project scope is intentionally rejected for Hermes because Hermes skills belong to a profile, not a source repository.
+
+Installation is idempotent. Existing identical content is left untouched; different content fails closed unless `--force` is explicit. If you skipped `npm link`, replace `ast-tool` with `node /absolute/path/to/ast-mcp-server/dist/cli.js`.
+
+Claude Code detects changes in an existing skill directory live; restart it if the top-level skills directory did not exist when the session started. In Hermes, run `/reload-skills` or start a new session, then verify with `hermes skills list`.
+
+Installing the skill does not configure the MCP transport. Complete the client-specific MCP setup below as well—the instructions are useful, but they have not yet learned to open a stdio socket through positive thinking.
+
 ## Use with Claude Code
 
 Claude Code supports local stdio MCP servers. After building this repository, register the server with an absolute entrypoint:

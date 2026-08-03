@@ -6,6 +6,12 @@ import { ZodError } from "zod";
 import { BatchExecutionError, parseBatchDocument, runBatchDocument } from "./batch/runner.js";
 import { MAX_BATCH_INPUT_BYTES } from "./batch/schema.js";
 import { applyPersistedOperation, persistOperationPlan } from "./services/operation-plan-file.js";
+import {
+  installBundledSkill,
+  resolveBundledSkillPath,
+  type SkillScope,
+  type SkillTargetSelection,
+} from "./services/skill-installer.js";
 
 interface CliFailure {
   status: "error";
@@ -35,6 +41,7 @@ function usage(): string {
     "  ast-tool run <pipeline.json|->",
     "  ast-tool validate <pipeline.json|->",
     "  ast-tool apply <plan.astplan> --plan-hash <sha256>",
+    "  ast-tool install-skill [claude|hermes|all] [--scope user|project] [--project-root <path>] [--force]",
   ].join("\n");
 }
 
@@ -81,6 +88,61 @@ function parseApplyArgs(args: string[]): { planFile: string; planHash: string } 
     throw new CliError(usage(), "USAGE", 2, "apply");
   }
   return { planFile: args[0], planHash: args[2] };
+}
+
+interface InstallSkillArgs {
+  target: SkillTargetSelection;
+  scope: SkillScope;
+  projectRoot?: string;
+  force: boolean;
+}
+
+function parseInstallSkillArgs(args: string[]): InstallSkillArgs {
+  let target: SkillTargetSelection = "all";
+  let targetSeen = false;
+  let scope: SkillScope = "user";
+  let scopeSeen = false;
+  let projectRoot: string | undefined;
+  let force = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]!;
+    if (argument === "--force") {
+      if (force) throw new CliError(usage(), "USAGE", 2, "install-skill");
+      force = true;
+      continue;
+    }
+    if (argument === "--scope") {
+      const value = args[index + 1];
+      if (scopeSeen || (value !== "user" && value !== "project")) {
+        throw new CliError(usage(), "USAGE", 2, "install-skill");
+      }
+      scope = value;
+      scopeSeen = true;
+      index += 1;
+      continue;
+    }
+    if (argument === "--project-root") {
+      const value = args[index + 1];
+      if (projectRoot !== undefined || !value || value.startsWith("--")) {
+        throw new CliError(usage(), "USAGE", 2, "install-skill");
+      }
+      projectRoot = value;
+      index += 1;
+      continue;
+    }
+    if (!targetSeen && (argument === "claude" || argument === "hermes" || argument === "all")) {
+      target = argument;
+      targetSeen = true;
+      continue;
+    }
+    throw new CliError(usage(), "USAGE", 2, "install-skill");
+  }
+
+  if (projectRoot !== undefined && scope !== "project") {
+    throw new CliError(usage(), "USAGE", 2, "install-skill");
+  }
+  return { target, scope, ...(projectRoot ? { projectRoot } : {}), force };
 }
 
 async function parseDocumentForCommand(source: string, command: string) {
@@ -146,6 +208,29 @@ export async function runCli(args: string[]): Promise<unknown> {
       throw new CliError(
         error instanceof Error ? error.message : String(error),
         "APPLY_ERROR",
+        1,
+        command,
+        undefined,
+        { cause: error },
+      );
+    }
+  }
+
+  if (command === "install-skill") {
+    const options = parseInstallSkillArgs(commandArgs);
+    try {
+      const executablePath = process.argv[1];
+      if (!executablePath) {
+        throw new Error("Cannot resolve the ast-tool executable path.");
+      }
+      return await installBundledSkill({
+        ...options,
+        sourceSkillPath: await resolveBundledSkillPath(executablePath),
+      });
+    } catch (error) {
+      throw new CliError(
+        error instanceof Error ? error.message : String(error),
+        "SKILL_INSTALL_ERROR",
         1,
         command,
         undefined,

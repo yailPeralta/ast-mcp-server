@@ -23,6 +23,7 @@
     "test:watch": "vitest",
     "test:mcp": "npm run build --silent && node scripts/mcp-smoke.mjs",
     "test:cli": "npm run build --silent && node scripts/cli-smoke.mjs",
+    "test:package": "node scripts/package-smoke.mjs",
     "benchmark": "npm run build --silent && node scripts/benchmark.mjs",
     "benchmark:corpus": "npm run build --silent && node scripts/benchmark-corpus.mjs",
     "benchmark:batch": "npm run build --silent && node scripts/benchmark-batch.mjs",

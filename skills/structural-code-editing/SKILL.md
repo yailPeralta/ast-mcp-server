@@ -1,17 +1,20 @@
 ---
 name: structural-code-editing
 description: Leer, navegar y editar proyectos TypeScript/JavaScript mediante el resolver real del compilador y operaciones AST preparadas, revisadas y vinculadas por hash.
-version: "3.1.0"
+version: "3.2.0"
 author: "yail"
+license: "ISC"
 metadata:
-  tags: ["typescript", "javascript", "ast", "refactoring", "mcp"]
+  hermes:
+    tags: ["typescript", "javascript", "ast", "refactoring", "mcp"]
+    homepage: "https://github.com/yailPeralta/ast-mcp-server"
 ---
 
 # Edición estructural con el servidor MCP `ast`
 
 ## Cuándo usarlo
 
-Usar las tools `mcp_ast_*` en proyectos TypeScript/JavaScript con `tsconfig.json` cuando haya que:
+Usar las tools del servidor MCP `ast` en proyectos TypeScript/JavaScript con `tsconfig.json` cuando haya que:
 
 - orientarse en archivos o módulos grandes/desconocidos;
 - encontrar declaraciones o referencias reales;
@@ -33,9 +36,11 @@ Para configs, Markdown, comentarios o una edición textual trivial en un archivo
 
 `file_path` debe ser preferentemente relativo al proyecto. Si un suffix coincide con varios archivos, la tool falla y devuelve candidatos en vez de elegir uno silenciosamente.
 
+Los clientes pueden prefijar los nombres publicados (`ast_*`) según su convención MCP; elegir por el nombre base y el schema, no adivinar el prefijo.
+
 ## Batch CLI para clientes con Bash
 
-Si el cliente no puede orquestar tools MCP programáticamente —por ejemplo Claude Code— usar `ast-tool run pipeline.json` para colapsar un pipeline conocido en una sola llamada Bash.
+Cuando un pipeline conocido requiere varias llamadas MCP dependientes y el cliente tiene Bash, usar `ast-tool run pipeline.json` para colapsar los roundtrips del modelo. No usar batch para exploración abierta ni asumir que reduce el trabajo interno del compilador.
 
 - Encadenar outputs previos con objetos `{ "$ref": "#/steps/id/campo" }`.
 - Usar `foreach` más `{ "$item": "/campo" }` solamente para lecturas acotadas.
@@ -83,6 +88,8 @@ Los planes CLI sobreviven al proceso bajo `${XDG_STATE_HOME:-~/.local/state}/ast
 - staging, flush, rename, verificación de hash y rollback conservador;
 - retry idempotente de un operation ya aplicado;
 - preservación de modo y UTF-8 BOM.
+
+La edición AST no demuestra que un cambio sea semánticamente correcto ni vuelve imposible romper código. La garantía práctica surge de combinar selección estructural, diagnostics, preview exacto, hash revisado, freshness checks y apply fail-closed.
 
 ## Límites
 
