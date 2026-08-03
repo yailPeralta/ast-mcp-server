@@ -47,6 +47,18 @@ interface DestinationPlan {
   status: InstallationStatus;
 }
 
+export class SkillConflictError extends Error {
+  readonly destination: string;
+
+  constructor(destination: string) {
+    super(
+      `Skill already exists with different content at ${destination}; pass --force to replace it.`,
+    );
+    this.name = "SkillConflictError";
+    this.destination = destination;
+  }
+}
+
 export async function resolveBundledSkillPath(executablePath: string): Promise<string> {
   const resolvedExecutable = await realpath(executablePath);
   return path.resolve(path.dirname(resolvedExecutable), "..", "skills", SKILL_NAME, "SKILL.md");
@@ -125,9 +137,7 @@ async function classifyDestination(
     const existingContent = await readFile(destination, "utf8");
     if (existingContent === sourceContent) return "unchanged";
     if (!force) {
-      throw new Error(
-        `Skill already exists with different content at ${destination}; pass --force to replace it.`,
-      );
+      throw new SkillConflictError(destination);
     }
     return "updated";
   } catch (error) {

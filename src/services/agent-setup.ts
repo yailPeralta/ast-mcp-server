@@ -5,6 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import {
   installBundledSkill,
+  SkillConflictError,
   type SkillInstallation,
   type SkillTargetSelection,
 } from "./skill-installer.js";
@@ -493,6 +494,15 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
     force: options.forceSkill ?? false,
     sourceSkillPath: options.sourceSkillPath,
     environment,
+  }).catch((error: unknown) => {
+    if (error instanceof SkillConflictError) {
+      throw new AgentSetupError(
+        `Skill already exists with different content at ${error.destination}; pass --force-skill to replace it.`,
+        "AGENT_SKILL_CONFLICT",
+        { path: error.destination },
+      );
+    }
+    throw error;
   });
   const skillStatuses = new Map(
     skillResult.installations.map((installation) => [installation.target, installation.status]),

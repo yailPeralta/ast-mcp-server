@@ -246,6 +246,48 @@ describe("agent setup", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("reports the setup-specific flag for a conflicting skill and updates only when forced", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const detections = await detectInstalledAgents({ environment: fake.environment });
+    const serverEntryPath = path.join(root, "package", "dist", "index.js");
+    const hermesSkillPath = path.join(
+      fake.environment.HERMES_HOME!,
+      "skills",
+      "software-development",
+      "structural-code-editing",
+      "SKILL.md",
+    );
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "", "utf8");
+    await mkdir(path.dirname(hermesSkillPath), { recursive: true });
+    await writeFile(hermesSkillPath, "custom skill\n", "utf8");
+
+    const options = {
+      agents: ["hermes"] as const,
+      detections,
+      environment: fake.environment,
+      sourceSkillPath: bundledSkillPath,
+      serverEntryPath,
+      nodeExecutable: process.execPath,
+    };
+
+    await expect(runAgentSetup(options)).rejects.toMatchObject({
+      code: "AGENT_SKILL_CONFLICT",
+      message: expect.stringContaining("--force-skill"),
+    });
+    await expect(access(fake.hermesState)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(hermesSkillPath, "utf8")).toBe("custom skill\n");
+
+    const result = await runAgentSetup({ ...options, forceSkill: true });
+    expect(result.agents[0]).toMatchObject({
+      agent: "hermes",
+      mcp: "configured",
+      skill: "updated",
+    });
+    expect(await readFile(hermesSkillPath, "utf8")).toBe(await readFile(bundledSkillPath, "utf8"));
+  });
+
   it("rejects a requested unavailable agent before writes", async () => {
     const root = await makeTemporaryDirectory();
     const fake = await createFakeAgents(root);
