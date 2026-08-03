@@ -8,15 +8,35 @@
 
 Reads are bounded and structured. Writes follow an explicit `prepare → review → apply` protocol with immutable hashes, workspace freshness checks, diagnostic guards, and idempotent receipts.
 
-## Why use it?
+## The problem
 
-Reading entire source files is expensive, while editing them with string replacement is fragile. This project keeps the useful middle ground:
+Coding agents often fall back to two generic operations: read files as plain text and write text patches. That works, but it has three predictable costs:
 
-- Retrieve body-free outlines before loading exact declarations.
-- Find compiler-resolved references rather than matching identifier text.
-- Prepare project-wide renames and callable-body replacements without writing immediately.
-- Review exact diffs and diagnostic deltas before applying a hash-bound plan.
-- Collapse known multi-step reads into one bounded `ast-tool` invocation.
+1. **Too much context.** The agent may load hundreds of lines when it only needs one signature or method body. That consumes model context and tokens without improving the answer.
+2. **Fragile edits.** Text patches do not inherently understand declarations, scopes, overloads, or TypeScript diagnostics. A plausible-looking edit can target the wrong construct or introduce a new compiler error.
+3. **Weak cross-file reasoning.** Text search can find matching words, but it cannot reliably distinguish two unrelated symbols with the same name. Project-wide references and renames need the compiler's understanding of the program.
+
+## What this tool does instead
+
+This MCP server gives the agent structural code tools in addition to generic file reads and writes. Under the hood, `ts-morph` uses the TypeScript compiler project model, so the server can reason about declarations and references as code rather than undifferentiated text.
+
+| Need                           | Structural operation      | Returned scope                                        |
+| ------------------------------ | ------------------------- | ----------------------------------------------------- |
+| Understand a file              | `ast_get_outline`         | Signatures without implementation bodies              |
+| Inspect one declaration        | `ast_get_symbol_source`   | Exact source for one function, method, class, or type |
+| Find usages across the project | `ast_find_references`     | Compiler-resolved reference locations                 |
+| Rename a symbol everywhere     | `ast_rename_symbol`       | A reviewed project-wide rename plan                   |
+| Change one implementation      | `ast_replace_symbol_body` | A body-only plan that preserves the declaration       |
+
+Reads can start with a compact outline and fetch exact source only when needed. Mutations are prepared in memory first, compared against baseline diagnostics, and returned as immutable, hash-bound plans. Nothing is written until the caller reviews and explicitly applies the plan.
+
+## Why this helps
+
+- **Less context:** the agent retrieves the smallest structural unit that answers the question instead of loading the complete file by default.
+- **Safer changes:** exact symbol selection, diagnostic deltas, workspace freshness checks, and `prepare → review → apply` reduce the failure modes of ad hoc text editing.
+- **Accurate project-wide operations:** references and renames use compiler resolution rather than matching identifier text with grep.
+
+AST-aware editing is not a proof that a change is semantically correct. The safety comes from combining structural selection with diagnostics, exact previews, reviewed hashes, freshness checks, and fail-closed apply semantics.
 
 The included batch benchmark records a 50% reduction in model round-trips and a 95.21% reduction in serialized context for its search-to-source scenario. These are reproducible scenario measurements, not universal token or latency claims.
 
