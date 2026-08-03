@@ -85,9 +85,13 @@ try {
   await executeFile(yarnExecutable, ["install", "--immutable"], {
     cwd: consumerDirectory,
   });
-  const scriptPolicy = await executeFile(yarnExecutable, ["config", "get", "enableScripts"], {
-    cwd: consumerDirectory,
-  });
+  const scriptPolicy = await executeFile(
+    yarnExecutable,
+    ["config", "get", "enableScripts", "--json"],
+    {
+      cwd: consumerDirectory,
+    },
+  );
   if (scriptPolicy.stdout.trim() !== "false") {
     throw new Error(`consumer lifecycle scripts are enabled: ${scriptPolicy.stdout}`);
   }
