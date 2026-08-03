@@ -1,26 +1,45 @@
 # ast-mcp-server
 
-A correctness-oriented MCP server and batch CLI for compact structural reads and reviewed TypeScript/JavaScript edits. It uses the real TypeScript project model through `ts-morph`; declarations, references, rename locations, and diagnostics are not inferred with text search.
+[![CI](https://github.com/yailPeralta/ast-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/yailPeralta/ast-mcp-server/actions/workflows/ci.yml)
+[![Node.js 20.19+](https://img.shields.io/badge/Node.js-20.19%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
+
+`ast-mcp-server` gives coding agents compact, type-aware access to TypeScript and JavaScript projects. It uses the real compiler project model through `ts-morph`, so declarations, references, rename locations, and diagnostics come from the AST instead of text-search guesses.
+
+Reads are bounded and structured. Writes follow an explicit `prepare → review → apply` protocol with immutable hashes, workspace freshness checks, diagnostic guards, and idempotent receipts.
+
+## Why use it?
+
+Reading entire source files is expensive, while editing them with string replacement is fragile. This project keeps the useful middle ground:
+
+- Retrieve body-free outlines before loading exact declarations.
+- Find compiler-resolved references rather than matching identifier text.
+- Prepare project-wide renames and callable-body replacements without writing immediately.
+- Review exact diffs and diagnostic deltas before applying a hash-bound plan.
+- Collapse known multi-step reads into one bounded `ast-tool` invocation.
+
+The included batch benchmark records a 50% reduction in model round-trips and a 95.21% reduction in serialized context for its search-to-source scenario. These are reproducible scenario measurements, not universal token or latency claims.
 
 ## Requirements
 
 - Node.js 20.19 or newer
 - A target project with a `tsconfig.json`
 
-## Install
+## Install from source
 
-From a checkout:
+The npm package is not published yet. Build the current release from GitHub:
 
 ```bash
+git clone https://github.com/yailPeralta/ast-mcp-server.git
+cd ast-mcp-server
 npm ci
 npm run build
-npm link
 ```
 
-From a package:
+Run `npm link` as an optional final step if you also want the global `ast-mcp-server` and `ast-tool` commands:
 
 ```bash
-npm install --global ast-mcp-server
+npm link
 ```
 
 The package exposes two executables:
@@ -28,7 +47,63 @@ The package exposes two executables:
 - `ast-mcp-server`: MCP stdio server.
 - `ast-tool`: one-shot declarative batch CLI for Bash-capable agents.
 
-## MCP setup
+## Use with Claude Code
+
+Claude Code supports local stdio MCP servers. After building this repository, register the server with an absolute entrypoint:
+
+```bash
+AST_MCP_DIR="$(pwd)"
+claude mcp add --scope user --transport stdio ast -- \
+  node "$AST_MCP_DIR/dist/index.js"
+claude mcp get ast
+```
+
+`claude mcp get ast` should report `Status: ✔ Connected`. The `--` separator is required: everything after it is the server command, not a Claude Code option.
+
+The example uses `--scope user`, which makes the server available in all your projects. Use `--scope local` instead to register it only for the project from which you run the command. Avoid committing a project-scoped `.mcp.json` that contains another developer's absolute checkout path.
+
+Start Claude Code inside any TypeScript project with a `tsconfig.json`:
+
+```bash
+cd /absolute/path/to/your-typescript-project
+claude
+```
+
+Then ask Claude to use the `ast` tools. For example:
+
+```text
+Use the ast MCP server to inspect this project.
+First search for UserService, then fetch only the exact source of its create method.
+```
+
+For a reviewed rename:
+
+```text
+Use ast_rename_symbol to prepare renaming UserService.create to createUser.
+Do not apply it yet. Show me the affected files, diagnostic delta, plan hash,
+and the complete operation preview.
+```
+
+After reviewing the preview:
+
+```text
+Apply that operation with ast_apply_operation using the exact operation_id and
+plan_hash returned by the prepare step.
+```
+
+Project-scoped read and prepare tools require `project_root`. Claude should pass the current project directory or its explicit `tsconfig.json` path. Preview and apply calls instead use the prepared operation coordinates; the MCP server itself contains no repository-specific paths.
+
+### MCP or batch CLI?
+
+| Workflow                                         | Recommended interface                     |
+| ------------------------------------------------ | ----------------------------------------- |
+| Interactive exploration or one reviewed mutation | Claude Code MCP tools                     |
+| A known multi-step read pipeline                 | `ast-tool run pipeline.json` through Bash |
+| Prepare now and apply in a later process         | `ast-tool run`, then `ast-tool apply`     |
+
+Use `/mcp` inside Claude Code to inspect server status and tools. Outside the session, use `claude mcp list`, `claude mcp get ast`, or `claude mcp remove ast -s user`.
+
+## Other MCP clients
 
 Hermes Agent:
 
@@ -37,7 +112,7 @@ hermes mcp add ast --command node --args /absolute/path/to/ast-mcp-server/dist/i
 hermes mcp test ast
 ```
 
-Each MCP tool accepts `project_root`, either the project directory or an explicit `tsconfig.json` path. The server contains no repository-specific paths.
+Project-scoped tools accept `project_root`, either the project directory or an explicit `tsconfig.json` path. The server contains no repository-specific paths.
 
 ## MCP tools
 
