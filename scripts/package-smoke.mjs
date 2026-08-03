@@ -79,7 +79,9 @@ try {
     "utf8",
   );
 
-  await executeFile(yarnExecutable, ["install"], { cwd: consumerDirectory });
+  await executeFile(yarnExecutable, ["install", "--no-immutable"], {
+    cwd: consumerDirectory,
+  });
   await executeFile(yarnExecutable, ["install", "--immutable"], {
     cwd: consumerDirectory,
   });

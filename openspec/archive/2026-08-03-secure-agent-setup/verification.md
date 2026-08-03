@@ -17,7 +17,7 @@ Status: PASS
 - `yarn install --immutable`: PASS.
 - `yarn config get enableScripts`: `false`.
 - `yarn audit`: PASS, no audit suggestions.
-- The tarball consumer independently commits `enableScripts: false`, installs through Yarn, repeats with `--immutable`, and checks the resolved policy before invoking the package.
+- The tarball consumer independently commits `enableScripts: false`, creates its initial lockfile with `--no-immutable`, repeats with `--immutable`, and checks the resolved policy before invoking the package.
 
 ## Canonical gates
 
@@ -29,6 +29,7 @@ Status: PASS
 - `yarn test:mcp`: PASS; stdio connected, 10 tools exposed, one fixture source listed.
 - `yarn test:cli`: PASS; existing batch/apply coverage plus two-agent setup and replay.
 - `yarn test:package`: PASS with `transport: yarn-tarball`, lifecycle scripts disabled, both agents configured, both skills installed, and both targets idempotent on replay.
+- `CI=true yarn test:package`: PASS; this reproduces Yarn's CI-default immutable policy while explicitly permitting only the consumer's initial lockfile creation.
 - `yarn pack --dry-run`: PASS; both executables, runtime setup modules, README, and bundled skill are present.
 - `ast_get_diagnostics`: 0 errors and 0 warnings.
 - `git diff --check`: PASS.
