@@ -1,0 +1,101 @@
+---
+name: structural-code-editing
+description: Leer, navegar y editar proyectos TypeScript/JavaScript mediante el resolver real del compilador y operaciones AST preparadas, revisadas y vinculadas por hash.
+version: "3.1.0"
+author: "yail"
+metadata:
+  tags: ["typescript", "javascript", "ast", "refactoring", "mcp"]
+---
+
+# Edición estructural con el servidor MCP `ast`
+
+## Cuándo usarlo
+
+Usar las tools `mcp_ast_*` en proyectos TypeScript/JavaScript con `tsconfig.json` cuando haya que:
+
+- orientarse en archivos o módulos grandes/desconocidos;
+- encontrar declaraciones o referencias reales;
+- medir el radio de impacto de un rename;
+- renombrar un símbolo en varios archivos;
+- reemplazar solo el cuerpo de una función, método, accessor o callable property;
+- obtener diagnostics sin cargar el proyecto como texto en el contexto.
+
+Para configs, Markdown, comentarios o una edición textual trivial en un archivo ya conocido, usar las tools normales de archivos. El AST no cobra alquiler, pero cada roundtrip sí.
+
+## Flujo compacto de lectura
+
+1. `ast_list_files` para descubrir archivos. Paginar; no pedir todo un monorepo si alcanza con un filtro.
+2. `ast_search_symbols` si todavía no se conoce el archivo o el selector exacto.
+3. `ast_get_outline` para ver contratos sin cuerpos. No pedir `include_symbols` salvo que haga falta la metadata detallada.
+4. `ast_get_symbol_source` solo para las declaraciones cuya implementación haya que inspeccionar.
+5. `ast_find_references` antes de renames o cambios con impacto cross-file.
+6. `ast_get_diagnostics` para establecer y verificar el estado del proyecto.
+
+`file_path` debe ser preferentemente relativo al proyecto. Si un suffix coincide con varios archivos, la tool falla y devuelve candidatos en vez de elegir uno silenciosamente.
+
+## Batch CLI para clientes con Bash
+
+Si el cliente no puede orquestar tools MCP programáticamente —por ejemplo Claude Code— usar `ast-tool run pipeline.json` para colapsar un pipeline conocido en una sola llamada Bash.
+
+- Encadenar outputs previos con objetos `{ "$ref": "#/steps/id/campo" }`.
+- Usar `foreach` más `{ "$item": "/campo" }` solamente para lecturas acotadas.
+- Definir `emit` para que los resultados intermedios no entren al contexto.
+- Mantener paginación y filtros: batch elimina roundtrips, no vuelve razonable leer un monorepo entero.
+- No generar JavaScript/eval dentro del documento; el contrato es declarativo y limitado.
+
+`ast-tool validate pipeline.json` valida schema, orden de referencias y política sin cargar el proyecto. Límites por defecto: 50 steps, 500 invocaciones, 200 items por foreach, concurrencia 4 (máximo 16), input 1 MiB, 10 MiB por resultado retenido/output y 50 MiB de contexto intermedio acumulado.
+
+## Flujo obligatorio de mutación
+
+Las tools de rename y reemplazo **solo preparan**. `dry_run: false` directo está deshabilitado.
+
+1. Llamar `ast_rename_symbol` o `ast_replace_symbol_body` con `dry_run: true`.
+2. Revisar:
+   - `affected_files`;
+   - summaries y previews;
+   - diagnostics agregados/removidos;
+   - `blocked` y el valor visible de `allow_new_errors`.
+3. Si el preview inline está truncado o hay varios archivos, pedir diffs completos con `ast_get_operation_preview`.
+4. Aplicar con `ast_apply_operation`, pasando **ambos**:
+   - `operation_id`;
+   - `plan_hash`.
+5. Ejecutar el typecheck/build/test canónico del proyecto después del apply.
+
+Nunca reconstruir el contenido a aplicar a partir del diff. Apply escribe los postimages exactos retenidos en el plan.
+
+### Mutaciones desde el CLI
+
+Un batch puede terminar en una sola preparación, pero nunca puede incluir `ast_apply_operation`. El resultado expone `operation_id`, `plan_hash` y `plan_file` en el nivel superior aunque `emit` los omita; revisar preview, diagnostics y affected files, y aplicar en otra llamada:
+
+```text
+ast-tool apply <plan_file> --plan-hash <reviewed_sha256>
+```
+
+Los planes CLI sobreviven al proceso bajo `${XDG_STATE_HOME:-~/.local/state}/ast-tool/plans` (o `AST_TOOL_STATE_DIR`), contienen bytes de código exactos y son privados. No copiar su contenido al chat si el repo es sensible.
+
+## Seguridad que sí ofrece
+
+- proyecto fresco al preparar mutaciones;
+- diagnostics pre/post y bloqueo de errores nuevos por default;
+- plan vinculado por hash al workspace completo, configs extendidos/referenciados y postimages;
+- rechazo si cambió cualquier source/config antes de apply;
+- lock filesystem cooperativo por config/workspace canónico compartido por MCP y CLI;
+- staging, flush, rename, verificación de hash y rollback conservador;
+- retry idempotente de un operation ya aplicado;
+- preservación de modo y UTF-8 BOM.
+
+## Límites
+
+- No es una transacción global multiarchivo: la atomicidad depende del rename por archivo.
+- El rollback es best effort y no pisa cambios de otro writer.
+- El lock coordina superficies de apply que usan el mismo state directory; no coordina editores, NFS ni writers hostiles.
+- Los planes MCP son in-memory y se pierden al reiniciar el servidor; los planes CLI son archivos privados, versionados y con el mismo TTL.
+- El receipt se persiste dentro de la sección crítica. Si esa persistencia falla después de reemplazar sources, apply sale no-cero y el retry recupera sólo si el workspace completo coincide exactamente con el fingerprint post-apply revisado.
+- Un crash duro puede dejar un lock stale: retirarlo requiere inspeccionar metadata y confirmar que no hay apply activo. Un estado parcial o divergente sigue fallando cerrado.
+- Solo admite sources UTF-8 con o sin BOM.
+- No implementa migración arbitraria de firmas, creación/eliminación de archivos ni lenguajes fuera de TS/JS.
+- `allow_new_errors: true` evita el bloqueo del plan; no convierte código roto en código sano.
+
+## Verificación
+
+Después de aplicar, correr el gate canónico del repo. Como mínimo, un typecheck/build. Para cambios cross-file o con dinero/producción en juego, también la suite focalizada y la completa que corresponda.

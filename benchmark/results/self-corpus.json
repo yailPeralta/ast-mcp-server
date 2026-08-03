@@ -1,0 +1,139 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-08-03T05:16:26.371Z",
+  "project_root": "<repository-root>",
+  "methodology": {
+    "baseline": "Complete text of every file declared by each task.",
+    "compact": "Serialized default ast_get_outline-equivalent text plus only the ast_get_symbol_source-equivalent declarations named by each task.",
+    "correctness_check": "Each compact payload must contain the predefined evidence strings needed to answer the task. This is a reproducible evidence check, not a claim of general semantic equivalence or tokenizer-specific savings."
+  },
+  "task_count": 12,
+  "evidence_pass_count": 12,
+  "payload": {
+    "full_source_chars": 83289,
+    "compact_payload_chars": 28372,
+    "reduction_percent": 65.93547767412264
+  },
+  "tasks": [
+    {
+      "id": "tool-registration",
+      "question": "Which MCP tools are registered by the executable entry point?",
+      "file_count": 1,
+      "full_source_chars": 1867,
+      "compact_payload_chars": 754,
+      "reduction_percent": 59.614354579539366,
+      "evidence_pass": true,
+      "missing_evidence": []
+    },
+    {
+      "id": "outline-contract",
+      "question": "What public structure and builder define a compact file outline?",
+      "file_count": 1,
+      "full_source_chars": 10720,
+      "compact_payload_chars": 2070,
+      "reduction_percent": 80.69029850746269,
+      "evidence_pass": true,
+      "missing_evidence": []
+    },
+    {
+      "id": "project-freshness",
+      "question": "How are cached projects synchronized after source or extended-config changes?",
+      "file_count": 2,
+      "full_source_chars": 8964,
+      "compact_payload_chars": 3234,
+      "reduction_percent": 63.922356091030785,
+      "evidence_pass": true,
+      "missing_evidence": []
+    },
+    {
+      "id": "path-resolution",
+      "question": "How does exact project-relative lookup differ from suffix fallback?",
+      "file_count": 1,
+      "full_source_chars": 5609,
+      "compact_payload_chars": 2670,
+      "reduction_percent": 52.39793189516848,
+      "evidence_pass": true,
+      "missing_evidence": []
+    },
+    {
+      "id": "diagnostic-delta",
+      "question": "How are added and removed diagnostics computed?",
+      "file_count": 1,
+      "full_source_chars": 2360,
+      "compact_payload_chars": 1311,
+      "reduction_percent": 44.449152542372886,
+      "evidence_pass": true,
+      "missing_evidence": []
+    },
+    {
+      "id": "prepare-apply",
+      "question": "What are the public mutation preparation and apply entry points?",
+      "file_count": 1,
+      "full_source_chars": 19328,
+      "compact_payload_chars": 3855,
+      "reduction_percent": 80.05484271523179,
+      "evidence_pass": true,
+      "missing_evidence": []
+    },
+    {
+      "id": "workspace-binding",
+      "question": "How is a prepared plan bound to source and config bytes?",
+      "file_count": 2,
+      "full_source_chars": 22683,
+      "compact_payload_chars": 10260,
+      "reduction_percent": 54.76788784552308,
+      "evidence_pass": true,
+      "missing_evidence": []
+    },
+    {
+      "id": "mcp-result-shape",
+      "question": "How are structured success and error tool results serialized?",
+      "file_count": 1,
+      "full_source_chars": 541,
+      "compact_payload_chars": 1024,
+      "reduction_percent": -89.27911275415896,
+      "evidence_pass": true,
+      "missing_evidence": []
+    },
+    {
+      "id": "pagination",
+      "question": "What pagination metadata is returned by bounded read tools?",
+      "file_count": 1,
+      "full_source_chars": 1242,
+      "compact_payload_chars": 973,
+      "reduction_percent": 21.658615136876005,
+      "evidence_pass": true,
+      "missing_evidence": []
+    },
+    {
+      "id": "symbol-resolution",
+      "question": "Which functions resolve declarations and callable bodies?",
+      "file_count": 1,
+      "full_source_chars": 4933,
+      "compact_payload_chars": 918,
+      "reduction_percent": 81.39063450233124,
+      "evidence_pass": true,
+      "missing_evidence": []
+    },
+    {
+      "id": "apply-tool-contract",
+      "question": "Which inputs bind an MCP apply call to a reviewed plan?",
+      "file_count": 1,
+      "full_source_chars": 1690,
+      "compact_payload_chars": 583,
+      "reduction_percent": 65.50295857988165,
+      "evidence_pass": true,
+      "missing_evidence": []
+    },
+    {
+      "id": "diagnostics-tool-contract",
+      "question": "How does the diagnostics tool distinguish project and file scope?",
+      "file_count": 1,
+      "full_source_chars": 3352,
+      "compact_payload_chars": 720,
+      "reduction_percent": 78.52028639618138,
+      "evidence_pass": true,
+      "missing_evidence": []
+    }
+  ]
+}

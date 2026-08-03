@@ -1,0 +1,892 @@
+import { createHash, randomUUID } from "node:crypto";
+import { lstatSync, realpathSync } from "node:fs";
+import { open, readFile, rename, stat, unlink } from "node:fs/promises";
+import path from "node:path";
+import { createTwoFilesPatch } from "diff";
+import { LanguageVariant, Node, ScriptTarget, SyntaxKind, ts, type Project } from "ts-morph";
+import {
+  compareDiagnostics,
+  normalizeDiagnostic,
+  type DiagnosticDelta,
+  type NormalizedDiagnostic,
+} from "./diagnostics.js";
+import {
+  createFreshProject,
+  findDeclarationByName,
+  getSourceFileOrThrow,
+  invalidateProject,
+} from "./project.js";
+import { executableDeclaration } from "./symbols.js";
+import { withWorkspaceFileLock, type RuntimeStateOptions } from "./runtime-state.js";
+import { createWorkspaceSnapshot, hashBytes, hashWorkspaceFiles } from "./workspace.js";
+
+const DEFAULT_OPERATION_TTL_MS = 15 * 60 * 1000;
+const DEFAULT_MAX_OPERATIONS = 100;
+const MAX_INLINE_PREVIEW_CHARS = 100_000;
+
+export type OperationKind = "rename_symbol" | "replace_symbol_body";
+export type OperationStatus = "prepared" | "applied";
+
+interface PlannedFileInternal {
+  absolutePath: string;
+  file: string;
+  originalHash: string;
+  updatedHash: string;
+  originalText: string;
+  updatedText: string;
+  originalBytes: Buffer;
+  updatedBytes: Buffer;
+  diff: string;
+  mode: number;
+}
+
+export interface PlannedFileSummary {
+  file: string;
+  original_hash: string;
+  updated_hash: string;
+}
+
+export interface PreparedOperation {
+  operation_id: string;
+  plan_hash: string;
+  kind: OperationKind;
+  status: OperationStatus;
+  project_root: string;
+  created_at: string;
+  expires_at: string;
+  affected_files: PlannedFileSummary[];
+  reference_count: number;
+  workspace_hash: string;
+  post_workspace_hash: string;
+  workspace_file_count: number;
+  diagnostics: DiagnosticDelta;
+  allow_new_errors: boolean;
+  blocked: boolean;
+  block_reason: string | null;
+  preview: string | null;
+  preview_truncated: boolean;
+}
+
+interface OperationRecord extends PreparedOperation {
+  tsConfigFilePath: string;
+  files: PlannedFileInternal[];
+  applied_at?: string;
+  receiptWriter?: () => Promise<void>;
+  lockStateDirectory?: string;
+}
+
+export interface PersistedOperationFile {
+  file: string;
+  original_hash: string;
+  updated_hash: string;
+  original_bytes_base64: string;
+  updated_bytes_base64: string;
+  mode: number;
+}
+
+export interface PersistedOperationRecord extends PreparedOperation {
+  applied_at?: string;
+  files: PersistedOperationFile[];
+}
+
+export interface AppliedOperation {
+  operation_id: string;
+  kind: OperationKind;
+  status: "applied";
+  applied_at: string;
+  affected_files: string[];
+  idempotent_replay: boolean;
+}
+
+const operations = new Map<string, OperationRecord>();
+const writeQueues = new Map<string, Promise<void>>();
+
+interface OperationTestHooks {
+  beforeReplace?: (file: string, index: number) => Promise<void> | void;
+}
+
+let operationTestHooks: OperationTestHooks = {};
+let operationTtlMs = DEFAULT_OPERATION_TTL_MS;
+let maxOperations = DEFAULT_MAX_OPERATIONS;
+let operationNow = (): number => Date.now();
+
+function hash(content: string | Uint8Array): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function planHashFor(operation: {
+  operation_id: string;
+  kind: OperationKind;
+  project_root: string;
+  created_at: string;
+  expires_at: string;
+  reference_count: number;
+  workspace_hash: string;
+  post_workspace_hash: string;
+  workspace_file_count: number;
+  diagnostics: DiagnosticDelta;
+  allow_new_errors: boolean;
+  blocked: boolean;
+  files: ReadonlyArray<{
+    file: string;
+    originalHash: string;
+    updatedHash: string;
+    mode: number;
+  }>;
+}): string {
+  return hash(
+    JSON.stringify({
+      version: 1,
+      operation_id: operation.operation_id,
+      kind: operation.kind,
+      project_root: operation.project_root,
+      created_at: operation.created_at,
+      expires_at: operation.expires_at,
+      reference_count: operation.reference_count,
+      workspace_hash: operation.workspace_hash,
+      post_workspace_hash: operation.post_workspace_hash,
+      workspace_file_count: operation.workspace_file_count,
+      diagnostics: operation.diagnostics,
+      allow_new_errors: operation.allow_new_errors,
+      blocked: operation.blocked,
+      files: operation.files.map((file) => ({
+        file: file.file,
+        original_hash: file.originalHash,
+        updated_hash: file.updatedHash,
+        mode: file.mode,
+      })),
+    }),
+  );
+}
+
+function pruneOperations(): void {
+  const now = operationNow();
+  for (const [id, operation] of operations) {
+    if (operation.status === "prepared" && Date.parse(operation.expires_at) <= now) {
+      operations.delete(id);
+    }
+  }
+  while (operations.size >= maxOperations) {
+    const oldest = operations.keys().next().value as string | undefined;
+    if (!oldest) break;
+    operations.delete(oldest);
+  }
+}
+
+function normalizeProjectDiagnostics(
+  project: Project,
+  projectRoot: string,
+): NormalizedDiagnostic[] {
+  return [...project.getConfigFileParsingDiagnostics(), ...project.getPreEmitDiagnostics()].map(
+    (diagnostic) => normalizeDiagnostic(diagnostic, projectRoot),
+  );
+}
+
+function decodeSource(bytes: Buffer, filePath: string): string {
+  if ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff)) {
+    throw new Error(
+      `Unsupported UTF-16 source encoding in ${filePath}. Convert it to UTF-8 first.`,
+    );
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (error) {
+    throw new Error(`Unsupported non-UTF-8 source encoding in ${filePath}.`, { cause: error });
+  }
+}
+
+function encodeUpdatedSource(originalBytes: Buffer, updatedText: string): Buffer {
+  const encoded = Buffer.from(updatedText, "utf8");
+  const hasUtf8Bom =
+    originalBytes[0] === 0xef && originalBytes[1] === 0xbb && originalBytes[2] === 0xbf;
+  return hasUtf8Bom ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), encoded]) : encoded;
+}
+
+function assertSafeOperationFile(
+  projectRoot: string,
+  absolutePath: string,
+  displayPath: string,
+): void {
+  const fileStat = lstatSync(absolutePath);
+  if (fileStat.isSymbolicLink()) {
+    throw new Error(`Operation target must not be a symbolic link: ${displayPath}`);
+  }
+  if (!fileStat.isFile()) {
+    throw new Error(`Operation target is not a regular file: ${displayPath}`);
+  }
+  const canonicalPath = realpathSync(absolutePath);
+  const samePath =
+    process.platform === "win32"
+      ? canonicalPath.toLowerCase() === absolutePath.toLowerCase()
+      : canonicalPath === absolutePath;
+  if (!samePath) {
+    throw new Error(`Operation target traverses a symbolic link: ${displayPath}`);
+  }
+  if (process.platform !== "win32" && fileStat.nlink !== 1) {
+    throw new Error(`Operation target must have exactly one hard link: ${displayPath}`);
+  }
+  const uid = process.getuid?.();
+  if (uid !== undefined && fileStat.uid !== uid) {
+    throw new Error(`Operation target is not owned by the current user: ${displayPath}`);
+  }
+  const relative = path.relative(projectRoot, canonicalPath);
+  if (relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`)) {
+    throw new Error(`Operation target escapes the project root: ${displayPath}`);
+  }
+}
+
+async function createPlan(
+  projectRootInput: string,
+  kind: OperationKind,
+  allowNewErrors: boolean,
+  mutate: (project: Project, projectRoot: string) => number,
+): Promise<PreparedOperation> {
+  pruneOperations();
+  const context = createFreshProject(projectRootInput);
+  const workspaceBefore = createWorkspaceSnapshot(context);
+  const beforeDiagnostics = normalizeProjectDiagnostics(context.project, context.projectRoot);
+  const originals = new Map(
+    context.project
+      .getSourceFiles()
+      .map((sourceFile) => [sourceFile.getFilePath(), sourceFile.getFullText()]),
+  );
+
+  for (const [filePath, sourceText] of originals) {
+    assertSafeOperationFile(
+      context.projectRoot,
+      filePath,
+      path.relative(context.projectRoot, filePath),
+    );
+    const diskText = decodeSource(await readFile(filePath), filePath);
+    if (diskText !== sourceText) {
+      throw new Error(
+        `Workspace changed while the operation was being prepared (${path.relative(context.projectRoot, filePath)}). Retry preparation.`,
+      );
+    }
+  }
+
+  const referenceCount = mutate(context.project, context.projectRoot);
+  const afterDiagnostics = normalizeProjectDiagnostics(context.project, context.projectRoot);
+  const diagnosticDelta = compareDiagnostics(beforeDiagnostics, afterDiagnostics);
+  const files: PlannedFileInternal[] = [];
+
+  for (const sourceFile of context.project.getSourceFiles()) {
+    const absolutePath = sourceFile.getFilePath();
+    const originalText = originals.get(absolutePath);
+    if (originalText === undefined) continue;
+    const updatedText = sourceFile.getFullText();
+    if (updatedText === originalText) continue;
+    const originalBytes = await readFile(absolutePath);
+    if (decodeSource(originalBytes, absolutePath) !== originalText) {
+      throw new Error(
+        `Workspace changed while the operation was being prepared (${path.relative(context.projectRoot, absolutePath)}). Retry preparation.`,
+      );
+    }
+    const updatedBytes = encodeUpdatedSource(originalBytes, updatedText);
+    const fileStat = await stat(absolutePath);
+    const file = path.relative(context.projectRoot, absolutePath);
+    files.push({
+      absolutePath,
+      file,
+      originalHash: hashBytes(originalBytes),
+      updatedHash: hashBytes(updatedBytes),
+      originalText,
+      updatedText,
+      originalBytes,
+      updatedBytes,
+      diff: createTwoFilesPatch(file, file, originalText, updatedText, "before", "after", {
+        context: 3,
+      }),
+      mode: fileStat.mode,
+    });
+  }
+
+  files.sort((left, right) => left.file.localeCompare(right.file));
+  if (files.length === 0) {
+    throw new Error("The structural operation produced no file changes.");
+  }
+
+  const postWorkspaceFiles = new Map(workspaceBefore.files);
+  for (const file of files) {
+    if (!postWorkspaceFiles.has(file.absolutePath)) {
+      throw new Error(`Affected file is missing from the workspace snapshot: ${file.file}`);
+    }
+    postWorkspaceFiles.set(file.absolutePath, file.updatedHash);
+  }
+  const postWorkspaceHash = hashWorkspaceFiles(postWorkspaceFiles);
+
+  const workspaceAfter = createWorkspaceSnapshot(context);
+  if (workspaceAfter.digest !== workspaceBefore.digest) {
+    throw new Error("Workspace changed while the operation was being prepared. Retry preparation.");
+  }
+
+  const fullPreview = files.map((file) => file.diff).join("\n");
+  const blocked = !allowNewErrors && diagnosticDelta.addedErrors.length > 0;
+  const now = operationNow();
+  const operationId = randomUUID();
+  const recordWithoutHash = {
+    operation_id: operationId,
+    kind,
+    status: "prepared",
+    project_root: context.projectRoot,
+    tsConfigFilePath: context.tsConfigFilePath,
+    created_at: new Date(now).toISOString(),
+    expires_at: new Date(now + operationTtlMs).toISOString(),
+    affected_files: files.map((file) => ({
+      file: file.file,
+      original_hash: file.originalHash,
+      updated_hash: file.updatedHash,
+    })),
+    reference_count: referenceCount,
+    workspace_hash: workspaceBefore.digest,
+    post_workspace_hash: postWorkspaceHash,
+    workspace_file_count: workspaceBefore.fileCount,
+    diagnostics: diagnosticDelta,
+    allow_new_errors: allowNewErrors,
+    blocked,
+    block_reason: blocked
+      ? `${diagnosticDelta.addedErrors.length} new TypeScript error(s) would be introduced. Prepare again with allow_new_errors=true only after explicit review.`
+      : null,
+    preview: fullPreview.length <= MAX_INLINE_PREVIEW_CHARS ? fullPreview : null,
+    preview_truncated: fullPreview.length > MAX_INLINE_PREVIEW_CHARS,
+    files,
+  } satisfies Omit<OperationRecord, "plan_hash">;
+  const record: OperationRecord = {
+    ...recordWithoutHash,
+    plan_hash: planHashFor(recordWithoutHash),
+  };
+  operations.set(operationId, record);
+  return publicOperation(record);
+}
+
+function publicOperation(record: OperationRecord): PreparedOperation {
+  return {
+    operation_id: record.operation_id,
+    plan_hash: record.plan_hash,
+    kind: record.kind,
+    status: record.status,
+    project_root: record.project_root,
+    created_at: record.created_at,
+    expires_at: record.expires_at,
+    affected_files: record.affected_files,
+    reference_count: record.reference_count,
+    workspace_hash: record.workspace_hash,
+    post_workspace_hash: record.post_workspace_hash,
+    workspace_file_count: record.workspace_file_count,
+    diagnostics: record.diagnostics,
+    allow_new_errors: record.allow_new_errors,
+    blocked: record.blocked,
+    block_reason: record.block_reason,
+    preview: record.preview,
+    preview_truncated: record.preview_truncated,
+  };
+}
+
+export async function prepareRename(args: {
+  projectRoot: string;
+  filePath: string;
+  symbolPath: string;
+  newName: string;
+  allowNewErrors?: boolean;
+}): Promise<PreparedOperation> {
+  const scanner = ts.createScanner(
+    ScriptTarget.Latest,
+    false,
+    LanguageVariant.Standard,
+    args.newName,
+  );
+  const validIdentifier =
+    scanner.scan() === SyntaxKind.Identifier && scanner.scan() === SyntaxKind.EndOfFileToken;
+  if (!validIdentifier) {
+    throw new Error(`"${args.newName}" is not a valid TypeScript identifier.`);
+  }
+
+  return createPlan(args.projectRoot, "rename_symbol", args.allowNewErrors ?? false, (project) => {
+    const sourceFile = getSourceFileOrThrow(project, args.filePath);
+    const node = findDeclarationByName(sourceFile, args.symbolPath);
+    if (!Node.isRenameable(node)) {
+      throw new Error(
+        `Symbol "${args.symbolPath}" (${node.getKindName()}) does not support structural rename.`,
+      );
+    }
+    const referenceCount = Node.isReferenceFindable(node) ? node.findReferencesAsNodes().length : 0;
+    node.rename(args.newName);
+    return referenceCount;
+  });
+}
+
+export async function prepareReplaceBody(args: {
+  projectRoot: string;
+  filePath: string;
+  symbolPath: string;
+  newBody: string;
+  allowNewErrors?: boolean;
+}): Promise<PreparedOperation> {
+  return createPlan(
+    args.projectRoot,
+    "replace_symbol_body",
+    args.allowNewErrors ?? false,
+    (project) => {
+      const sourceFile = getSourceFileOrThrow(project, args.filePath);
+      const declaration = findDeclarationByName(sourceFile, args.symbolPath);
+      const executable = executableDeclaration(declaration) as Node & {
+        setBodyText(text: string): Node;
+      };
+      if (typeof executable.setBodyText !== "function") {
+        throw new Error(`Symbol "${args.symbolPath}" does not expose a replaceable body.`);
+      }
+      if (Node.isArrowFunction(executable) && !Node.isBlock(executable.getBody())) {
+        executable.getBody().replaceWithText("{}");
+      }
+      executable.setBodyText(args.newBody);
+      return 0;
+    },
+  );
+}
+
+async function withWriteLock<T>(key: string, callback: () => Promise<T>): Promise<T> {
+  const previous = writeQueues.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  writeQueues.set(key, next);
+  await previous;
+  try {
+    return await callback();
+  } finally {
+    release();
+    if (writeQueues.get(key) === next) writeQueues.delete(key);
+  }
+}
+
+async function safeUnlink(filePath: string): Promise<void> {
+  try {
+    await unlink(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}
+
+async function stageFile(file: PlannedFileInternal, operationId: string): Promise<string> {
+  const temporaryPath = `${file.absolutePath}.ast-mcp-${operationId}.tmp`;
+  await safeUnlink(temporaryPath);
+  const handle = await open(temporaryPath, "wx", file.mode);
+  try {
+    await handle.writeFile(file.updatedBytes);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  return temporaryPath;
+}
+
+async function restoreFile(file: PlannedFileInternal, operationId: string): Promise<void> {
+  const restorePath = `${file.absolutePath}.ast-mcp-${operationId}.restore`;
+  await safeUnlink(restorePath);
+  const handle = await open(restorePath, "wx", file.mode);
+  try {
+    await handle.writeFile(file.originalBytes);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await rename(restorePath, file.absolutePath);
+}
+
+async function syncDirectories(files: readonly PlannedFileInternal[]): Promise<void> {
+  const directories = new Set(files.map((file) => path.dirname(file.absolutePath)));
+  for (const directory of directories) {
+    const handle = await open(directory, "r");
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  }
+}
+
+function appliedResult(operation: OperationRecord, idempotentReplay: boolean): AppliedOperation {
+  return {
+    operation_id: operation.operation_id,
+    kind: operation.kind,
+    status: "applied",
+    applied_at: operation.applied_at!,
+    affected_files: operation.files.map((file) => file.file),
+    idempotent_replay: idempotentReplay,
+  };
+}
+
+export function configureOperationApply(
+  operationId: string,
+  options: RuntimeStateOptions & { receiptWriter: () => Promise<void> },
+): void {
+  const operation = operations.get(operationId);
+  if (!operation) {
+    throw new Error(`Prepared operation "${operationId}" was not found or has expired.`);
+  }
+  operation.receiptWriter = options.receiptWriter;
+  operation.lockStateDirectory = options.stateDirectory;
+}
+
+export async function applyOperation(
+  operationId: string,
+  planHash: string,
+): Promise<AppliedOperation> {
+  const operation = operations.get(operationId);
+  if (!operation) {
+    throw new Error(`Prepared operation "${operationId}" was not found or has expired.`);
+  }
+  if (planHash !== operation.plan_hash) {
+    throw new Error(`Plan hash mismatch for operation "${operationId}". No files were written.`);
+  }
+
+  const persistReceipt = async (): Promise<void> => {
+    if (!operation.receiptWriter) return;
+    try {
+      await operation.receiptWriter();
+    } catch (error) {
+      throw new Error(
+        "Operation sources are at the verified postimages, but receipt persistence failed. Retry apply with the same reviewed plan after resolving the storage error.",
+        { cause: error },
+      );
+    }
+  };
+
+  return withWriteLock(operation.tsConfigFilePath, async () =>
+    withWorkspaceFileLock(
+      operation.tsConfigFilePath,
+      { stateDirectory: operation.lockStateDirectory },
+      async () => {
+        if (operation.status === "applied") {
+          for (const file of operation.files) {
+            const currentBytes = await readFile(file.absolutePath);
+            if (hashBytes(currentBytes) !== file.updatedHash) {
+              throw new Error(
+                `Applied receipt conflict: ${file.file} no longer matches the recorded postimage.`,
+              );
+            }
+          }
+          await persistReceipt();
+          return appliedResult(operation, true);
+        }
+        if (Date.parse(operation.expires_at) <= operationNow()) {
+          operations.delete(operationId);
+          throw new Error(`Prepared operation "${operationId}" has expired.`);
+        }
+        if (operation.blocked) {
+          throw new Error(
+            operation.block_reason ?? "The operation is blocked by validation errors.",
+          );
+        }
+
+        for (const file of operation.files) {
+          assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
+        }
+
+        const currentContext = createFreshProject(operation.tsConfigFilePath);
+        const currentWorkspace = createWorkspaceSnapshot(currentContext);
+        if (currentWorkspace.digest === operation.post_workspace_hash) {
+          for (const file of operation.files) {
+            const currentBytes = await readFile(file.absolutePath);
+            if (hashBytes(currentBytes) !== file.updatedHash) {
+              throw new Error(
+                `Postimage recovery conflict: ${file.file} does not match the reviewed postimage.`,
+              );
+            }
+          }
+          operation.status = "applied";
+          operation.applied_at ??= new Date().toISOString();
+          invalidateProject(operation.tsConfigFilePath);
+          await persistReceipt();
+          return appliedResult(operation, true);
+        }
+        if (currentWorkspace.digest !== operation.workspace_hash) {
+          throw new Error(
+            "Conflict: the project source/config workspace changed after preparation. No files were written.",
+          );
+        }
+
+        for (const file of operation.files) {
+          const currentBytes = await readFile(file.absolutePath);
+          if (hashBytes(currentBytes) !== file.originalHash) {
+            throw new Error(
+              `Conflict: ${file.file} changed after the operation was prepared. No files were written.`,
+            );
+          }
+        }
+
+        const staged = new Map<PlannedFileInternal, string>();
+        const applied: PlannedFileInternal[] = [];
+        try {
+          for (const file of operation.files) {
+            staged.set(file, await stageFile(file, operationId));
+          }
+          for (const file of operation.files) {
+            const currentBytes = await readFile(file.absolutePath);
+            if (hashBytes(currentBytes) !== file.originalHash) {
+              throw new Error(
+                `Conflict: ${file.file} changed while the operation was being staged. No files were written.`,
+              );
+            }
+          }
+          for (const [index, file] of operation.files.entries()) {
+            await operationTestHooks.beforeReplace?.(file.file, index);
+            await rename(staged.get(file)!, file.absolutePath);
+            staged.delete(file);
+            applied.push(file);
+            const writtenBytes = await readFile(file.absolutePath);
+            if (hashBytes(writtenBytes) !== file.updatedHash) {
+              throw new Error(`Post-write verification failed for ${file.file}.`);
+            }
+          }
+          await syncDirectories(operation.files);
+        } catch (error) {
+          const rollbackErrors: string[] = [];
+          for (const file of [...applied].reverse()) {
+            try {
+              const currentBytes = await readFile(file.absolutePath);
+              if (hashBytes(currentBytes) !== file.updatedHash) {
+                rollbackErrors.push(
+                  `${file.file}: current bytes no longer match this operation's postimage`,
+                );
+                continue;
+              }
+              await restoreFile(file, operationId);
+            } catch (rollbackError) {
+              rollbackErrors.push(
+                `${file.file}: ${
+                  rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+                }`,
+              );
+            }
+          }
+          for (const temporaryPath of staged.values()) await safeUnlink(temporaryPath);
+          if (applied.length > 0 && rollbackErrors.length === 0) {
+            await syncDirectories(applied);
+            throw new Error(
+              `Operation failed after replacing ${applied.length} file(s); rollback succeeded and original bytes were restored. Original error: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+              { cause: error },
+            );
+          }
+          if (rollbackErrors.length > 0) {
+            throw new Error(
+              `Operation failed and rollback was incomplete: ${rollbackErrors.join("; ")}. Original error: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+              { cause: error },
+            );
+          }
+          throw error;
+        }
+
+        operation.status = "applied";
+        operation.applied_at = new Date().toISOString();
+        invalidateProject(operation.tsConfigFilePath);
+        await persistReceipt();
+        return appliedResult(operation, false);
+      },
+    ),
+  );
+}
+
+export function getOperationPreview(
+  operationId: string,
+  file?: string,
+): { operation_id: string; plan_hash: string; files: Array<{ file: string; diff: string }> } {
+  const operation = operations.get(operationId);
+  if (!operation) {
+    throw new Error(`Prepared operation "${operationId}" was not found or has expired.`);
+  }
+  const files = file ? operation.files.filter((item) => item.file === file) : operation.files;
+  if (file && files.length === 0) {
+    throw new Error(`File "${file}" is not part of operation "${operationId}".`);
+  }
+  return {
+    operation_id: operationId,
+    plan_hash: operation.plan_hash,
+    files: files.map((item) => ({ file: item.file, diff: item.diff })),
+  };
+}
+
+function decodePersistedBytes(value: string, label: string): Buffer {
+  const bytes = Buffer.from(value, "base64");
+  if (bytes.toString("base64") !== value) {
+    throw new Error(`Persisted operation contains invalid base64 for ${label}.`);
+  }
+  return bytes;
+}
+
+function containedOperationPath(projectRoot: string, file: string): string {
+  if (path.isAbsolute(file)) {
+    throw new Error(`Persisted operation file path must be project-relative: ${file}`);
+  }
+  const absolutePath = path.resolve(projectRoot, file);
+  const relative = path.relative(projectRoot, absolutePath);
+  if (relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`)) {
+    throw new Error(`Persisted operation file escapes the project root: ${file}`);
+  }
+  if (relative !== file.split(path.posix.sep).join(path.sep)) {
+    throw new Error(`Persisted operation file path is not normalized: ${file}`);
+  }
+  assertSafeOperationFile(projectRoot, absolutePath, file);
+  return absolutePath;
+}
+
+export function exportOperationRecord(operationId: string): PersistedOperationRecord {
+  const operation = operations.get(operationId);
+  if (!operation) {
+    throw new Error(`Prepared operation "${operationId}" was not found or has expired.`);
+  }
+  return {
+    ...publicOperation(operation),
+    ...(operation.applied_at ? { applied_at: operation.applied_at } : {}),
+    files: operation.files.map((file) => ({
+      file: file.file,
+      original_hash: file.originalHash,
+      updated_hash: file.updatedHash,
+      original_bytes_base64: file.originalBytes.toString("base64"),
+      updated_bytes_base64: file.updatedBytes.toString("base64"),
+      mode: file.mode,
+    })),
+  };
+}
+
+export function importOperationRecord(
+  persisted: PersistedOperationRecord,
+  expectedPlanHash: string,
+): PreparedOperation {
+  if (persisted.plan_hash !== expectedPlanHash) {
+    throw new Error(
+      `Plan hash mismatch for operation "${persisted.operation_id}". No files were written.`,
+    );
+  }
+  if (persisted.status === "prepared" && Date.parse(persisted.expires_at) <= operationNow()) {
+    throw new Error(`Prepared operation "${persisted.operation_id}" has expired.`);
+  }
+  if (persisted.status === "applied" && !persisted.applied_at) {
+    throw new Error("Persisted applied operation is missing applied_at.");
+  }
+  if (persisted.status === "prepared" && persisted.applied_at) {
+    throw new Error("Persisted prepared operation cannot contain applied_at.");
+  }
+
+  const context = createFreshProject(persisted.project_root);
+  if (context.projectRoot !== persisted.project_root) {
+    throw new Error("Persisted project_root is not canonical.");
+  }
+  const files: PlannedFileInternal[] = persisted.files.map((file) => {
+    const absolutePath = containedOperationPath(context.projectRoot, file.file);
+    const originalBytes = decodePersistedBytes(
+      file.original_bytes_base64,
+      `${file.file} original bytes`,
+    );
+    const updatedBytes = decodePersistedBytes(
+      file.updated_bytes_base64,
+      `${file.file} updated bytes`,
+    );
+    if (hashBytes(originalBytes) !== file.original_hash) {
+      throw new Error(`Persisted original hash mismatch for ${file.file}.`);
+    }
+    if (hashBytes(updatedBytes) !== file.updated_hash) {
+      throw new Error(`Persisted updated hash mismatch for ${file.file}.`);
+    }
+    const originalText = decodeSource(originalBytes, absolutePath);
+    const updatedText = decodeSource(updatedBytes, absolutePath);
+    return {
+      absolutePath,
+      file: file.file,
+      originalHash: file.original_hash,
+      updatedHash: file.updated_hash,
+      originalText,
+      updatedText,
+      originalBytes,
+      updatedBytes,
+      diff: createTwoFilesPatch(
+        file.file,
+        file.file,
+        originalText,
+        updatedText,
+        "before",
+        "after",
+        { context: 3 },
+      ),
+      mode: file.mode,
+    };
+  });
+  files.sort((left, right) => left.file.localeCompare(right.file));
+  if (files.length === 0 || new Set(files.map((file) => file.file)).size !== files.length) {
+    throw new Error("Persisted operation must contain unique affected files.");
+  }
+
+  const affectedFiles = files.map((file) => ({
+    file: file.file,
+    original_hash: file.originalHash,
+    updated_hash: file.updatedHash,
+  }));
+  if (JSON.stringify(affectedFiles) !== JSON.stringify(persisted.affected_files)) {
+    throw new Error("Persisted affected_files do not match the exact file payloads.");
+  }
+  const addedErrors = persisted.diagnostics.added.filter(
+    (diagnostic) => diagnostic.category === "Error",
+  );
+  if (JSON.stringify(addedErrors) !== JSON.stringify(persisted.diagnostics.addedErrors)) {
+    throw new Error("Persisted diagnostic error delta is inconsistent.");
+  }
+  const blocked = !persisted.allow_new_errors && addedErrors.length > 0;
+  if (persisted.blocked !== blocked) {
+    throw new Error("Persisted blocked status is inconsistent with diagnostics policy.");
+  }
+
+  const fullPreview = files.map((file) => file.diff).join("\n");
+  const record: OperationRecord = {
+    ...persisted,
+    affected_files: affectedFiles,
+    blocked,
+    block_reason: blocked
+      ? `${addedErrors.length} new TypeScript error(s) would be introduced. Prepare again with allow_new_errors=true only after explicit review.`
+      : null,
+    preview: fullPreview.length <= MAX_INLINE_PREVIEW_CHARS ? fullPreview : null,
+    preview_truncated: fullPreview.length > MAX_INLINE_PREVIEW_CHARS,
+    tsConfigFilePath: context.tsConfigFilePath,
+    files,
+  };
+  if (planHashFor(record) !== expectedPlanHash) {
+    throw new Error(
+      `Persisted plan integrity mismatch for operation "${persisted.operation_id}". No files were written.`,
+    );
+  }
+
+  const existing = operations.get(record.operation_id);
+  if (existing && existing.plan_hash !== record.plan_hash) {
+    throw new Error(`Operation id collision for "${record.operation_id}".`);
+  }
+  pruneOperations();
+  operations.set(record.operation_id, record);
+  return publicOperation(record);
+}
+
+export function setOperationTestHooksForTests(hooks: OperationTestHooks): void {
+  operationTestHooks = hooks;
+}
+
+export function setOperationStoreConfigForTests(options: {
+  now?: () => number;
+  ttlMs?: number;
+  maxOperations?: number;
+}): void {
+  operationNow = options.now ?? operationNow;
+  operationTtlMs = options.ttlMs ?? operationTtlMs;
+  maxOperations = options.maxOperations ?? maxOperations;
+}
+
+export function clearOperationsForTests(): void {
+  operations.clear();
+  writeQueues.clear();
+  operationTestHooks = {};
+  operationTtlMs = DEFAULT_OPERATION_TTL_MS;
+  maxOperations = DEFAULT_MAX_OPERATIONS;
+  operationNow = () => Date.now();
+}

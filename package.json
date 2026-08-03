@@ -1,0 +1,51 @@
+{
+  "name": "ast-mcp-server",
+  "version": "0.3.0",
+  "description": "Structural code MCP server and batch CLI for compact TypeScript/JavaScript reads and hash-bound AST edits.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "ast-mcp-server": "dist/index.js",
+    "ast-tool": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:mcp": "npm run build --silent && node scripts/mcp-smoke.mjs",
+    "test:cli": "npm run build --silent && node scripts/cli-smoke.mjs",
+    "benchmark": "npm run build --silent && node scripts/benchmark.mjs",
+    "benchmark:corpus": "npm run build --silent && node scripts/benchmark-corpus.mjs",
+    "benchmark:batch": "npm run build --silent && node scripts/benchmark-batch.mjs",
+    "lint": "eslint src test scripts vitest.config.ts eslint.config.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepack": "npm run build",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "diff": "^9.0.0",
+    "ts-morph": "24.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.5.0",
+    "eslint": "^10.8.0",
+    "prettier": "^3.9.6",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-03T05:16:28.547Z",
+  "project_root": "<repository-root>",
+  "tsconfig": "<repository-root>/tsconfig.json",
+  "node_version": "v24.16.0",
+  "methodology": {
+    "selection": "lexicographically first non-declaration project files after optional substring filter",
+    "sample_requested": 20,
+    "sample_measured": 20,
+    "token_claim": "No tokenizer claim. Character counts measure serialized MCP payload size only."
+  },
+  "latency_ms": {
+    "fresh_project_load": 543.154379,
+    "cold_cached_session_outline": 354.39118799999994,
+    "warm_cached_session_outline": 1.8574510000000828,
+    "outline_p50": 0.061879999999973734,
+    "outline_p95": 1.510672999999997
+  },
+  "payload": {
+    "full_source_chars": 77982,
+    "default_structured_outline_chars": 12512,
+    "detailed_structured_outline_chars": 54348,
+    "reduction_percent": 83.95527172937345
+  },
+  "files": [
+    {
+      "file": "src/index.ts",
+      "source_chars": 1808,
+      "outline_text_chars": 87,
+      "structured_result_chars": 124,
+      "detailed_result_chars": 454,
+      "reduction_percent": 93.14159292035397,
+      "symbol_count": 2,
+      "duration_ms": 1.510672999999997
+    },
+    {
+      "file": "src/services/diagnostics.ts",
+      "source_chars": 2286,
+      "outline_text_chars": 741,
+      "structured_result_chars": 808,
+      "detailed_result_chars": 3456,
+      "reduction_percent": 64.65441819772528,
+      "symbol_count": 15,
+      "duration_ms": 0.7160159999999678
+    },
+    {
+      "file": "src/services/operations.ts",
+      "source_chars": 19255,
+      "outline_text_chars": 3662,
+      "structured_result_chars": 3820,
+      "detailed_result_chars": 17789,
+      "reduction_percent": 80.16099714359906,
+      "symbol_count": 77,
+      "duration_ms": 2.6104409999999234
+    },
+    {
+      "file": "src/services/outline.ts",
+      "source_chars": 10650,
+      "outline_text_chars": 1940,
+      "structured_result_chars": 2035,
+      "detailed_result_chars": 8179,
+      "reduction_percent": 80.89201877934272,
+      "symbol_count": 33,
+      "duration_ms": 0.5609390000000758
+    },
+    {
+      "file": "src/services/pagination.ts",
+      "source_chars": 1169,
+      "outline_text_chars": 370,
+      "structured_result_chars": 432,
+      "detailed_result_chars": 2255,
+      "reduction_percent": 63.045337895637296,
+      "symbol_count": 12,
+      "duration_ms": 0.13465399999995498
+    },
+    {
+      "file": "src/services/project.ts",
+      "source_chars": 5539,
+      "outline_text_chars": 1187,
+      "structured_result_chars": 1260,
+      "detailed_result_chars": 5757,
+      "reduction_percent": 77.25221159053982,
+      "symbol_count": 25,
+      "duration_ms": 0.38669000000004417
+    },
+    {
+      "file": "src/services/symbols.ts",
+      "source_chars": 4863,
+      "outline_text_chars": 821,
+      "structured_result_chars": 883,
+      "detailed_result_chars": 3593,
+      "reduction_percent": 81.84248406333539,
+      "symbol_count": 15,
+      "duration_ms": 0.19154599999990296
+    },
+    {
+      "file": "src/services/workspace.ts",
+      "source_chars": 3282,
+      "outline_text_chars": 640,
+      "structured_result_chars": 706,
+      "detailed_result_chars": 3015,
+      "reduction_percent": 78.48872638634978,
+      "symbol_count": 13,
+      "duration_ms": 0.13278399999990143
+    },
+    {
+      "file": "src/tools/apply_operation.ts",
+      "source_chars": 1615,
+      "outline_text_chars": 137,
+      "structured_result_chars": 191,
+      "detailed_result_chars": 794,
+      "reduction_percent": 88.17337461300309,
+      "symbol_count": 3,
+      "duration_ms": 0.13819300000000112
+    },
+    {
+      "file": "src/tools/find_references.ts",
+      "source_chars": 4621,
+      "outline_text_chars": 160,
+      "structured_result_chars": 215,
+      "detailed_result_chars": 972,
+      "reduction_percent": 95.34732741830773,
+      "symbol_count": 4,
+      "duration_ms": 0.061879999999973734
+    },
+    {
+      "file": "src/tools/get_diagnostics.ts",
+      "source_chars": 3277,
+      "outline_text_chars": 161,
+      "structured_result_chars": 216,
+      "detailed_result_chars": 975,
+      "reduction_percent": 93.40860543179737,
+      "symbol_count": 4,
+      "duration_ms": 0.07293300000003455
+    },
+    {
+      "file": "src/tools/get_operation_preview.ts",
+      "source_chars": 1410,
+      "outline_text_chars": 152,
+      "structured_result_chars": 212,
+      "detailed_result_chars": 860,
+      "reduction_percent": 84.9645390070922,
+      "symbol_count": 3,
+      "duration_ms": 0.036143999999922016
+    },
+    {
+      "file": "src/tools/get_outline.ts",
+      "source_chars": 2331,
+      "outline_text_chars": 152,
+      "structured_result_chars": 203,
+      "detailed_result_chars": 935,
+      "reduction_percent": 91.29129129129129,
+      "symbol_count": 4,
+      "duration_ms": 0.04808100000002469
+    },
+    {
+      "file": "src/tools/get_symbol_source.ts",
+      "source_chars": 1944,
+      "outline_text_chars": 140,
+      "structured_result_chars": 196,
+      "detailed_result_chars": 809,
+      "reduction_percent": 89.91769547325103,
+      "symbol_count": 3,
+      "duration_ms": 0.03258799999991879
+    },
+    {
+      "file": "src/tools/list_files.ts",
+      "source_chars": 2134,
+      "outline_text_chars": 122,
+      "structured_result_chars": 171,
+      "detailed_result_chars": 730,
+      "reduction_percent": 91.98687910028116,
+      "symbol_count": 3,
+      "duration_ms": 0.03411000000005515
+    },
+    {
+      "file": "src/tools/operation-schema.ts",
+      "source_chars": 2342,
+      "outline_text_chars": 158,
+      "structured_result_chars": 213,
+      "detailed_result_chars": 842,
+      "reduction_percent": 90.90520922288641,
+      "symbol_count": 3,
+      "duration_ms": 0.031835000000000946
+    },
+    {
+      "file": "src/tools/rename_symbol.ts",
+      "source_chars": 2130,
+      "outline_text_chars": 96,
+      "structured_result_chars": 147,
+      "detailed_result_chars": 545,
+      "reduction_percent": 93.09859154929578,
+      "symbol_count": 2,
+      "duration_ms": 0.024639000000092892
+    },
+    {
+      "file": "src/tools/replace_symbol_body.ts",
+      "source_chars": 2174,
+      "outline_text_chars": 106,
+      "structured_result_chars": 163,
+      "detailed_result_chars": 591,
+      "reduction_percent": 92.50229990800368,
+      "symbol_count": 2,
+      "duration_ms": 0.024581000000011954
+    },
+    {
+      "file": "src/tools/result.ts",
+      "source_chars": 475,
+      "outline_text_chars": 251,
+      "structured_result_chars": 303,
+      "detailed_result_chars": 825,
+      "reduction_percent": 36.21052631578948,
+      "symbol_count": 2,
+      "duration_ms": 0.020643000000063694
+    },
+    {
+      "file": "src/tools/search_symbols.ts",
+      "source_chars": 4677,
+      "outline_text_chars": 160,
+      "structured_result_chars": 214,
+      "detailed_result_chars": 972,
+      "reduction_percent": 95.42441736155655,
+      "symbol_count": 4,
+      "duration_ms": 0.050707999999985987
+    }
+  ]
+}

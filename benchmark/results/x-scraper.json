@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-03T05:16:36.733Z",
+  "project_root": "<x-scraper-root>",
+  "tsconfig": "<x-scraper-root>/tsconfig.json",
+  "node_version": "v24.16.0",
+  "methodology": {
+    "selection": "lexicographically first non-declaration project files after optional substring filter",
+    "sample_requested": 20,
+    "sample_measured": 20,
+    "token_claim": "No tokenizer claim. Character counts measure serialized MCP payload size only."
+  },
+  "latency_ms": {
+    "fresh_project_load": 3951.1330040000003,
+    "cold_cached_session_outline": 2723.264977,
+    "warm_cached_session_outline": 180.16309900000033,
+    "outline_p50": 0.12635499999942112,
+    "outline_p95": 1.332788000000619
+  },
+  "payload": {
+    "full_source_chars": 178110,
+    "default_structured_outline_chars": 17036,
+    "detailed_structured_outline_chars": 82426,
+    "reduction_percent": 90.43512436134972
+  },
+  "files": [
+    {
+      "file": "playwright.config.ts",
+      "source_chars": 2176,
+      "outline_text_chars": 0,
+      "structured_result_chars": 44,
+      "detailed_result_chars": 57,
+      "reduction_percent": 97.97794117647058,
+      "symbol_count": 0,
+      "duration_ms": 0.47471699999914563
+    },
+    {
+      "file": "scripts/agent-nansen-audit.ts",
+      "source_chars": 3167,
+      "outline_text_chars": 88,
+      "structured_result_chars": 142,
+      "detailed_result_chars": 486,
+      "reduction_percent": 95.51626144616357,
+      "symbol_count": 2,
+      "duration_ms": 1.305859000000055
+    },
+    {
+      "file": "scripts/analyze-exit-patterns.ts",
+      "source_chars": 13081,
+      "outline_text_chars": 898,
+      "structured_result_chars": 988,
+      "detailed_result_chars": 5781,
+      "reduction_percent": 92.4470606222766,
+      "symbol_count": 33,
+      "duration_ms": 1.332788000000619
+    },
+    {
+      "file": "scripts/analyze-losing-tokens.ts",
+      "source_chars": 34226,
+      "outline_text_chars": 4308,
+      "structured_result_chars": 4491,
+      "detailed_result_chars": 25440,
+      "reduction_percent": 86.87839654064162,
+      "symbol_count": 120,
+      "duration_ms": 3.571962999999414
+    },
+    {
+      "file": "scripts/analyze-near-grad-winners.ts",
+      "source_chars": 8582,
+      "outline_text_chars": 654,
+      "structured_result_chars": 738,
+      "detailed_result_chars": 4388,
+      "reduction_percent": 91.40060591936611,
+      "symbol_count": 24,
+      "duration_ms": 0.32804699999996956
+    },
+    {
+      "file": "scripts/analyze-post-sdd-deep.ts",
+      "source_chars": 8345,
+      "outline_text_chars": 155,
+      "structured_result_chars": 217,
+      "detailed_result_chars": 1161,
+      "reduction_percent": 97.39964050329539,
+      "symbol_count": 7,
+      "duration_ms": 0.10947500000020227
+    },
+    {
+      "file": "scripts/analyze-strategy-funnel.ts",
+      "source_chars": 8539,
+      "outline_text_chars": 157,
+      "structured_result_chars": 219,
+      "detailed_result_chars": 951,
+      "reduction_percent": 97.43529687317016,
+      "symbol_count": 5,
+      "duration_ms": 0.12635499999942112
+    },
+    {
+      "file": "scripts/audit-sniper-health.ts",
+      "source_chars": 5227,
+      "outline_text_chars": 37,
+      "structured_result_chars": 91,
+      "detailed_result_chars": 249,
+      "reduction_percent": 98.2590396020662,
+      "symbol_count": 1,
+      "duration_ms": 0.03158900000016729
+    },
+    {
+      "file": "scripts/backfill-cooccurrence.ts",
+      "source_chars": 3025,
+      "outline_text_chars": 51,
+      "structured_result_chars": 108,
+      "detailed_result_chars": 390,
+      "reduction_percent": 96.4297520661157,
+      "symbol_count": 2,
+      "duration_ms": 0.05327500000021246
+    },
+    {
+      "file": "scripts/backfill-early-tokens.ts",
+      "source_chars": 6524,
+      "outline_text_chars": 216,
+      "structured_result_chars": 275,
+      "detailed_result_chars": 981,
+      "reduction_percent": 95.7847946045371,
+      "symbol_count": 4,
+      "duration_ms": 0.0828879999999117
+    },
+    {
+      "file": "scripts/backfill-exit-blacklist.ts",
+      "source_chars": 4453,
+      "outline_text_chars": 107,
+      "structured_result_chars": 169,
+      "detailed_result_chars": 869,
+      "reduction_percent": 96.20480574893331,
+      "symbol_count": 5,
+      "duration_ms": 0.11278000000038446
+    },
+    {
+      "file": "scripts/backfill-validation.ts",
+      "source_chars": 12959,
+      "outline_text_chars": 1627,
+      "structured_result_chars": 1726,
+      "detailed_result_chars": 8489,
+      "reduction_percent": 86.68107107029863,
+      "symbol_count": 43,
+      "duration_ms": 0.9894180000001143
+    },
+    {
+      "file": "scripts/backtest-killswitch-coverage.ts",
+      "source_chars": 6068,
+      "outline_text_chars": 55,
+      "structured_result_chars": 120,
+      "detailed_result_chars": 528,
+      "reduction_percent": 98.022412656559,
+      "symbol_count": 3,
+      "duration_ms": 0.0476490000000922
+    },
+    {
+      "file": "scripts/calibrate-near-grad-bundle-quality.ts",
+      "source_chars": 13845,
+      "outline_text_chars": 1753,
+      "structured_result_chars": 1866,
+      "detailed_result_chars": 8949,
+      "reduction_percent": 86.52221018418201,
+      "symbol_count": 43,
+      "duration_ms": 0.6212189999996554
+    },
+    {
+      "file": "scripts/calibrate-near-grad-late-risk.ts",
+      "source_chars": 9499,
+      "outline_text_chars": 965,
+      "structured_result_chars": 1054,
+      "detailed_result_chars": 4896,
+      "reduction_percent": 88.90409516791242,
+      "symbol_count": 25,
+      "duration_ms": 0.2842189999992115
+    },
+    {
+      "file": "scripts/calibrate-near-grad-profit-protection-risk-sizing.ts",
+      "source_chars": 10795,
+      "outline_text_chars": 1585,
+      "structured_result_chars": 1718,
+      "detailed_result_chars": 5059,
+      "reduction_percent": 84.08522464103751,
+      "symbol_count": 14,
+      "duration_ms": 0.2445159999997486
+    },
+    {
+      "file": "scripts/calibrate-near-grad-uncertainty.ts",
+      "source_chars": 17410,
+      "outline_text_chars": 2533,
+      "structured_result_chars": 2663,
+      "detailed_result_chars": 12097,
+      "reduction_percent": 84.70419299253302,
+      "symbol_count": 55,
+      "duration_ms": 0.7066020000002027
+    },
+    {
+      "file": "scripts/calibrate-near-grad-volume-floor.ts",
+      "source_chars": 6248,
+      "outline_text_chars": 168,
+      "structured_result_chars": 241,
+      "detailed_result_chars": 1192,
+      "reduction_percent": 96.1427656850192,
+      "symbol_count": 7,
+      "duration_ms": 0.10725900000034017
+    },
+    {
+      "file": "scripts/check-emergency-exit.ts",
+      "source_chars": 1178,
+      "outline_text_chars": 22,
+      "structured_result_chars": 77,
+      "detailed_result_chars": 218,
+      "reduction_percent": 93.4634974533107,
+      "symbol_count": 1,
+      "duration_ms": 0.011626000000433123
+    },
+    {
+      "file": "scripts/check-entry-state.ts",
+      "source_chars": 2763,
+      "outline_text_chars": 37,
+      "structured_result_chars": 89,
+      "detailed_result_chars": 245,
+      "reduction_percent": 96.77886355410786,
+      "symbol_count": 1,
+      "duration_ms": 0.015559000000394008
+    }
+  ]
+}

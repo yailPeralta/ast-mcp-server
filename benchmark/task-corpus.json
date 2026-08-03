@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "project_root": "..",
+  "tasks": [
+    {
+      "id": "tool-registration",
+      "question": "Which MCP tools are registered by the executable entry point?",
+      "files": ["src/index.ts"],
+      "symbol_sources": [{ "file": "src/index.ts", "symbol": "createServer" }],
+      "expected_evidence": ["createServer", "main", "registerApplyOperation"]
+    },
+    {
+      "id": "outline-contract",
+      "question": "What public structure and builder define a compact file outline?",
+      "files": ["src/services/outline.ts"],
+      "expected_evidence": ["interface FileOutline", "function buildFileOutline"]
+    },
+    {
+      "id": "project-freshness",
+      "question": "How are cached projects synchronized after source or extended-config changes?",
+      "files": ["src/services/project.ts", "src/services/workspace.ts"],
+      "symbol_sources": [
+        { "file": "src/services/project.ts", "symbol": "synchronizeSession" },
+        { "file": "src/services/workspace.ts", "symbol": "createConfigSnapshot" }
+      ],
+      "expected_evidence": ["function withProject", "function createConfigSnapshot"]
+    },
+    {
+      "id": "path-resolution",
+      "question": "How does exact project-relative lookup differ from suffix fallback?",
+      "files": ["src/services/project.ts"],
+      "symbol_sources": [{ "file": "src/services/project.ts", "symbol": "getSourceFileOrThrow" }],
+      "expected_evidence": ["function getSourceFileOrThrow", "path.normalize", "exactPath"]
+    },
+    {
+      "id": "diagnostic-delta",
+      "question": "How are added and removed diagnostics computed?",
+      "files": ["src/services/diagnostics.ts"],
+      "symbol_sources": [{ "file": "src/services/diagnostics.ts", "symbol": "compareDiagnostics" }],
+      "expected_evidence": ["interface DiagnosticDelta", "function compareDiagnostics"]
+    },
+    {
+      "id": "prepare-apply",
+      "question": "What are the public mutation preparation and apply entry points?",
+      "files": ["src/services/operations.ts"],
+      "expected_evidence": [
+        "function prepareRename",
+        "function prepareReplaceBody",
+        "function applyOperation"
+      ]
+    },
+    {
+      "id": "workspace-binding",
+      "question": "How is a prepared plan bound to source and config bytes?",
+      "files": ["src/services/workspace.ts", "src/services/operations.ts"],
+      "symbol_sources": [
+        { "file": "src/services/workspace.ts", "symbol": "createWorkspaceSnapshot" },
+        { "file": "src/services/operations.ts", "symbol": "createPlan" }
+      ],
+      "expected_evidence": ["function createWorkspaceSnapshot", "plan_hash", "workspace_hash"]
+    },
+    {
+      "id": "mcp-result-shape",
+      "question": "How are structured success and error tool results serialized?",
+      "files": ["src/tools/result.ts"],
+      "symbol_sources": [
+        { "file": "src/tools/result.ts", "symbol": "structuredResult" },
+        { "file": "src/tools/result.ts", "symbol": "errorResult" }
+      ],
+      "expected_evidence": ["function structuredResult", "function errorResult"]
+    },
+    {
+      "id": "pagination",
+      "question": "What pagination metadata is returned by bounded read tools?",
+      "files": ["src/services/pagination.ts"],
+      "symbol_sources": [{ "file": "src/services/pagination.ts", "symbol": "paginate" }],
+      "expected_evidence": ["function paginate", "PaginationOutputSchema"]
+    },
+    {
+      "id": "symbol-resolution",
+      "question": "Which functions resolve declarations and callable bodies?",
+      "files": ["src/services/symbols.ts"],
+      "expected_evidence": ["function findDeclaration", "function executableDeclaration"]
+    },
+    {
+      "id": "apply-tool-contract",
+      "question": "Which inputs bind an MCP apply call to a reviewed plan?",
+      "files": ["src/tools/apply_operation.ts"],
+      "symbol_sources": [
+        {
+          "file": "src/tools/apply_operation.ts",
+          "symbol": "AstApplyOperationInputSchema"
+        }
+      ],
+      "expected_evidence": ["operation_id", "plan_hash", "function registerApplyOperation"]
+    },
+    {
+      "id": "diagnostics-tool-contract",
+      "question": "How does the diagnostics tool distinguish project and file scope?",
+      "files": ["src/tools/get_diagnostics.ts"],
+      "symbol_sources": [
+        {
+          "file": "src/tools/get_diagnostics.ts",
+          "symbol": "AstGetDiagnosticsInputSchema"
+        }
+      ],
+      "expected_evidence": ["file_path", "function registerGetDiagnostics"]
+    }
+  ]
+}
