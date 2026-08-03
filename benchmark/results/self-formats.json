@@ -1,0 +1,260 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-03T22:05:47.381Z",
+  "node_version": "v24.16.0",
+  "project_root": "<repository-root>",
+  "methodology": {
+    "tokenizer": "gpt-tokenizer o200k_base",
+    "tokenizer_package_version": "3.4.0",
+    "toon_package_version": "4.1.0",
+    "json_representation": "JSON.stringify of the validated logical result",
+    "cli_toon_representation": "plain TOON text",
+    "mcp_toon_representation": "JSON.stringify of {format:'toon',data:<TOON>} structuredContent",
+    "latency_iterations": 50,
+    "billing_claim": "Tokenizer counts are local estimates only. No provider-side billed-token or cache claim is made."
+  },
+  "tool_metadata": {
+    "baseline_version": "0.3.0",
+    "baseline_serialized_characters": 19101,
+    "current_serialized_characters": 16650,
+    "delta_characters": -2451,
+    "delta_percent": -12.831788911575309
+  },
+  "payloads": [
+    {
+      "name": "broad_symbol_search",
+      "eligible": true,
+      "source": "repository tool output",
+      "record_count": 100,
+      "round_trip_equal": true,
+      "json": {
+        "characters": 22291,
+        "bytes": 22291,
+        "tokens_o200k_base": 5225
+      },
+      "toon": {
+        "characters": 14781,
+        "bytes": 14781,
+        "tokens_o200k_base": 3710
+      },
+      "mcp_envelope": {
+        "characters": 15090,
+        "bytes": 15090,
+        "tokens_o200k_base": 3881
+      },
+      "reduction_percent": {
+        "cli_tokens": 28.995215311004785,
+        "mcp_tokens": 25.722488038277515,
+        "cli_bytes": 33.69072719931811,
+        "mcp_bytes": 32.304517518280925
+      },
+      "latency_ms": {
+        "encode_p50": 0.24579599999992752,
+        "decode_p50": 0.7029409999998961
+      }
+    },
+    {
+      "name": "references",
+      "eligible": true,
+      "source": "deterministic fixture tool output",
+      "record_count": 71,
+      "round_trip_equal": true,
+      "json": {
+        "characters": 10961,
+        "bytes": 10961,
+        "tokens_o200k_base": 3086
+      },
+      "toon": {
+        "characters": 6524,
+        "bytes": 6524,
+        "tokens_o200k_base": 2038
+      },
+      "mcp_envelope": {
+        "characters": 6693,
+        "bytes": 6693,
+        "tokens_o200k_base": 2150
+      },
+      "reduction_percent": {
+        "cli_tokens": 33.9598185353208,
+        "mcp_tokens": 30.33052495139339,
+        "cli_bytes": 40.479883222333726,
+        "mcp_bytes": 38.93805309734513
+      },
+      "latency_ms": {
+        "encode_p50": 0.11092849999999999,
+        "decode_p50": 0.3951170000000275
+      }
+    },
+    {
+      "name": "diagnostics",
+      "eligible": true,
+      "source": "deterministic fixture tool output",
+      "record_count": 30,
+      "round_trip_equal": true,
+      "json": {
+        "characters": 4495,
+        "bytes": 4495,
+        "tokens_o200k_base": 1309
+      },
+      "toon": {
+        "characters": 2816,
+        "bytes": 2816,
+        "tokens_o200k_base": 962
+      },
+      "mcp_envelope": {
+        "characters": 2881,
+        "bytes": 2881,
+        "tokens_o200k_base": 1034
+      },
+      "reduction_percent": {
+        "cli_tokens": 26.508785332314744,
+        "mcp_tokens": 21.008403361344538,
+        "cli_bytes": 37.35261401557286,
+        "mcp_bytes": 35.906562847608456
+      },
+      "latency_ms": {
+        "encode_p50": 0.04098450000003595,
+        "decode_p50": 0.15741149999985282
+      }
+    },
+    {
+      "name": "file_list_negative_control",
+      "eligible": false,
+      "source": "repository tool output",
+      "record_count": 30,
+      "round_trip_equal": true,
+      "json": {
+        "characters": 912,
+        "bytes": 912,
+        "tokens_o200k_base": 218
+      },
+      "toon": {
+        "characters": 846,
+        "bytes": 846,
+        "tokens_o200k_base": 220
+      },
+      "mcp_envelope": {
+        "characters": 878,
+        "bytes": 878,
+        "tokens_o200k_base": 230
+      },
+      "reduction_percent": {
+        "cli_tokens": -0.9174311926605505,
+        "mcp_tokens": -5.5045871559633035,
+        "cli_bytes": 7.236842105263158,
+        "mcp_bytes": 3.7280701754385963
+      },
+      "latency_ms": {
+        "encode_p50": 0.007049999999935608,
+        "decode_p50": 0.02271399999995083
+      }
+    },
+    {
+      "name": "outline_negative_control",
+      "eligible": false,
+      "source": "repository tool output",
+      "record_count": null,
+      "round_trip_equal": true,
+      "json": {
+        "characters": 214,
+        "bytes": 214,
+        "tokens_o200k_base": 47
+      },
+      "toon": {
+        "characters": 208,
+        "bytes": 208,
+        "tokens_o200k_base": 46
+      },
+      "mcp_envelope": {
+        "characters": 241,
+        "bytes": 241,
+        "tokens_o200k_base": 58
+      },
+      "reduction_percent": {
+        "cli_tokens": 2.127659574468085,
+        "mcp_tokens": -23.404255319148938,
+        "cli_bytes": 2.803738317757009,
+        "mcp_bytes": -12.616822429906541
+      },
+      "latency_ms": {
+        "encode_p50": 0.0022945000000618165,
+        "decode_p50": 0.004257999999936146
+      }
+    },
+    {
+      "name": "source_negative_control",
+      "eligible": false,
+      "source": "repository tool output",
+      "record_count": null,
+      "round_trip_equal": true,
+      "json": {
+        "characters": 3384,
+        "bytes": 3384,
+        "tokens_o200k_base": 755
+      },
+      "toon": {
+        "characters": 3376,
+        "bytes": 3376,
+        "tokens_o200k_base": 756
+      },
+      "mcp_envelope": {
+        "characters": 3505,
+        "bytes": 3505,
+        "tokens_o200k_base": 823
+      },
+      "reduction_percent": {
+        "cli_tokens": -0.13245033112582782,
+        "mcp_tokens": -9.006622516556291,
+        "cli_bytes": 0.2364066193853428,
+        "mcp_bytes": -3.57565011820331
+      },
+      "latency_ms": {
+        "encode_p50": 0.012052999999923486,
+        "decode_p50": 0.03589549999992414
+      }
+    },
+    {
+      "name": "prepare_negative_control",
+      "eligible": false,
+      "source": "deterministic fixture tool output",
+      "record_count": null,
+      "round_trip_equal": true,
+      "json": {
+        "characters": 11697,
+        "bytes": 11697,
+        "tokens_o200k_base": 3677
+      },
+      "toon": {
+        "characters": 11218,
+        "bytes": 11218,
+        "tokens_o200k_base": 3612
+      },
+      "mcp_envelope": {
+        "characters": 11590,
+        "bytes": 11590,
+        "tokens_o200k_base": 3867
+      },
+      "reduction_percent": {
+        "cli_tokens": 1.7677454446559695,
+        "mcp_tokens": -5.1672559151482185,
+        "cli_bytes": 4.0950671112251005,
+        "mcp_bytes": 0.9147644695220997
+      },
+      "latency_ms": {
+        "encode_p50": 0.043094500000051994,
+        "decode_p50": 0.16842050000013842
+      }
+    }
+  ],
+  "aggregate": {
+    "eligible_json_tokens_o200k_base": 9620,
+    "eligible_mcp_toon_tokens_o200k_base": 7065,
+    "eligible_mcp_token_reduction_percent": 26.559251559251557
+  },
+  "gates": {
+    "round_trip_all_payloads": true,
+    "broad_search_mcp_token_reduction_at_least_20_percent": true,
+    "aggregate_eligible_mcp_token_reduction_at_least_15_percent": true,
+    "passed": true
+  }
+}

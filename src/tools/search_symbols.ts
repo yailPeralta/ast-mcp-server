@@ -5,7 +5,7 @@ import { buildFileOutline } from "../services/outline.js";
 import { PaginationInputSchema, PaginationOutputSchema, paginate } from "../services/pagination.js";
 import { withProject } from "../services/project.js";
 import { collectSymbols } from "../services/symbols.js";
-import { errorResult, structuredResult } from "./result.js";
+import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
 
 const AstSearchSymbolsInputSchema = z.object({
   project_root: z
@@ -25,6 +25,7 @@ const AstSearchSymbolsInputSchema = z.object({
     .string()
     .optional()
     .describe("Optional case-insensitive substring matched against project-relative file paths."),
+  ...ToolOutputFormatInputSchema,
   ...PaginationInputSchema,
 });
 
@@ -52,7 +53,6 @@ export function registerSearchSymbols(server: McpServer): void {
       description:
         "Searches declarations structurally and returns exact file/symbol selectors that can be passed to the other AST tools.",
       inputSchema: AstSearchSymbolsInputSchema,
-      outputSchema: AstSearchSymbolsOutputSchema,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -60,7 +60,7 @@ export function registerSearchSymbols(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root, query, kinds, file_filter, offset, limit }) => {
+    async ({ project_root, query, kinds, file_filter, output_format, offset, limit }) => {
       try {
         const structuredContent = await withProject(project_root, ({ project, projectRoot }) => {
           const startedAt = performance.now();
@@ -124,7 +124,7 @@ export function registerSearchSymbols(server: McpServer): void {
             ...metadata,
           };
         });
-        return structuredResult(structuredContent);
+        return formattedResult(AstSearchSymbolsOutputSchema, structuredContent, output_format);
       } catch (error) {
         return errorResult(error);
       }

@@ -136,6 +136,85 @@ describe("batch runner", () => {
     ).toThrow(/tool|invalid/i);
   });
 
+  it("rejects explicit TOON output in intermediate batch steps before execution", async () => {
+    const project = await fixture();
+
+    expect(() =>
+      parseBatchDocument({
+        version: 1,
+        project_root: project.root,
+        steps: [
+          {
+            id: "search",
+            tool: "ast_search_symbols",
+            input: { query: "format", output_format: "toon" },
+          },
+        ],
+      }),
+    ).toThrow(/TOON.*intermediate|intermediate.*TOON/i);
+  });
+
+  it("rejects TOON introduced by a resolved template before the dependent invocation", async () => {
+    const document = parseBatchDocument({
+      version: 1,
+      project_root: "/tmp/project",
+      steps: [
+        { id: "source", tool: "ast_list_files", input: {} },
+        {
+          id: "search",
+          tool: "ast_search_symbols",
+          input: { $ref: "#/steps/source/payload" },
+        },
+      ],
+    });
+    let invocations = 0;
+
+    await expect(
+      runBatchDocument(document, {
+        invokeTool: async () => {
+          invocations += 1;
+          return { payload: { query: "format", output_format: "toon" } };
+        },
+      }),
+    ).rejects.toThrow(/TOON.*intermediate|intermediate.*TOON/i);
+    expect(invocations).toBe(1);
+  });
+
+  it("preflights every foreach input before invoking any item", async () => {
+    const document = parseBatchDocument({
+      version: 1,
+      project_root: "/tmp/project",
+      steps: [
+        { id: "producer", tool: "ast_list_files", input: {} },
+        {
+          id: "searches",
+          tool: "ast_search_symbols",
+          foreach: { $ref: "#/steps/producer/items" },
+          input: { $item: "" },
+        },
+      ],
+    });
+    let searchInvocations = 0;
+
+    await expect(
+      runBatchDocument(document, {
+        invokeTool: async (tool) => {
+          if (tool === "ast_list_files") {
+            return {
+              items: [
+                { query: "safe", output_format: "json" },
+                { query: "blocked", output_format: "toon" },
+              ],
+            };
+          }
+          searchInvocations += 1;
+          return { symbols: [] };
+        },
+      }),
+    ).rejects.toThrow(/TOON.*intermediate|intermediate.*TOON/i);
+    expect(searchInvocations).toBe(0);
+  });
+
   it("allows one prepare only as the final non-foreach step", async () => {
     const project = await fixture();
 

@@ -1,7 +1,7 @@
 ---
 name: structural-code-editing
 description: Leer, navegar y editar proyectos TypeScript/JavaScript mediante el resolver real del compilador y operaciones AST preparadas, revisadas y vinculadas por hash.
-version: "3.3.0"
+version: "3.4.0"
 author: "yail"
 license: "ISC"
 metadata:
@@ -49,6 +49,20 @@ El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reempl
 
 Los clientes pueden prefijar los nombres publicados (`ast_*`) según su convención MCP; elegir por el nombre base y el schema, no adivinar el prefijo.
 
+## Formato de resultado para el modelo
+
+`ast_search_symbols`, `ast_find_references` y `ast_get_diagnostics` aceptan `output_format: "toon"`. Usarlo cuando la respuesta vaya directo al modelo y se espere una colección uniforme con varios registros. Omitirlo, o usar `json`, para automatización que dependa del objeto canónico.
+
+En MCP, TOON llega como un único envelope estructurado `{ "format": "toon", "data": "..." }`; `data` contiene el documento TOON lossless. No hay una copia JSON completa en paralelo. Las tres tools validan primero el valor canónico con Zod, pero no publican un `outputSchema` MCP único porque tienen dos representaciones de éxito.
+
+No pedir TOON para `ast_list_files`, outlines, source, previews ni mutaciones: los benchmarks muestran que el envelope empeora esas formas pequeñas, multiline o diff-heavy. Para un pipeline read-only conocido, se puede compactar únicamente el resultado final con:
+
+```text
+ast-tool run pipeline.json --output-format toon
+```
+
+Los pasos internos del batch siempre son JSON estructurado. TOON dentro de `step.input` y TOON final para un batch de preparación se rechazan antes de ejecutar la operación.
+
 ## Batch CLI para clientes con Bash
 
 Cuando un pipeline conocido requiere varias llamadas MCP dependientes y el cliente tiene Bash, usar `ast-tool run pipeline.json` para colapsar los roundtrips del modelo. No usar batch para exploración abierta ni asumir que reduce el trabajo interno del compilador.
@@ -59,7 +73,7 @@ Cuando un pipeline conocido requiere varias llamadas MCP dependientes y el clien
 - Mantener paginación y filtros: batch elimina roundtrips, no vuelve razonable leer un monorepo entero.
 - No generar JavaScript/eval dentro del documento; el contrato es declarativo y limitado.
 
-`ast-tool validate pipeline.json` valida schema, orden de referencias y política sin cargar el proyecto. Límites por defecto: 50 steps, 500 invocaciones, 200 items por foreach, concurrencia 4 (máximo 16), input 1 MiB, 10 MiB por resultado retenido/output y 50 MiB de contexto intermedio acumulado.
+`ast-tool validate pipeline.json` valida schema, orden de referencias y política sin cargar el proyecto. Límites por defecto: 50 steps, 500 invocaciones, 200 items por foreach, concurrencia 4 (máximo 16), input 1 MiB, 10 MiB por resultado retenido/output y 50 MiB de contexto intermedio acumulado. Los errores del CLI permanecen como JSON en stderr aunque el output exitoso solicitado sea TOON.
 
 ## Flujo obligatorio de mutación
 

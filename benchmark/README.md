@@ -1,6 +1,6 @@
 # Benchmark methodology
 
-The benchmark suite measures two separate properties. It deliberately avoids converting characters into tokens because tokenizer choice changes the answer.
+The benchmark suite measures structural payload reduction, batch orchestration, and model-facing result formats. The first two benchmarks deliberately avoid converting characters into tokens. The format benchmark pins and names one tokenizer so its estimates are reproducible rather than universal.
 
 ## Project payload and latency
 
@@ -64,6 +64,27 @@ yarn benchmark:batch --iterations 5 --output benchmark/results/self-batch.json
 
 The report records logical model round-trips, actual tool invocations, median wall time, process maximum RSS, final-result characters, and total characters exposed to the model. It does not include model inference latency, so the practical wall-time benefit of removing a model round-trip will be larger than this local process-only comparison. Maximum RSS includes the Node runtime and TypeScript project in each fresh worker.
 
+## Model-facing JSON and TOON
+
+`scripts/benchmark-formats.mjs` compares compact JSON with TOON for actual MCP logical results. It uses this repository for broad symbol search and deterministic temporary TypeScript fixtures for repeated references and non-empty diagnostics. File lists, outlines, exact source, and a prepared rename are retained as negative controls.
+
+For each payload it records:
+
+- exact JSON→TOON→value round-trip equality;
+- UTF-8 bytes;
+- `gpt-tokenizer@3.4.0` `o200k_base` token estimates;
+- plain TOON for CLI output and the real MCP `{format,data}` envelope;
+- median encode/decode time over 50 local iterations;
+- serialized `tools/list` metadata against the checked v0.3.0 baseline.
+
+Run:
+
+```bash
+yarn benchmark:formats
+```
+
+The script fails unless every round trip is exact, the broad-search MCP envelope reduces estimated tokens by at least 20%, and the aggregate eligible corpus reduces them by at least 15%. Tokenizer estimates are not provider usage records and do not establish billed-token or prompt-cache savings.
+
 ## Checked results
 
 Results generated on 2026-08-03 with Node.js v24.16.0:
@@ -84,3 +105,14 @@ The checked broad search-to-source batch result used five fresh-process samples:
 | Batch    |                 1 |                2 |           552 |        535.24 ms |      378.35 MB |
 
 That run reduced model round-trips by 50% and serialized context by 95.21%. Local execution latency decreased by 0.18% and RSS increased by 0.21%, both small enough to treat as noise rather than a performance claim. The batch value is orchestration/context reduction; it does not make TypeScript analysis free.
+
+The checked model-facing format corpus used the complete MCP envelope for TOON:
+
+| Payload             | Records | JSON tokens | MCP TOON tokens | Reduction |
+| ------------------- | ------: | ----------: | --------------: | --------: |
+| Broad symbol search |     100 |       5,225 |           3,881 |    25.72% |
+| References          |      71 |       3,086 |           2,150 |    30.33% |
+| Diagnostics         |      30 |       1,309 |           1,034 |    21.01% |
+| Eligible aggregate  |     201 |       9,620 |           7,065 |    26.56% |
+
+All seven positive and negative payloads round-tripped exactly. File list, outline, source, and prepare envelopes ranged from 5.50% to 23.40% worse in estimated tokens, which is why they remain JSON-only. Current serialized tool metadata is 2,451 characters smaller than the v0.3.0 baseline despite the three new input fields, because multi-shape tools no longer advertise a single incompatible output schema.

@@ -350,6 +350,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@toon-format/toon@npm:4.1.0":
+  version: 4.1.0
+  resolution: "@toon-format/toon@npm:4.1.0"
+  checksum: 10c0/a7a177deb9fb69cdefb2201a233d8c416b749417ffde92de04fd55ef94f7189342c2af7258736d0e131cf6539c8808950edeb67c3e3097244636a1ce59455916
+  languageName: node
+  linkType: hard
+
 "@ts-morph/common@npm:~0.25.0":
   version: 0.25.0
   resolution: "@ts-morph/common@npm:0.25.0"
@@ -720,9 +727,11 @@ __metadata:
   dependencies:
     "@eslint/js": "npm:^10.0.1"
     "@modelcontextprotocol/sdk": "npm:^1.12.0"
+    "@toon-format/toon": "npm:4.1.0"
     "@types/node": "npm:^22.5.0"
     diff: "npm:^9.0.0"
     eslint: "npm:^10.8.0"
+    gpt-tokenizer: "npm:3.4.0"
     prettier: "npm:^3.9.6"
     ts-morph: "npm:24.0.0"
     typescript: "npm:^5.6.0"
@@ -1417,6 +1426,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"gpt-tokenizer@npm:3.4.0":
+  version: 3.4.0
+  resolution: "gpt-tokenizer@npm:3.4.0"
+  checksum: 10c0/40e30e73840ab52ee902fe1f481c0dfff45ca6eb27feb4c97fcaa248fdd9f4e61679fa8873383b1360a6d13cb4c421b6ab0c56d77db59adcabccf34fcd639146
+  languageName: node
+  linkType: hard
+
 "graceful-fs@npm:^4.2.6":
   version: 4.2.11
   resolution: "graceful-fs@npm:4.2.11"
@@ -1440,10 +1456,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"hono@npm:^4.11.4":
-  version: 4.12.33
-  resolution: "hono@npm:4.12.33"
-  checksum: 10c0/519d7e40acd8dcf9015f2012d536e56fd4896909602264a2cbc590a480ba5418dd56f68051dd5e624f3fd383abe766aaa95b5399261e9ab298dff2471271f3da
+"hono@npm:4.12.34":
+  version: 4.12.34
+  resolution: "hono@npm:4.12.34"
+  checksum: 10c0/9d184cb95bc630622d3a8885706feb8e98170556650ce139f09e54c96b9429b3194a296ad4fb0791e7b642a21a03acbf592cb0d19d906ab5e8b78a13337d61bc
   languageName: node
   linkType: hard
 

@@ -155,6 +155,11 @@ export function parseBatchDocument(input: unknown): BatchDocument {
 
   for (const [index, step] of parsed.steps.entries()) {
     if (ids.has(step.id)) throw new Error(`Duplicate batch step id "${step.id}".`);
+    if (step.input.output_format === "toon") {
+      throw new Error(
+        `Step "${step.id}" cannot request TOON for an intermediate batch result. Use CLI --output-format toon for the final output.`,
+      );
+    }
     if (Object.hasOwn(step.input, "project_root")) {
       if (step.input.project_root !== parsed.project_root) {
         throw new Error(`Step "${step.id}" project_root conflicts with the pipeline project_root.`);

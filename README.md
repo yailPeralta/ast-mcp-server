@@ -39,7 +39,7 @@ Reads can start with a compact outline and fetch exact source only when needed. 
 
 AST-aware editing is not a proof that a change is semantically correct. The safety comes from combining structural selection with diagnostics, exact previews, reviewed hashes, freshness checks, and fail-closed apply semantics.
 
-The included batch benchmark records a 50% reduction in model round-trips and a 95.21% reduction in serialized context for its search-to-source scenario. These are reproducible scenario measurements, not universal token or latency claims.
+The included batch benchmark records a 50% reduction in model round-trips and a 95.21% reduction in serialized context for its search-to-source scenario. The format benchmark records an `o200k_base` estimate of 25.72% fewer model-facing tokens for a 100-row symbol search and 26.56% across the eligible collection corpus. These are reproducible scenario measurements, not universal token, billing, cache, or latency claims.
 
 ## Requirements
 
@@ -229,6 +229,14 @@ Project-scoped tools accept `project_root`, either the project directory or an e
 
 Read results use project-relative paths, deterministic ordering, structured MCP output, and pagination where result sets can grow with the project.
 
+### Optional TOON results
+
+`ast_search_symbols`, `ast_find_references`, and `ast_get_diagnostics` accept `output_format: "toon"` for collection-heavy results consumed directly by a model. JSON remains the default and preserves the canonical structured object.
+
+MCP TOON is returned once as structured content shaped like `{ "format": "toon", "data": "..." }`; `data` is the lossless TOON document. The complete JSON result is not duplicated. These three tools validate their canonical Zod result and verify an encode/decode deep-equality round trip before presentation, but do not advertise a single MCP `outputSchema` because their successful structured content has two representations.
+
+Do not request TOON for source, outlines, file lists, previews, or mutation results. Checked negative controls show that the MCP envelope makes those shapes larger. TOON is an explicit shape-specific optimization, not a new dialect for every object in sight.
+
 ## Batch CLI
 
 `ast-tool` lets Claude Code and other Bash-capable clients collapse a known structural pipeline into one shell call:
@@ -236,6 +244,7 @@ Read results use project-relative paths, deterministic ordering, structured MCP 
 ```bash
 ast-tool validate pipeline.json
 ast-tool run pipeline.json
+ast-tool run pipeline.json --output-format toon
 cat pipeline.json | ast-tool run -
 ```
 
@@ -299,7 +308,7 @@ A `$ref` is an RFC 6901 JSON Pointer rooted at prior step results. References ca
 - One project root per pipeline.
 - No branches, eval, embedded JavaScript, while loops, or arbitrary transformations.
 
-Success is one JSON value on stdout. Errors are structured JSON on stderr. Exit code 0 is success, 1 is execution/apply failure, and 2 is usage or schema failure.
+Success is one compact JSON value on stdout by default. `ast-tool run --output-format toon` writes one plain TOON document for a read-only batch; internal steps remain structured JSON, and prepare batches reject TOON before execution. Encoding and output-limit failures write no partial stdout and use stable `ENCODING_ERROR` or `OUTPUT_LIMIT` codes. Errors are always structured JSON on stderr. Exit code 0 is success, 1 is execution/apply failure, and 2 is usage or schema failure.
 
 ## Reviewed mutations
 
@@ -370,9 +379,12 @@ yarn pack --dry-run
 yarn benchmark /absolute/project --sample 20 --output benchmark/results/project.json
 yarn benchmark:corpus benchmark/task-corpus.json --output benchmark/results/self-corpus.json
 yarn benchmark:batch --iterations 5 --output benchmark/results/self-batch.json
+yarn benchmark:formats
 ```
 
-The batch benchmark compares two separate client calls with one batch invocation in fresh Node processes, recording model round-trips, actual tool invocations, wall time, maximum RSS, and serialized character counts. Character counts are not model-specific token estimates. See `benchmark/README.md` for methodology and limitations.
+The batch benchmark compares two separate client calls with one batch invocation in fresh Node processes, recording model round-trips, actual tool invocations, wall time, maximum RSS, and serialized character counts. Character counts are not model-specific token estimates.
+
+The format benchmark runs real tools against this repository plus deterministic reference/diagnostic fixtures. It checks JSON→TOON→value equality, UTF-8 bytes, `gpt-tokenizer` `o200k_base` estimates, encode/decode latency, the actual MCP envelope, tool metadata, and negative controls. Its checked result is `benchmark/results/self-formats.json`; local tokenizer estimates do not establish provider-side billing or cache savings. See `benchmark/README.md` for methodology and limitations.
 
 ## Scope
 

@@ -5,7 +5,8 @@ import { createInterface } from "node:readline/promises";
 
 import { ZodError } from "zod";
 import { BatchExecutionError, parseBatchDocument, runBatchDocument } from "./batch/runner.js";
-import { MAX_BATCH_INPUT_BYTES } from "./batch/schema.js";
+import { MAX_BATCH_INPUT_BYTES, isPrepareBatchTool } from "./batch/schema.js";
+import { CliOutputError, serializeCliSuccess, type CliOutputFormat } from "./cli-output.js";
 import { applyPersistedOperation, persistOperationPlan } from "./services/operation-plan-file.js";
 import {
   AgentSetupError,
@@ -52,7 +53,7 @@ class CliError extends Error {
 function usage(): string {
   return [
     "Usage:",
-    "  ast-tool run <pipeline.json|->",
+    "  ast-tool run <pipeline.json|-> [--output-format json|toon]",
     "  ast-tool validate <pipeline.json|->",
     "  ast-tool apply <plan.astplan> --plan-hash <sha256>",
     "  ast-tool install-skill [claude|hermes|all] [--scope user|project] [--project-root <path>] [--force]",
@@ -103,6 +104,39 @@ function parseApplyArgs(args: string[]): { planFile: string; planHash: string } 
     throw new CliError(usage(), "USAGE", 2, "apply");
   }
   return { planFile: args[0], planHash: args[2] };
+}
+
+interface RunArgs {
+  source: string;
+  outputFormat: CliOutputFormat;
+}
+
+function parseRunArgs(args: string[]): RunArgs {
+  let source: string | undefined;
+  let outputFormat: CliOutputFormat = "json";
+  let outputFormatSeen = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]!;
+    if (argument === "--output-format") {
+      const value = args[index + 1];
+      if (outputFormatSeen || (value !== "json" && value !== "toon")) {
+        throw new CliError(usage(), "USAGE", 2, "run");
+      }
+      outputFormat = value;
+      outputFormatSeen = true;
+      index += 1;
+      continue;
+    }
+    if (source === undefined && !argument.startsWith("--")) {
+      source = argument;
+      continue;
+    }
+    throw new CliError(usage(), "USAGE", 2, "run");
+  }
+
+  if (!source) throw new CliError(usage(), "USAGE", 2, "run");
+  return { source, outputFormat };
 }
 
 interface InstallSkillArgs {
@@ -240,16 +274,31 @@ async function parseDocumentForCommand(source: string, command: string) {
 export async function runCli(args: string[]): Promise<unknown> {
   const [command, ...commandArgs] = args;
   if (command === "run" || command === "validate") {
-    if (commandArgs.length !== 1 || !commandArgs[0]) {
-      throw new CliError(usage(), "USAGE", 2, command);
-    }
-    const document = await parseDocumentForCommand(commandArgs[0], command);
+    const runArgs =
+      command === "run"
+        ? parseRunArgs(commandArgs)
+        : commandArgs.length === 1 && commandArgs[0]
+          ? { source: commandArgs[0], outputFormat: "json" as const }
+          : undefined;
+    if (!runArgs) throw new CliError(usage(), "USAGE", 2, command);
+    const document = await parseDocumentForCommand(runArgs.source, command);
     if (command === "validate") {
       return {
         version: 1,
         status: "valid",
         step_count: document.steps.length,
       };
+    }
+    if (
+      runArgs.outputFormat === "toon" &&
+      document.steps.some((step) => isPrepareBatchTool(step.tool))
+    ) {
+      throw new CliError(
+        "TOON output is available only for read-only batches; prepare results require JSON review coordinates.",
+        "INVALID_BATCH",
+        2,
+        command,
+      );
     }
     try {
       return await runBatchDocument(document, {
@@ -378,7 +427,10 @@ export async function runCli(args: string[]): Promise<unknown> {
   throw new CliError(usage(), "USAGE", 2, command ?? null);
 }
 
-function failure(error: unknown): { value: CliFailure; exitCode: 1 | 2 } {
+function failure(
+  error: unknown,
+  command: string | null = null,
+): { value: CliFailure; exitCode: 1 | 2 } {
   if (error instanceof CliError) {
     return {
       value: {
@@ -390,6 +442,17 @@ function failure(error: unknown): { value: CliFailure; exitCode: 1 | 2 } {
         ...(error.details === undefined ? {} : { details: error.details }),
       },
       exitCode: error.exitCode,
+    };
+  }
+  if (error instanceof CliOutputError) {
+    return {
+      value: {
+        status: "error",
+        command,
+        code: error.code,
+        message: error.message,
+      },
+      exitCode: 1,
     };
   }
   return {
@@ -404,11 +467,13 @@ function failure(error: unknown): { value: CliFailure; exitCode: 1 | 2 } {
 }
 
 async function main(): Promise<void> {
+  const args = process.argv.slice(2);
   try {
-    const result = await runCli(process.argv.slice(2));
-    process.stdout.write(`${JSON.stringify(result)}\n`);
+    const result = await runCli(args);
+    const outputFormat = args[0] === "run" ? parseRunArgs(args.slice(1)).outputFormat : "json";
+    process.stdout.write(`${serializeCliSuccess(result, outputFormat)}\n`);
   } catch (error) {
-    const failed = failure(error);
+    const failed = failure(error, args[0] ?? null);
     process.stderr.write(`${JSON.stringify(failed.value)}\n`);
     process.exitCode = failed.exitCode;
   }

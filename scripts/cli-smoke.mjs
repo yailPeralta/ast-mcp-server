@@ -7,6 +7,7 @@ import path from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { decode } from "@toon-format/toon";
 
 const executeFile = promisify(execFile);
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -36,6 +37,30 @@ async function invoke(args) {
   });
   if (stderr !== "") throw new Error(`Expected empty stderr, received: ${stderr}`);
   return JSON.parse(stdout);
+}
+
+async function invokeRaw(args) {
+  const { stdout, stderr } = await executeFile(process.execPath, [cliPath, ...args], {
+    cwd: repositoryRoot,
+    env: environment,
+    maxBuffer: 12 * 1024 * 1024,
+  });
+  if (stderr !== "") throw new Error(`Expected empty stderr, received: ${stderr}`);
+  return stdout.trimEnd();
+}
+
+async function invokeFailure(args) {
+  try {
+    await executeFile(process.execPath, [cliPath, ...args], {
+      cwd: repositoryRoot,
+      env: environment,
+      maxBuffer: 12 * 1024 * 1024,
+    });
+    throw new Error(`CLI unexpectedly succeeded: ${args.join(" ")}`);
+  } catch (error) {
+    if (typeof error?.code !== "number") throw error;
+    return { code: error.code, stdout: error.stdout ?? "", stderr: error.stderr ?? "" };
+  }
 }
 
 async function invokeWithStdin(args, input) {
@@ -173,6 +198,90 @@ try {
   if (readResult.invocation_count !== 2 || !readResult.result?.text?.includes("formatValue")) {
     throw new Error(`Unexpected read pipeline output: ${JSON.stringify(readResult)}`);
   }
+  const toonReadResult = decode(
+    await invokeRaw(["run", "--output-format", "toon", readPipelineFile]),
+  );
+  if (
+    toonReadResult.invocation_count !== 2 ||
+    !toonReadResult.result?.text?.includes("formatValue")
+  ) {
+    throw new Error(`Unexpected TOON read pipeline output: ${JSON.stringify(toonReadResult)}`);
+  }
+
+  const explicitJson = await invoke(["run", readPipelineFile, "--output-format", "json"]);
+  if (explicitJson.invocation_count !== 2 || !explicitJson.result?.text?.includes("formatValue")) {
+    throw new Error(`Unexpected explicit JSON output: ${JSON.stringify(explicitJson)}`);
+  }
+
+  for (const invalidArgs of [
+    ["run", readPipelineFile, "--output-format"],
+    ["run", readPipelineFile, "--output-format", "yaml"],
+    ["run", readPipelineFile, "--output-format", "toon", "--output-format", "json"],
+    ["validate", readPipelineFile, "--output-format", "toon"],
+  ]) {
+    const failed = await invokeFailure(invalidArgs);
+    const error = JSON.parse(failed.stderr);
+    if (failed.code !== 2 || failed.stdout !== "" || error.code !== "USAGE") {
+      throw new Error(`Unexpected invalid-format failure: ${JSON.stringify(failed)}`);
+    }
+  }
+
+  const failingPipelineFile = path.join(fixtureRoot, "failing-read-pipeline.json");
+  await writeFile(
+    failingPipelineFile,
+    JSON.stringify({
+      version: 1,
+      project_root: fixtureRoot,
+      steps: [
+        {
+          id: "missing",
+          tool: "ast_get_symbol_source",
+          input: { file_path: "src/missing.ts", symbol_path: "missing" },
+        },
+      ],
+    }),
+  );
+  const failedRead = await invokeFailure(["run", failingPipelineFile, "--output-format", "toon"]);
+  if (
+    failedRead.code !== 1 ||
+    failedRead.stdout !== "" ||
+    JSON.parse(failedRead.stderr).status !== "error"
+  ) {
+    throw new Error(`Unexpected TOON tool failure: ${JSON.stringify(failedRead)}`);
+  }
+
+  const deepChain = (prefix, depth) => {
+    let value = "leaf";
+    for (let index = depth - 1; index >= 0; index -= 1) value = { [`${prefix}_${index}`]: value };
+    return value;
+  };
+  const oversizedEmit = Object.fromEntries(
+    Array.from({ length: 100 }, (_, index) => [`chain_${index}`, deepChain(`key_${index}`, 330)]),
+  );
+  const oversizedPipelineFile = path.join(fixtureRoot, "oversized-toon-pipeline.json");
+  await writeFile(
+    oversizedPipelineFile,
+    JSON.stringify({
+      version: 1,
+      project_root: fixtureRoot,
+      steps: [{ id: "files", tool: "ast_list_files", input: { limit: 1 } }],
+      emit: oversizedEmit,
+    }),
+  );
+  const oversizedFailure = await invokeFailure([
+    "run",
+    oversizedPipelineFile,
+    "--output-format",
+    "toon",
+  ]);
+  const oversizedError = JSON.parse(oversizedFailure.stderr);
+  if (
+    oversizedFailure.code !== 1 ||
+    oversizedFailure.stdout !== "" ||
+    oversizedError.code !== "OUTPUT_LIMIT"
+  ) {
+    throw new Error(`Unexpected TOON overflow failure: ${JSON.stringify(oversizedFailure)}`);
+  }
 
   const forbiddenPipelineFile = path.join(fixtureRoot, "forbidden-pipeline.json");
   await writeFile(
@@ -220,6 +329,16 @@ try {
       emit: { summary: "prepared" },
     }),
   );
+  try {
+    await invoke(["run", preparePipelineFile, "--output-format", "toon"]);
+    throw new Error("Prepare unexpectedly allowed TOON output.");
+  } catch (error) {
+    const stderr = error?.stderr ?? "";
+    if (error?.code !== 2 || !stderr.includes('"code":"INVALID_BATCH"')) throw error;
+  }
+  if (!(await readFile(path.join(fixtureRoot, "src/value.ts"), "utf8")).includes("formatValue")) {
+    throw new Error("Rejected TOON prepare modified source files.");
+  }
   const prepared = await invoke(["run", preparePipelineFile]);
   if (
     prepared.result?.summary !== "prepared" ||
@@ -336,7 +455,7 @@ try {
   }
 
   process.stdout.write(
-    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, persisted_apply: true, lock_contention: true, replay: true, skill_installation: true, agent_setup: true })}\n`,
+    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, toon_output: true, persisted_apply: true, lock_contention: true, replay: true, skill_installation: true, agent_setup: true })}\n`,
   );
 } finally {
   await rm(fixtureRoot, { recursive: true, force: true });

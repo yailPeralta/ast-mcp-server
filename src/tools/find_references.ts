@@ -4,7 +4,7 @@ import { Node } from "ts-morph";
 import { z } from "zod";
 import { PaginationInputSchema, PaginationOutputSchema, paginate } from "../services/pagination.js";
 import { findDeclarationByName, getSourceFileOrThrow, withProject } from "../services/project.js";
-import { errorResult, structuredResult } from "./result.js";
+import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
 
 const AstFindReferencesInputSchema = z.object({
   project_root: z
@@ -13,6 +13,7 @@ const AstFindReferencesInputSchema = z.object({
   file_path: z.string().describe("File containing the declaration."),
   symbol_path: z.string().describe("Exact symbol path returned by an outline or symbol search."),
   include_declaration: z.boolean().default(true),
+  ...ToolOutputFormatInputSchema,
   ...PaginationInputSchema,
 });
 
@@ -42,7 +43,6 @@ export function registerFindReferences(server: McpServer): void {
       description:
         "Finds type-resolved references and returns bounded project-relative locations, including declaration impact by default.",
       inputSchema: AstFindReferencesInputSchema,
-      outputSchema: AstFindReferencesOutputSchema,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -50,7 +50,15 @@ export function registerFindReferences(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root, file_path, symbol_path, include_declaration, offset, limit }) => {
+    async ({
+      project_root,
+      file_path,
+      symbol_path,
+      include_declaration,
+      output_format,
+      offset,
+      limit,
+    }) => {
       try {
         const structuredContent = await withProject(project_root, ({ project, projectRoot }) => {
           const sourceFile = getSourceFileOrThrow(project, file_path);
@@ -105,7 +113,7 @@ export function registerFindReferences(server: McpServer): void {
             ...metadata,
           };
         });
-        return structuredResult(structuredContent);
+        return formattedResult(AstFindReferencesOutputSchema, structuredContent, output_format);
       } catch (error) {
         return errorResult(error);
       }

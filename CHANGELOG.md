@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-03
+
+### Added
+
+- Opt-in TOON envelopes for symbol search, semantic references, and diagnostics through `output_format: "toon"`.
+- Plain TOON output for final read-only batch results through `ast-tool run --output-format toon`.
+- Reproducible JSON/TOON benchmark with lossless round trips, UTF-8 bytes, `o200k_base` token estimates, encoding latency, static tool-metadata accounting, and negative controls.
+
+### Changed
+
+- Collection-heavy tools validate their canonical Zod outputs explicitly before returning JSON or TOON. They no longer advertise one MCP `outputSchema` because their structured result can be either the canonical object or a TOON envelope.
+- The bundled structural-code-editing skill now selects TOON only for measured collection shapes and keeps JSON for source, outline, file-list, and mutation workflows.
+
+### Security
+
+- Batch steps reject statically declared and dynamically resolved TOON intermediates before the affected invocation.
+- TOON output is capped at 10 MiB after UTF-8 encoding, and mutation preparation remains JSON-only so review coordinates are never compacted.
+- Successful MCP TOON output is decode-checked against the validated value, and MCP error text is capped at 64 KiB of UTF-8.
+- The transitive Hono runtime is resolved to `4.12.34`, closing GHSA-8j4g-w8fx-2239 from the MCP SDK dependency tree.
+
 ## [0.3.0] - 2026-08-03
 
 Initial public release.
@@ -24,4 +44,5 @@ Initial public release.
 - Apply rejects stale workspaces, changed configs/sources, mismatched plan hashes, unsafe plan files, conflicting MCP registrations, and conflicting skill content.
 - Inputs, outputs, operation stores, subprocesses, batch fan-out, plan lifetime, and filesystem access are bounded.
 
+[0.4.0]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.4.0
 [0.3.0]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.3.0

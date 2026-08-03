@@ -2,6 +2,7 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { decode } from "@toon-format/toon";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -42,8 +43,25 @@ try {
     throw new Error(`Unexpected ast_list_files response: ${JSON.stringify(result)}`);
   }
 
+  const toonResult = await client.callTool({
+    name: "ast_search_symbols",
+    arguments: { project_root: fixtureRoot, query: "value", output_format: "toon" },
+  });
+  const envelope = toonResult.structuredContent;
+  if (
+    toonResult.isError === true ||
+    envelope?.format !== "toon" ||
+    typeof envelope.data !== "string"
+  ) {
+    throw new Error(`Unexpected TOON response: ${JSON.stringify(toonResult)}`);
+  }
+  const toonPayload = decode(envelope.data);
+  if (toonPayload.total !== 1 || toonPayload.symbols?.[0]?.name !== "value") {
+    throw new Error(`Unexpected decoded TOON payload: ${JSON.stringify(toonPayload)}`);
+  }
+
   process.stdout.write(
-    `${JSON.stringify({ status: "ok", transport: "stdio", tool_count: names.length, fixture_files: files.length })}\n`,
+    `${JSON.stringify({ status: "ok", transport: "stdio", tool_count: names.length, fixture_files: files.length, toon_output: true })}\n`,
   );
 } finally {
   await client.close().catch(() => undefined);

@@ -1,3 +1,4 @@
+import { decode } from "@toon-format/toon";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -12,6 +13,16 @@ function structured(result: Awaited<ReturnType<Client["callTool"]>>): Record<str
   expect(result.content).toEqual([]);
   expect(result.structuredContent).toBeTypeOf("object");
   return result.structuredContent as Record<string, unknown>;
+}
+
+function toon(result: Awaited<ReturnType<Client["callTool"]>>): Record<string, unknown> {
+  if (result.isError === true) {
+    throw new Error(`Expected TOON success, received: ${JSON.stringify(result)}`);
+  }
+  expect(result.content).toEqual([]);
+  expect(result.structuredContent).toMatchObject({ format: "toon", data: expect.any(String) });
+  const envelope = result.structuredContent as { format: string; data: string };
+  return decode(envelope.data) as Record<string, unknown>;
 }
 
 describe("MCP integration", () => {
@@ -124,6 +135,59 @@ describe("MCP integration", () => {
       }),
     );
     expect(diagnostics.error_count).toBe(0);
+  });
+
+  it("exposes lossless TOON envelopes for eligible collection reads only when requested", async () => {
+    await fixture.write(
+      "src/error.ts",
+      'export const broken: string = 42;\nexport const message = "comma, quote: \\" and ✅";\n',
+    );
+    clearProjectSessions();
+
+    const symbols = toon(
+      await client.callTool({
+        name: "ast_search_symbols",
+        arguments: { project_root: fixture.root, query: "format", output_format: "toon" },
+      }),
+    );
+    expect(symbols.total).toBe(1);
+    expect(symbols.symbols).toEqual([
+      expect.objectContaining({ file: "src/value.ts", symbol_path: "formatValue" }),
+    ]);
+
+    const references = toon(
+      await client.callTool({
+        name: "ast_find_references",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          output_format: "toon",
+        },
+      }),
+    );
+    expect(references.total).toBe(3);
+    expect(references.references).toEqual(
+      expect.arrayContaining([expect.objectContaining({ file: "src/use.ts" })]),
+    );
+
+    const diagnostics = toon(
+      await client.callTool({
+        name: "ast_get_diagnostics",
+        arguments: { project_root: fixture.root, output_format: "toon" },
+      }),
+    );
+    expect(diagnostics.error_count).toBeGreaterThanOrEqual(1);
+    expect(diagnostics.diagnostics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ file: "src/error.ts", code: 2322 })]),
+    );
+
+    const tools = await client.listTools();
+    const eligible = new Set(["ast_search_symbols", "ast_find_references", "ast_get_diagnostics"]);
+    for (const tool of tools.tools) {
+      const properties = (tool.inputSchema.properties ?? {}) as Record<string, unknown>;
+      expect(Object.hasOwn(properties, "output_format")).toBe(eligible.has(tool.name));
+    }
   });
 
   it("prepares, previews and atomically applies a rename", async () => {

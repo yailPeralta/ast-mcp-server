@@ -3,7 +3,7 @@ import { z } from "zod";
 import { normalizeDiagnostic } from "../services/diagnostics.js";
 import { PaginationInputSchema, PaginationOutputSchema, paginate } from "../services/pagination.js";
 import { getSourceFileOrThrow, withProject } from "../services/project.js";
-import { errorResult, structuredResult } from "./result.js";
+import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
 
 const DiagnosticSchema = z.object({
   code: z.number().int(),
@@ -22,6 +22,7 @@ const AstGetDiagnosticsInputSchema = z.object({
     .string()
     .optional()
     .describe("Optional project-relative or absolute file path. Omit for project diagnostics."),
+  ...ToolOutputFormatInputSchema,
   ...PaginationInputSchema,
 });
 
@@ -41,7 +42,6 @@ export function registerGetDiagnostics(server: McpServer): void {
       description:
         "Returns bounded normalized TypeScript diagnostics for a project or one source file. Existing errors are preserved as evidence for write-operation delta checks.",
       inputSchema: AstGetDiagnosticsInputSchema,
-      outputSchema: AstGetDiagnosticsOutputSchema,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -49,7 +49,7 @@ export function registerGetDiagnostics(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root, file_path, offset, limit }) => {
+    async ({ project_root, file_path, output_format, offset, limit }) => {
       try {
         const structuredContent = await withProject(project_root, ({ project, projectRoot }) => {
           const startedAt = performance.now();
@@ -74,7 +74,7 @@ export function registerGetDiagnostics(server: McpServer): void {
             ...metadata,
           };
         });
-        return structuredResult(structuredContent);
+        return formattedResult(AstGetDiagnosticsOutputSchema, structuredContent, output_format);
       } catch (error) {
         return errorResult(error);
       }

@@ -133,6 +133,13 @@ function injectProjectRoot(
     );
   }
   const input = resolved as Record<string, unknown>;
+  if (input.output_format === "toon") {
+    throw new BatchExecutionError(
+      `Step "${step.id}" cannot resolve TOON for an intermediate batch result.`,
+      "TOON_INTERMEDIATE_FORBIDDEN",
+      step.id,
+    );
+  }
   if (
     Object.prototype.hasOwnProperty.call(input, "project_root") &&
     input.project_root !== projectRoot
@@ -308,6 +315,15 @@ export async function runBatchDocument(
             `Step "${step.id}" expands to ${items.length} items; maximum is ${MAX_FOREACH_ITEMS}.`,
             "FOREACH_LIMIT",
             step.id,
+          );
+        }
+        // Resolve once up front so one forbidden item cannot race valid sibling invocations.
+        // Resolve again inside mapLimit to avoid retaining up to 200 cloned input payloads.
+        for (const item of items) {
+          injectProjectRoot(
+            resolveTemplate(step.input, context, item),
+            document.project_root,
+            step,
           );
         }
         reserveInvocations(items.length, step);
