@@ -1,7 +1,7 @@
 ---
 name: structural-code-editing
 description: Leer, navegar y editar proyectos TypeScript/JavaScript mediante el resolver real del compilador y operaciones AST preparadas, revisadas y vinculadas por hash.
-version: "3.2.0"
+version: "3.3.0"
 author: "yail"
 license: "ISC"
 metadata:
@@ -24,6 +24,17 @@ Usar las tools del servidor MCP `ast` en proyectos TypeScript/JavaScript con `ts
 - obtener diagnostics sin cargar el proyecto como texto en el contexto.
 
 Para configs, Markdown, comentarios o una edición textual trivial en un archivo ya conocido, usar las tools normales de archivos. El AST no cobra alquiler, pero cada roundtrip sí.
+
+## Preflight de disponibilidad
+
+La presencia de este skill no demuestra que el transporte MCP esté configurado. Si las tools `ast_*` no aparecen, no simularlas con búsquedas textuales mientras se afirma que son estructurales:
+
+- desde el checkout del servidor, ejecutar `yarn setup` para detectar agentes, registrar el MCP e instalar el skill;
+- desde un paquete instalado, ejecutar `ast-tool setup`;
+- verificar Claude Code con `/mcp` o `claude mcp get ast`;
+- verificar Hermes con `hermes mcp test ast` y recargar la sesión si acaba de cambiar la configuración.
+
+El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reemplazar una configuración existente sin revisión explícita.
 
 ## Flujo compacto de lectura
 

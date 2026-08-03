@@ -15,7 +15,7 @@ The benchmark suite measures two separate properties. It deliberately avoids con
 Run:
 
 ```bash
-npm run benchmark -- /absolute/project/path --sample 20 --output benchmark/results/project.json
+yarn benchmark /absolute/project/path --sample 20 --output benchmark/results/project.json
 ```
 
 The selection rule is deterministic but not statistically representative of every repository. Use `--filter` and multiple samples when comparing particular modules.
@@ -38,7 +38,7 @@ It fails unless every predefined evidence string is present in the compact paylo
 Run:
 
 ```bash
-npm run benchmark:corpus -- benchmark/task-corpus.json --output benchmark/results/self-corpus.json
+yarn benchmark:corpus benchmark/task-corpus.json --output benchmark/results/self-corpus.json
 ```
 
 ## Interpreting results
@@ -59,7 +59,7 @@ npm run benchmark:corpus -- benchmark/task-corpus.json --output benchmark/result
 Run:
 
 ```bash
-npm run benchmark:batch -- --iterations 5 --output benchmark/results/self-batch.json
+yarn benchmark:batch --iterations 5 --output benchmark/results/self-batch.json
 ```
 
 The report records logical model round-trips, actual tool invocations, median wall time, process maximum RSS, final-result characters, and total characters exposed to the model. It does not include model inference latency, so the practical wall-time benefit of removing a model round-trip will be larger than this local process-only comparison. Maximum RSS includes the Node runtime and TypeScript project in each fresh worker.

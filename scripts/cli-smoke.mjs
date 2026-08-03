@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile, spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -15,11 +15,17 @@ const fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "ast-tool-cli-"));
 const stateDirectory = path.join(fixtureRoot, "state");
 const claudeConfigDirectory = path.join(fixtureRoot, "claude");
 const hermesHome = path.join(fixtureRoot, "hermes");
+const fakeBin = path.join(fixtureRoot, "bin");
+const fakeClaudeState = path.join(fixtureRoot, "fake-claude-state.json");
+const fakeHermesState = path.join(fixtureRoot, "fake-hermes-state.json");
 const environment = {
   ...process.env,
+  PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
   AST_TOOL_STATE_DIR: stateDirectory,
   CLAUDE_CONFIG_DIR: claudeConfigDirectory,
   HERMES_HOME: hermesHome,
+  FAKE_CLAUDE_STATE: fakeClaudeState,
+  FAKE_HERMES_STATE: fakeHermesState,
 };
 
 async function invoke(args) {
@@ -105,7 +111,18 @@ async function holdWorkspaceLock(workspaceKey) {
   };
 }
 
+async function installFakeAgents() {
+  await mkdir(fakeBin, { recursive: true });
+  const fixture = path.join(repositoryRoot, "scripts", "fixtures", "fake-agent.mjs");
+  for (const agent of ["claude", "hermes"]) {
+    const executable = path.join(fakeBin, agent);
+    await copyFile(fixture, executable);
+    await chmod(executable, 0o755);
+  }
+}
+
 try {
+  await installFakeAgents();
   await mkdir(path.join(fixtureRoot, "src"), { recursive: true });
   await writeFile(
     path.join(fixtureRoot, "tsconfig.json"),
@@ -277,6 +294,22 @@ try {
     throw new Error(`Skill installation was not idempotent: ${JSON.stringify(skillReplay)}`);
   }
 
+  const agentSetup = await invoke(["setup", "--agents", "all", "--yes"]);
+  if (
+    agentSetup.agents?.length !== 2 ||
+    !agentSetup.agents.every((agent) => agent.mcp === "configured" && agent.skill === "unchanged")
+  ) {
+    throw new Error(`Unexpected agent setup output: ${JSON.stringify(agentSetup)}`);
+  }
+  const agentSetupReplay = await invoke(["setup", "--agents", "all", "--yes"]);
+  if (
+    !agentSetupReplay.agents.every(
+      (agent) => agent.mcp === "unchanged" && agent.skill === "unchanged",
+    )
+  ) {
+    throw new Error(`Agent setup was not idempotent: ${JSON.stringify(agentSetupReplay)}`);
+  }
+
   const claudeProject = path.join(fixtureRoot, "claude-project");
   await mkdir(claudeProject);
   const projectSkill = await invoke([
@@ -303,7 +336,7 @@ try {
   }
 
   process.stdout.write(
-    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, persisted_apply: true, lock_contention: true, replay: true, skill_installation: true })}\n`,
+    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, persisted_apply: true, lock_contention: true, replay: true, skill_installation: true, agent_setup: true })}\n`,
   );
 } finally {
   await rm(fixtureRoot, { recursive: true, force: true });

@@ -1,17 +1,29 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 import process from "node:process";
+import { createInterface } from "node:readline/promises";
 
 import { ZodError } from "zod";
 import { BatchExecutionError, parseBatchDocument, runBatchDocument } from "./batch/runner.js";
 import { MAX_BATCH_INPUT_BYTES } from "./batch/schema.js";
 import { applyPersistedOperation, persistOperationPlan } from "./services/operation-plan-file.js";
 import {
+  AgentSetupError,
+  detectInstalledAgents,
+  resolveServerEntryPath,
+  runAgentSetup,
+} from "./services/agent-setup.js";
+import {
   installBundledSkill,
   resolveBundledSkillPath,
   type SkillScope,
   type SkillTargetSelection,
 } from "./services/skill-installer.js";
+import {
+  parseAgentsArgument,
+  promptForAgentSelection,
+  type AgentId,
+} from "./services/setup-wizard.js";
 
 interface CliFailure {
   status: "error";
@@ -19,6 +31,7 @@ interface CliFailure {
   code: string;
   step_id?: string;
   message: string;
+  details?: unknown;
 }
 
 class CliError extends Error {
@@ -29,6 +42,7 @@ class CliError extends Error {
     readonly command: string | null,
     readonly stepId?: string,
     options?: ErrorOptions,
+    readonly details?: unknown,
   ) {
     super(message, options);
     this.name = "CliError";
@@ -42,6 +56,7 @@ function usage(): string {
     "  ast-tool validate <pipeline.json|->",
     "  ast-tool apply <plan.astplan> --plan-hash <sha256>",
     "  ast-tool install-skill [claude|hermes|all] [--scope user|project] [--project-root <path>] [--force]",
+    "  ast-tool setup [--agents claude,hermes|all --yes] [--force-skill]",
   ].join("\n");
 }
 
@@ -145,6 +160,63 @@ function parseInstallSkillArgs(args: string[]): InstallSkillArgs {
   return { target, scope, ...(projectRoot ? { projectRoot } : {}), force };
 }
 
+interface SetupArgs {
+  agents?: AgentId[];
+  yes: boolean;
+  forceSkill: boolean;
+}
+
+function parseSetupArgs(args: string[]): SetupArgs {
+  let agents: AgentId[] | undefined;
+  let yes = false;
+  let forceSkill = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]!;
+    if (argument === "--agents") {
+      const value = args[index + 1];
+      if (agents !== undefined || !value || value.startsWith("--")) {
+        throw new CliError(usage(), "USAGE", 2, "setup");
+      }
+      try {
+        agents = parseAgentsArgument(value);
+      } catch (error) {
+        throw new CliError(
+          error instanceof Error ? error.message : String(error),
+          "USAGE",
+          2,
+          "setup",
+          undefined,
+          { cause: error },
+        );
+      }
+      index += 1;
+      continue;
+    }
+    if (argument === "--yes") {
+      if (yes) throw new CliError(usage(), "USAGE", 2, "setup");
+      yes = true;
+      continue;
+    }
+    if (argument === "--force-skill") {
+      if (forceSkill) throw new CliError(usage(), "USAGE", 2, "setup");
+      forceSkill = true;
+      continue;
+    }
+    throw new CliError(usage(), "USAGE", 2, "setup");
+  }
+
+  if ((agents === undefined) === yes) {
+    throw new CliError(
+      "Non-interactive setup requires both --agents and --yes; interactive setup accepts neither.",
+      "USAGE",
+      2,
+      "setup",
+    );
+  }
+  return { ...(agents === undefined ? {} : { agents }), yes, forceSkill };
+}
+
 async function parseDocumentForCommand(source: string, command: string) {
   try {
     return parseBatchDocument(await readBatchInput(source));
@@ -216,6 +288,70 @@ export async function runCli(args: string[]): Promise<unknown> {
     }
   }
 
+  if (command === "setup") {
+    const options = parseSetupArgs(commandArgs);
+    try {
+      const detections = await detectInstalledAgents();
+      let agents = options.agents;
+      if (agents === undefined) {
+        if (process.stdin.isTTY !== true || process.stderr.isTTY !== true) {
+          throw new CliError(
+            "Interactive setup requires a TTY. Use --agents claude,hermes --yes for automation.",
+            "USAGE",
+            2,
+            command,
+          );
+        }
+        const prompt = createInterface({ input: process.stdin, output: process.stderr });
+        try {
+          agents = await promptForAgentSelection(detections, (question) =>
+            prompt.question(question),
+          );
+        } finally {
+          prompt.close();
+        }
+        if (agents.length === 0) {
+          return { status: "cancelled", command: "setup", agents: [] };
+        }
+      }
+
+      const executablePath = process.argv[1];
+      if (!executablePath) {
+        throw new Error("Cannot resolve the ast-tool executable path.");
+      }
+      return await runAgentSetup({
+        agents,
+        detections,
+        sourceSkillPath: await resolveBundledSkillPath(executablePath),
+        serverEntryPath: await resolveServerEntryPath(executablePath),
+        forceSkill: options.forceSkill,
+      });
+    } catch (error) {
+      if (error instanceof CliError) {
+        throw error;
+      }
+      if (error instanceof AgentSetupError) {
+        throw new CliError(
+          error.message,
+          error.code,
+          1,
+          command,
+          undefined,
+          { cause: error },
+          error.details,
+        );
+      }
+      throw new CliError(
+        error instanceof Error ? error.message : String(error),
+        "SETUP_ERROR",
+        1,
+        command,
+        undefined,
+        { cause: error },
+      );
+    }
+  }
+
   if (command === "install-skill") {
     const options = parseInstallSkillArgs(commandArgs);
     try {
@@ -251,6 +387,7 @@ function failure(error: unknown): { value: CliFailure; exitCode: 1 | 2 } {
         code: error.code,
         ...(error.stepId ? { step_id: error.stepId } : {}),
         message: error.message,
+        ...(error.details === undefined ? {} : { details: error.details }),
       },
       exitCode: error.exitCode,
     };

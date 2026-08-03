@@ -1,85 +1,167 @@
 #!/usr/bin/env node
 
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import console from "node:console";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
-import { fileURLToPath } from "node:url";
 
-const executeFile = promisify(execFile);
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ast-tool-package-"));
+const execFileAsync = promisify(execFile);
+const repositoryRoot = path.resolve(import.meta.dirname, "..");
+const yarnExecutable = process.platform === "win32" ? "yarn.cmd" : "yarn";
+const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ast-package-smoke-"));
 const packageDirectory = path.join(temporaryRoot, "package");
-const installPrefix = path.join(temporaryRoot, "prefix");
-const claudeConfigDirectory = path.join(temporaryRoot, "claude");
-const hermesHome = path.join(temporaryRoot, "hermes");
-const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
+const consumerDirectory = path.join(temporaryRoot, "consumer");
+const archivePath = path.join(packageDirectory, "ast-mcp-server.tgz");
+const claudeRoot = path.join(temporaryRoot, "claude");
+const hermesRoot = path.join(temporaryRoot, "hermes");
+const fakeBin = path.join(temporaryRoot, "bin");
+const fakeClaudeState = path.join(temporaryRoot, "fake-claude-state.json");
+const fakeHermesState = path.join(temporaryRoot, "fake-hermes-state.json");
+
+async function executeFile(file, args, options = {}) {
+  return execFileAsync(file, args, {
+    encoding: "utf8",
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 180_000,
+    ...options,
+  });
+}
+
+function parseJsonOutput(stdout) {
+  const lines = stdout
+    .trim()
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return JSON.parse(lines.at(-1));
+}
+
+async function installFakeAgents() {
+  await mkdir(fakeBin, { recursive: true });
+  const fixture = path.join(repositoryRoot, "scripts", "fixtures", "fake-agent.mjs");
+  for (const agent of ["claude", "hermes"]) {
+    const executable = path.join(fakeBin, agent);
+    await copyFile(fixture, executable);
+    await chmod(executable, 0o755);
+  }
+}
 
 try {
   await mkdir(packageDirectory, { recursive: true });
-  const packed = await executeFile(
-    npmExecutable,
-    ["pack", "--silent", "--pack-destination", packageDirectory],
-    { cwd: repositoryRoot },
-  );
-  const archiveName = packed.stdout.trim().split(/\r?\n/).at(-1);
-  if (!archiveName?.endsWith(".tgz")) {
-    throw new Error(`npm pack did not return an archive name: ${packed.stdout}`);
-  }
-  const archivePath = path.join(packageDirectory, archiveName);
+  await mkdir(consumerDirectory, { recursive: true });
 
-  await executeFile(
-    npmExecutable,
-    ["install", "--global", "--prefix", installPrefix, "--ignore-scripts", archivePath],
-    { cwd: temporaryRoot },
+  await executeFile(yarnExecutable, ["pack", "--out", archivePath], {
+    cwd: repositoryRoot,
+  });
+
+  const archiveReference = `file:${archivePath.replaceAll("\\", "/")}`;
+  await writeFile(
+    path.join(consumerDirectory, "package.json"),
+    `${JSON.stringify(
+      {
+        private: true,
+        packageManager: "yarn@4.15.0",
+        dependencies: {
+          "ast-mcp-server": archiveReference,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
   );
+  await writeFile(
+    path.join(consumerDirectory, ".yarnrc.yml"),
+    "nodeLinker: node-modules\nenableScripts: false\nenableTelemetry: false\n",
+    "utf8",
+  );
+
+  await executeFile(yarnExecutable, ["install"], { cwd: consumerDirectory });
+  await executeFile(yarnExecutable, ["install", "--immutable"], {
+    cwd: consumerDirectory,
+  });
+  const scriptPolicy = await executeFile(yarnExecutable, ["config", "get", "enableScripts"], {
+    cwd: consumerDirectory,
+  });
+  if (scriptPolicy.stdout.trim() !== "false") {
+    throw new Error(`consumer lifecycle scripts are enabled: ${scriptPolicy.stdout}`);
+  }
 
   const executable =
     process.platform === "win32"
-      ? path.join(installPrefix, "ast-tool.cmd")
-      : path.join(installPrefix, "bin", "ast-tool");
+      ? path.join(consumerDirectory, "node_modules", ".bin", "ast-tool.cmd")
+      : path.join(consumerDirectory, "node_modules", ".bin", "ast-tool");
+  const setupSupported = process.platform !== "win32";
+  if (setupSupported) {
+    await installFakeAgents();
+  }
   const environment = {
     ...process.env,
-    CLAUDE_CONFIG_DIR: claudeConfigDirectory,
-    HERMES_HOME: hermesHome,
+    ...(setupSupported
+      ? {
+          PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
+          FAKE_CLAUDE_STATE: fakeClaudeState,
+          FAKE_HERMES_STATE: fakeHermesState,
+        }
+      : {}),
+    CLAUDE_CONFIG_DIR: claudeRoot,
+    HERMES_HOME: hermesRoot,
   };
-  const firstRun = await executeFile(executable, ["install-skill", "all"], {
-    cwd: temporaryRoot,
+  const setupArgs = setupSupported
+    ? ["setup", "--agents", "all", "--yes"]
+    : ["install-skill", "all"];
+  const first = await executeFile(executable, setupArgs, {
+    cwd: consumerDirectory,
     env: environment,
   });
-  if (firstRun.stderr !== "") {
-    throw new Error(`Packaged ast-tool wrote unexpected stderr: ${firstRun.stderr}`);
-  }
-  const installed = JSON.parse(firstRun.stdout);
+  const second = await executeFile(executable, setupArgs, {
+    cwd: consumerDirectory,
+    env: environment,
+  });
+  const firstResult = parseJsonOutput(first.stdout);
+  const secondResult = parseJsonOutput(second.stdout);
+
+  const firstItems = setupSupported ? firstResult.agents : firstResult.installations;
+  const secondItems = setupSupported ? secondResult.agents : secondResult.installations;
   if (
-    installed.installations?.length !== 2 ||
-    !installed.installations.every((item) => item.status === "installed")
+    firstItems?.length !== 2 ||
+    !firstItems.every((item) => item.skill === "installed" || item.status === "installed") ||
+    (setupSupported && !firstItems.every((item) => item.mcp === "configured"))
   ) {
-    throw new Error(`Unexpected packaged install result: ${firstRun.stdout}`);
+    throw new Error(`tarball setup did not configure both agents: ${first.stdout}`);
+  }
+  if (
+    secondItems?.length !== 2 ||
+    !secondItems.every((item) => item.skill === "unchanged" || item.status === "unchanged") ||
+    (setupSupported && !secondItems.every((item) => item.mcp === "unchanged"))
+  ) {
+    throw new Error(`tarball setup was not idempotent: ${second.stdout}`);
   }
 
-  const expectedFiles = [
-    path.join(claudeConfigDirectory, "skills", "structural-code-editing", "SKILL.md"),
-    path.join(hermesHome, "skills", "software-development", "structural-code-editing", "SKILL.md"),
-  ];
-  const installedFiles = await Promise.all(expectedFiles.map((file) => readFile(file, "utf8")));
-  if (!installedFiles.every((content) => content.includes('version: "3.2.0"'))) {
-    throw new Error("The packaged installer did not write the bundled skill version.");
+  const claudeSkill = await readFile(
+    path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md"),
+    "utf8",
+  );
+  const hermesSkill = await readFile(
+    path.join(hermesRoot, "skills", "software-development", "structural-code-editing", "SKILL.md"),
+    "utf8",
+  );
+  if (!claudeSkill.includes("name: structural-code-editing") || claudeSkill !== hermesSkill) {
+    throw new Error("installed tarball skills do not match");
   }
 
-  const replayRun = await executeFile(executable, ["install-skill", "all"], {
-    cwd: temporaryRoot,
-    env: environment,
-  });
-  const replay = JSON.parse(replayRun.stdout);
-  if (!replay.installations.every((item) => item.status === "unchanged")) {
-    throw new Error(`Packaged install was not idempotent: ${replayRun.stdout}`);
-  }
-
-  process.stdout.write(
-    `${JSON.stringify({ status: "ok", transport: "installed-tarball", skill_targets: 2, idempotent: true })}\n`,
+  console.log(
+    JSON.stringify({
+      status: "ok",
+      transport: "yarn-tarball",
+      lifecycle_scripts: false,
+      agent_setup: setupSupported,
+      installed_targets: firstItems.length,
+      idempotent_targets: secondItems.length,
+    }),
   );
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });

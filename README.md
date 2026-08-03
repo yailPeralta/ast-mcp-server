@@ -43,29 +43,53 @@ The included batch benchmark records a 50% reduction in model round-trips and a 
 ## Requirements
 
 - Node.js 20.19 or newer
+- Corepack with Yarn 4.15.0 (pinned by `packageManager`)
 - A target project with a `tsconfig.json`
 
 ## Install from source
 
-The npm package is not published yet. Build the current release from GitHub:
+The package is not published yet. Build the current release from GitHub:
 
 ```bash
 git clone https://github.com/yailPeralta/ast-mcp-server.git
 cd ast-mcp-server
-npm ci
-npm run build
+corepack enable
+yarn install --immutable
+yarn build
 ```
 
-Run `npm link` as an optional final step if you also want the global `ast-mcp-server` and `ast-tool` commands:
+The repository pins Yarn 4 and commits `enableScripts: false` in `.yarnrc.yml`. Dependency lifecycle scripts are therefore disabled during installation; switching from npm without this setting would merely change logos while preserving the risk.
 
-```bash
-npm link
-```
-
-The package exposes two executables:
+The package exposes two executables when installed:
 
 - `ast-mcp-server`: MCP stdio server.
-- `ast-tool`: one-shot declarative batch CLI for Bash-capable agents.
+- `ast-tool`: batch, skill-installation, and agent-setup CLI.
+
+## Guided agent setup
+
+The recommended setup command builds the package and opens an interactive wizard:
+
+```bash
+yarn setup
+```
+
+The wizard detects Claude Code and Hermes from `PATH`, shows their executable and version, selects every detected agent by default, and lets you deselect agents before confirmation. For each selected agent it:
+
+1. preflights any existing `ast` MCP registration;
+2. installs the bundled `structural-code-editing` skill;
+3. registers this package's MCP server through the agent's official CLI;
+4. reconnects and verifies the expected tools.
+
+Existing matching registrations and skill files are unchanged. Conflicting MCP registrations fail before any write; remove or rename them explicitly instead of letting a setup script guess. Conflicting skill content also fails closed unless `--force-skill` is explicit.
+
+For automation, make the target set and confirmation explicit:
+
+```bash
+yarn setup --agents all --yes
+yarn setup --agents claude --yes
+```
+
+After installing the package elsewhere, use the equivalent `ast-tool setup` command.
 
 ## Install the agent skill
 
@@ -97,11 +121,11 @@ ast-tool install-skill claude --scope project --project-root /absolute/project
 
 This writes `.claude/skills/structural-code-editing/SKILL.md` below that project. Project scope is intentionally rejected for Hermes because Hermes skills belong to a profile, not a source repository.
 
-Installation is idempotent. Existing identical content is left untouched; different content fails closed unless `--force` is explicit. If you skipped `npm link`, replace `ast-tool` with `node /absolute/path/to/ast-mcp-server/dist/cli.js`.
+Installation is idempotent. Existing identical content is left untouched; different content fails closed unless `--force` is explicit. From an unlinked source checkout, replace `ast-tool` with `yarn node /absolute/path/to/ast-mcp-server/dist/cli.js`.
 
 Claude Code detects changes in an existing skill directory live; restart it if the top-level skills directory did not exist when the session started. In Hermes, run `/reload-skills` or start a new session, then verify with `hermes skills list`.
 
-Installing the skill does not configure the MCP transport. Complete the client-specific MCP setup below as well—the instructions are useful, but they have not yet learned to open a stdio socket through positive thinking.
+`install-skill` only installs the skill; it does not configure the MCP transport. Use the guided `setup` command to do both, or complete the client-specific MCP setup below—the instructions are useful, but they have not yet learned to open a stdio socket through positive thinking.
 
 ## Use with Claude Code
 
@@ -308,15 +332,16 @@ The server does **not** claim a filesystem-wide transaction:
 ## Development gates
 
 ```bash
-npm run format:check
-npm run lint
-npm run typecheck
-npm test
-npm run build
-npm run test:mcp
-npm run test:cli
-npm audit
-npm pack --dry-run
+yarn format:check
+yarn lint
+yarn typecheck
+yarn test
+yarn build
+yarn test:mcp
+yarn test:cli
+yarn test:package
+yarn npm audit --all --recursive
+yarn pack --dry-run
 ```
 
 `test:mcp` exercises the built stdio server. `test:cli` runs a read pipeline and a prepare/apply/replay workflow across separate Node processes.
@@ -324,9 +349,9 @@ npm pack --dry-run
 ## Benchmarks
 
 ```bash
-npm run benchmark -- /absolute/project --sample 20 --output benchmark/results/project.json
-npm run benchmark:corpus -- benchmark/task-corpus.json --output benchmark/results/self-corpus.json
-npm run benchmark:batch -- --iterations 5 --output benchmark/results/self-batch.json
+yarn benchmark /absolute/project --sample 20 --output benchmark/results/project.json
+yarn benchmark:corpus benchmark/task-corpus.json --output benchmark/results/self-corpus.json
+yarn benchmark:batch --iterations 5 --output benchmark/results/self-batch.json
 ```
 
 The batch benchmark compares two separate client calls with one batch invocation in fresh Node processes, recording model round-trips, actual tool invocations, wall time, maximum RSS, and serialized character counts. Character counts are not model-specific token estimates. See `benchmark/README.md` for methodology and limitations.
