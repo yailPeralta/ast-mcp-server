@@ -187,7 +187,7 @@ try {
           tool: "ast_get_symbol_source",
           input: {
             file_path: { $ref: "#/steps/search/symbols/0/file" },
-            symbol_path: { $ref: "#/steps/search/symbols/0/symbol_path" },
+            symbol_path: { $ref: "#/steps/search/symbols/0/selector" },
           },
         },
       ],

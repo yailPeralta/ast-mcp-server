@@ -19,7 +19,11 @@ export const READ_BATCH_TOOLS = [
   "ast_get_diagnostics",
 ] as const;
 
-export const PREPARE_BATCH_TOOLS = ["ast_rename_symbol", "ast_replace_symbol_body"] as const;
+export const PREPARE_BATCH_TOOLS = [
+  "ast_rename_symbol",
+  "ast_replace_symbol_body",
+  "ast_scaffold_class",
+] as const;
 
 export const BATCH_TOOLS = [...READ_BATCH_TOOLS, ...PREPARE_BATCH_TOOLS] as const;
 

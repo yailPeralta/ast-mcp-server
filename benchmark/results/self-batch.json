@@ -1,30 +1,30 @@
 {
-  "generated_at": "2026-08-03T13:12:51.058Z",
+  "generated_at": "2026-08-04T18:04:21.268Z",
   "node": "v24.16.0",
-  "project_root": "<repository-root>",
+  "project_root": "/home/yail/Documentos/proyects/ast-mcp-server",
   "iterations": 5,
   "scenario": "search the broad term Batch, then read the first exact symbol source",
   "methodology": "Each sample runs in a fresh Node process. Characters are JSON string lengths, not tokenizer estimates.",
   "separate": {
-    "median_duration_ms": 536.190247,
-    "median_max_rss_bytes": 377536512,
+    "median_duration_ms": 591.345961,
+    "median_max_rss_bytes": 380674048,
     "model_round_trips": 2,
     "tool_invocations": 2,
-    "context_characters": 11514,
-    "final_result_characters": 454
+    "context_characters": 7818,
+    "final_result_characters": 312
   },
   "batch": {
-    "median_duration_ms": 535.242575,
-    "median_max_rss_bytes": 378347520,
+    "median_duration_ms": 581.168584,
+    "median_max_rss_bytes": 379940864,
     "model_round_trips": 1,
     "tool_invocations": 2,
-    "context_characters": 552,
-    "final_result_characters": 454
+    "context_characters": 417,
+    "final_result_characters": 312
   },
   "reduction": {
     "model_round_trips_percent": 50,
-    "context_characters_percent": 95.205836373111,
-    "duration_percent": 0.17674174517389374,
-    "max_rss_percent": -0.21481577919541728
+    "context_characters_percent": 94.66615502686109,
+    "duration_percent": 1.7210529319908519,
+    "max_rss_percent": 0.19260151929243152
   }
 }

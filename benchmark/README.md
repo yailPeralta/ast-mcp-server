@@ -101,18 +101,29 @@ The checked broad search-to-source batch result used five fresh-process samples:
 
 | Mode     | Model round-trips | Tool invocations | Context chars | Median wall time | Median max RSS |
 | -------- | ----------------: | ---------------: | ------------: | ---------------: | -------------: |
-| Separate |                 2 |                2 |        11,514 |        536.19 ms |      377.54 MB |
-| Batch    |                 1 |                2 |           552 |        535.24 ms |      378.35 MB |
+| Separate |                 2 |                2 |         7,818 |        587.03 ms |      380.68 MB |
+| Batch    |                 1 |                2 |           417 |        607.95 ms |      379.15 MB |
 
-That run reduced model round-trips by 50% and serialized context by 95.21%. Local execution latency decreased by 0.18% and RSS increased by 0.21%, both small enough to treat as noise rather than a performance claim. The batch value is orchestration/context reduction; it does not make TypeScript analysis free.
+That run reduced model round-trips by 50% and serialized context by 94.67%. Local execution latency increased by 3.56% and RSS decreased by 0.40%, both small enough to treat as noise rather than a performance claim. The batch value is orchestration/context reduction; it does not make TypeScript analysis free.
 
 The checked model-facing format corpus used the complete MCP envelope for TOON:
 
 | Payload             | Records | JSON tokens | MCP TOON tokens | Reduction |
 | ------------------- | ------: | ----------: | --------------: | --------: |
-| Broad symbol search |     100 |       5,225 |           3,881 |    25.72% |
-| References          |      71 |       3,086 |           2,150 |    30.33% |
+| Broad symbol search |     100 |       5,382 |           4,061 |    24.54% |
+| References          |      71 |       3,094 |           2,159 |    30.22% |
 | Diagnostics         |      30 |       1,309 |           1,034 |    21.01% |
-| Eligible aggregate  |     201 |       9,620 |           7,065 |    26.56% |
+| Eligible aggregate  |     201 |       9,785 |           7,254 |    25.87% |
 
-All seven positive and negative payloads round-tripped exactly. File list, outline, source, and prepare envelopes ranged from 5.50% to 23.40% worse in estimated tokens, which is why they remain JSON-only. Current serialized tool metadata is 2,451 characters smaller than the v0.3.0 baseline despite the three new input fields, because multi-shape tools no longer advertise a single incompatible output schema.
+All seven positive and negative payloads round-tripped exactly. File list, outline, source, and prepare envelopes were 5.13% to 13.56% worse in estimated tokens, which is why they remain JSON-only. The complete eleven-tool metadata is 3,372 serialized characters larger than the retained v0.3.0 baseline; this static protocol cost is reported separately from dynamic result savings.
+
+The checked result-shaping corpus compares the v0.4.0-compatible `full/100/context` profiles with the new public defaults across exact-name, exact-path, prefix, broad-substring, and multi-file-reference workflows:
+
+| Profile   | Logical calls | MCP TOON tokens |
+| --------- | ------------: | --------------: |
+| Baseline  |             6 |           3,910 |
+| Candidate |             6 |           1,220 |
+
+Every declared selector and reference coordinate remained present, and the aggregate reduction was 68.80%, above the checked 35% gate. `duration_ms` is omitted from both measured representations to make token counts deterministic; real JSON/TOON outputs are still decode-compared before measurement. These are local `o200k_base` estimates, not provider billing, cache, or latency evidence.
+
+The complete v0.5.0 `tools/list` metadata is 22,473 serialized characters versus the retained v0.4.0 value of 16,650 (`+5,823`). Removing only `ast_scaffold_class` from the current list reduces it by 5,411 characters and 1,295 local `o200k_base` tokens. No v0.4.0 metadata token count was retained, so the report intentionally leaves the historical token delta unset.

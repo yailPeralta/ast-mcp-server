@@ -39,7 +39,7 @@ Reads can start with a compact outline and fetch exact source only when needed. 
 
 AST-aware editing is not a proof that a change is semantically correct. The safety comes from combining structural selection with diagnostics, exact previews, reviewed hashes, freshness checks, and fail-closed apply semantics.
 
-The included batch benchmark records a 50% reduction in model round-trips and a 95.21% reduction in serialized context for its search-to-source scenario. The format benchmark records an `o200k_base` estimate of 25.72% fewer model-facing tokens for a 100-row symbol search and 26.56% across the eligible collection corpus. These are reproducible scenario measurements, not universal token, billing, cache, or latency claims.
+The included batch benchmark records a 50% reduction in model round-trips and a 94.67% reduction in serialized context for its search-to-source scenario. The result-shaping corpus records a 68.80% reduction in aggregate model-facing TOON tokens while preserving declared selectors/reference coordinates with the same six logical calls. The separate format benchmark records 25.87% across its eligible collection corpus. These are reproducible local `o200k_base` estimates, not universal token, billing, cache, or latency claims.
 
 ## Requirements
 
@@ -224,10 +224,13 @@ Project-scoped tools accept `project_root`, either the project directory or an e
 | `ast_get_diagnostics`       | Project- or file-scoped TypeScript diagnostics                       | No            |
 | `ast_rename_symbol`         | Prepare a project-wide rename                                        | No            |
 | `ast_replace_symbol_body`   | Prepare a body-only replacement while preserving the signature       | No            |
+| `ast_scaffold_class`        | Prepare one new class file with explicit placeholder methods         | No            |
 | `ast_get_operation_preview` | Retrieve the complete retained diff for a prepared plan              | No            |
 | `ast_apply_operation`       | Apply one reviewed, hash-bound plan                                  | Yes           |
 
 Read results use project-relative paths, deterministic ordering, structured MCP output, and pagination where result sets can grow with the project.
+
+Symbol search is relevance-ranked and defaults to at most 20 `summary` records containing `file`, a directly reusable `selector`, `kind`, and body-free `signature`. Request `detail: "selectors"` for routing coordinates only, or `detail: "full", limit: 100` for the v0.4.0 fields/page. References default to `detail: "locations"`; request `detail: "context"` only when the bounded source line is needed.
 
 ### Optional TOON results
 
@@ -265,7 +268,7 @@ Example search-to-source pipeline:
       "tool": "ast_get_symbol_source",
       "input": {
         "file_path": { "$ref": "#/steps/search/symbols/0/file" },
-        "symbol_path": { "$ref": "#/steps/search/symbols/0/symbol_path" }
+        "symbol_path": { "$ref": "#/steps/search/symbols/0/selector" }
       }
     }
   ],
@@ -314,14 +317,16 @@ Success is one compact JSON value on stdout by default. `ast-tool run --output-f
 
 ### MCP process
 
-Rename and body replacement never write directly:
+Rename, body replacement, and class scaffold never write directly during preparation:
 
-1. Call `ast_rename_symbol` or `ast_replace_symbol_body`.
+1. Call `ast_rename_symbol`, `ast_replace_symbol_body`, or `ast_scaffold_class`.
 2. Review the diagnostic delta, affected files, `blocked`, and `plan_hash`.
 3. Fetch complete diffs with `ast_get_operation_preview` when needed.
 4. Call `ast_apply_operation` with both `operation_id` and `plan_hash`.
 
 MCP plans live in a bounded in-memory store and do not survive a server restart.
+
+`ast_scaffold_class` accepts structured imports, heritage, decorators, constructor parameter properties, initialized properties, and one or more method signatures. It creates an in-memory preview for one absent project-relative `.ts`/`.tsx` target. Each generated method initially contains only `throw new Error("Not implemented: Class.method")`. Review the `/dev/null` creation diff and diagnostics, apply the scaffold, then replace each pending method body with `ast_replace_symbol_body`. Existing targets and symbolic/traversing parents fail closed.
 
 ### CLI process boundary
 
@@ -380,15 +385,18 @@ yarn benchmark /absolute/project --sample 20 --output benchmark/results/project.
 yarn benchmark:corpus benchmark/task-corpus.json --output benchmark/results/self-corpus.json
 yarn benchmark:batch --iterations 5 --output benchmark/results/self-batch.json
 yarn benchmark:formats
+yarn benchmark:shapes
 ```
 
 The batch benchmark compares two separate client calls with one batch invocation in fresh Node processes, recording model round-trips, actual tool invocations, wall time, maximum RSS, and serialized character counts. Character counts are not model-specific token estimates.
 
 The format benchmark runs real tools against this repository plus deterministic reference/diagnostic fixtures. It checks JSON→TOON→value equality, UTF-8 bytes, `gpt-tokenizer` `o200k_base` estimates, encode/decode latency, the actual MCP envelope, tool metadata, and negative controls. Its checked result is `benchmark/results/self-formats.json`; local tokenizer estimates do not establish provider-side billing or cache savings. See `benchmark/README.md` for methodology and limitations.
 
+The result-shaping benchmark compares the v0.4.0-compatible `full/100/context` profiles with the new public defaults across exact-name, exact-path, prefix, broad-substring, and multi-file-reference tasks. It fails on missing evidence, extra logical calls, fewer than 11 tools, or less than 35% aggregate TOON token reduction. Its checked result is `benchmark/results/self-result-shapes.json`.
+
 ## Scope
 
 - TypeScript and JavaScript projects understood by the TypeScript compiler.
-- Structural rename and callable-body replacement.
+- Structural rename, callable-body replacement, and reviewed creation of one class scaffold.
 - Declarative DAG-like pipelines with prior-result references and bounded foreach.
-- No arbitrary signature migration, file creation/deletion plans, cross-language refactors, or general-purpose scripting language.
+- No arbitrary signature migration, general file creation/deletion, cross-language refactors, or general-purpose scripting language.

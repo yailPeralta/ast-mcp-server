@@ -55,7 +55,7 @@ const PersistedOperationSchema = z
   .object({
     operation_id: z.string().uuid(),
     plan_hash: HashSchema,
-    kind: z.enum(["rename_symbol", "replace_symbol_body"]),
+    kind: z.enum(["rename_symbol", "replace_symbol_body", "scaffold_class"]),
     status: z.enum(["prepared", "applied"]),
     project_root: z.string().min(1),
     created_at: IsoDateSchema,

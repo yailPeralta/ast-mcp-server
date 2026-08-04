@@ -3,16 +3,23 @@ import { z } from "zod";
 export const DEFAULT_PAGE_LIMIT = 100;
 export const MAX_PAGE_LIMIT = 500;
 
-export const PaginationInputSchema = {
-  offset: z.number().int().min(0).default(0).describe("Zero-based result offset."),
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(MAX_PAGE_LIMIT)
-    .default(DEFAULT_PAGE_LIMIT)
-    .describe(`Maximum results to return (1-${MAX_PAGE_LIMIT}).`),
-};
+export function createPaginationInputSchema(defaultLimit = DEFAULT_PAGE_LIMIT) {
+  if (!Number.isInteger(defaultLimit) || defaultLimit < 1 || defaultLimit > MAX_PAGE_LIMIT) {
+    throw new Error(`Default page limit must be an integer from 1 to ${MAX_PAGE_LIMIT}.`);
+  }
+  return {
+    offset: z.number().int().min(0).default(0).describe("Zero-based result offset."),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_PAGE_LIMIT)
+      .default(defaultLimit)
+      .describe(`Maximum results to return (1-${MAX_PAGE_LIMIT}).`),
+  };
+}
+
+export const PaginationInputSchema = createPaginationInputSchema();
 
 export const PaginationOutputSchema = {
   offset: z.number().int().min(0),

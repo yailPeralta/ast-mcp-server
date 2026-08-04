@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import packageMetadata from "../package.json" with { type: "json" };
 import { createServer } from "../src/server.js";
 import { clearOperationsForTests } from "../src/services/operations.js";
 import { clearProjectSessions } from "../src/services/project.js";
@@ -32,13 +33,16 @@ describe("MCP integration", () => {
 
   beforeEach(async () => {
     fixture = await createProjectFixture({
-      "src/value.ts": `export function formatValue(value: number): string { return String(value); }\n`,
+      "src/value.ts": `export function formatValueHelper(value: number): string { return String(value); }
+export function formatValue(value: number): string { return String(value); }
+`,
       "src/use.ts": `import { formatValue } from "./value.js";\nexport const result = formatValue(42);\n`,
     });
     server = createServer();
     client = new Client({ name: "ast-mcp-test-client", version: "1.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    expect(client.getServerVersion()?.version).toBe(packageMetadata.version);
   });
 
   afterEach(async () => {
@@ -60,6 +64,7 @@ describe("MCP integration", () => {
       "ast_get_diagnostics",
       "ast_rename_symbol",
       "ast_replace_symbol_body",
+      "ast_scaffold_class",
       "ast_get_operation_preview",
       "ast_apply_operation",
     ]);
@@ -111,10 +116,61 @@ describe("MCP integration", () => {
     const symbols = structured(
       await client.callTool({
         name: "ast_search_symbols",
-        arguments: { project_root: fixture.root, query: "format" },
+        arguments: { project_root: fixture.root, query: "formatValue" },
       }),
     );
-    expect(symbols.total).toBe(1);
+    expect(symbols.total).toBe(2);
+    expect(symbols.limit).toBe(20);
+    expect(symbols.symbols).toEqual([
+      {
+        file: "src/value.ts",
+        selector: "formatValue@2",
+        kind: "FunctionDeclaration",
+        signature: "export function formatValue(value: number): string;",
+      },
+      {
+        file: "src/value.ts",
+        selector: "formatValueHelper@1",
+        kind: "FunctionDeclaration",
+        signature: "export function formatValueHelper(value: number): string;",
+      },
+    ]);
+
+    const selectorSymbols = structured(
+      await client.callTool({
+        name: "ast_search_symbols",
+        arguments: {
+          project_root: fixture.root,
+          query: "formatValue",
+          detail: "selectors",
+        },
+      }),
+    );
+    expect(selectorSymbols.symbols).toEqual([
+      { file: "src/value.ts", selector: "formatValue@2", kind: "FunctionDeclaration" },
+      {
+        file: "src/value.ts",
+        selector: "formatValueHelper@1",
+        kind: "FunctionDeclaration",
+      },
+    ]);
+
+    const fullSymbols = structured(
+      await client.callTool({
+        name: "ast_search_symbols",
+        arguments: {
+          project_root: fixture.root,
+          query: "formatValue",
+          detail: "full",
+          limit: 100,
+        },
+      }),
+    );
+    expect(fullSymbols.limit).toBe(100);
+    expect(fullSymbols.symbols).toEqual([
+      expect.objectContaining({ symbol_path: "formatValue", name: "formatValue", line: 2 }),
+      expect.objectContaining({ symbol_path: "formatValueHelper", line: 1 }),
+    ]);
 
     const references = structured(
       await client.callTool({
@@ -126,7 +182,29 @@ describe("MCP integration", () => {
         },
       }),
     );
+    expect(references).toMatchObject({
+      include_declaration: true,
+      declaration_count: 1,
+    });
     expect(references.total).toBe(3);
+    expect(references.references).toEqual(
+      expect.arrayContaining([expect.not.objectContaining({ context: expect.anything() })]),
+    );
+
+    const referencesWithContext = structured(
+      await client.callTool({
+        name: "ast_find_references",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          detail: "context",
+        },
+      }),
+    );
+    expect(referencesWithContext.references).toEqual(
+      expect.arrayContaining([expect.objectContaining({ context: expect.any(String) })]),
+    );
 
     const diagnostics = structured(
       await client.callTool({
@@ -147,13 +225,20 @@ describe("MCP integration", () => {
     const symbols = toon(
       await client.callTool({
         name: "ast_search_symbols",
-        arguments: { project_root: fixture.root, query: "format", output_format: "toon" },
+        arguments: {
+          project_root: fixture.root,
+          query: "formatValue",
+          detail: "full",
+          output_format: "toon",
+        },
       }),
     );
-    expect(symbols.total).toBe(1);
-    expect(symbols.symbols).toEqual([
-      expect.objectContaining({ file: "src/value.ts", symbol_path: "formatValue" }),
-    ]);
+    expect(symbols.total).toBe(2);
+    expect(symbols.symbols).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ file: "src/value.ts", symbol_path: "formatValue" }),
+      ]),
+    );
 
     const references = toon(
       await client.callTool({
@@ -162,6 +247,7 @@ describe("MCP integration", () => {
           project_root: fixture.root,
           file_path: "src/value.ts",
           symbol_path: "formatValue",
+          detail: "context",
           output_format: "toon",
         },
       }),
@@ -226,5 +312,63 @@ describe("MCP integration", () => {
     expect(applied.status).toBe("applied");
     expect(await fixture.read("src/value.ts")).toContain("renderValue");
     expect(await fixture.read("src/use.ts")).toContain("renderValue");
+  });
+
+  it("prepares, previews and atomically applies a create-only class scaffold", async () => {
+    const prepared = structured(
+      await client.callTool({
+        name: "ast_scaffold_class",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value-service.ts",
+          class_name: "ValueService",
+          methods: [
+            {
+              name: "render",
+              is_async: false,
+              return_type: "string",
+              access: "public",
+              parameters: [{ name: "value", type: "number" }],
+            },
+          ],
+        },
+      }),
+    );
+    expect(prepared).toMatchObject({
+      kind: "scaffold_class",
+      status: "prepared",
+      blocked: false,
+      file: "src/value-service.ts",
+      class_name: "ValueService",
+      pending_methods: ["ValueService.render"],
+    });
+    expect(prepared.outline).toContain("export class ValueService");
+    await expect(fixture.read("src/value-service.ts")).rejects.toMatchObject({ code: "ENOENT" });
+
+    const preview = structured(
+      await client.callTool({
+        name: "ast_get_operation_preview",
+        arguments: {
+          operation_id: prepared.operation_id,
+          file: "src/value-service.ts",
+        },
+      }),
+    );
+    expect(JSON.stringify(preview)).toContain("/dev/null");
+    expect(JSON.stringify(preview)).toContain("Not implemented: ValueService.render");
+
+    const applied = structured(
+      await client.callTool({
+        name: "ast_apply_operation",
+        arguments: {
+          operation_id: prepared.operation_id,
+          plan_hash: prepared.plan_hash,
+        },
+      }),
+    );
+    expect(applied).toMatchObject({ kind: "scaffold_class", status: "applied" });
+    expect(await fixture.read("src/value-service.ts")).toContain(
+      'throw new Error("Not implemented: ValueService.render")',
+    );
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "ast-mcp-server",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Structural code MCP server and batch CLI for compact TypeScript/JavaScript reads and hash-bound AST edits.",
   "keywords": [
     "mcp",
@@ -55,6 +55,7 @@
     "benchmark:corpus": "yarn build && node scripts/benchmark-corpus.mjs",
     "benchmark:batch": "yarn build && node scripts/benchmark-batch.mjs",
     "benchmark:formats": "yarn build && node scripts/benchmark-formats.mjs",
+    "benchmark:shapes": "yarn build && node scripts/benchmark-result-shapes.mjs",
     "lint": "eslint src test scripts vitest.config.ts eslint.config.js",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

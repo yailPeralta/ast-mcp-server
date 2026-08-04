@@ -1,6 +1,11 @@
 import { Node, Project } from "ts-morph";
 import { describe, expect, it } from "vitest";
-import { collectSymbols, executableDeclaration, findDeclaration } from "../src/services/symbols.js";
+import {
+  collectSymbols,
+  executableDeclaration,
+  findDeclaration,
+  symbolMatchRank,
+} from "../src/services/symbols.js";
 
 function sourceFile(text: string) {
   const project = new Project({ useInMemoryFileSystem: true });
@@ -8,6 +13,16 @@ function sourceFile(text: string) {
 }
 
 describe("symbol location", () => {
+  it("ranks exact selectors, paths and names before prefixes and substrings", () => {
+    const symbol = { symbolPath: "Api.Client.request", name: "request", line: 42 };
+
+    expect(symbolMatchRank("Api.Client.request@42", symbol)).toBe(0);
+    expect(symbolMatchRank("Api.Client.request", symbol)).toBe(1);
+    expect(symbolMatchRank("request", symbol)).toBe(2);
+    expect(symbolMatchRank("Api.Client", symbol)).toBe(3);
+    expect(symbolMatchRank("Client", symbol)).toBe(4);
+  });
+
   it("collects namespace, class members, constructors and function-valued declarations", () => {
     const source = sourceFile(`
 export namespace API {

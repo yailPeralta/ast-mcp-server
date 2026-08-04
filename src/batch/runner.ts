@@ -2,7 +2,7 @@ import { performance } from "node:perf_hooks";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createServer } from "../server.js";
+import { createServer, PACKAGE_VERSION } from "../server.js";
 import {
   MAX_BATCH_CONTEXT_BYTES,
   MAX_BATCH_INVOCATIONS,
@@ -155,7 +155,7 @@ function injectProjectRoot(
 
 async function connectBatchClient(): Promise<BatchConnection> {
   const server = createServer();
-  const client = new Client({ name: "ast-tool-batch", version: "0.3.0" });
+  const client = new Client({ name: "ast-tool-batch", version: PACKAGE_VERSION });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   return { client, server };

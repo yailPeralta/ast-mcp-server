@@ -20,6 +20,7 @@ import {
 import {
   clearOperationsForTests,
   prepareRename,
+  prepareScaffoldClass,
   setOperationStoreConfigForTests,
 } from "../src/services/operations.js";
 import { clearProjectSessions } from "../src/services/project.js";
@@ -75,6 +76,52 @@ describe("persisted operation plans", () => {
     setOperationStoreConfigForTests({ now: () => Date.now() + 24 * 60 * 60 * 1000 });
     const replay = await applyPersistedOperation(planFile, prepared.plan_hash, { stateDirectory });
     expect(replay.idempotent_replay).toBe(true);
+    expect((await inspectPersistedPlan(planFile)).status).toBe("applied");
+  });
+
+  it("persists, creates and idempotently replays a class scaffold across stores", async () => {
+    const { fixture, stateDirectory } = await setup();
+    const target = path.join(fixture.root, "src/value-service.ts");
+    const prepared = await prepareScaffoldClass({
+      projectRoot: fixture.root,
+      filePath: "src/value-service.ts",
+      spec: {
+        className: "ValueService",
+        imports: [],
+        implements: [],
+        decorators: [],
+        constructorParams: [],
+        properties: [],
+        methods: [
+          {
+            name: "render",
+            isAsync: false,
+            returnType: "string",
+            params: [{ name: "value", type: "number" }],
+          },
+        ],
+      },
+    });
+    const planFile = await persistOperationPlan(prepared.operation.operation_id, {
+      stateDirectory,
+    });
+    await expect(readFile(target, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+
+    clearOperationsForTests();
+    const applied = await applyPersistedOperation(planFile, prepared.operation.plan_hash, {
+      stateDirectory,
+    });
+    expect(applied).toMatchObject({ kind: "scaffold_class", idempotent_replay: false });
+    expect(await readFile(target, "utf8")).toContain(
+      'throw new Error("Not implemented: ValueService.render")',
+    );
+
+    clearOperationsForTests();
+    setOperationStoreConfigForTests({ now: () => Date.now() + 24 * 60 * 60 * 1000 });
+    const replay = await applyPersistedOperation(planFile, prepared.operation.plan_hash, {
+      stateDirectory,
+    });
+    expect(replay).toMatchObject({ kind: "scaffold_class", idempotent_replay: true });
     expect((await inspectPersistedPlan(planFile)).status).toBe("applied");
   });
 

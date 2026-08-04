@@ -7,7 +7,7 @@
 
 The MCP server returns validated JSON-compatible objects through `structuredContent`. This is correct for schemas, clients and batch `$ref` traversal, but uniform collections repeat property names when a host serializes them into model context.
 
-Repository measurements with TOON v4.1.0 and `gpt-tokenizer` `o200k_base` showed MCP-envelope reductions of 25.72% for a 100-row symbol search, 30.33% for references, and 21.01% for diagnostics. File lists, outlines, source, and prepare outputs became 5.50% to 23.40% worse. TOON therefore has value for particular result shapes, not as a universal protocol replacement.
+The v0.4.0 decision measurements with TOON v4.1.0 and `gpt-tokenizer` `o200k_base` showed MCP-envelope reductions of 25.72% for a 100-row symbol search, 30.33% for references, and 21.01% for diagnostics. File lists, outlines, source, and prepare outputs became 5.50% to 23.40% worse. TOON therefore has value for particular result shapes, not as a universal protocol replacement. Current release measurements live in `benchmark/results/self-formats.json`.
 
 The implementation spike also established an SDK constraint: when a tool registers `outputSchema`, the lockfile-resolved MCP SDK requires successful calls to provide matching `structuredContent`. A top-level union schema is not accepted by the installed Zod compatibility path. Text-only TOON with the existing output schema is therefore not a valid contract.
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-03T22:05:47.381Z",
+  "generated_at": "2026-08-04T18:04:08.919Z",
   "node_version": "v24.16.0",
   "project_root": "<repository-root>",
   "methodology": {
@@ -16,9 +16,9 @@
   "tool_metadata": {
     "baseline_version": "0.3.0",
     "baseline_serialized_characters": 19101,
-    "current_serialized_characters": 16650,
-    "delta_characters": -2451,
-    "delta_percent": -12.831788911575309
+    "current_serialized_characters": 22473,
+    "delta_characters": 3372,
+    "delta_percent": 17.653525993403488
   },
   "payloads": [
     {
@@ -28,29 +28,29 @@
       "record_count": 100,
       "round_trip_equal": true,
       "json": {
-        "characters": 22291,
-        "bytes": 22291,
-        "tokens_o200k_base": 5225
+        "characters": 23924,
+        "bytes": 23924,
+        "tokens_o200k_base": 5382
       },
       "toon": {
-        "characters": 14781,
-        "bytes": 14781,
-        "tokens_o200k_base": 3710
+        "characters": 16412,
+        "bytes": 16412,
+        "tokens_o200k_base": 3883
       },
       "mcp_envelope": {
-        "characters": 15090,
-        "bytes": 15090,
-        "tokens_o200k_base": 3881
+        "characters": 16719,
+        "bytes": 16719,
+        "tokens_o200k_base": 4061
       },
       "reduction_percent": {
-        "cli_tokens": 28.995215311004785,
-        "mcp_tokens": 25.722488038277515,
-        "cli_bytes": 33.69072719931811,
-        "mcp_bytes": 32.304517518280925
+        "cli_tokens": 27.85209959123003,
+        "mcp_tokens": 24.54477889260498,
+        "cli_bytes": 31.399431533188434,
+        "mcp_bytes": 30.116201304129742
       },
       "latency_ms": {
-        "encode_p50": 0.24579599999992752,
-        "decode_p50": 0.7029409999998961
+        "encode_p50": 0.2661684999998215,
+        "decode_p50": 0.7317700000000968
       }
     },
     {
@@ -60,29 +60,29 @@
       "record_count": 71,
       "round_trip_equal": true,
       "json": {
-        "characters": 10961,
-        "bytes": 10961,
-        "tokens_o200k_base": 3086
+        "characters": 10990,
+        "bytes": 10990,
+        "tokens_o200k_base": 3094
       },
       "toon": {
-        "characters": 6524,
-        "bytes": 6524,
-        "tokens_o200k_base": 2038
+        "characters": 6552,
+        "bytes": 6552,
+        "tokens_o200k_base": 2047
       },
       "mcp_envelope": {
-        "characters": 6693,
-        "bytes": 6693,
-        "tokens_o200k_base": 2150
+        "characters": 6722,
+        "bytes": 6722,
+        "tokens_o200k_base": 2159
       },
       "reduction_percent": {
-        "cli_tokens": 33.9598185353208,
-        "mcp_tokens": 30.33052495139339,
-        "cli_bytes": 40.479883222333726,
-        "mcp_bytes": 38.93805309734513
+        "cli_tokens": 33.839689722042664,
+        "mcp_tokens": 30.21978021978022,
+        "cli_bytes": 40.382165605095544,
+        "mcp_bytes": 38.835304822565966
       },
       "latency_ms": {
-        "encode_p50": 0.11092849999999999,
-        "decode_p50": 0.3951170000000275
+        "encode_p50": 0.11772250000012718,
+        "decode_p50": 0.4251934999999776
       }
     },
     {
@@ -92,61 +92,61 @@
       "record_count": 30,
       "round_trip_equal": true,
       "json": {
-        "characters": 4495,
-        "bytes": 4495,
-        "tokens_o200k_base": 1309
+        "characters": 4488,
+        "bytes": 4488,
+        "tokens_o200k_base": 1306
       },
       "toon": {
-        "characters": 2816,
-        "bytes": 2816,
-        "tokens_o200k_base": 962
+        "characters": 2809,
+        "bytes": 2809,
+        "tokens_o200k_base": 959
       },
       "mcp_envelope": {
-        "characters": 2881,
-        "bytes": 2881,
-        "tokens_o200k_base": 1034
+        "characters": 2874,
+        "bytes": 2874,
+        "tokens_o200k_base": 1031
       },
       "reduction_percent": {
-        "cli_tokens": 26.508785332314744,
-        "mcp_tokens": 21.008403361344538,
-        "cli_bytes": 37.35261401557286,
-        "mcp_bytes": 35.906562847608456
+        "cli_tokens": 26.56967840735069,
+        "mcp_tokens": 21.05666156202144,
+        "cli_bytes": 37.4108734402852,
+        "mcp_bytes": 35.962566844919785
       },
       "latency_ms": {
-        "encode_p50": 0.04098450000003595,
-        "decode_p50": 0.15741149999985282
+        "encode_p50": 0.0443715000001248,
+        "decode_p50": 0.17042650000007598
       }
     },
     {
       "name": "file_list_negative_control",
       "eligible": false,
       "source": "repository tool output",
-      "record_count": 30,
+      "record_count": 32,
       "round_trip_equal": true,
       "json": {
-        "characters": 912,
-        "bytes": 912,
-        "tokens_o200k_base": 218
+        "characters": 969,
+        "bytes": 969,
+        "tokens_o200k_base": 231
       },
       "toon": {
-        "characters": 846,
-        "bytes": 846,
-        "tokens_o200k_base": 220
+        "characters": 899,
+        "bytes": 899,
+        "tokens_o200k_base": 233
       },
       "mcp_envelope": {
-        "characters": 878,
-        "bytes": 878,
-        "tokens_o200k_base": 230
+        "characters": 931,
+        "bytes": 931,
+        "tokens_o200k_base": 243
       },
       "reduction_percent": {
-        "cli_tokens": -0.9174311926605505,
-        "mcp_tokens": -5.5045871559633035,
-        "cli_bytes": 7.236842105263158,
-        "mcp_bytes": 3.7280701754385963
+        "cli_tokens": -0.8658008658008658,
+        "mcp_tokens": -5.194805194805195,
+        "cli_bytes": 7.223942208462332,
+        "mcp_bytes": 3.9215686274509802
       },
       "latency_ms": {
-        "encode_p50": 0.007049999999935608,
-        "decode_p50": 0.02271399999995083
+        "encode_p50": 0.007460000000037326,
+        "decode_p50": 0.023795499999778258
       }
     },
     {
@@ -156,29 +156,29 @@
       "record_count": null,
       "round_trip_equal": true,
       "json": {
-        "characters": 214,
-        "bytes": 214,
-        "tokens_o200k_base": 47
+        "characters": 533,
+        "bytes": 533,
+        "tokens_o200k_base": 118
       },
       "toon": {
-        "characters": 208,
-        "bytes": 208,
-        "tokens_o200k_base": 46
+        "characters": 527,
+        "bytes": 527,
+        "tokens_o200k_base": 117
       },
       "mcp_envelope": {
-        "characters": 241,
-        "bytes": 241,
-        "tokens_o200k_base": 58
+        "characters": 567,
+        "bytes": 567,
+        "tokens_o200k_base": 134
       },
       "reduction_percent": {
-        "cli_tokens": 2.127659574468085,
-        "mcp_tokens": -23.404255319148938,
-        "cli_bytes": 2.803738317757009,
-        "mcp_bytes": -12.616822429906541
+        "cli_tokens": 0.847457627118644,
+        "mcp_tokens": -13.559322033898304,
+        "cli_bytes": 1.125703564727955,
+        "mcp_bytes": -6.378986866791744
       },
       "latency_ms": {
-        "encode_p50": 0.0022945000000618165,
-        "decode_p50": 0.004257999999936146
+        "encode_p50": 0.0028515000001334556,
+        "decode_p50": 0.007667499999797656
       }
     },
     {
@@ -188,29 +188,29 @@
       "record_count": null,
       "round_trip_equal": true,
       "json": {
-        "characters": 3384,
-        "bytes": 3384,
-        "tokens_o200k_base": 755
+        "characters": 4161,
+        "bytes": 4161,
+        "tokens_o200k_base": 913
       },
       "toon": {
-        "characters": 3376,
-        "bytes": 3376,
-        "tokens_o200k_base": 756
+        "characters": 4153,
+        "bytes": 4153,
+        "tokens_o200k_base": 914
       },
       "mcp_envelope": {
-        "characters": 3505,
-        "bytes": 3505,
-        "tokens_o200k_base": 823
+        "characters": 4301,
+        "bytes": 4301,
+        "tokens_o200k_base": 993
       },
       "reduction_percent": {
-        "cli_tokens": -0.13245033112582782,
-        "mcp_tokens": -9.006622516556291,
-        "cli_bytes": 0.2364066193853428,
-        "mcp_bytes": -3.57565011820331
+        "cli_tokens": -0.10952902519167579,
+        "mcp_tokens": -8.762322015334064,
+        "cli_bytes": 0.19226147560682527,
+        "mcp_bytes": -3.3645758231194423
       },
       "latency_ms": {
-        "encode_p50": 0.012052999999923486,
-        "decode_p50": 0.03589549999992414
+        "encode_p50": 0.0158125000000382,
+        "decode_p50": 0.04707400000006601
       }
     },
     {
@@ -227,29 +227,29 @@
       "toon": {
         "characters": 11218,
         "bytes": 11218,
-        "tokens_o200k_base": 3612
+        "tokens_o200k_base": 3613
       },
       "mcp_envelope": {
         "characters": 11590,
         "bytes": 11590,
-        "tokens_o200k_base": 3867
+        "tokens_o200k_base": 3868
       },
       "reduction_percent": {
-        "cli_tokens": 1.7677454446559695,
-        "mcp_tokens": -5.1672559151482185,
+        "cli_tokens": 1.7405493608920315,
+        "mcp_tokens": -5.1944519989121565,
         "cli_bytes": 4.0950671112251005,
         "mcp_bytes": 0.9147644695220997
       },
       "latency_ms": {
-        "encode_p50": 0.043094500000051994,
-        "decode_p50": 0.16842050000013842
+        "encode_p50": 0.04623449999985496,
+        "decode_p50": 0.17496349999987615
       }
     }
   ],
   "aggregate": {
-    "eligible_json_tokens_o200k_base": 9620,
-    "eligible_mcp_toon_tokens_o200k_base": 7065,
-    "eligible_mcp_token_reduction_percent": 26.559251559251557
+    "eligible_json_tokens_o200k_base": 9782,
+    "eligible_mcp_toon_tokens_o200k_base": 7251,
+    "eligible_mcp_token_reduction_percent": 25.874054385606215
   },
   "gates": {
     "round_trip_all_payloads": true,

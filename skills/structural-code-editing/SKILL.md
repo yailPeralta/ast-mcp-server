@@ -1,7 +1,7 @@
 ---
 name: structural-code-editing
 description: Leer, navegar y editar proyectos TypeScript/JavaScript mediante el resolver real del compilador y operaciones AST preparadas, revisadas y vinculadas por hash.
-version: "3.4.0"
+version: "4.0.0"
 author: "yail"
 license: "ISC"
 metadata:
@@ -21,6 +21,7 @@ Usar las tools del servidor MCP `ast` en proyectos TypeScript/JavaScript con `ts
 - medir el radio de impacto de un rename;
 - renombrar un símbolo en varios archivos;
 - reemplazar solo el cuerpo de una función, método, accessor o callable property;
+- crear un archivo de clase nuevo mediante un scaffold estructurado y revisado;
 - obtener diagnostics sin cargar el proyecto como texto en el contexto.
 
 Para configs, Markdown, comentarios o una edición textual trivial en un archivo ya conocido, usar las tools normales de archivos. El AST no cobra alquiler, pero cada roundtrip sí.
@@ -44,6 +45,8 @@ El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reempl
 4. `ast_get_symbol_source` solo para las declaraciones cuya implementación haya que inspeccionar.
 5. `ast_find_references` antes de renames o cambios con impacto cross-file.
 6. `ast_get_diagnostics` para establecer y verificar el estado del proyecto.
+
+`ast_search_symbols` devuelve por default hasta 20 records `summary` rankeados. Su campo `selector` es el valor que se pasa como `symbol_path` a la siguiente tool; pedir `detail: "selectors"` para routing puro o `detail: "full", limit: 100` para el perfil v0.4.0. `ast_find_references` devuelve `detail: "locations"` por default; expandir a `detail: "context"` únicamente cuando la línea fuente aporte evidencia necesaria.
 
 `file_path` debe ser preferentemente relativo al proyecto. Si un suffix coincide con varios archivos, la tool falla y devuelve candidatos en vez de elegir uno silenciosamente.
 
@@ -77,9 +80,9 @@ Cuando un pipeline conocido requiere varias llamadas MCP dependientes y el clien
 
 ## Flujo obligatorio de mutación
 
-Las tools de rename y reemplazo **solo preparan**. `dry_run: false` directo está deshabilitado.
+Las tools de rename, reemplazo y scaffold **solo preparan**. `dry_run: false` directo está deshabilitado.
 
-1. Llamar `ast_rename_symbol` o `ast_replace_symbol_body` con `dry_run: true`.
+1. Llamar `ast_rename_symbol`, `ast_replace_symbol_body` o `ast_scaffold_class` con `dry_run: true`.
 2. Revisar:
    - `affected_files`;
    - summaries y previews;
@@ -92,6 +95,12 @@ Las tools de rename y reemplazo **solo preparan**. `dry_run: false` directo est�
 5. Ejecutar el typecheck/build/test canónico del proyecto después del apply.
 
 Nunca reconstruir el contenido a aplicar a partir del diff. Apply escribe los postimages exactos retenidos en el plan.
+
+### Scaffold de clase
+
+Usar `ast_scaffold_class` solo para crear un `.ts`/`.tsx` ausente con una clase estructurada. Pasar imports, heritage, decorators, constructor params, properties inicializadas y métodos mediante el schema; no inyectar un archivo completo como string. Debe haber al menos un método.
+
+Cada método generado contiene exclusivamente `throw new Error("Not implemented: Class.method")`. Preparar el scaffold, revisar el diff desde `/dev/null`, diagnostics, `pending_methods`, `blocked` y `plan_hash`, aplicar y luego reemplazar cada selector pendiente con `ast_replace_symbol_body`. Un target existente, path fuera del proyecto o parent simbólico debe fallar; no buscar un fallback textual.
 
 ### Mutaciones desde el CLI
 
@@ -110,7 +119,8 @@ Los planes CLI sobreviven al proceso bajo `${XDG_STATE_HOME:-~/.local/state}/ast
 - plan vinculado por hash al workspace completo, configs extendidos/referenciados y postimages;
 - rechazo si cambió cualquier source/config antes de apply;
 - lock filesystem cooperativo por config/workspace canónico compartido por MCP y CLI;
-- staging, flush, rename, verificación de hash y rollback conservador;
+- staging, flush, rename para reemplazos y creación no-clobber para targets nuevos, con verificación de hash y rollback conservador;
+- scaffold create-only con target ausente, parent real, postimage incluida en el fingerprint y diff contra `/dev/null`;
 - retry idempotente de un operation ya aplicado;
 - preservación de modo y UTF-8 BOM.
 
@@ -125,7 +135,7 @@ La edición AST no demuestra que un cambio sea semánticamente correcto ni vuelv
 - El receipt se persiste dentro de la sección crítica. Si esa persistencia falla después de reemplazar sources, apply sale no-cero y el retry recupera sólo si el workspace completo coincide exactamente con el fingerprint post-apply revisado.
 - Un crash duro puede dejar un lock stale: retirarlo requiere inspeccionar metadata y confirmar que no hay apply activo. Un estado parcial o divergente sigue fallando cerrado.
 - Solo admite sources UTF-8 con o sin BOM.
-- No implementa migración arbitraria de firmas, creación/eliminación de archivos ni lenguajes fuera de TS/JS.
+- No implementa migración arbitraria de firmas, creación/eliminación general de archivos ni lenguajes fuera de TS/JS; la única creación admitida es el scaffold de una clase.
 - `allow_new_errors: true` evita el bloqueo del plan; no convierte código roto en código sano.
 
 ## Verificación

@@ -41,7 +41,7 @@ describe("batch runner", () => {
           tool: "ast_get_symbol_source",
           input: {
             file_path: { $ref: "#/steps/search/symbols/0/file" },
-            symbol_path: { $ref: "#/steps/search/symbols/0/symbol_path" },
+            symbol_path: { $ref: "#/steps/search/symbols/0/selector" },
           },
         },
       ],
@@ -236,6 +236,23 @@ describe("batch runner", () => {
         ],
       }),
     ).toThrow(/prepare.*final/i);
+
+    const scaffold = parseBatchDocument({
+      version: 1,
+      project_root: project.root,
+      steps: [
+        {
+          id: "prepare",
+          tool: "ast_scaffold_class",
+          input: {
+            file_path: "src/value-service.ts",
+            class_name: "ValueService",
+            methods: [{ name: "render", return_type: "string" }],
+          },
+        },
+      ],
+    });
+    expect(scaffold.steps[0]!.tool).toBe("ast_scaffold_class");
   });
 
   it("rejects missing runtime reference targets before invoking the dependent tool", async () => {
@@ -250,7 +267,7 @@ describe("batch runner", () => {
           tool: "ast_get_symbol_source",
           input: {
             file_path: { $ref: "#/steps/search/symbols/0/file" },
-            symbol_path: { $ref: "#/steps/search/symbols/0/symbol_path" },
+            symbol_path: { $ref: "#/steps/search/symbols/0/selector" },
           },
         },
       ],

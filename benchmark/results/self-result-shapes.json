@@ -1,0 +1,403 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-04T18:04:10.976Z",
+  "node_version": "v24.16.0",
+  "methodology": {
+    "corpus": "deterministic exact-name, exact-path, prefix, broad-substring and multi-file reference workflows",
+    "baseline": "search detail=full/limit=100 and references detail=context",
+    "candidate": "omitted search/reference detail and search limit (public defaults)",
+    "tokenizer": "gpt-tokenizer o200k_base",
+    "representation": "serialized MCP structuredContent with duration_ms omitted for deterministic measurement; TOON includes its {format,data} envelope",
+    "correctness": "Every declared selector/coordinate must remain present, reference scope metadata must match and required logical calls must not increase.",
+    "billing_claim": "Local serializer/tokenizer estimates only; no provider billing or cache-cost claim."
+  },
+  "threshold": {
+    "minimum_aggregate_toon_token_reduction_percent": 35
+  },
+  "tasks": [
+    {
+      "id": "exact-name",
+      "kind": "symbol_search",
+      "expected_evidence": ["createServer@2"],
+      "baseline_calls": 1,
+      "candidate_calls": 1,
+      "baseline": {
+        "json": {
+          "characters": 494,
+          "bytes": 494,
+          "tokens_o200k_base": 117
+        },
+        "toon": {
+          "characters": 427,
+          "bytes": 427,
+          "tokens_o200k_base": 116
+        }
+      },
+      "candidate": {
+        "json": {
+          "characters": 361,
+          "bytes": 361,
+          "tokens_o200k_base": 85
+        },
+        "toon": {
+          "characters": 336,
+          "bytes": 336,
+          "tokens_o200k_base": 93
+        }
+      },
+      "evidence_pass": true,
+      "call_bound_pass": true
+    },
+    {
+      "id": "exact-path",
+      "kind": "symbol_search",
+      "expected_evidence": ["Api.Client.request@5"],
+      "baseline_calls": 1,
+      "candidate_calls": 1,
+      "baseline": {
+        "json": {
+          "characters": 275,
+          "bytes": 275,
+          "tokens_o200k_base": 71
+        },
+        "toon": {
+          "characters": 280,
+          "bytes": 280,
+          "tokens_o200k_base": 83
+        }
+      },
+      "candidate": {
+        "json": {
+          "characters": 213,
+          "bytes": 213,
+          "tokens_o200k_base": 56
+        },
+        "toon": {
+          "characters": 228,
+          "bytes": 228,
+          "tokens_o200k_base": 70
+        }
+      },
+      "evidence_pass": true,
+      "call_bound_pass": true
+    },
+    {
+      "id": "prefix",
+      "kind": "symbol_search",
+      "expected_evidence": ["Api.Client@4"],
+      "baseline_calls": 1,
+      "candidate_calls": 1,
+      "baseline": {
+        "json": {
+          "characters": 608,
+          "bytes": 608,
+          "tokens_o200k_base": 150
+        },
+        "toon": {
+          "characters": 465,
+          "bytes": 465,
+          "tokens_o200k_base": 135
+        }
+      },
+      "candidate": {
+        "json": {
+          "characters": 437,
+          "bytes": 437,
+          "tokens_o200k_base": 106
+        },
+        "toon": {
+          "characters": 368,
+          "bytes": 368,
+          "tokens_o200k_base": 107
+        }
+      },
+      "evidence_pass": true,
+      "call_bound_pass": true
+    },
+    {
+      "id": "broad-substring",
+      "kind": "symbol_search",
+      "expected_evidence": [
+        "item000@9",
+        "item001@10",
+        "item002@11",
+        "item003@12",
+        "item004@13",
+        "item005@14",
+        "item006@15",
+        "item007@16",
+        "item008@17",
+        "item009@18",
+        "item010@19",
+        "item011@20",
+        "item012@21",
+        "item013@22",
+        "item014@23",
+        "item015@24",
+        "item016@25",
+        "item017@26",
+        "item018@27",
+        "item019@28"
+      ],
+      "baseline_calls": 1,
+      "candidate_calls": 1,
+      "baseline": {
+        "json": {
+          "characters": 17898,
+          "bytes": 17898,
+          "tokens_o200k_base": 4327
+        },
+        "toon": {
+          "characters": 10777,
+          "bytes": 10777,
+          "tokens_o200k_base": 2753
+        }
+      },
+      "candidate": {
+        "json": {
+          "characters": 2619,
+          "bytes": 2619,
+          "tokens_o200k_base": 587
+        },
+        "toon": {
+          "characters": 1875,
+          "bytes": 1875,
+          "tokens_o200k_base": 468
+        }
+      },
+      "evidence_pass": true,
+      "call_bound_pass": true
+    },
+    {
+      "id": "multi-file-references",
+      "kind": "references",
+      "expected_evidence": [
+        {
+          "file": "src/shared.ts",
+          "line": 1,
+          "column": 1,
+          "is_declaration": true
+        },
+        {
+          "file": "src/use-0.ts",
+          "line": 1,
+          "column": 10,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-0.ts",
+          "line": 2,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-0.ts",
+          "line": 3,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-0.ts",
+          "line": 4,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-0.ts",
+          "line": 5,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-0.ts",
+          "line": 6,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-1.ts",
+          "line": 1,
+          "column": 10,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-1.ts",
+          "line": 2,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-1.ts",
+          "line": 3,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-1.ts",
+          "line": 4,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-1.ts",
+          "line": 5,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-1.ts",
+          "line": 6,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-2.ts",
+          "line": 1,
+          "column": 10,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-2.ts",
+          "line": 2,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-2.ts",
+          "line": 3,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-2.ts",
+          "line": 4,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-2.ts",
+          "line": 5,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-2.ts",
+          "line": 6,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-3.ts",
+          "line": 1,
+          "column": 10,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-3.ts",
+          "line": 2,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-3.ts",
+          "line": 3,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-3.ts",
+          "line": 4,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-3.ts",
+          "line": 5,
+          "column": 26,
+          "is_declaration": false
+        },
+        {
+          "file": "src/use-3.ts",
+          "line": 6,
+          "column": 26,
+          "is_declaration": false
+        }
+      ],
+      "baseline_calls": 2,
+      "candidate_calls": 2,
+      "baseline": {
+        "json": {
+          "characters": 4050,
+          "bytes": 4050,
+          "tokens_o200k_base": 1132
+        },
+        "toon": {
+          "characters": 2597,
+          "bytes": 2597,
+          "tokens_o200k_base": 823
+        }
+      },
+      "candidate": {
+        "json": {
+          "characters": 2579,
+          "bytes": 2579,
+          "tokens_o200k_base": 756
+        },
+        "toon": {
+          "characters": 1382,
+          "bytes": 1382,
+          "tokens_o200k_base": 482
+        }
+      },
+      "evidence_pass": true,
+      "call_bound_pass": true
+    }
+  ],
+  "aggregate": {
+    "baseline": {
+      "calls": 6,
+      "json": {
+        "characters": 23325,
+        "bytes": 23325,
+        "tokens_o200k_base": 5797
+      },
+      "toon": {
+        "characters": 14546,
+        "bytes": 14546,
+        "tokens_o200k_base": 3910
+      }
+    },
+    "candidate": {
+      "calls": 6,
+      "json": {
+        "characters": 6209,
+        "bytes": 6209,
+        "tokens_o200k_base": 1590
+      },
+      "toon": {
+        "characters": 4189,
+        "bytes": 4189,
+        "tokens_o200k_base": 1220
+      }
+    },
+    "toon_token_reduction_percent": 68.79795396419436
+  },
+  "tool_metadata": {
+    "baseline_version": "0.4.0",
+    "baseline_serialized_characters": 16650,
+    "current_tool_count": 11,
+    "current_serialized_characters": 22473,
+    "current_tokens_o200k_base": 5080,
+    "character_delta": 5823,
+    "scaffold_marginal_characters": 5411,
+    "scaffold_marginal_tokens_o200k_base": 1295,
+    "historical_token_delta": null,
+    "note": "No retained v0.4.0 tokenizer count exists; historical token delta is intentionally not fabricated."
+  },
+  "checks": {
+    "evidence_and_calls": true,
+    "aggregate_toon_reduction": true,
+    "complete_tool_list": true
+  },
+  "pass": true
+}

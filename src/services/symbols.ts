@@ -14,6 +14,27 @@ export interface LocatedSymbol {
   line: number;
 }
 
+export interface SymbolMatchCandidate {
+  symbolPath: string;
+  name: string;
+  line: number;
+}
+
+export function symbolMatchRank(query: string, symbol: SymbolMatchCandidate): number {
+  const normalizedQuery = query.toLowerCase();
+  const normalizedPath = symbol.symbolPath.toLowerCase();
+  const normalizedName = symbol.name.toLowerCase();
+  const normalizedSelector = `${normalizedPath}@${symbol.line}`;
+
+  if (normalizedSelector === normalizedQuery) return 0;
+  if (normalizedPath === normalizedQuery) return 1;
+  if (normalizedName === normalizedQuery) return 2;
+  if (normalizedPath.startsWith(normalizedQuery) || normalizedName.startsWith(normalizedQuery)) {
+    return 3;
+  }
+  return 4;
+}
+
 function namedNode(node: Node): string | undefined {
   if (Node.isConstructorDeclaration(node)) return "constructor";
   if (

@@ -2,10 +2,17 @@ import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { buildFileOutline } from "../services/outline.js";
-import { PaginationInputSchema, PaginationOutputSchema, paginate } from "../services/pagination.js";
+import {
+  createPaginationInputSchema,
+  PaginationOutputSchema,
+  paginate,
+} from "../services/pagination.js";
 import { withProject } from "../services/project.js";
-import { collectSymbols } from "../services/symbols.js";
+import { collectSymbols, symbolMatchRank } from "../services/symbols.js";
 import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
+
+const SEARCH_DEFAULT_LIMIT = 20;
+const SearchDetailSchema = z.enum(["selectors", "summary", "full"]).default("summary");
 
 const AstSearchSymbolsInputSchema = z.object({
   project_root: z
@@ -25,11 +32,14 @@ const AstSearchSymbolsInputSchema = z.object({
     .string()
     .optional()
     .describe("Optional case-insensitive substring matched against project-relative file paths."),
+  detail: SearchDetailSchema.describe(
+    "Result detail: selectors for routing, summary adds signatures, full adds redundant declaration fields.",
+  ),
   ...ToolOutputFormatInputSchema,
-  ...PaginationInputSchema,
+  ...createPaginationInputSchema(SEARCH_DEFAULT_LIMIT),
 });
 
-const SearchSymbolSchema = z.object({
+const FullSearchSymbolSchema = z.object({
   file: z.string(),
   symbol_path: z.string(),
   selector: z.string(),
@@ -39,11 +49,51 @@ const SearchSymbolSchema = z.object({
   signature: z.string(),
 });
 
-const AstSearchSymbolsOutputSchema = z.object({
-  symbols: z.array(SearchSymbolSchema),
-  duration_ms: z.number().min(0),
-  ...PaginationOutputSchema,
+const SelectorSearchSymbolSchema = FullSearchSymbolSchema.pick({
+  file: true,
+  selector: true,
+  kind: true,
 });
+const SummarySearchSymbolSchema = FullSearchSymbolSchema.pick({
+  file: true,
+  selector: true,
+  kind: true,
+  signature: true,
+});
+
+const SearchOutputSchemas = {
+  selectors: z.object({
+    symbols: z.array(SelectorSearchSymbolSchema),
+    duration_ms: z.number().min(0),
+    ...PaginationOutputSchema,
+  }),
+  summary: z.object({
+    symbols: z.array(SummarySearchSymbolSchema),
+    duration_ms: z.number().min(0),
+    ...PaginationOutputSchema,
+  }),
+  full: z.object({
+    symbols: z.array(FullSearchSymbolSchema),
+    duration_ms: z.number().min(0),
+    ...PaginationOutputSchema,
+  }),
+} as const;
+
+type FullSearchSymbol = z.infer<typeof FullSearchSymbolSchema>;
+type SearchDetail = z.infer<typeof SearchDetailSchema>;
+
+function projectSymbols(detail: SearchDetail, symbols: FullSearchSymbol[]) {
+  if (detail === "full") return symbols;
+  if (detail === "summary") {
+    return symbols.map(({ file, selector, kind, signature }) => ({
+      file,
+      selector,
+      kind,
+      signature,
+    }));
+  }
+  return symbols.map(({ file, selector, kind }) => ({ file, selector, kind }));
+}
 
 export function registerSearchSymbols(server: McpServer): void {
   server.registerTool(
@@ -51,7 +101,7 @@ export function registerSearchSymbols(server: McpServer): void {
     {
       title: "Search project symbols",
       description:
-        "Searches declarations structurally and returns exact file/symbol selectors that can be passed to the other AST tools.",
+        "Ranks structural declarations and returns exact file/symbol selectors for downstream AST tools.",
       inputSchema: AstSearchSymbolsInputSchema,
       annotations: {
         readOnlyHint: true,
@@ -60,7 +110,7 @@ export function registerSearchSymbols(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root, query, kinds, file_filter, output_format, offset, limit }) => {
+    async ({ project_root, query, kinds, file_filter, detail, output_format, offset, limit }) => {
       try {
         const structuredContent = await withProject(project_root, ({ project, projectRoot }) => {
           const startedAt = performance.now();
@@ -83,12 +133,15 @@ export function registerSearchSymbols(server: McpServer): void {
               continue;
             }
 
-            const matchingSymbols = collectSymbols(sourceFile).filter(
-              (symbol) =>
+            const matchingSymbols = collectSymbols(sourceFile).filter((symbol) => {
+              const selector = `${symbol.symbolPath}@${symbol.line}`.toLowerCase();
+              return (
                 (!kindSet || kindSet.has(symbol.kind)) &&
                 (symbol.name.toLowerCase().includes(normalizedQuery) ||
-                  symbol.symbolPath.toLowerCase().includes(normalizedQuery)),
-            );
+                  symbol.symbolPath.toLowerCase().includes(normalizedQuery) ||
+                  selector.includes(normalizedQuery))
+              );
+            });
             if (matchingSymbols.length === 0) continue;
 
             const signatures = new Map(
@@ -111,20 +164,36 @@ export function registerSearchSymbols(server: McpServer): void {
             }
           }
 
-          matches.sort((left, right) =>
-            `${left.file}:${left.line}:${left.symbol_path}`.localeCompare(
-              `${right.file}:${right.line}:${right.symbol_path}`,
-            ),
-          );
+          matches.sort((left, right) => {
+            const rank =
+              symbolMatchRank(query, {
+                symbolPath: left.symbol_path,
+                name: left.name,
+                line: left.line,
+              }) -
+              symbolMatchRank(query, {
+                symbolPath: right.symbol_path,
+                name: right.name,
+                line: right.line,
+              });
+            if (rank !== 0) return rank;
+            return (
+              left.file.localeCompare(right.file) ||
+              left.line - right.line ||
+              left.symbol_path.localeCompare(right.symbol_path) ||
+              left.kind.localeCompare(right.kind)
+            );
+          });
           const page = paginate(matches, offset, limit);
           const { items, ...metadata } = page;
           return {
-            symbols: items,
+            symbols: projectSymbols(detail, items),
             duration_ms: performance.now() - startedAt,
             ...metadata,
           };
         });
-        return formattedResult(AstSearchSymbolsOutputSchema, structuredContent, output_format);
+        const outputSchema = SearchOutputSchemas[detail] as z.ZodType<Record<string, unknown>>;
+        return formattedResult(outputSchema, structuredContent, output_format);
       } catch (error) {
         return errorResult(error);
       }

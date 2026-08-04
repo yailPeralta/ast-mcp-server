@@ -153,6 +153,7 @@ async function collectPayloads(client, projectRoot, fixtureRoot, query) {
     project_root: projectRoot,
     query,
     limit: 100,
+    detail: "full",
   });
   if (!Array.isArray(broadSearch.symbols) || broadSearch.symbols.length < 10) {
     throw new Error(`Broad search query ${JSON.stringify(query)} returned fewer than 10 symbols.`);
@@ -163,14 +164,17 @@ async function collectPayloads(client, projectRoot, fixtureRoot, query) {
     query: "benchmarkTarget",
     limit: 10,
   });
-  const declaration = fixtureSearch.symbols?.find((symbol) => symbol.name === "benchmarkTarget");
+  const declaration = fixtureSearch.symbols?.find((symbol) =>
+    symbol.selector.startsWith("benchmarkTarget@"),
+  );
   if (!declaration) throw new Error("Reference benchmark declaration was not found.");
 
   const references = await callJson(client, "ast_find_references", {
     project_root: fixtureRoot,
     file_path: declaration.file,
-    symbol_path: declaration.symbol_path,
+    symbol_path: declaration.selector,
     limit: 100,
+    detail: "context",
   });
   const diagnostics = await callJson(client, "ast_get_diagnostics", {
     project_root: fixtureRoot,
@@ -192,7 +196,7 @@ async function collectPayloads(client, projectRoot, fixtureRoot, query) {
   const prepared = await callJson(client, "ast_rename_symbol", {
     project_root: fixtureRoot,
     file_path: declaration.file,
-    symbol_path: declaration.symbol_path,
+    symbol_path: declaration.selector,
     new_name: "renamedBenchmarkTarget",
     dry_run: true,
   });

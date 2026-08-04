@@ -1,4 +1,4 @@
-import { readFile, symlink, unlink, writeFile } from "node:fs/promises";
+import { access, readFile, symlink, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -10,6 +10,7 @@ import {
   importOperationRecord,
   prepareRename,
   prepareReplaceBody,
+  prepareScaffoldClass,
   setOperationStoreConfigForTests,
   setOperationTestHooksForTests,
 } from "../src/services/operations.js";
@@ -31,6 +32,25 @@ async function renameFixture(): Promise<ProjectFixture> {
   });
   fixtures.push(fixture);
   return fixture;
+}
+
+function scaffoldSpec() {
+  return {
+    className: "UserService",
+    imports: [],
+    implements: [],
+    decorators: [],
+    constructorParams: [],
+    properties: [],
+    methods: [
+      {
+        name: "findUser",
+        isAsync: true,
+        params: [{ name: "id", type: "string" }],
+        returnType: "Promise<string>",
+      },
+    ],
+  };
 }
 
 describe("prepared structural operations", () => {
@@ -283,6 +303,219 @@ describe("prepared structural operations", () => {
     });
 
     const recovered = await applyOperation(prepared.operation_id, prepared.plan_hash);
+    expect(recovered.idempotent_replay).toBe(true);
+    expect(receiptPersisted).toBe(true);
+  });
+
+  it("prepares a class scaffold without writing and creates it idempotently on apply", async () => {
+    const fixture = await createProjectFixture({
+      "src/existing.ts": "export const existing = true;\n",
+    });
+    fixtures.push(fixture);
+    const target = path.join(fixture.root, "src/user.service.ts");
+    const prepared = await prepareScaffoldClass({
+      projectRoot: fixture.root,
+      filePath: "src/user.service.ts",
+      spec: scaffoldSpec(),
+    });
+
+    expect(prepared.operation.kind).toBe("scaffold_class");
+    expect(prepared.operation.blocked).toBe(false);
+    expect(prepared.pendingMethods).toEqual(["UserService.findUser"]);
+    expect(prepared.outline).toContain("findUser(id: string): Promise<string>;");
+    expect(getOperationPreview(prepared.operation.operation_id).files[0]?.diff).toContain(
+      "/dev/null",
+    );
+    await expect(access(target)).rejects.toThrow();
+
+    const applied = await applyOperation(
+      prepared.operation.operation_id,
+      prepared.operation.plan_hash,
+    );
+    expect(applied.idempotent_replay).toBe(false);
+    expect(await readFile(target, "utf8")).toContain("Not implemented: UserService.findUser");
+    const replay = await applyOperation(
+      prepared.operation.operation_id,
+      prepared.operation.plan_hash,
+    );
+    expect(replay.idempotent_replay).toBe(true);
+  });
+
+  it("never clobbers a scaffold target created after preparation", async () => {
+    const fixture = await createProjectFixture({
+      "src/existing.ts": "export const existing = true;\n",
+    });
+    fixtures.push(fixture);
+    const target = path.join(fixture.root, "src/user.service.ts");
+    const prepared = await prepareScaffoldClass({
+      projectRoot: fixture.root,
+      filePath: "src/user.service.ts",
+      spec: scaffoldSpec(),
+    });
+    await writeFile(target, "export const external = true;\n");
+
+    await expect(
+      applyOperation(prepared.operation.operation_id, prepared.operation.plan_hash),
+    ).rejects.toThrow(/exists|changed/i);
+    expect(await readFile(target, "utf8")).toBe("export const external = true;\n");
+  });
+
+  it("distinguishes an existing empty target from absence and rejects symbolic parents", async () => {
+    const fixture = await createProjectFixture({
+      "src/existing.ts": "export const existing = true;\n",
+    });
+    fixtures.push(fixture);
+    const emptyTarget = path.join(fixture.root, "src/empty.ts");
+    await writeFile(emptyTarget, "");
+
+    await expect(
+      prepareScaffoldClass({
+        projectRoot: fixture.root,
+        filePath: "src/empty.ts",
+        spec: scaffoldSpec(),
+      }),
+    ).rejects.toThrow(/already exists/i);
+    expect(await readFile(emptyTarget, "utf8")).toBe("");
+
+    if (process.platform !== "win32") {
+      const linkedParent = path.join(fixture.root, "linked-src");
+      await symlink(path.join(fixture.root, "src"), linkedParent, "dir");
+      await expect(
+        prepareScaffoldClass({
+          projectRoot: fixture.root,
+          filePath: "linked-src/user.service.ts",
+          spec: scaffoldSpec(),
+        }),
+      ).rejects.toThrow(/symbolic link/i);
+    }
+  });
+
+  it("blocks new scaffold diagnostics unless explicitly allowed", async () => {
+    const fixture = await createProjectFixture({
+      "src/existing.ts": "export const existing = true;\n",
+    });
+    fixtures.push(fixture);
+    const invalidSpec = {
+      ...scaffoldSpec(),
+      methods: [
+        {
+          name: "findUser",
+          isAsync: false,
+          params: [],
+          returnType: "MissingType",
+        },
+      ],
+    };
+
+    const blocked = await prepareScaffoldClass({
+      projectRoot: fixture.root,
+      filePath: "src/blocked.service.ts",
+      spec: invalidSpec,
+    });
+    expect(blocked.operation.blocked).toBe(true);
+    expect(blocked.operation.diagnostics.addedErrors.length).toBeGreaterThan(0);
+    await expect(
+      applyOperation(blocked.operation.operation_id, blocked.operation.plan_hash),
+    ).rejects.toThrow(/new TypeScript error/i);
+    await expect(access(path.join(fixture.root, "src/blocked.service.ts"))).rejects.toThrow();
+
+    const allowed = await prepareScaffoldClass({
+      projectRoot: fixture.root,
+      filePath: "src/allowed.service.ts",
+      spec: invalidSpec,
+      allowNewErrors: true,
+    });
+    expect(allowed.operation.blocked).toBe(false);
+    expect(allowed.operation.allow_new_errors).toBe(true);
+    expect(allowed.operation.diagnostics.addedErrors.length).toBeGreaterThan(0);
+    await applyOperation(allowed.operation.operation_id, allowed.operation.plan_hash);
+    expect(await readFile(path.join(fixture.root, "src/allowed.service.ts"), "utf8")).toContain(
+      "MissingType",
+    );
+  });
+
+  it("removes only the exact created postimage after an injected failure", async () => {
+    const fixture = await createProjectFixture({
+      "src/existing.ts": "export const existing = true;\n",
+    });
+    fixtures.push(fixture);
+    const target = path.join(fixture.root, "src/user.service.ts");
+    const prepared = await prepareScaffoldClass({
+      projectRoot: fixture.root,
+      filePath: "src/user.service.ts",
+      spec: scaffoldSpec(),
+    });
+    setOperationTestHooksForTests({
+      afterReplace: () => {
+        throw new Error("injected post-create failure");
+      },
+    });
+
+    await expect(
+      applyOperation(prepared.operation.operation_id, prepared.operation.plan_hash),
+    ).rejects.toThrow(/rollback succeeded/i);
+    await expect(access(target)).rejects.toThrow();
+  });
+
+  it("preserves a scaffold target changed before rollback can verify its postimage", async () => {
+    const fixture = await createProjectFixture({
+      "src/existing.ts": "export const existing = true;\n",
+    });
+    fixtures.push(fixture);
+    const target = path.join(fixture.root, "src/user.service.ts");
+    const prepared = await prepareScaffoldClass({
+      projectRoot: fixture.root,
+      filePath: "src/user.service.ts",
+      spec: scaffoldSpec(),
+    });
+    setOperationTestHooksForTests({
+      afterReplace: async () => {
+        await writeFile(target, "export const competingWriter = true;\n");
+        throw new Error("injected post-create failure");
+      },
+    });
+
+    await expect(
+      applyOperation(prepared.operation.operation_id, prepared.operation.plan_hash),
+    ).rejects.toThrow(/rollback was incomplete.*postimage/i);
+    expect(await readFile(target, "utf8")).toBe("export const competingWriter = true;\n");
+  });
+
+  it("recovers a durable scaffold postimage after receipt persistence fails", async () => {
+    const fixture = await createProjectFixture({
+      "src/existing.ts": "export const existing = true;\n",
+    });
+    fixtures.push(fixture);
+    const target = path.join(fixture.root, "src/user.service.ts");
+    const prepared = await prepareScaffoldClass({
+      projectRoot: fixture.root,
+      filePath: "src/user.service.ts",
+      spec: scaffoldSpec(),
+    });
+    const persisted = exportOperationRecord(prepared.operation.operation_id);
+    configureOperationApply(prepared.operation.operation_id, {
+      receiptWriter: async () => {
+        throw new Error("injected receipt failure");
+      },
+    });
+
+    await expect(
+      applyOperation(prepared.operation.operation_id, prepared.operation.plan_hash),
+    ).rejects.toThrow(/postimages.*receipt persistence failed/i);
+    expect(await readFile(target, "utf8")).toContain("Not implemented: UserService.findUser");
+
+    clearOperationsForTests();
+    importOperationRecord(persisted, prepared.operation.plan_hash);
+    let receiptPersisted = false;
+    configureOperationApply(prepared.operation.operation_id, {
+      receiptWriter: async () => {
+        receiptPersisted = true;
+      },
+    });
+    const recovered = await applyOperation(
+      prepared.operation.operation_id,
+      prepared.operation.plan_hash,
+    );
     expect(recovered.idempotent_replay).toBe(true);
     expect(receiptPersisted).toBe(true);
   });

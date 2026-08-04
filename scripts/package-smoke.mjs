@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { execFile } from "node:child_process";
 import console from "node:console";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -122,6 +124,24 @@ try {
     throw new Error("installed tarball release metadata is incomplete");
   }
 
+  const mcpClient = new Client({ name: "ast-package-smoke", version: "1.0.0" });
+  const mcpTransport = new StdioClientTransport({
+    command: process.execPath,
+    args: [path.join(installedPackageRoot, "dist", "index.js")],
+    stderr: "pipe",
+  });
+  try {
+    await mcpClient.connect(mcpTransport);
+    const serverVersion = mcpClient.getServerVersion()?.version;
+    if (serverVersion !== installedMetadata.version) {
+      throw new Error(
+        `packed MCP handshake version mismatch: ${String(serverVersion)} != ${installedMetadata.version}`,
+      );
+    }
+  } finally {
+    await mcpClient.close();
+  }
+
   const executable =
     process.platform === "win32"
       ? path.join(consumerDirectory, "node_modules", ".bin", "ast-tool.cmd")
@@ -216,6 +236,7 @@ try {
       transport: "yarn-tarball",
       lifecycle_scripts: false,
       package_version: installedMetadata.version,
+      handshake_version: installedMetadata.version,
       global_install: true,
       agent_setup: setupSupported,
       installed_targets: firstItems.length,

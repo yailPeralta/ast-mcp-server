@@ -4,12 +4,14 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { decode } from "@toon-format/toon";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const packageVersion = createRequire(import.meta.url)("../package.json").version;
 const serverPath = path.join(repositoryRoot, "dist/index.js");
 const fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "ast-mcp-stdio-"));
 const client = new Client({ name: "ast-mcp-stdio-smoke", version: "1.0.0" });
@@ -30,8 +32,18 @@ try {
   await client.connect(transport);
   const listed = await client.listTools();
   const names = listed.tools.map((tool) => tool.name).sort();
-  if (!names.includes("ast_list_files") || !names.includes("ast_apply_operation")) {
+  if (
+    names.length !== 11 ||
+    !names.includes("ast_list_files") ||
+    !names.includes("ast_scaffold_class") ||
+    !names.includes("ast_apply_operation")
+  ) {
     throw new Error(`Expected AST tools were not registered: ${names.join(", ")}`);
+  }
+  if (client.getServerVersion()?.version !== packageVersion) {
+    throw new Error(
+      `Expected stdio server version ${packageVersion}, got ${client.getServerVersion()?.version ?? "missing"}.`,
+    );
   }
 
   const result = await client.callTool({
@@ -56,7 +68,11 @@ try {
     throw new Error(`Unexpected TOON response: ${JSON.stringify(toonResult)}`);
   }
   const toonPayload = decode(envelope.data);
-  if (toonPayload.total !== 1 || toonPayload.symbols?.[0]?.name !== "value") {
+  if (
+    toonPayload.total !== 1 ||
+    toonPayload.limit !== 20 ||
+    toonPayload.symbols?.[0]?.selector !== "value@1"
+  ) {
     throw new Error(`Unexpected decoded TOON payload: ${JSON.stringify(toonPayload)}`);
   }
 

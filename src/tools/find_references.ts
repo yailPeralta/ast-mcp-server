@@ -6,6 +6,8 @@ import { PaginationInputSchema, PaginationOutputSchema, paginate } from "../serv
 import { findDeclarationByName, getSourceFileOrThrow, withProject } from "../services/project.js";
 import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
 
+const ReferenceDetailSchema = z.enum(["locations", "context"]).default("locations");
+
 const AstFindReferencesInputSchema = z.object({
   project_root: z
     .string()
@@ -13,11 +15,14 @@ const AstFindReferencesInputSchema = z.object({
   file_path: z.string().describe("File containing the declaration."),
   symbol_path: z.string().describe("Exact symbol path returned by an outline or symbol search."),
   include_declaration: z.boolean().default(true),
+  detail: ReferenceDetailSchema.describe(
+    "Result detail: locations omits source lines; context adds bounded source-line text.",
+  ),
   ...ToolOutputFormatInputSchema,
   ...PaginationInputSchema,
 });
 
-const ReferenceSchema = z.object({
+const ContextReferenceSchema = z.object({
   file: z.string(),
   line: z.number().int().positive(),
   column: z.number().int().positive(),
@@ -26,14 +31,25 @@ const ReferenceSchema = z.object({
   context: z.string(),
 });
 
-const AstFindReferencesOutputSchema = z.object({
+const LocationReferenceSchema = ContextReferenceSchema.omit({ context: true });
+const ReferenceOutputBase = {
   symbol: z.string(),
+  include_declaration: z.boolean(),
   declaration_count: z.number().int().min(0),
   reference_count: z.number().int().min(0),
   affected_files: z.array(z.string()),
-  references: z.array(ReferenceSchema),
   ...PaginationOutputSchema,
-});
+};
+const ReferenceOutputSchemas = {
+  locations: z.object({
+    ...ReferenceOutputBase,
+    references: z.array(LocationReferenceSchema),
+  }),
+  context: z.object({
+    ...ReferenceOutputBase,
+    references: z.array(ContextReferenceSchema),
+  }),
+} as const;
 
 export function registerFindReferences(server: McpServer): void {
   server.registerTool(
@@ -55,6 +71,7 @@ export function registerFindReferences(server: McpServer): void {
       file_path,
       symbol_path,
       include_declaration,
+      detail,
       output_format,
       offset,
       limit,
@@ -106,14 +123,25 @@ export function registerFindReferences(server: McpServer): void {
           const { items, ...metadata } = page;
           return {
             symbol: symbol_path,
+            include_declaration,
             declaration_count: 1,
             reference_count: references.length,
             affected_files: affectedFiles,
-            references: items,
+            references:
+              detail === "context"
+                ? items
+                : items.map(({ file, line, column, kind, is_declaration }) => ({
+                    file,
+                    line,
+                    column,
+                    kind,
+                    is_declaration,
+                  })),
             ...metadata,
           };
         });
-        return formattedResult(AstFindReferencesOutputSchema, structuredContent, output_format);
+        const outputSchema = ReferenceOutputSchemas[detail] as z.ZodType<Record<string, unknown>>;
+        return formattedResult(outputSchema, structuredContent, output_format);
       } catch (error) {
         return errorResult(error);
       }

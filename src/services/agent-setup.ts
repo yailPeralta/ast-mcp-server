@@ -25,6 +25,7 @@ const EXPECTED_HERMES_TOOLS = [
   "ast_get_diagnostics",
   "ast_rename_symbol",
   "ast_replace_symbol_body",
+  "ast_scaffold_class",
   "ast_get_operation_preview",
   "ast_apply_operation",
 ] as const;

@@ -66,7 +66,7 @@ async function runSeparate(projectRoot) {
         arguments: {
           project_root: projectRoot,
           file_path: symbol.file,
-          symbol_path: symbol.symbol_path,
+          symbol_path: symbol.selector,
         },
       }),
       "source",
@@ -99,7 +99,7 @@ async function runBatch(projectRoot) {
         tool: "ast_get_symbol_source",
         input: {
           file_path: { $ref: "#/steps/search/symbols/0/file" },
-          symbol_path: { $ref: "#/steps/search/symbols/0/symbol_path" },
+          symbol_path: { $ref: "#/steps/search/symbols/0/selector" },
         },
       },
     ],

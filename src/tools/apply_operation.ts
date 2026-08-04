@@ -10,7 +10,7 @@ const AstApplyOperationInputSchema = z.object({
 
 const AstApplyOperationOutputSchema = z.object({
   operation_id: z.string().uuid(),
-  kind: z.enum(["rename_symbol", "replace_symbol_body"]),
+  kind: z.enum(["rename_symbol", "replace_symbol_body", "scaffold_class"]),
   status: z.literal("applied"),
   applied_at: z.string(),
   affected_files: z.array(z.string()),

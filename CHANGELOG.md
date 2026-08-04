@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-03
+
+### Added
+
+- Relevance-ranked symbol search with `selectors`, `summary`, and backward-compatible `full` detail profiles.
+- Progressive semantic references with location-only defaults and opt-in bounded source context.
+- `ast_scaffold_class`, a strict prepare-only class scaffold that generates explicit throwing method placeholders and uses the existing preview/apply protocol.
+- Hash-bound absent-file plans with atomic no-clobber creation, conservative rollback, persisted replay, and idempotent receipt recovery.
+- A checked result-shaping workflow benchmark covering ranking, selector chaining, multi-file references, JSON/TOON payloads, call counts, evidence preservation, and complete tool metadata.
+
+### Changed
+
+- Symbol search now defaults to ranked `summary` records with a 20-result page. Use `detail: "full", limit: 100` for the v0.4.0 result profile.
+- Reference search now defaults to `locations` without source lines. Use `detail: "context"` for the v0.4.0 record profile.
+- MCP and batch client identity now derives from the shipped package version instead of a separately maintained literal.
+
+### Security
+
+- Scaffold inputs are strict and bounded; identifiers, duplicates, raw TypeScript fragments, paths, parent directories, and target absence are validated before plan creation.
+- File creation uses same-directory exclusive staging plus an atomic hard-link commit and never falls back to overwrite-capable rename.
+- Existing rename/body-replacement plan hashes and persisted modification plans remain compatible.
+
 ## [0.4.0] - 2026-08-03
 
 ### Added
@@ -44,5 +66,6 @@ Initial public release.
 - Apply rejects stale workspaces, changed configs/sources, mismatched plan hashes, unsafe plan files, conflicting MCP registrations, and conflicting skill content.
 - Inputs, outputs, operation stores, subprocesses, batch fan-out, plan lifetime, and filesystem access are bounded.
 
+[0.5.0]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.5.0
 [0.4.0]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.4.0
 [0.3.0]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.3.0

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstatSync, realpathSync } from "node:fs";
-import { open, readFile, rename, stat, unlink } from "node:fs/promises";
+import { link, open, readFile, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { createTwoFilesPatch } from "diff";
 import { LanguageVariant, Node, ScriptTarget, SyntaxKind, ts, type Project } from "ts-morph";
@@ -17,14 +17,17 @@ import {
   invalidateProject,
 } from "./project.js";
 import { executableDeclaration } from "./symbols.js";
+import { buildClassScaffold, type ClassScaffoldSpec } from "./scaffold.js";
 import { withWorkspaceFileLock, type RuntimeStateOptions } from "./runtime-state.js";
 import { createWorkspaceSnapshot, hashBytes, hashWorkspaceFiles } from "./workspace.js";
 
 const DEFAULT_OPERATION_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_MAX_OPERATIONS = 100;
 const MAX_INLINE_PREVIEW_CHARS = 100_000;
+const ABSENT_FILE_HASH = "0".repeat(64);
+const DEFAULT_NEW_FILE_MODE = 0o644;
 
-export type OperationKind = "rename_symbol" | "replace_symbol_body";
+export type OperationKind = "rename_symbol" | "replace_symbol_body" | "scaffold_class";
 export type OperationStatus = "prepared" | "applied";
 
 interface PlannedFileInternal {
@@ -103,6 +106,7 @@ const writeQueues = new Map<string, Promise<void>>();
 
 interface OperationTestHooks {
   beforeReplace?: (file: string, index: number) => Promise<void> | void;
+  afterReplace?: (file: string, index: number) => Promise<void> | void;
 }
 
 let operationTestHooks: OperationTestHooks = {};
@@ -235,6 +239,62 @@ function assertSafeOperationFile(
   }
 }
 
+function isCreatedFile(file: PlannedFileInternal): boolean {
+  return file.originalHash === ABSENT_FILE_HASH;
+}
+
+function assertSafeNewOperationFile(
+  projectRoot: string,
+  absolutePath: string,
+  displayPath: string,
+): void {
+  const relative = path.relative(projectRoot, absolutePath);
+  if (relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`)) {
+    throw new Error(`Operation target escapes the project root: ${displayPath}`);
+  }
+  try {
+    lstatSync(absolutePath);
+    throw new Error(`Operation target already exists: ${displayPath}`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+
+  const parentPath = path.dirname(absolutePath);
+  const parentStat = lstatSync(parentPath);
+  if (parentStat.isSymbolicLink()) {
+    throw new Error(`Operation target parent must not be a symbolic link: ${displayPath}`);
+  }
+  if (!parentStat.isDirectory()) {
+    throw new Error(`Operation target parent must be a real directory: ${displayPath}`);
+  }
+  const canonicalParent = realpathSync(parentPath);
+  const sameParent =
+    process.platform === "win32"
+      ? canonicalParent.toLowerCase() === parentPath.toLowerCase()
+      : canonicalParent === parentPath;
+  if (!sameParent) {
+    throw new Error(`Operation target parent traverses a symbolic link: ${displayPath}`);
+  }
+  const uid = process.getuid?.();
+  if (uid !== undefined && parentStat.uid !== uid) {
+    throw new Error(`Operation target parent is not owned by the current user: ${displayPath}`);
+  }
+}
+
+function assertSafeCreationState(
+  projectRoot: string,
+  absolutePath: string,
+  displayPath: string,
+): void {
+  try {
+    lstatSync(absolutePath);
+    assertSafeOperationFile(projectRoot, absolutePath, displayPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    assertSafeNewOperationFile(projectRoot, absolutePath, displayPath);
+  }
+}
+
 async function createPlan(
   projectRootInput: string,
   kind: OperationKind,
@@ -273,8 +333,29 @@ async function createPlan(
   for (const sourceFile of context.project.getSourceFiles()) {
     const absolutePath = sourceFile.getFilePath();
     const originalText = originals.get(absolutePath);
-    if (originalText === undefined) continue;
     const updatedText = sourceFile.getFullText();
+
+    if (originalText === undefined) {
+      const file = path.relative(context.projectRoot, absolutePath);
+      assertSafeNewOperationFile(context.projectRoot, absolutePath, file);
+      const originalBytes = Buffer.alloc(0);
+      const updatedBytes = Buffer.from(updatedText, "utf8");
+      files.push({
+        absolutePath,
+        file,
+        originalHash: ABSENT_FILE_HASH,
+        updatedHash: hashBytes(updatedBytes),
+        originalText: "",
+        updatedText,
+        originalBytes,
+        updatedBytes,
+        diff: createTwoFilesPatch("/dev/null", file, "", updatedText, "before", "after", {
+          context: 3,
+        }),
+        mode: DEFAULT_NEW_FILE_MODE,
+      });
+      continue;
+    }
     if (updatedText === originalText) continue;
     const originalBytes = await readFile(absolutePath);
     if (decodeSource(originalBytes, absolutePath) !== originalText) {
@@ -308,14 +389,14 @@ async function createPlan(
 
   const postWorkspaceFiles = new Map(workspaceBefore.files);
   for (const file of files) {
-    if (!postWorkspaceFiles.has(file.absolutePath)) {
+    if (!isCreatedFile(file) && !postWorkspaceFiles.has(file.absolutePath)) {
       throw new Error(`Affected file is missing from the workspace snapshot: ${file.file}`);
     }
     postWorkspaceFiles.set(file.absolutePath, file.updatedHash);
   }
   const postWorkspaceHash = hashWorkspaceFiles(postWorkspaceFiles);
 
-  const workspaceAfter = createWorkspaceSnapshot(context);
+  const workspaceAfter = createWorkspaceSnapshot(createFreshProject(context.tsConfigFilePath));
   if (workspaceAfter.digest !== workspaceBefore.digest) {
     throw new Error("Workspace changed while the operation was being prepared. Retry preparation.");
   }
@@ -444,6 +525,62 @@ export async function prepareReplaceBody(args: {
   );
 }
 
+export interface PreparedClassScaffold {
+  operation: PreparedOperation;
+  file: string;
+  className: string;
+  outline: string;
+  pendingMethods: string[];
+}
+
+export async function prepareScaffoldClass(args: {
+  projectRoot: string;
+  filePath: string;
+  spec: ClassScaffoldSpec;
+  allowNewErrors?: boolean;
+}): Promise<PreparedClassScaffold> {
+  if (path.isAbsolute(args.filePath)) {
+    throw new Error("Scaffold file_path must be project-relative.");
+  }
+  const normalizedFile = path.normalize(args.filePath);
+  if (
+    normalizedFile === "." ||
+    normalizedFile === ".." ||
+    normalizedFile.startsWith(`..${path.sep}`) ||
+    normalizedFile !== args.filePath.split(path.posix.sep).join(path.sep)
+  ) {
+    throw new Error("Scaffold file_path must be normalized and remain inside the project root.");
+  }
+  if (!/\.(?:ts|tsx)$/.test(normalizedFile) || normalizedFile.endsWith(".d.ts")) {
+    throw new Error("Scaffold file_path must target a .ts or .tsx implementation file.");
+  }
+
+  let metadata: { outline: string; pendingMethods: string[] } | undefined;
+  const operation = await createPlan(
+    args.projectRoot,
+    "scaffold_class",
+    args.allowNewErrors ?? false,
+    (project, projectRoot) => {
+      const absolutePath = path.resolve(projectRoot, normalizedFile);
+      assertSafeNewOperationFile(projectRoot, absolutePath, normalizedFile);
+      const scaffold = buildClassScaffold(project, absolutePath, args.spec);
+      metadata = {
+        outline: scaffold.outline,
+        pendingMethods: scaffold.pendingMethods,
+      };
+      return 0;
+    },
+  );
+  if (!metadata) throw new Error("Scaffold generation did not produce metadata.");
+  return {
+    operation,
+    file: normalizedFile.split(path.sep).join(path.posix.sep),
+    className: args.spec.className,
+    outline: metadata.outline,
+    pendingMethods: metadata.pendingMethods,
+  };
+}
+
 async function withWriteLock<T>(key: string, callback: () => Promise<T>): Promise<T> {
   const previous = writeQueues.get(key) ?? Promise.resolve();
   let release!: () => void;
@@ -506,6 +643,22 @@ async function syncDirectories(files: readonly PlannedFileInternal[]): Promise<v
   }
 }
 
+async function currentWorkspaceHash(operation: OperationRecord): Promise<string> {
+  const context = createFreshProject(operation.tsConfigFilePath);
+  const snapshot = createWorkspaceSnapshot(context);
+  const files = new Map(snapshot.files);
+  for (const file of operation.files) {
+    if (!isCreatedFile(file)) continue;
+    try {
+      files.set(file.absolutePath, hashBytes(await readFile(file.absolutePath)));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      files.delete(file.absolutePath);
+    }
+  }
+  return hashWorkspaceFiles(files);
+}
+
 function appliedResult(operation: OperationRecord, idempotentReplay: boolean): AppliedOperation {
   return {
     operation_id: operation.operation_id,
@@ -560,6 +713,7 @@ export async function applyOperation(
       async () => {
         if (operation.status === "applied") {
           for (const file of operation.files) {
+            assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
             const currentBytes = await readFile(file.absolutePath);
             if (hashBytes(currentBytes) !== file.updatedHash) {
               throw new Error(
@@ -581,13 +735,17 @@ export async function applyOperation(
         }
 
         for (const file of operation.files) {
-          assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
+          if (isCreatedFile(file)) {
+            assertSafeCreationState(operation.project_root, file.absolutePath, file.file);
+          } else {
+            assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
+          }
         }
 
-        const currentContext = createFreshProject(operation.tsConfigFilePath);
-        const currentWorkspace = createWorkspaceSnapshot(currentContext);
-        if (currentWorkspace.digest === operation.post_workspace_hash) {
+        const workspaceHash = await currentWorkspaceHash(operation);
+        if (workspaceHash === operation.post_workspace_hash) {
           for (const file of operation.files) {
+            assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
             const currentBytes = await readFile(file.absolutePath);
             if (hashBytes(currentBytes) !== file.updatedHash) {
               throw new Error(
@@ -601,13 +759,14 @@ export async function applyOperation(
           await persistReceipt();
           return appliedResult(operation, true);
         }
-        if (currentWorkspace.digest !== operation.workspace_hash) {
+        if (workspaceHash !== operation.workspace_hash) {
           throw new Error(
             "Conflict: the project source/config workspace changed after preparation. No files were written.",
           );
         }
 
         for (const file of operation.files) {
+          if (isCreatedFile(file)) continue;
           const currentBytes = await readFile(file.absolutePath);
           if (hashBytes(currentBytes) !== file.originalHash) {
             throw new Error(
@@ -623,6 +782,10 @@ export async function applyOperation(
             staged.set(file, await stageFile(file, operationId));
           }
           for (const file of operation.files) {
+            if (isCreatedFile(file)) {
+              assertSafeNewOperationFile(operation.project_root, file.absolutePath, file.file);
+              continue;
+            }
             const currentBytes = await readFile(file.absolutePath);
             if (hashBytes(currentBytes) !== file.originalHash) {
               throw new Error(
@@ -632,9 +795,17 @@ export async function applyOperation(
           }
           for (const [index, file] of operation.files.entries()) {
             await operationTestHooks.beforeReplace?.(file.file, index);
-            await rename(staged.get(file)!, file.absolutePath);
-            staged.delete(file);
-            applied.push(file);
+            if (isCreatedFile(file)) {
+              await link(staged.get(file)!, file.absolutePath);
+              applied.push(file);
+              await safeUnlink(staged.get(file)!);
+              staged.delete(file);
+            } else {
+              await rename(staged.get(file)!, file.absolutePath);
+              staged.delete(file);
+              applied.push(file);
+            }
+            await operationTestHooks.afterReplace?.(file.file, index);
             const writtenBytes = await readFile(file.absolutePath);
             if (hashBytes(writtenBytes) !== file.updatedHash) {
               throw new Error(`Post-write verification failed for ${file.file}.`);
@@ -652,7 +823,12 @@ export async function applyOperation(
                 );
                 continue;
               }
-              await restoreFile(file, operationId);
+              if (isCreatedFile(file)) {
+                assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
+                await safeUnlink(file.absolutePath);
+              } else {
+                await restoreFile(file, operationId);
+              }
             } catch (rollbackError) {
               rollbackErrors.push(
                 `${file.file}: ${
@@ -731,7 +907,6 @@ function containedOperationPath(projectRoot: string, file: string): string {
   if (relative !== file.split(path.posix.sep).join(path.sep)) {
     throw new Error(`Persisted operation file path is not normalized: ${file}`);
   }
-  assertSafeOperationFile(projectRoot, absolutePath, file);
   return absolutePath;
 }
 
@@ -787,11 +962,19 @@ export function importOperationRecord(
       file.updated_bytes_base64,
       `${file.file} updated bytes`,
     );
-    if (hashBytes(originalBytes) !== file.original_hash) {
+    const createsFile = file.original_hash === ABSENT_FILE_HASH;
+    if (
+      createsFile ? originalBytes.length !== 0 : hashBytes(originalBytes) !== file.original_hash
+    ) {
       throw new Error(`Persisted original hash mismatch for ${file.file}.`);
     }
     if (hashBytes(updatedBytes) !== file.updated_hash) {
       throw new Error(`Persisted updated hash mismatch for ${file.file}.`);
+    }
+    if (createsFile) {
+      assertSafeCreationState(context.projectRoot, absolutePath, file.file);
+    } else {
+      assertSafeOperationFile(context.projectRoot, absolutePath, file.file);
     }
     const originalText = decodeSource(originalBytes, absolutePath);
     const updatedText = decodeSource(updatedBytes, absolutePath);
@@ -805,7 +988,7 @@ export function importOperationRecord(
       originalBytes,
       updatedBytes,
       diff: createTwoFilesPatch(
-        file.file,
+        createsFile ? "/dev/null" : file.file,
         file.file,
         originalText,
         updatedText,

@@ -13,7 +13,7 @@ export const NormalizedDiagnosticSchema = z.object({
 export const PreparedOperationOutputSchema = z.object({
   operation_id: z.string().uuid(),
   plan_hash: z.string().length(64),
-  kind: z.enum(["rename_symbol", "replace_symbol_body"]),
+  kind: z.enum(["rename_symbol", "replace_symbol_body", "scaffold_class"]),
   status: z.literal("prepared"),
   project_root: z.string(),
   created_at: z.string(),
