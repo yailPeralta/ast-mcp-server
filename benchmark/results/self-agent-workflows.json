@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-05T22:59:28.417Z",
+  "node_version": "v24.16.0",
+  "project_root": "[deterministic-fixture]",
+  "methodology": {
+    "corpus": "benchmark/context-corpus.json",
+    "note": "Characters, bytes and o200k_base values are local serialized-payload measurements, not provider billing or latency guarantees.",
+    "model_round_trips": "Conceptual agent turns required by each workflow; tool_invocations are actual MCP calls.",
+    "fallback": "Any incomplete ast_explore evidence is reported; it is never treated as a successful complete context."
+  },
+  "static_tool_metadata": {
+    "tool_count": 14,
+    "characters": 33083,
+    "bytes": 33083
+  },
+  "scenarios": [
+    {
+      "id": "search_to_source",
+      "description": "Find benchmarkTarget and return its exact implementation.",
+      "workflows": {
+        "full_file": {
+          "model_round_trips": 1,
+          "tool_invocations": 1,
+          "duration_ms": 156.45892799999996,
+          "payload": {
+            "characters": 302,
+            "bytes": 302,
+            "tokens_o200k_base": 105
+          },
+          "evidence_pass": true,
+          "call_bound_pass": true,
+          "fallback": "none",
+          "unresolved_count": 0
+        },
+        "primitives": {
+          "model_round_trips": 2,
+          "tool_invocations": 2,
+          "duration_ms": 15.866207999999915,
+          "payload": {
+            "characters": 408,
+            "bytes": 408,
+            "tokens_o200k_base": 108
+          },
+          "evidence_pass": true,
+          "call_bound_pass": true,
+          "fallback": "none",
+          "unresolved_count": 0
+        },
+        "ast_explore": {
+          "model_round_trips": 1,
+          "tool_invocations": 1,
+          "duration_ms": 4.231169999999906,
+          "payload": {
+            "characters": 861,
+            "bytes": 861,
+            "tokens_o200k_base": 233
+          },
+          "evidence_pass": true,
+          "call_bound_pass": true,
+          "fallback": "none",
+          "unresolved_count": 0
+        }
+      }
+    },
+    {
+      "id": "multi_file_references",
+      "description": "Find benchmarkTarget and expose its declaration, import and call sites.",
+      "workflows": {
+        "full_file": {
+          "model_round_trips": 1,
+          "tool_invocations": 2,
+          "duration_ms": 5.373262000000068,
+          "payload": {
+            "characters": 635,
+            "bytes": 635,
+            "tokens_o200k_base": 214
+          },
+          "evidence_pass": true,
+          "call_bound_pass": true,
+          "fallback": "none",
+          "unresolved_count": 0
+        },
+        "primitives": {
+          "model_round_trips": 2,
+          "tool_invocations": 2,
+          "duration_ms": 61.840218999999934,
+          "payload": {
+            "characters": 977,
+            "bytes": 977,
+            "tokens_o200k_base": 256
+          },
+          "evidence_pass": true,
+          "call_bound_pass": true,
+          "fallback": "none",
+          "unresolved_count": 0
+        },
+        "ast_explore": {
+          "model_round_trips": 1,
+          "tool_invocations": 1,
+          "duration_ms": 3.734997000000021,
+          "payload": {
+            "characters": 1643,
+            "bytes": 1643,
+            "tokens_o200k_base": 436
+          },
+          "evidence_pass": true,
+          "call_bound_pass": true,
+          "fallback": "none",
+          "unresolved_count": 0
+        }
+      }
+    }
+  ],
+  "gates": {
+    "evidence_preserved": true,
+    "call_bounds_respected": true
+  }
+}

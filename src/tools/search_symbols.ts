@@ -1,14 +1,12 @@
-import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { buildFileOutline } from "../services/outline.js";
 import {
   createPaginationInputSchema,
   PaginationOutputSchema,
   paginate,
 } from "../services/pagination.js";
 import { withProject } from "../services/project.js";
-import { collectSymbols, symbolMatchRank } from "../services/symbols.js";
+import { searchProjectSymbols } from "../services/symbols.js";
 import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
 
 const SEARCH_DEFAULT_LIMIT = 20;
@@ -114,75 +112,10 @@ export function registerSearchSymbols(server: McpServer): void {
       try {
         const structuredContent = await withProject(project_root, ({ project, projectRoot }) => {
           const startedAt = performance.now();
-          const normalizedQuery = query.toLowerCase();
-          const normalizedFileFilter = file_filter?.toLowerCase();
-          const kindSet = kinds ? new Set(kinds) : undefined;
-          const matches: Array<{
-            file: string;
-            symbol_path: string;
-            selector: string;
-            name: string;
-            kind: string;
-            line: number;
-            signature: string;
-          }> = [];
-
-          for (const sourceFile of project.getSourceFiles()) {
-            const file = path.relative(projectRoot, sourceFile.getFilePath());
-            if (normalizedFileFilter && !file.toLowerCase().includes(normalizedFileFilter)) {
-              continue;
-            }
-
-            const matchingSymbols = collectSymbols(sourceFile).filter((symbol) => {
-              const selector = `${symbol.symbolPath}@${symbol.line}`.toLowerCase();
-              return (
-                (!kindSet || kindSet.has(symbol.kind)) &&
-                (symbol.name.toLowerCase().includes(normalizedQuery) ||
-                  symbol.symbolPath.toLowerCase().includes(normalizedQuery) ||
-                  selector.includes(normalizedQuery))
-              );
-            });
-            if (matchingSymbols.length === 0) continue;
-
-            const signatures = new Map(
-              buildFileOutline(sourceFile).symbols.map((symbol) => [
-                `${symbol.symbolPath}@${symbol.startLine}`,
-                symbol.signature,
-              ]),
-            );
-            for (const symbol of matchingSymbols) {
-              matches.push({
-                file,
-                symbol_path: symbol.symbolPath,
-                selector: `${symbol.symbolPath}@${symbol.line}`,
-                name: symbol.name,
-                kind: symbol.kind,
-                line: symbol.line,
-                signature:
-                  signatures.get(`${symbol.symbolPath}@${symbol.line}`) ?? symbol.node.getText(),
-              });
-            }
-          }
-
-          matches.sort((left, right) => {
-            const rank =
-              symbolMatchRank(query, {
-                symbolPath: left.symbol_path,
-                name: left.name,
-                line: left.line,
-              }) -
-              symbolMatchRank(query, {
-                symbolPath: right.symbol_path,
-                name: right.name,
-                line: right.line,
-              });
-            if (rank !== 0) return rank;
-            return (
-              left.file.localeCompare(right.file) ||
-              left.line - right.line ||
-              left.symbol_path.localeCompare(right.symbol_path) ||
-              left.kind.localeCompare(right.kind)
-            );
+          const matches = searchProjectSymbols(project, projectRoot, {
+            query,
+            kinds,
+            fileFilter: file_filter,
           });
           const page = paginate(matches, offset, limit);
           const { items, ...metadata } = page;

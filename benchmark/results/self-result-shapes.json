@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-04T18:04:10.976Z",
+  "generated_at": "2026-08-05T23:14:04.336Z",
   "node_version": "v24.16.0",
   "methodology": {
     "corpus": "deterministic exact-name, exact-path, prefix, broad-substring and multi-file reference workflows",
@@ -11,9 +11,7 @@
     "correctness": "Every declared selector/coordinate must remain present, reference scope metadata must match and required logical calls must not increase.",
     "billing_claim": "Local serializer/tokenizer estimates only; no provider billing or cache-cost claim."
   },
-  "threshold": {
-    "minimum_aggregate_toon_token_reduction_percent": 35
-  },
+  "threshold": { "minimum_aggregate_toon_token_reduction_percent": 35 },
   "tasks": [
     {
       "id": "exact-name",
@@ -22,28 +20,12 @@
       "baseline_calls": 1,
       "candidate_calls": 1,
       "baseline": {
-        "json": {
-          "characters": 494,
-          "bytes": 494,
-          "tokens_o200k_base": 117
-        },
-        "toon": {
-          "characters": 427,
-          "bytes": 427,
-          "tokens_o200k_base": 116
-        }
+        "json": { "characters": 494, "bytes": 494, "tokens_o200k_base": 117 },
+        "toon": { "characters": 427, "bytes": 427, "tokens_o200k_base": 116 }
       },
       "candidate": {
-        "json": {
-          "characters": 361,
-          "bytes": 361,
-          "tokens_o200k_base": 85
-        },
-        "toon": {
-          "characters": 336,
-          "bytes": 336,
-          "tokens_o200k_base": 93
-        }
+        "json": { "characters": 361, "bytes": 361, "tokens_o200k_base": 85 },
+        "toon": { "characters": 336, "bytes": 336, "tokens_o200k_base": 93 }
       },
       "evidence_pass": true,
       "call_bound_pass": true
@@ -55,28 +37,12 @@
       "baseline_calls": 1,
       "candidate_calls": 1,
       "baseline": {
-        "json": {
-          "characters": 275,
-          "bytes": 275,
-          "tokens_o200k_base": 71
-        },
-        "toon": {
-          "characters": 280,
-          "bytes": 280,
-          "tokens_o200k_base": 83
-        }
+        "json": { "characters": 275, "bytes": 275, "tokens_o200k_base": 71 },
+        "toon": { "characters": 280, "bytes": 280, "tokens_o200k_base": 83 }
       },
       "candidate": {
-        "json": {
-          "characters": 213,
-          "bytes": 213,
-          "tokens_o200k_base": 56
-        },
-        "toon": {
-          "characters": 228,
-          "bytes": 228,
-          "tokens_o200k_base": 70
-        }
+        "json": { "characters": 213, "bytes": 213, "tokens_o200k_base": 56 },
+        "toon": { "characters": 228, "bytes": 228, "tokens_o200k_base": 70 }
       },
       "evidence_pass": true,
       "call_bound_pass": true
@@ -88,28 +54,12 @@
       "baseline_calls": 1,
       "candidate_calls": 1,
       "baseline": {
-        "json": {
-          "characters": 608,
-          "bytes": 608,
-          "tokens_o200k_base": 150
-        },
-        "toon": {
-          "characters": 465,
-          "bytes": 465,
-          "tokens_o200k_base": 135
-        }
+        "json": { "characters": 608, "bytes": 608, "tokens_o200k_base": 150 },
+        "toon": { "characters": 465, "bytes": 465, "tokens_o200k_base": 135 }
       },
       "candidate": {
-        "json": {
-          "characters": 437,
-          "bytes": 437,
-          "tokens_o200k_base": 106
-        },
-        "toon": {
-          "characters": 368,
-          "bytes": 368,
-          "tokens_o200k_base": 107
-        }
+        "json": { "characters": 437, "bytes": 437, "tokens_o200k_base": 106 },
+        "toon": { "characters": 368, "bytes": 368, "tokens_o200k_base": 107 }
       },
       "evidence_pass": true,
       "call_bound_pass": true
@@ -154,16 +104,8 @@
         }
       },
       "candidate": {
-        "json": {
-          "characters": 2619,
-          "bytes": 2619,
-          "tokens_o200k_base": 587
-        },
-        "toon": {
-          "characters": 1875,
-          "bytes": 1875,
-          "tokens_o200k_base": 468
-        }
+        "json": { "characters": 2619, "bytes": 2619, "tokens_o200k_base": 587 },
+        "toon": { "characters": 1875, "bytes": 1875, "tokens_o200k_base": 468 }
       },
       "evidence_pass": true,
       "call_bound_pass": true
@@ -331,23 +273,11 @@
           "bytes": 4050,
           "tokens_o200k_base": 1132
         },
-        "toon": {
-          "characters": 2597,
-          "bytes": 2597,
-          "tokens_o200k_base": 823
-        }
+        "toon": { "characters": 2597, "bytes": 2597, "tokens_o200k_base": 823 }
       },
       "candidate": {
-        "json": {
-          "characters": 2579,
-          "bytes": 2579,
-          "tokens_o200k_base": 756
-        },
-        "toon": {
-          "characters": 1382,
-          "bytes": 1382,
-          "tokens_o200k_base": 482
-        }
+        "json": { "characters": 2579, "bytes": 2579, "tokens_o200k_base": 756 },
+        "toon": { "characters": 1382, "bytes": 1382, "tokens_o200k_base": 482 }
       },
       "evidence_pass": true,
       "call_bound_pass": true
@@ -361,34 +291,22 @@
         "bytes": 23325,
         "tokens_o200k_base": 5797
       },
-      "toon": {
-        "characters": 14546,
-        "bytes": 14546,
-        "tokens_o200k_base": 3910
-      }
+      "toon": { "characters": 14546, "bytes": 14546, "tokens_o200k_base": 3910 }
     },
     "candidate": {
       "calls": 6,
-      "json": {
-        "characters": 6209,
-        "bytes": 6209,
-        "tokens_o200k_base": 1590
-      },
-      "toon": {
-        "characters": 4189,
-        "bytes": 4189,
-        "tokens_o200k_base": 1220
-      }
+      "json": { "characters": 6209, "bytes": 6209, "tokens_o200k_base": 1590 },
+      "toon": { "characters": 4189, "bytes": 4189, "tokens_o200k_base": 1220 }
     },
     "toon_token_reduction_percent": 68.79795396419436
   },
   "tool_metadata": {
     "baseline_version": "0.4.0",
     "baseline_serialized_characters": 16650,
-    "current_tool_count": 11,
-    "current_serialized_characters": 22473,
-    "current_tokens_o200k_base": 5080,
-    "character_delta": 5823,
+    "current_tool_count": 14,
+    "current_serialized_characters": 33083,
+    "current_tokens_o200k_base": 7509,
+    "character_delta": 16433,
     "scaffold_marginal_characters": 5411,
     "scaffold_marginal_tokens_o200k_base": 1295,
     "historical_token_delta": null,

@@ -23,13 +23,25 @@ This MCP server gives the agent structural code tools in addition to generic fil
 
 | Need                           | Structural operation      | Returned scope                                        |
 | ------------------------------ | ------------------------- | ----------------------------------------------------- |
+| Read a bounded file            | `ast_get_file`            | Exact selected source lines, hash, and snapshot state |
+| Explore bounded context        | `ast_explore`             | Ranked selectors plus optional source and references  |
 | Understand a file              | `ast_get_outline`         | Signatures without implementation bodies              |
 | Inspect one declaration        | `ast_get_symbol_source`   | Exact source for one function, method, class, or type |
 | Find usages across the project | `ast_find_references`     | Compiler-resolved reference locations                 |
 | Rename a symbol everywhere     | `ast_rename_symbol`       | A reviewed project-wide rename plan                   |
 | Change one implementation      | `ast_replace_symbol_body` | A body-only plan that preserves the declaration       |
 
-Reads can start with a compact outline and fetch exact source only when needed. Mutations are prepared in memory first, compared against baseline diagnostics, and returned as immutable, hash-bound plans. Nothing is written until the caller reviews and explicitly applies the plan.
+Reads can start with a bounded file slice, a compact outline, or exact source only for the declaration that needs inspection. Mutations are prepared in memory first, compared against baseline diagnostics, and returned as immutable, hash-bound plans. Nothing is written until the caller reviews and explicitly applies the plan.
+
+### Choosing a read tool
+
+- Use `ast_get_file` when the file path is known and the agent needs exact source lines. It is read-only, uses zero-based `offset` and bounded `limit`, returns one-based line records, a SHA-256 byte hash, and `snapshot_state`.
+- Use `ast_get_file` with `symbols_only: true` when only selectors and body-free signatures are needed from one known file.
+- Use `ast_explore` when the question spans discovery and evidence. Its default summary is bounded; use `detail: "context"` for selected source and `detail: "full"` for source plus compiler references.
+- Use `ast_get_outline` for a compact body-free view of a known file without source lines.
+- Use `ast_get_symbol_source` when one declaration or implementation is the required evidence.
+
+`snapshot_state: "fresh"` means that the returned file bytes match the synchronized compiler snapshot. It does not mean that the project has zero TypeScript diagnostics; use `ast_get_diagnostics` for compiler errors and warnings.
 
 ## Why this helps
 
@@ -39,7 +51,7 @@ Reads can start with a compact outline and fetch exact source only when needed. 
 
 AST-aware editing is not a proof that a change is semantically correct. The safety comes from combining structural selection with diagnostics, exact previews, reviewed hashes, freshness checks, and fail-closed apply semantics.
 
-The included batch benchmark records a 50% reduction in model round-trips and a 94.67% reduction in serialized context for its search-to-source scenario. The result-shaping corpus records a 68.80% reduction in aggregate model-facing TOON tokens while preserving declared selectors/reference coordinates with the same six logical calls. The separate format benchmark records 25.87% across its eligible collection corpus. These are reproducible local `o200k_base` estimates, not universal token, billing, cache, or latency claims.
+The included batch benchmark records a 50% reduction in model round-trips and a 94.67% reduction in serialized context for its search-to-source scenario. The result-shaping corpus records a 68.80% reduction in aggregate model-facing TOON tokens while preserving declared selectors/reference coordinates with the same six logical calls. The separate format benchmark records 25.87% across its eligible collection corpus. The context workflow benchmark verifies evidence preservation and call bounds for full-file, primitive, and `ast_explore` workflows. These are reproducible local `o200k_base` estimates, not universal token, billing, cache, or latency claims.
 
 ## Requirements
 
@@ -217,6 +229,9 @@ Project-scoped tools accept `project_root`, either the project directory or an e
 | Tool                        | Purpose                                                              | Mutates files |
 | --------------------------- | -------------------------------------------------------------------- | ------------- |
 | `ast_list_files`            | Paginated, project-relative source file inventory                    | No            |
+| `ast_get_project_status`    | Read-only compiler, freshness, index, and operation status           | No            |
+| `ast_explore`               | Bounded composed selectors, source evidence, and references          | No            |
+| `ast_get_file`              | Bounded exact source lines, byte hash, and snapshot state            | No            |
 | `ast_get_outline`           | Body-free declaration signatures; detailed symbol metadata is opt-in | No            |
 | `ast_get_symbol_source`     | Exact source for one declaration                                     | No            |
 | `ast_search_symbols`        | Paginated structural symbol discovery                                | No            |
@@ -229,6 +244,8 @@ Project-scoped tools accept `project_root`, either the project directory or an e
 | `ast_apply_operation`       | Apply one reviewed, hash-bound plan                                  | Yes           |
 
 Read results use project-relative paths, deterministic ordering, structured MCP output, and pagination where result sets can grow with the project.
+
+`ast_explore` supports query, exact file, and exact symbol routes. Its default `summary` profile returns bounded reusable selectors; `context` adds selected source and `full` adds compiler references. Every response reports freshness, completeness, truncation, unresolved selectors, record limits, and a serialized byte budget. Use the primitive tools when a single exact operation is clearer or when preparing a mutation.
 
 Symbol search is relevance-ranked and defaults to at most 20 `summary` records containing `file`, a directly reusable `selector`, `kind`, and body-free `signature`. Request `detail: "selectors"` for routing coordinates only, or `detail: "full", limit: 100` for the v0.4.0 fields/page. References default to `detail: "locations"`; request `detail: "context"` only when the bounded source line is needed.
 
@@ -392,7 +409,7 @@ The batch benchmark compares two separate client calls with one batch invocation
 
 The format benchmark runs real tools against this repository plus deterministic reference/diagnostic fixtures. It checks JSON→TOON→value equality, UTF-8 bytes, `gpt-tokenizer` `o200k_base` estimates, encode/decode latency, the actual MCP envelope, tool metadata, and negative controls. Its checked result is `benchmark/results/self-formats.json`; local tokenizer estimates do not establish provider-side billing or cache savings. See `benchmark/README.md` for methodology and limitations.
 
-The result-shaping benchmark compares the v0.4.0-compatible `full/100/context` profiles with the new public defaults across exact-name, exact-path, prefix, broad-substring, and multi-file-reference tasks. It fails on missing evidence, extra logical calls, fewer than 11 tools, or less than 35% aggregate TOON token reduction. Its checked result is `benchmark/results/self-result-shapes.json`.
+The result-shaping benchmark compares the v0.4.0-compatible `full/100/context` profiles with the new public defaults across exact-name, exact-path, prefix, broad-substring, and multi-file-reference tasks. It fails on missing evidence, extra required calls, fewer than the benchmark's required minimum tool surface, or less than 35% aggregate TOON token reduction. Its checked result is `benchmark/results/self-result-shapes.json`.
 
 ## Scope
 

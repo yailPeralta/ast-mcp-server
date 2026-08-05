@@ -64,6 +64,35 @@ yarn benchmark:batch --iterations 5 --output benchmark/results/self-batch.json
 
 The report records logical model round-trips, actual tool invocations, median wall time, process maximum RSS, final-result characters, and total characters exposed to the model. It does not include model inference latency, so the practical wall-time benefit of removing a model round-trip will be larger than this local process-only comparison. Maximum RSS includes the Node runtime and TypeScript project in each fresh worker.
 
+## Composed agent workflows
+
+`benchmark/context-corpus.json` and `scripts/benchmark-agent-workflows.mjs` compare three read workflows over a deterministic TypeScript fixture:
+
+- full-file: `ast_get_file` for the declared files;
+- primitives: `ast_search_symbols` followed by exact source or reference retrieval;
+- `ast_explore`: one bounded composed call with the required source/reference evidence.
+
+Each scenario fails on missing evidence or a call bound violation. The report records conceptual model round-trips, actual MCP invocations, serialized characters/bytes, named `o200k_base` estimates, local duration, fallback state, unresolved items, and static `tools/list` metadata separately. It does not claim that a larger composed payload is cheaper; completeness and fewer model turns are the point of this workflow.
+
+Run:
+
+```bash
+yarn benchmark:agent-workflows
+```
+
+The checked run on 2026-08-05 with Node.js v24.16.0 exposed 14 tools and passed both corpus gates (`evidence_preserved` and `call_bounds_respected`):
+
+| Scenario / workflow          | Model turns | MCP calls | Characters | `o200k_base` |  Duration |
+| ---------------------------- | ----------: | --------: | ---------: | -----------: | --------: |
+| search-to-source / full      |           1 |         1 |        302 |          105 | 154.17 ms |
+| search-to-source / primitive |           2 |         2 |        407 |          107 |  17.77 ms |
+| search-to-source / explore   |           1 |         1 |        861 |          233 |   4.18 ms |
+| multi-file / full            |           1 |         2 |        635 |          214 |   5.31 ms |
+| multi-file / primitive       |           2 |         2 |        977 |          256 |  61.49 ms |
+| multi-file / explore         |           1 |         1 |      1,643 |          436 |   3.90 ms |
+
+`ast_explore` is intentionally richer than the primitive payload in these tiny fixtures because it carries routing, freshness, completeness, truncation, budget, source and reference metadata in one response. The benchmark measures the tradeoff instead of treating payload reduction as the sole success criterion. The generated report is `benchmark/results/self-agent-workflows.json`.
+
 ## Model-facing JSON and TOON
 
 `scripts/benchmark-formats.mjs` compares compact JSON with TOON for actual MCP logical results. It uses this repository for broad symbol search and deterministic temporary TypeScript fixtures for repeated references and non-empty diagnostics. File lists, outlines, exact source, and a prepared rename are retained as negative controls.
@@ -115,7 +144,7 @@ The checked model-facing format corpus used the complete MCP envelope for TOON:
 | Diagnostics         |      30 |       1,309 |           1,034 |    21.01% |
 | Eligible aggregate  |     201 |       9,785 |           7,254 |    25.87% |
 
-All seven positive and negative payloads round-tripped exactly. File list, outline, source, and prepare envelopes were 5.13% to 13.56% worse in estimated tokens, which is why they remain JSON-only. The complete eleven-tool metadata is 3,372 serialized characters larger than the retained v0.3.0 baseline; this static protocol cost is reported separately from dynamic result savings.
+All seven positive and negative payloads round-tripped exactly. File list, outline, source, and prepare envelopes were 5.13% to 13.56% worse in estimated tokens, which is why they remain JSON-only. The historical eleven-tool metadata snapshot is 3,372 serialized characters larger than the retained v0.3.0 baseline; this static protocol cost predates later additive tools and is reported separately from dynamic result savings.
 
 The checked result-shaping corpus compares the v0.4.0-compatible `full/100/context` profiles with the new public defaults across exact-name, exact-path, prefix, broad-substring, and multi-file-reference workflows:
 
@@ -126,4 +155,4 @@ The checked result-shaping corpus compares the v0.4.0-compatible `full/100/conte
 
 Every declared selector and reference coordinate remained present, and the aggregate reduction was 68.80%, above the checked 35% gate. `duration_ms` is omitted from both measured representations to make token counts deterministic; real JSON/TOON outputs are still decode-compared before measurement. These are local `o200k_base` estimates, not provider billing, cache, or latency evidence.
 
-The complete v0.5.0 `tools/list` metadata is 22,473 serialized characters versus the retained v0.4.0 value of 16,650 (`+5,823`). Removing only `ast_scaffold_class` from the current list reduces it by 5,411 characters and 1,295 local `o200k_base` tokens. No v0.4.0 metadata token count was retained, so the report intentionally leaves the historical token delta unset.
+The historical complete v0.5.0 `tools/list` metadata was 22,473 serialized characters versus the retained v0.4.0 value of 16,650 (`+5,823`). Removing only `ast_scaffold_class` from that historical list reduced it by 5,411 characters and 1,295 local `o200k_base` tokens. No v0.4.0 metadata token count was retained, so the report intentionally leaves the historical token delta unset. The current context-workflow report separately measured 14 tools and 33,083 serialized metadata characters.

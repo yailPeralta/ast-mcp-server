@@ -17,6 +17,7 @@ metadata:
 Usar las tools del servidor MCP `ast` en proyectos TypeScript/JavaScript con `tsconfig.json` cuando haya que:
 
 - orientarse en archivos o módulos grandes/desconocidos;
+- leer rangos acotados del source exacto de un archivo conocido;
 - encontrar declaraciones o referencias reales;
 - medir el radio de impacto de un rename;
 - renombrar un símbolo en varios archivos;
@@ -40,15 +41,21 @@ El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reempl
 ## Flujo compacto de lectura
 
 1. `ast_list_files` para descubrir archivos. Paginar; no pedir todo un monorepo si alcanza con un filtro.
-2. `ast_search_symbols` si todavía no se conoce el archivo o el selector exacto.
-3. `ast_get_outline` para ver contratos sin cuerpos. No pedir `include_symbols` salvo que haga falta la metadata detallada.
-4. `ast_get_symbol_source` solo para las declaraciones cuya implementación haya que inspeccionar.
-5. `ast_find_references` antes de renames o cambios con impacto cross-file.
-6. `ast_get_diagnostics` para establecer y verificar el estado del proyecto.
+2. `ast_explore` para una pregunta de lectura que combine descubrimiento y evidencia. Usar `summary` por defecto, `context` para source seleccionado y `full` para source más referencias.
+3. `ast_get_file` si ya se conoce el archivo y hace falta source exacto. Usar `offset`/`limit`; no cargar el archivo completo por defecto.
+4. `ast_search_symbols` si todavía no se conoce el archivo o el selector exacto.
+5. `ast_get_outline` para ver contratos sin cuerpos. No pedir `include_symbols` salvo que haga falta la metadata detallada.
+6. `ast_get_symbol_source` solo para las declaraciones cuya implementación haya que inspeccionar.
+7. `ast_find_references` antes de renames o cambios con impacto cross-file.
+8. `ast_get_diagnostics` para establecer y verificar el estado del proyecto.
 
 `ast_search_symbols` devuelve por default hasta 20 records `summary` rankeados. Su campo `selector` es el valor que se pasa como `symbol_path` a la siguiente tool; pedir `detail: "selectors"` para routing puro o `detail: "full", limit: 100` para el perfil v0.4.0. `ast_find_references` devuelve `detail: "locations"` por default; expandir a `detail: "context"` únicamente cuando la línea fuente aporte evidencia necesaria.
 
 `file_path` debe ser preferentemente relativo al proyecto. Si un suffix coincide con varios archivos, la tool falla y devuelve candidatos en vez de elegir uno silenciosamente.
+
+`ast_get_file` es read-only y solo acepta archivos incluidos por el tsconfig activo. Su modo normal devuelve líneas exactas, paginadas y numeradas desde 1, junto con el hash SHA-256 de los bytes actuales. `symbols_only: true` devuelve selectors y signatures sin cuerpos. `snapshot_state: "fresh"` describe sincronización con el snapshot del compilador, no ausencia de diagnostics; consultar `ast_get_diagnostics` por separado.
+
+`ast_explore` es read-only y no prepara ni aplica operaciones. Sus selectors son directamente reutilizables por las tools primitivas y de mutación. La respuesta declara `freshness`, `completeness`, `truncation`, `unresolved` y `budget`; si el límite de bytes impide incluir todo el contexto, el resultado queda marcado como incompleto.
 
 Los clientes pueden prefijar los nombres publicados (`ast_*`) según su convención MCP; elegir por el nombre base y el schema, no adivinar el prefijo.
 

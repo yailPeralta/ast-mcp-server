@@ -67,9 +67,12 @@ Any new read index MUST remain advisory. It MUST NOT become the authority for mu
 
 ### Current MCP surface
 
-`src/server.ts` registers eleven tools:
+`src/server.ts` registers fourteen tools:
 
 - `ast_list_files`;
+- `ast_get_project_status`;
+- `ast_explore`;
+- `ast_get_file`;
 - `ast_get_outline`;
 - `ast_get_symbol_source`;
 - `ast_search_symbols`;

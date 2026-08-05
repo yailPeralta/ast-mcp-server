@@ -1,10 +1,13 @@
+import path from "node:path";
 import {
   Node,
+  type Project,
   type ModuleBlock,
   type ModuleDeclaration,
   type SourceFile,
   type Statement,
 } from "ts-morph";
+import { buildFileOutline } from "./outline.js";
 
 export interface LocatedSymbol {
   node: Node;
@@ -20,6 +23,44 @@ export interface SymbolMatchCandidate {
   line: number;
 }
 
+export interface ProjectSymbolSearchOptions {
+  readonly query: string;
+  readonly kinds?: readonly string[];
+  readonly fileFilter?: string;
+}
+
+export interface ProjectSymbolRecord {
+  readonly file: string;
+  readonly symbol_path: string;
+  readonly selector: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly line: number;
+  readonly signature: string;
+}
+
+export function sourceFileSymbols(
+  sourceFile: SourceFile,
+  projectRoot: string,
+): ProjectSymbolRecord[] {
+  const file = path.relative(projectRoot, sourceFile.getFilePath());
+  const signatures = new Map(
+    buildFileOutline(sourceFile).symbols.map((symbol) => [
+      `${symbol.symbolPath}@${symbol.startLine}`,
+      symbol.signature,
+    ]),
+  );
+  return collectSymbols(sourceFile).map((symbol) => ({
+    file,
+    symbol_path: symbol.symbolPath,
+    selector: `${symbol.symbolPath}@${symbol.line}`,
+    name: symbol.name,
+    kind: symbol.kind,
+    line: symbol.line,
+    signature: signatures.get(`${symbol.symbolPath}@${symbol.line}`) ?? symbol.node.getText(),
+  }));
+}
+
 export function symbolMatchRank(query: string, symbol: SymbolMatchCandidate): number {
   const normalizedQuery = query.toLowerCase();
   const normalizedPath = symbol.symbolPath.toLowerCase();
@@ -33,6 +74,58 @@ export function symbolMatchRank(query: string, symbol: SymbolMatchCandidate): nu
     return 3;
   }
   return 4;
+}
+
+export function searchProjectSymbols(
+  project: Project,
+  projectRoot: string,
+  options: ProjectSymbolSearchOptions,
+): ProjectSymbolRecord[] {
+  const normalizedQuery = options.query.toLowerCase();
+  const normalizedFileFilter = options.fileFilter?.toLowerCase();
+  const kindSet = options.kinds ? new Set(options.kinds) : undefined;
+  const matches: ProjectSymbolRecord[] = [];
+
+  for (const sourceFile of project.getSourceFiles()) {
+    const file = path.relative(projectRoot, sourceFile.getFilePath());
+    if (normalizedFileFilter && !file.toLowerCase().includes(normalizedFileFilter)) continue;
+
+    const matchingSymbols = sourceFileSymbols(sourceFile, projectRoot).filter((symbol) => {
+      return (
+        (!kindSet || kindSet.has(symbol.kind)) &&
+        (symbol.name.toLowerCase().includes(normalizedQuery) ||
+          symbol.symbol_path.toLowerCase().includes(normalizedQuery) ||
+          symbol.selector.toLowerCase().includes(normalizedQuery))
+      );
+    });
+    if (matchingSymbols.length === 0) continue;
+
+    for (const symbol of matchingSymbols) {
+      matches.push(symbol);
+    }
+  }
+
+  matches.sort((left, right) => {
+    const rank =
+      symbolMatchRank(options.query, {
+        symbolPath: left.symbol_path,
+        name: left.name,
+        line: left.line,
+      }) -
+      symbolMatchRank(options.query, {
+        symbolPath: right.symbol_path,
+        name: right.name,
+        line: right.line,
+      });
+    if (rank !== 0) return rank;
+    return (
+      left.file.localeCompare(right.file) ||
+      left.line - right.line ||
+      left.symbol_path.localeCompare(right.symbol_path) ||
+      left.kind.localeCompare(right.kind)
+    );
+  });
+  return matches;
 }
 
 function namedNode(node: Node): string | undefined {

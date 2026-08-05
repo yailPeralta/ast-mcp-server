@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "description": "Deterministic context-retrieval corpus for full-file, primitive and ast_explore workflows.",
+  "scenarios": [
+    {
+      "id": "search_to_source",
+      "description": "Find benchmarkTarget and return its exact implementation.",
+      "query": "benchmarkTarget",
+      "source_file": "src/shared.ts",
+      "symbol_path": "benchmarkTarget",
+      "full_files": ["src/shared.ts"],
+      "required_evidence": ["export function benchmarkTarget", "return value + 1"],
+      "accepted_call_bound": 2
+    },
+    {
+      "id": "multi_file_references",
+      "description": "Find benchmarkTarget and expose its declaration, import and call sites.",
+      "query": "benchmarkTarget",
+      "source_file": "src/shared.ts",
+      "symbol_path": "benchmarkTarget",
+      "full_files": ["src/shared.ts", "src/use.ts"],
+      "required_evidence": [
+        "export function benchmarkTarget",
+        "import { benchmarkTarget }",
+        "benchmarkTarget(42)"
+      ],
+      "accepted_call_bound": 2
+    }
+  ]
+}

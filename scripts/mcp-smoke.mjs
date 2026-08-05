@@ -33,9 +33,11 @@ try {
   const listed = await client.listTools();
   const names = listed.tools.map((tool) => tool.name).sort();
   if (
-    names.length !== 12 ||
+    names.length !== 14 ||
     !names.includes("ast_list_files") ||
     !names.includes("ast_get_project_status") ||
+    !names.includes("ast_get_file") ||
+    !names.includes("ast_explore") ||
     !names.includes("ast_scaffold_class") ||
     !names.includes("ast_apply_operation")
   ) {
@@ -68,6 +70,32 @@ try {
     status?.operation_queue?.state !== "running"
   ) {
     throw new Error(`Unexpected ast_get_project_status response: ${JSON.stringify(statusResult)}`);
+  }
+
+  const fileResult = await client.callTool({
+    name: "ast_get_file",
+    arguments: { project_root: fixtureRoot, file_path: "src/value.ts", limit: 10 },
+  });
+  if (
+    fileResult.isError === true ||
+    fileResult.structuredContent?.mode !== "source" ||
+    fileResult.structuredContent?.snapshot_state !== "fresh" ||
+    fileResult.structuredContent?.lines?.[0]?.text !== "export const value = 1;"
+  ) {
+    throw new Error(`Unexpected ast_get_file response: ${JSON.stringify(fileResult)}`);
+  }
+
+  const exploreResult = await client.callTool({
+    name: "ast_explore",
+    arguments: { project_root: fixtureRoot, query: "value", detail: "summary" },
+  });
+  if (
+    exploreResult.isError === true ||
+    exploreResult.structuredContent?.route !== "query" ||
+    exploreResult.structuredContent?.total !== 1 ||
+    exploreResult.structuredContent?.symbols?.[0]?.selector !== "value@1"
+  ) {
+    throw new Error(`Unexpected ast_explore response: ${JSON.stringify(exploreResult)}`);
   }
 
   const toonResult = await client.callTool({

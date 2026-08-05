@@ -7,7 +7,7 @@ Implementation must remain phase-gated. Each task follows RED → GREEN → VERI
 - [ ] Review this SDD against the current `openspec/archive/` artifacts and ADRs 0001–0004.
 - [ ] Add an implementation ADR only after the corresponding design decision has evidence; do not pre-accept persistence or daemon decisions.
 - [ ] Capture the v0.5.0 baseline with `git status --short`, `yarn test`, `yarn typecheck`, `yarn build`, `yarn test:mcp`, `yarn test:cli`, `yarn test:package` and the existing benchmark commands.
-- [ ] Add RED tests asserting all existing eleven tools and mutation contracts remain available after additive registrations.
+- [ ] Add RED tests asserting all existing thirteen tools and mutation contracts remain available after additive registrations.
 
 ## 1. Shared read contracts and status model
 
@@ -88,6 +88,8 @@ Expected: all existing tests plus the new status/contract tests pass; no mutatio
 
 ### Task 2.1: Add file snapshot provider
 
+Status: complete — provider tests pass; project path resolution is reused from `src/services/project.ts`, so no modification to that file was required.
+
 Files:
 
 - Create: `src/services/file-snapshot.ts`
@@ -99,6 +101,8 @@ Implement project-scoped path resolution, symlink/containment checks, exact UTF-
 Run: `yarn test test/file-snapshot.test.ts`
 
 ### Task 2.2: Add `ast_get_file` schema and tool
+
+Status: complete — MCP integration, stdio smoke and package smoke pass with the additive fourteenth tool.
 
 Files:
 
@@ -112,6 +116,8 @@ Run: `yarn test test/mcp.integration.test.ts -t "get file"`
 
 ### Task 2.3: Add file-read documentation and skill guidance
 
+Status: complete — README, bundled skill and changelog document source mode, `symbols_only`, read-only behavior and freshness semantics.
+
 Files:
 
 - Modify: `README.md`
@@ -124,11 +130,15 @@ Run: `yarn format:check`
 
 ### Phase 2 gate
 
+Status: complete — 157/157 tests, typecheck, build, lint, format check, MCP/CLI/package smokes and diff check pass; invalid, ambiguous, traversal and escaping-symlink paths fail closed.
+
 Run the full Phase 1 gate plus focused file path/range, MCP stdio and package smoke tests. Verify that invalid paths fail before reading and that no existing mutation test changes.
 
 ## 3. Composed exploration
 
 ### Task 3.1: Extract a reusable context builder
+
+Status: complete — shared compiler-backed symbol ranking and reference collection pass focused builder tests without a second resolver.
 
 Files:
 
@@ -142,6 +152,8 @@ Run: `yarn test test/context-builder.test.ts`
 
 ### Task 3.2: Add `ast_explore` input/output schemas
 
+Status: complete — strict route/detail/budget schemas and byte-limit truncation pass focused tool tests.
+
 Files:
 
 - Create: `src/tools/explore.ts`
@@ -152,6 +164,8 @@ Implement strict query, selector/file routing, detail, filters, limits and outpu
 Run: `yarn test test/explore.test.ts`
 
 ### Task 3.3: Register and integrate exploration
+
+Status: complete — MCP integration proves query and exact-symbol routes preserve reusable selectors and source/reference evidence in one call.
 
 Files:
 
@@ -165,6 +179,8 @@ Prove one exploration call can replace the checked search-to-source model workfl
 Run: `yarn test test/mcp.integration.test.ts -t "explore"`
 
 ### Task 3.4: Add context workflow benchmark
+
+Status: complete — deterministic corpus passes evidence and call-bound gates; report records calls, bytes, named-tokenizer estimates, metadata and timings separately.
 
 Files:
 
@@ -181,7 +197,9 @@ Expected: the benchmark fails on missing evidence or excess calls; it does not a
 
 ### Phase 3 gate
 
-The context corpus must pass with required evidence preserved. Existing `yarn benchmark:batch`, `yarn benchmark:shapes` and all package/MCP gates must remain green.
+Status: complete — context corpus, focused exploration tests, typecheck, lint, format, MCP smoke and the full quality/package gates pass.
+
+The context corpus passes with required evidence preserved. Existing `yarn benchmark:batch`, `yarn benchmark:shapes` and all package/MCP gates remain green.
 
 ## 4. Incremental in-memory index
 

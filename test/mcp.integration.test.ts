@@ -58,11 +58,13 @@ export function formatValue(value: number): string { return String(value); }
     expect(tools.tools.map((tool) => tool.name)).toEqual([
       "ast_list_files",
       "ast_get_project_status",
+      "ast_explore",
       "ast_get_outline",
       "ast_get_symbol_source",
       "ast_search_symbols",
       "ast_find_references",
       "ast_get_diagnostics",
+      "ast_get_file",
       "ast_rename_symbol",
       "ast_replace_symbol_body",
       "ast_scaffold_class",
@@ -99,6 +101,50 @@ export function formatValue(value: number): string { return String(value); }
       }),
     );
     expect(detailedOutline.symbols).toEqual(
+      expect.arrayContaining([expect.objectContaining({ symbolPath: "formatValue" })]),
+    );
+
+    const file = structured(
+      await client.callTool({
+        name: "ast_get_file",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          offset: 1,
+          limit: 1,
+        },
+      }),
+    );
+    expect(file).toMatchObject({
+      mode: "source",
+      file: "src/value.ts",
+      range: { offset: 1, limit: 1, total_lines: 2 },
+      lines: [
+        {
+          line: 2,
+          text: "export function formatValue(value: number): string { return String(value); }",
+        },
+      ],
+      snapshot_state: "fresh",
+    });
+    expect(file.file_hash).toMatch(/^[0-9a-f]{64}$/);
+
+    const symbolsOnly = structured(
+      await client.callTool({
+        name: "ast_get_file",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbols_only: true,
+        },
+      }),
+    );
+    expect(symbolsOnly).toMatchObject({
+      mode: "symbols_only",
+      file: "src/value.ts",
+      snapshot_state: "fresh",
+    });
+    expect(symbolsOnly.symbols).toEqual(
       expect.arrayContaining([expect.objectContaining({ symbolPath: "formatValue" })]),
     );
 
@@ -238,6 +284,61 @@ export function formatValue(value: number): string { return String(value); }
       config_id: expect.stringMatching(/^config_[0-9a-f]{20}$/),
     });
     expect(JSON.stringify(status)).not.toContain(fixture.root);
+  });
+
+  it("composes search-to-source exploration with bounded evidence", async () => {
+    const explored = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          query: "formatValue",
+          detail: "summary",
+          limit: 1,
+        },
+      }),
+    );
+    expect(explored).toMatchObject({
+      route: "query",
+      total: 2,
+      has_more: true,
+      truncation: { truncated: true, reason: "record_limit" },
+      completeness: { symbols_complete: false, evidence_complete: true },
+    });
+    expect(explored.symbols).toEqual([
+      expect.objectContaining({ selector: "formatValue@2", signature: expect.any(String) }),
+    ]);
+
+    const exact = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          detail: "full",
+        },
+      }),
+    );
+    expect(exact).toMatchObject({
+      route: "symbol",
+      completeness: { complete: true, unresolved: [] },
+    });
+    expect(exact.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          selector: "formatValue@2",
+          source: expect.objectContaining({ file: "src/value.ts" }),
+          references: expect.objectContaining({ reference_count: 2 }),
+        }),
+      ]),
+    );
+
+    const invalid = await client.callTool({
+      name: "ast_explore",
+      arguments: { project_root: fixture.root },
+    });
+    expect(invalid.isError).toBe(true);
   });
 
   it("exposes lossless TOON envelopes for eligible collection reads only when requested", async () => {

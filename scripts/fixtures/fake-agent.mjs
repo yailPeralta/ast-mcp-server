@@ -59,14 +59,16 @@ if (!isClaude && args[0] === "mcp" && args[1] === "test") {
   }
   console.log(`Testing 'ast'...
   ✓ Connected
-  ✓ Tools discovered: 12
+  ✓ Tools discovered: 14
   ast_list_files
   ast_get_project_status
+  ast_explore
   ast_get_outline
   ast_get_symbol_source
   ast_search_symbols
   ast_find_references
   ast_get_diagnostics
+  ast_get_file
   ast_rename_symbol
   ast_replace_symbol_body
   ast_scaffold_class
@@ -79,7 +81,7 @@ if (!isClaude && args[0] === "mcp" && args[1] === "add") {
   const commandIndex = args.indexOf("--command");
   const argsIndex = args.indexOf("--args");
   writeState({ command: args[commandIndex + 1], entry: args[argsIndex + 1] });
-  console.log("✓ Saved 'ast' (12/12 tools enabled)");
+  console.log("✓ Saved 'ast' (14/14 tools enabled)");
   process.exit(0);
 }
 

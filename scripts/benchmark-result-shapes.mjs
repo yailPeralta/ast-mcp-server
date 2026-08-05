@@ -10,6 +10,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { decode, encode } from "@toon-format/toon";
 import { countTokens } from "gpt-tokenizer";
+import { format } from "prettier";
 import { createServer } from "../dist/server.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -338,13 +339,13 @@ try {
     checks: {
       evidence_and_calls: evidencePass,
       aggregate_toon_reduction: toonReduction >= MINIMUM_TOON_TOKEN_REDUCTION_PERCENT,
-      complete_tool_list: toolList.tools.length === 12,
+      complete_tool_list: toolList.tools.length === 14,
     },
   };
   report.pass = Object.values(report.checks).every(Boolean);
 
   await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`);
+  await writeFile(outputPath, await format(`${JSON.stringify(report)}\n`, { parser: "json" }));
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   if (!report.pass) process.exitCode = 1;
 } finally {

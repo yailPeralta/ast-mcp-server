@@ -1,9 +1,8 @@
-import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Node } from "ts-morph";
 import { z } from "zod";
-import { PaginationInputSchema, PaginationOutputSchema, paginate } from "../services/pagination.js";
+import { PaginationInputSchema, PaginationOutputSchema } from "../services/pagination.js";
 import { findDeclarationByName, getSourceFileOrThrow, withProject } from "../services/project.js";
+import { collectSymbolReferences } from "../services/references.js";
 import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
 
 const ReferenceDetailSchema = z.enum(["locations", "context"]).default("locations");
@@ -80,64 +79,28 @@ export function registerFindReferences(server: McpServer): void {
         const structuredContent = await withProject(project_root, ({ project, projectRoot }) => {
           const sourceFile = getSourceFileOrThrow(project, file_path);
           const node = findDeclarationByName(sourceFile, symbol_path);
-          if (!Node.isReferenceFindable(node)) {
-            throw new Error(
-              `Symbol "${symbol_path}" (${node.getKindName()}) does not support semantic reference search.`,
-            );
-          }
-
-          const lineCache = new Map<string, string[]>();
-          const location = (referenceNode: Node, isDeclaration: boolean) => {
-            const referenceSource = referenceNode.getSourceFile();
-            const absoluteFile = referenceSource.getFilePath();
-            let lines = lineCache.get(absoluteFile);
-            if (!lines) {
-              lines = referenceSource.getFullText().split(/\r?\n/);
-              lineCache.set(absoluteFile, lines);
-            }
-            const position = referenceSource.getLineAndColumnAtPos(referenceNode.getStart());
-            return {
-              file: path.relative(projectRoot, absoluteFile),
-              line: position.line,
-              column: position.column,
-              kind: referenceNode.getParent()?.getKindName() ?? referenceNode.getKindName(),
-              is_declaration: isDeclaration,
-              context: (lines[position.line - 1] ?? "").trim().slice(0, 500),
-            };
-          };
-
-          const references = node
-            .findReferencesAsNodes()
-            .map((reference) => location(reference, false));
-          const declaration = location(node, true);
-          const allLocations = include_declaration ? [declaration, ...references] : references;
-          allLocations.sort((left, right) =>
-            `${left.file}:${left.line}:${left.column}:${left.is_declaration ? 0 : 1}`.localeCompare(
-              `${right.file}:${right.line}:${right.column}:${right.is_declaration ? 0 : 1}`,
-            ),
-          );
-          const affectedFiles = [
-            ...new Set([declaration, ...references].map((item) => item.file)),
-          ].sort();
-          const page = paginate(allLocations, offset, limit);
-          const { items, ...metadata } = page;
-          return {
-            symbol: symbol_path,
+          const collected = collectSymbolReferences(
+            node,
+            projectRoot,
+            symbol_path,
             include_declaration,
-            declaration_count: 1,
-            reference_count: references.length,
-            affected_files: affectedFiles,
+            detail,
+            offset,
+            limit,
+          );
+          const { references, ...metadata } = collected;
+          return {
+            ...metadata,
             references:
               detail === "context"
-                ? items
-                : items.map(({ file, line, column, kind, is_declaration }) => ({
+                ? references
+                : references.map(({ file, line, column, kind, is_declaration }) => ({
                     file,
                     line,
                     column,
                     kind,
                     is_declaration,
                   })),
-            ...metadata,
           };
         });
         const outputSchema = ReferenceOutputSchemas[detail] as z.ZodType<Record<string, unknown>>;
