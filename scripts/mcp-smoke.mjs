@@ -33,8 +33,9 @@ try {
   const listed = await client.listTools();
   const names = listed.tools.map((tool) => tool.name).sort();
   if (
-    names.length !== 11 ||
+    names.length !== 12 ||
     !names.includes("ast_list_files") ||
+    !names.includes("ast_get_project_status") ||
     !names.includes("ast_scaffold_class") ||
     !names.includes("ast_apply_operation")
   ) {
@@ -53,6 +54,20 @@ try {
   const files = result.structuredContent?.files;
   if (!Array.isArray(files) || !files.includes("src/value.ts")) {
     throw new Error(`Unexpected ast_list_files response: ${JSON.stringify(result)}`);
+  }
+
+  const statusResult = await client.callTool({
+    name: "ast_get_project_status",
+    arguments: { project_root: fixtureRoot },
+  });
+  const status = statusResult.structuredContent;
+  if (
+    statusResult.isError === true ||
+    status?.state !== "fresh" ||
+    status?.indexed_count !== 0 ||
+    status?.operation_queue?.state !== "running"
+  ) {
+    throw new Error(`Unexpected ast_get_project_status response: ${JSON.stringify(statusResult)}`);
   }
 
   const toonResult = await client.callTool({

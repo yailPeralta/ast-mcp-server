@@ -2,12 +2,22 @@ import fs from "node:fs";
 import path from "node:path";
 import { Project, type Node, type SourceFile } from "ts-morph";
 import { findDeclaration } from "./symbols.js";
-import { createConfigSnapshot } from "./workspace.js";
+import { createConfigSnapshot, createWorkspaceSnapshot } from "./workspace.js";
+import {
+  createInitialProjectStatus,
+  createProjectIdentity,
+  projectStatusToProjection,
+  transitionProjectStatus,
+  type ProjectStatus,
+  type ProjectStatusProjection,
+  type SynchronizationCause,
+} from "./project-status.js";
 
 export interface ProjectContext {
   project: Project;
   projectRoot: string;
   tsConfigFilePath: string;
+  status: ProjectStatus;
 }
 
 interface ProjectSession {
@@ -15,7 +25,21 @@ interface ProjectSession {
   configDigest: string;
   queue: Promise<void>;
   activeOperations: number;
+  runningOperations: number;
+  queuedOperations: number;
   lastAccessedAt: number;
+}
+
+export type ProjectQueueState = "idle" | "queued" | "running";
+
+export interface ProjectOperationQueueStatus {
+  readonly state: ProjectQueueState;
+  readonly active_operations: number;
+  readonly queued_operations: number;
+}
+
+export interface ProjectStatusSnapshot extends ProjectStatusProjection {
+  readonly operation_queue: ProjectOperationQueueStatus;
 }
 
 const MAX_PROJECT_SESSIONS = 8;
@@ -47,7 +71,11 @@ function buildProjectContext(tsConfigFilePath: string): ProjectContext {
   });
   const projectRoot = path.dirname(tsConfigFilePath);
   projectRoots.set(project, projectRoot);
-  return { project, projectRoot, tsConfigFilePath };
+  const status = createInitialProjectStatus(
+    createProjectIdentity({ projectRoot, configPath: tsConfigFilePath }),
+    { sourceCount: project.getSourceFiles().length },
+  );
+  return { project, projectRoot, tsConfigFilePath, status };
 }
 
 export function createFreshProject(projectRoot: string): ProjectContext {
@@ -75,33 +103,91 @@ function getOrCreateSession(projectRoot: string): ProjectSession {
     configDigest: createConfigSnapshot(tsConfigFilePath).digest,
     queue: Promise.resolve(),
     activeOperations: 0,
+    runningOperations: 0,
+    queuedOperations: 0,
     lastAccessedAt: Date.now(),
   };
   projectSessions.set(tsConfigFilePath, session);
   return session;
 }
 
-async function synchronizeSession(session: ProjectSession): Promise<void> {
-  const currentConfigDigest = createConfigSnapshot(session.context.tsConfigFilePath).digest;
-  if (currentConfigDigest !== session.configDigest) {
-    session.context = buildProjectContext(session.context.tsConfigFilePath);
-    session.configDigest = currentConfigDigest;
-    return;
-  }
-
-  const { project, tsConfigFilePath } = session.context;
-  project.addSourceFilesFromTsConfig(tsConfigFilePath);
-  await Promise.all(
-    project.getSourceFiles().map((sourceFile) => sourceFile.refreshFromFileSystem()),
-  );
+function getQueueStatus(session: ProjectSession): ProjectOperationQueueStatus {
+  return {
+    state:
+      session.runningOperations > 0 ? "running" : session.queuedOperations > 0 ? "queued" : "idle",
+    active_operations: session.runningOperations,
+    queued_operations: session.queuedOperations,
+  };
 }
 
-export async function withProject<T>(
-  projectRoot: string,
+async function synchronizeSession(session: ProjectSession): Promise<void> {
+  let syncFailureCause: SynchronizationCause = "compiler_rebuild";
+  let currentConfigDigest: string;
+  try {
+    currentConfigDigest = createConfigSnapshot(session.context.tsConfigFilePath).digest;
+    if (currentConfigDigest !== session.configDigest) {
+      let status = transitionProjectStatus(session.context.status, { type: "config_changed" });
+      status = transitionProjectStatus(status, { type: "compiler_rebuild_started" });
+      const rebuilt = buildProjectContext(session.context.tsConfigFilePath);
+      session.context = { ...rebuilt, status };
+    }
+
+    const { project, tsConfigFilePath } = session.context;
+    syncFailureCause = "source_change";
+    const refreshSourceFiles = async (): Promise<void> => {
+      project.addSourceFilesFromTsConfig(tsConfigFilePath);
+      await Promise.all(
+        project.getSourceFiles().map((sourceFile) => sourceFile.refreshFromFileSystem()),
+      );
+    };
+    await refreshSourceFiles();
+
+    const snapshot = createWorkspaceSnapshot(session.context);
+    if (snapshot.configDigest !== currentConfigDigest) {
+      syncFailureCause = "config_change";
+      throw new Error("Project configuration changed during synchronization. Retry the operation.");
+    }
+
+    await refreshSourceFiles();
+    const verificationSnapshot = createWorkspaceSnapshot(session.context);
+    if (verificationSnapshot.configDigest !== currentConfigDigest) {
+      syncFailureCause = "config_change";
+      throw new Error("Project configuration changed during synchronization. Retry the operation.");
+    }
+    if (verificationSnapshot.sourceDigest !== snapshot.sourceDigest) {
+      syncFailureCause = "source_change";
+      throw new Error("Project source changed during synchronization. Retry the operation.");
+    }
+
+    const status = transitionProjectStatus(session.context.status, {
+      type: "sync_succeeded",
+      sourceCount: verificationSnapshot.sourceFileCount,
+      indexedCount: 0,
+      sourceSnapshotFingerprint: `source_${verificationSnapshot.sourceDigest}`,
+      configSnapshotFingerprint: `config_${verificationSnapshot.configDigest}`,
+      canonicalSnapshotFingerprint: `snapshot_${verificationSnapshot.digest}`,
+      at: new Date().toISOString(),
+    });
+    session.context = { ...session.context, status };
+    session.configDigest = verificationSnapshot.configDigest;
+  } catch (error) {
+    const status = transitionProjectStatus(session.context.status, {
+      type: "sync_failed",
+      cause: syncFailureCause,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    session.context = { ...session.context, status };
+    throw error;
+  }
+}
+
+async function runSessionWithSyncPolicy<T>(
+  session: ProjectSession,
   operation: (context: ProjectContext) => Promise<T> | T,
+  allowSynchronizationFailure: boolean,
 ): Promise<T> {
-  const session = getOrCreateSession(projectRoot);
   session.activeOperations += 1;
+  session.queuedOperations += 1;
 
   let release: (() => void) | undefined;
   const previous = session.queue;
@@ -110,14 +196,40 @@ export async function withProject<T>(
   });
 
   await previous;
+  session.queuedOperations -= 1;
+  session.runningOperations += 1;
   try {
-    await synchronizeSession(session);
+    try {
+      await synchronizeSession(session);
+    } catch (error) {
+      if (!allowSynchronizationFailure) throw error;
+    }
     session.lastAccessedAt = Date.now();
     return await operation(session.context);
   } finally {
+    session.runningOperations -= 1;
     session.activeOperations -= 1;
     release?.();
   }
+}
+
+export async function withProject<T>(
+  projectRoot: string,
+  operation: (context: ProjectContext) => Promise<T> | T,
+): Promise<T> {
+  return runSessionWithSyncPolicy(getOrCreateSession(projectRoot), operation, false);
+}
+
+export async function getProjectStatus(projectRoot: string): Promise<ProjectStatusSnapshot> {
+  const session = getOrCreateSession(projectRoot);
+  return runSessionWithSyncPolicy(
+    session,
+    (context) => ({
+      ...projectStatusToProjection(context.status),
+      operation_queue: getQueueStatus(session),
+    }),
+    true,
+  );
 }
 
 // Compatibility API for internal scripts. MCP tools should use withProject().

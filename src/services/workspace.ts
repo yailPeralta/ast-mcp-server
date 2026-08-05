@@ -6,6 +6,9 @@ import type { ProjectContext } from "./project.js";
 
 export interface WorkspaceSnapshot {
   digest: string;
+  sourceDigest: string;
+  configDigest: string;
+  sourceFileCount: number;
   fileCount: number;
   files: ReadonlyMap<string, string>;
 }
@@ -88,13 +91,17 @@ export function createConfigSnapshot(rootConfigPath: string): ConfigSnapshot {
 export function createWorkspaceSnapshot(context: ProjectContext): WorkspaceSnapshot {
   const sourcePaths = context.project
     .getSourceFiles()
-    .map((sourceFile) => sourceFile.getFilePath());
-  const paths = [...sourcePaths, ...createConfigSnapshot(context.tsConfigFilePath).files]
-    .map(canonicalPath)
-    .sort();
-  const files = new Map<string, string>();
+    .map((sourceFile) => canonicalPath(sourceFile.getFilePath()));
+  const configSnapshot = createConfigSnapshot(context.tsConfigFilePath);
+  const sourceFiles = new Map<string, string>();
 
-  for (const filePath of paths) {
+  for (const filePath of [...new Set(sourcePaths)].sort()) {
+    const digest = hashBytes(fs.readFileSync(filePath));
+    sourceFiles.set(filePath, digest);
+  }
+
+  const files = new Map(sourceFiles);
+  for (const filePath of configSnapshot.files) {
     const digest = hashBytes(fs.readFileSync(filePath));
     const previous = files.get(filePath);
     if (previous && previous !== digest) {
@@ -105,6 +112,9 @@ export function createWorkspaceSnapshot(context: ProjectContext): WorkspaceSnaps
 
   return {
     digest: hashWorkspaceFiles(files),
+    sourceDigest: hashWorkspaceFiles(sourceFiles),
+    configDigest: configSnapshot.digest,
+    sourceFileCount: sourceFiles.size,
     fileCount: files.size,
     files,
   };

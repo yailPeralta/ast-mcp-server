@@ -338,7 +338,7 @@ try {
     checks: {
       evidence_and_calls: evidencePass,
       aggregate_toon_reduction: toonReduction >= MINIMUM_TOON_TOKEN_REDUCTION_PERCENT,
-      complete_tool_list: toolList.tools.length === 11,
+      complete_tool_list: toolList.tools.length === 12,
     },
   };
   report.pass = Object.values(report.checks).every(Boolean);

@@ -57,6 +57,7 @@ export function formatValue(value: number): string { return String(value); }
     const tools = await client.listTools();
     expect(tools.tools.map((tool) => tool.name)).toEqual([
       "ast_list_files",
+      "ast_get_project_status",
       "ast_get_outline",
       "ast_get_symbol_source",
       "ast_search_symbols",
@@ -213,6 +214,30 @@ export function formatValue(value: number): string { return String(value); }
       }),
     );
     expect(diagnostics.error_count).toBe(0);
+  });
+
+  it("exposes project status without leaking the fixture path", async () => {
+    const status = structured(
+      await client.callTool({
+        name: "ast_get_project_status",
+        arguments: { project_root: fixture.root },
+      }),
+    );
+
+    expect(status.state).toBe("fresh");
+    expect(status.source_count).toBe(2);
+    expect(status.indexed_count).toBe(0);
+    expect(status.index).toEqual({ state: "disabled" });
+    expect(status.operation_queue).toEqual({
+      state: "running",
+      active_operations: 1,
+      queued_operations: 0,
+    });
+    expect(status.project).toEqual({
+      project_id: expect.stringMatching(/^project_[0-9a-f]{20}$/),
+      config_id: expect.stringMatching(/^config_[0-9a-f]{20}$/),
+    });
+    expect(JSON.stringify(status)).not.toContain(fixture.root);
   });
 
   it("exposes lossless TOON envelopes for eligible collection reads only when requested", async () => {

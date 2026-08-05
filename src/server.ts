@@ -5,6 +5,7 @@ import { registerFindReferences } from "./tools/find_references.js";
 import { registerGetDiagnostics } from "./tools/get_diagnostics.js";
 import { registerGetOperationPreview } from "./tools/get_operation_preview.js";
 import { registerGetOutline } from "./tools/get_outline.js";
+import { registerGetProjectStatus } from "./tools/get_project_status.js";
 import { registerGetSymbolSource } from "./tools/get_symbol_source.js";
 import { registerListFiles } from "./tools/list_files.js";
 import { registerRenameSymbol } from "./tools/rename_symbol.js";
@@ -21,6 +22,7 @@ export function createServer(): McpServer {
     version: PACKAGE_VERSION,
   });
   registerListFiles(server);
+  registerGetProjectStatus(server);
   registerGetOutline(server);
   registerGetSymbolSource(server);
   registerSearchSymbols(server);
