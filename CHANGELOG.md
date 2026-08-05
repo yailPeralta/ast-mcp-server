@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-08-05
+
+### Added
+
+- Bounded JSON-safe project status contracts and the read-only `ast_get_project_status` tool.
+- Session freshness metadata with separate source, config, and canonical fingerprints.
+- Serialized operation-queue accounting and status integration without changing reviewed mutation semantics.
+
+### Changed
+
+- Source synchronization verifies stability across refresh, snapshot, refresh, and verification before reporting fresh state.
+- Phase 1 keeps the symbol index disabled while exposing explicit stale/degraded recovery state.
+
+### Security
+
+- Status projections redact identities, absolute paths, credentials, and multi-token `Authorization` values at both transition and projection boundaries.
+- Noncanonical external fingerprints are converted to bounded opaque SHA-256 digests before projection.
+
 ## [0.5.0] - 2026-08-03
 
 ### Added
@@ -66,6 +84,7 @@ Initial public release.
 - Apply rejects stale workspaces, changed configs/sources, mismatched plan hashes, unsafe plan files, conflicting MCP registrations, and conflicting skill content.
 - Inputs, outputs, operation stores, subprocesses, batch fan-out, plan lifetime, and filesystem access are bounded.
 
+[0.5.1]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.5.1
 [0.5.0]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.5.0
 [0.4.0]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.4.0
 [0.3.0]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.3.0
