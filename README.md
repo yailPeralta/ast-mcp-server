@@ -1,8 +1,12 @@
+<p align="center">
+  <img src="assets/header.jpg" alt="Abstract network of connected code symbols with the text AST MCP Server." width="100%" />
+</p>
+
 # ast-mcp-server
 
 [![CI](https://github.com/yailPeralta/ast-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/yailPeralta/ast-mcp-server/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/ast-mcp-server.svg)](https://www.npmjs.com/package/ast-mcp-server)
-[![Node.js 20.19+](https://img.shields.io/badge/Node.js-20.19%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node.js 22.5+](https://img.shields.io/badge/Node.js-22.5%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 
 `ast-mcp-server` gives coding agents compact, type-aware access to TypeScript and JavaScript projects. It uses the real compiler project model through `ts-morph`, so declarations, references, rename locations, and diagnostics come from the AST instead of text-search guesses.
@@ -72,7 +76,7 @@ The included batch benchmark records a 50% reduction in model round-trips and a 
 
 ## Requirements
 
-- Node.js 20.19 or newer
+- Node.js 22.5.0 or newer
 - Corepack with Yarn 4.15.0 (pinned by `packageManager`)
 - A target project with a `tsconfig.json`
 

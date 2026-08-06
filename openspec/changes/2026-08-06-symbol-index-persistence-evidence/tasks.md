@@ -12,14 +12,14 @@ This change is phase-gated. It starts as an exploration/evidence SDD and must no
 
 ### Task 1.1: Run explicit supported-runtime probes
 
-Status: complete — explicit Docker probes passed the project quality/package gates on Node `20.19.6` and Node `22.23.2`; the local Node `24.16.0` gate was already green. Native SQLite is unavailable on Node 20 and experimental on Node 22, so it cannot be selected as the sole backend for the current engine range.
+Status: complete — explicit Docker probes passed the project quality/package gates on Node `22.23.2`; the local Node `24.16.0` gate was already green. The declared floor is now Node `22.5.0`, where the built-in SQLite API is available but active development. Native SQLite remains unselected until conformance and failure-injection gates pass.
 
 Files:
 
 - Modify: `scripts/benchmark-index-storage.mjs` only if explicit executable invocation or report redaction is missing.
 - Test: temporary runtime reports under `/tmp`.
 
-Run the storage workload with Node 20.19, Node 22 and Node 24. Record availability, native API presence, package install behavior and exact blockers. Never download a runtime implicitly.
+Run the storage workload with the Node 22.5.0 floor, Node 24 and explicitly provisioned versions when needed. Record availability, native API presence, package install behavior and exact blockers. Never download a runtime implicitly.
 
 ### Task 1.2: Establish dependency/package evidence
 
@@ -75,7 +75,7 @@ Status: proposed.
 
 Files:
 
-- Create or modify: `docs/adr/0008-index-persistence-backend.md`.
+- Create or modify: `docs/adr/0009-index-persistence-backend.md`.
 
 Select one backend only if all gates pass. Otherwise record a reaffirmation of memory-only and the exact missing evidence. Do not integrate a backend from benchmark performance alone.
 
@@ -106,7 +106,7 @@ Prove that disabling persistence returns to memory-only without source or operat
 ## 5. Final verification and archive
 
 - [ ] Run focused conformance/lifecycle tests and the full quality gates on the frozen tree.
-- [ ] Run Node 20.19/22/24 matrix and isolated package smoke.
+- [ ] Run Node 22.5.0/24 matrix and isolated package smoke.
 - [ ] Verify no source bodies, secrets, compiler objects or mutation plans enter the cache.
 - [ ] Create `verification.md` with requirement-to-evidence traceability and residual risks.
 - [ ] Archive only after the decision ADR and all acceptance gates are complete.

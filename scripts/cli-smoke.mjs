@@ -138,6 +138,7 @@ async function holdWorkspaceLock(workspaceKey) {
 
 async function installFakeAgents() {
   await mkdir(fakeBin, { recursive: true });
+  await writeFile(path.join(fakeBin, "package.json"), '{"type":"module"}\n', "utf8");
   const fixture = path.join(repositoryRoot, "scripts", "fixtures", "fake-agent.mjs");
   for (const agent of ["claude", "hermes"]) {
     const executable = path.join(fakeBin, agent);

@@ -50,6 +50,7 @@ function parseJsonOutput(stdout) {
 
 async function installFakeAgents() {
   await mkdir(fakeBin, { recursive: true });
+  await writeFile(path.join(fakeBin, "package.json"), '{"type":"module"}\n', "utf8");
   const fixture = path.join(repositoryRoot, "scripts", "fixtures", "fake-agent.mjs");
   for (const agent of ["claude", "hermes"]) {
     const executable = path.join(fakeBin, agent);
@@ -116,6 +117,7 @@ try {
   if (
     installedMetadata.name !== releaseMetadata.name ||
     installedMetadata.version !== releaseMetadata.version ||
+    installedMetadata.engines?.node !== releaseMetadata.engines?.node ||
     installedMetadata.license !== releaseMetadata.license ||
     installedMetadata.repository?.url !== releaseMetadata.repository?.url ||
     installedMetadata.publishConfig?.access !== releaseMetadata.publishConfig?.access ||
@@ -236,6 +238,7 @@ try {
       transport: "yarn-tarball",
       lifecycle_scripts: false,
       package_version: installedMetadata.version,
+      node_engine: installedMetadata.engines?.node,
       handshake_version: installedMetadata.version,
       global_install: true,
       agent_setup: setupSupported,

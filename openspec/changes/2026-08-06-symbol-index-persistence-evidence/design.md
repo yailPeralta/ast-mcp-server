@@ -15,7 +15,7 @@ Extend the existing disposable `scripts/benchmark-index-storage.mjs` or add a fo
 
 The harness must:
 
-- accept explicit runtime executables for Node 20.19 and Node 22 rather than guessing or downloading them;
+- accept explicit runtime executables for the Node 22.5.0 floor and Node 24 rather than guessing or downloading them;
 - report unavailable runtimes as structured `not_available` evidence;
 - execute identical contract tests against memory and each candidate adapter;
 - use both the existing 128-file synthetic workload and a repository-sized sample with body-free entries;
@@ -41,7 +41,7 @@ Required invariants:
 
 ### Track A: native runtime capability
 
-Probe the Node built-in SQLite API on Node 20.19, Node 22 and Node 24. If it is unavailable or unsuitable on any supported runtime, it cannot be the sole production backend for the current package engine range without a documented runtime split and fallback policy.
+Probe the Node built-in SQLite API on Node 22.5.0 and Node 24. If it is unavailable or unsuitable on any supported runtime, it cannot be the sole production backend without a documented capability check and fallback policy.
 
 ### Track B: portable dependency
 

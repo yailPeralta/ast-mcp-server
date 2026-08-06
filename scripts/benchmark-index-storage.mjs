@@ -345,8 +345,8 @@ function detectPortableWasm() {
 
 function detectRuntimeMatrix() {
   const targets = [
-    { target: "node20.19+", env: "INDEX_STORAGE_NODE20_BIN" },
-    { target: "node22+", env: "INDEX_STORAGE_NODE22_BIN" },
+    { target: "node22.5+", env: "INDEX_STORAGE_NODE22_5_BIN" },
+    { target: "node24+", env: "INDEX_STORAGE_NODE24_BIN" },
   ];
   return targets.map(({ target, env }) => ({
     target,

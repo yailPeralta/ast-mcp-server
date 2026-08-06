@@ -32,6 +32,7 @@ async function createFakeAgents(root: string): Promise<{
   const claudeState = path.join(root, "claude-state.json");
   const hermesState = path.join(root, "hermes-state.json");
   await mkdir(bin, { recursive: true });
+  await writeFile(path.join(bin, "package.json"), '{"type":"module"}\n', "utf8");
 
   const fakeAgent = `#!/usr/bin/env node
 import fs from "node:fs";

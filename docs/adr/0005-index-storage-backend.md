@@ -4,6 +4,8 @@
 - Date: 2026-08-06
 - Decision owners: ast-mcp-server maintainers
 
+> Runtime amendment: ADR 0008 raises the package floor to Node.js `>=22.5.0`. This ADR remains the memory-only persistence decision; it does not select or enable a durable backend.
+
 ## Decision
 
 Keep `InMemorySymbolIndex` as the only production backend for the current release. Do not add a native SQLite or portable/WASM SQLite dependency in Task 7.1, and do not introduce a JSON file store into the runtime path.

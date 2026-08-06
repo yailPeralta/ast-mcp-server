@@ -18,7 +18,7 @@ Persistence MUST be behind a versioned policy and the existing `SymbolIndexStore
 
 ### IDX-RUNTIME-001 Supported matrix
 
-A candidate backend MUST run the same conformance suite on Node 20.19+, Node 22 and the current supported development runtime. Missing local binaries MUST be reported as unavailable, never silently substituted by a different runtime.
+A candidate backend MUST run the same conformance suite on the declared Node 22.5.0 floor and the current supported Node 24 development runtime. Missing local binaries MUST be reported as unavailable, never silently substituted by a different runtime.
 
 ### IDX-RUNTIME-002 Package safety
 

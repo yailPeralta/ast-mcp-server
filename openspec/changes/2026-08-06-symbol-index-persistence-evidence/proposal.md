@@ -12,19 +12,19 @@ The current memory-only index is safe and simple, but every process restart rebu
 
 ## Options
 
-| Option                   | Benefit                                                                              | Blocking cost/risk                                                                                                                   | Initial disposition                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| Keep memory-only         | No dependency, no corruption surface, compiler rebuild is authoritative              | No restart reuse; cold rebuild remains                                                                                               | Safe baseline and rollback target                                                           |
-| JSON file store          | Portable, easy to inspect and package                                                | Atomicity, concurrent writers, large rewrites and recovery need explicit proof                                                       | Benchmark-only candidate until concurrency is proven                                        |
-| Native SQLite API        | Transactions, indexes and compact storage; no third-party dependency where available | `node:sqlite` is unavailable on Node 20.19 and experimental on Node 22; a native-only policy would violate the package runtime range | Not selectable as the sole backend; evaluate only as one leg of an explicit fallback policy |
-| Portable SQLite/WASM     | One implementation across runtimes                                                   | New dependency/package size, startup/worker behavior, API compatibility and lifecycle surface                                        | Evaluate only if matrix or native option requires it                                        |
-| External database/daemon | Shared multi-process state                                                           | Operational dependency, availability, deployment and failure complexity disproportionate to a local derived cache                    | Rejected for this SDD                                                                       |
+| Option                   | Benefit                                                                                       | Blocking cost/risk                                                                                                 | Initial disposition                                           |
+| ------------------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| Keep memory-only         | No dependency, no corruption surface, compiler rebuild is authoritative                       | No restart reuse; cold rebuild remains                                                                             | Safe baseline and rollback target                             |
+| JSON file store          | Portable, easy to inspect and package                                                         | Atomicity, concurrent writers, large rewrites and recovery need explicit proof                                     | Benchmark-only candidate until concurrency is proven          |
+| Native SQLite API        | Transactions, indexes and compact storage; no third-party dependency on the new runtime floor | `node:sqlite` is active development (`Stability: 1.1`) and still needs adapter-level fallback/conformance evidence | Candidate for Node 22.5+, not selected or enabled by this SDD |
+| Portable SQLite/WASM     | One implementation across runtimes                                                            | New dependency/package size, startup/worker behavior, API compatibility and lifecycle surface                      | Evaluate only if matrix or native option requires it          |
+| External database/daemon | Shared multi-process state                                                                    | Operational dependency, availability, deployment and failure complexity disproportionate to a local derived cache  | Rejected for this SDD                                         |
 
 No backend is selected by this proposal. The evidence phase must compare the candidates against the same conformance and failure matrix.
 
 ## In scope
 
-- Runtime probes for Node 20.19, Node 22 and current Node 24.
+- Runtime probes for the Node 22.5.0 floor and current Node 24.
 - Backend-neutral store contract and conformance tests.
 - Restart, schema migration, corruption, atomicity, interrupted write, concurrent reader/writer and project isolation tests.
 - Package/tarball/install evidence with Yarn lifecycle scripts disabled.
@@ -48,7 +48,7 @@ A backend can be proposed for production only if it demonstrates:
 3. versioned migration and bounded corruption rebuild;
 4. atomic or otherwise fail-safe writes under interruption and concurrency;
 5. no source bodies or compiler objects persisted;
-6. Node 20.19 and Node 22 support, plus the current Node 24 development runtime;
+6. Node 22.5.0 support at the declared floor, plus the current Node 24 development runtime;
 7. isolated package install and smoke with lifecycle scripts disabled;
 8. disabled-cache/compiler fallback when any optional persistence operation fails;
 9. no change to mutation plan verification, freshness authority or exact compiler reads;

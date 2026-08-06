@@ -8,8 +8,8 @@ The answer is not accepted yet. This change is an evidence SDD; it does not add 
 
 ## Repository evidence
 
-- `package.json` declares Node `>=20.19`, Yarn 4.15.0, no SQLite or WASM persistence dependency, and an in-memory runtime today.
-- `.github/workflows/ci.yml` tests Node `20.19.0` and Node `22`.
+- `package.json` declares Node `>=22.5.0`, Yarn 4.15.0, no SQLite or WASM persistence dependency, and an in-memory runtime today.
+- `.github/workflows/ci.yml` tests the declared floor Node `22.5.0` and the current Node `24` line.
 - `src/services/symbol-index.ts` already exposes an async `SymbolIndexStore` boundary with `load`, `upsert`, `remove`, `querySymbols`, `clear` and `flush`.
 - The current implementation is `InMemorySymbolIndex`; it stores only derived symbol metadata, project/config identity, source/config hashes, schema version and canonical indexing time. Source bodies are not part of an entry.
 - `src/services/project.ts` treats the index as disabled in the current runtime and keeps exact compiler reads and mutation validation independent of it.
@@ -29,8 +29,7 @@ Observed on Node `v24.16.0`:
 
 - native `node:sqlite`: available;
 - portable WASM SQLite: unavailable;
-- Node 20.19+ executable: not available locally;
-- Node 22+ executable: not available locally;
+- initial benchmark runtime targets: Node 20.19+ and Node 22+ were not configured;
 - isolated tarball/package smoke: pass, lifecycle scripts disabled, package/handshake `0.6.0`, two agent targets and idempotency pass;
 - workload: 128 files × 8 body-free symbols, 30 queries;
 - memory: expected non-durable behavior;
@@ -40,13 +39,13 @@ Observed on Node `v24.16.0`:
 
 The timings are local observations on synthetic records. They are not capacity, latency-SLA or backend-selection evidence by themselves.
 
-A direct local runtime probe on 2026-08-06 found only `/home/yail/.nvm/versions/node/v24.16.0/bin/node`; no Node 20/22 executable or `nvm` shell function was available. Explicit Docker probes then ran the package checkout on Node `20.19.6` and Node `22.23.2` without modifying the working tree. Both runtimes passed format, lint, typecheck, 29 test files/213 tests, build, MCP smoke, CLI smoke, package smoke and audit. Node 20 completed with a wrapper cleanup exit caused only by root-owned temporary files; the gate commands themselves and the storage benchmark completed, and the workspace was removed after explicit authorization. Node 20 has no `node:sqlite`; JSON passed the synthetic restart/migration/corruption fixture. Node 22 exposes experimental `node:sqlite`; native SQLite and JSON passed the same synthetic lifecycle fixture. Node 24 had already passed the equivalent gate and native SQLite probe. The supported-runtime gate is therefore satisfied for the existing project, but native SQLite alone is not a portable backend for the declared Node range.
+A direct local runtime probe on 2026-08-06 found only `/home/yail/.nvm/versions/node/v24.16.0/bin/node`; explicit Docker probes then ran the package checkout on Node `20.19.6` and Node `22.23.2` without modifying the working tree. Both runtimes passed the project gates; Node 20 was retained as historical compatibility evidence but is no longer supported after the runtime-floor decision. Node 22 exposes experimental `node:sqlite`; native SQLite and JSON passed the same synthetic lifecycle fixture. Node 24 had already passed the equivalent gate and native SQLite probe. The supported-runtime gate for the new package range is satisfied by the Node 22.5+ capability evidence and Node 24 quality gate, but native SQLite still requires conformance and failure-injection evidence before production selection.
 
 ## Forces and constraints
 
 1. Compiler/project snapshots remain authoritative for selectors, relationships, impact and every mutation decision.
 2. A persisted index may rank candidates only; it must never authorize a mutation or make stale source current.
-3. The supported package runtime includes Node 20.19 and Node 22, not only the current local Node 24.
+3. The supported package runtime starts at Node 22.5.0 and includes the current Node 24 line.
 4. Persistence must be isolated per canonical project/config identity and safe across process restart.
 5. Corruption, schema mismatch, unsupported runtime APIs and failed writes must degrade to bounded compiler fallback, not block exact reads or weaken mutation checks.
 6. The dependency and package surface must remain reviewable with Yarn lifecycle scripts disabled.
@@ -80,4 +79,4 @@ Out of scope for this SDD:
 
 ## Current conclusion
 
-The store boundary is ready for an evidence spike. The current benchmark is useful but insufficient for production selection because it ran only on Node 24, uses synthetic data, and does not yet prove multi-process/concurrent semantics or the supported-runtime package matrix. Keep memory-only until those gaps close.
+The store boundary is ready for an evidence spike. The runtime/package matrix is now aligned to Node 22.5.0 and Node 24, but the benchmark remains synthetic and does not yet prove multi-process/concurrent semantics, interrupted writes or production fallback behavior. Keep memory-only until those gaps close.
