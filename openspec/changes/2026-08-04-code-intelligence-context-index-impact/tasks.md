@@ -539,6 +539,8 @@ Run: `yarn format:check`
 
 ### Task 9.2: Add accepted ADRs from evidence
 
+Status: complete — ADR 0006 records the context/freshness contract and ADR 0007 records compiler-first relationship/impact authority, bounded traversal and conservative candidate-test resolution. ADR 0005 already records the evidence-backed decision to defer persistent index storage.
+
 Files:
 
 - Create: `docs/adr/0006-context-and-freshness-contract.md`
