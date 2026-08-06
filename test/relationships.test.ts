@@ -1,8 +1,19 @@
-import { describe, expect, it } from "vitest";
+import path from "node:path";
+import { Project } from "ts-morph";
+import { afterEach, describe, expect, it } from "vitest";
 import {
+  collectCompilerRelationships,
   createRelationshipEdge,
+  type RelationshipEdge,
   type RelationshipEdgeInput,
 } from "../src/services/relationships.js";
+import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
+
+const fixtures: ProjectFixture[] = [];
+
+afterEach(async () => {
+  await Promise.all(fixtures.splice(0).map((fixture) => fixture.cleanup()));
+});
 
 function freshness(state: "fresh" | "stale" = "fresh"): RelationshipEdgeInput["freshness"] {
   return {
@@ -96,5 +107,89 @@ describe("normalized relationship edges", () => {
         }),
       ),
     ).toThrow("freshness");
+  });
+});
+
+describe("compiler-backed relationships", () => {
+  it("collects exact references, resolved imports/exports, inheritance, and interfaces", async () => {
+    const fixture = await createProjectFixture({
+      "src/base.ts": [
+        "export interface Base { run(): void; }",
+        "export class Parent {}",
+        "export function formatValue(value: number): number { return value; }",
+      ].join("\n"),
+      "src/child.ts": [
+        'import { Base, Parent, formatValue } from "./base.js";',
+        "export class Child extends Parent implements Base {",
+        "  run(): void { formatValue(1); }",
+        "}",
+        'export { formatValue as reExported } from "./base.js";',
+      ].join("\n"),
+      "src/use.ts": [
+        'import { formatValue } from "./base.js";',
+        "export const result = formatValue(42);",
+      ].join("\n"),
+      "src/unresolved.ts": [
+        'import { missing } from "./missing.js";',
+        "export const result = missing;",
+      ].join("\n"),
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+
+    const edges = collectCompilerRelationships(project, fixture.root, freshness());
+    const edge = (
+      kind: string,
+      targetPath: string,
+      sourceFile?: string,
+    ): RelationshipEdge | undefined =>
+      edges.find(
+        (candidate) =>
+          candidate.kind === kind &&
+          candidate.target.symbol_path === targetPath &&
+          (!sourceFile || candidate.source.file === sourceFile),
+      );
+
+    expect(
+      edges.some(
+        (candidate) =>
+          candidate.kind === "reference" &&
+          candidate.source.file === "src/use.ts" &&
+          candidate.source.symbol_path === "result" &&
+          candidate.target.file === "src/base.ts" &&
+          candidate.target.symbol_path === "formatValue",
+      ),
+    ).toBe(true);
+
+    expect(edge("import", "formatValue", "src/use.ts")).toMatchObject({
+      source: { file: "src/use.ts", symbol_path: "<module>" },
+      target: { file: "src/base.ts", symbol_path: "formatValue" },
+      provenance: "compiler",
+      confidence: "exact",
+      resolution: "resolved",
+      compiler_authoritative: true,
+    });
+    expect(edge("export", "formatValue")).toMatchObject({
+      source: { file: "src/child.ts", symbol_path: "<module>" },
+      target: { file: "src/base.ts", symbol_path: "formatValue" },
+    });
+    expect(edge("extends", "Parent")).toMatchObject({
+      source: { file: "src/child.ts", symbol_path: "Child" },
+      target: { file: "src/base.ts", symbol_path: "Parent" },
+    });
+    expect(edge("implements", "Base")).toMatchObject({
+      source: { file: "src/child.ts", symbol_path: "Child" },
+      target: { file: "src/base.ts", symbol_path: "Base" },
+    });
+
+    expect(
+      edges.some(
+        (candidate) =>
+          candidate.source.file === "src/unresolved.ts" ||
+          candidate.target.file === "src/unresolved.ts" ||
+          candidate.target.symbol_path === "missing",
+      ),
+    ).toBe(false);
+    expect(edges.every((candidate) => candidate.provenance === "compiler")).toBe(true);
   });
 });

@@ -294,6 +294,8 @@ Run: `yarn test test/relationships.test.ts`
 
 ### Task 5.2: Add compiler-backed relationships
 
+Status: complete — compiler-resolved references/usages, module imports/exports, class/interface heritage and implemented types are collected into normalized edges; unresolved modules are omitted rather than promoted to exact evidence, and failed session synchronization invalidates retained relationship edges.
+
 Files:
 
 - Modify: `src/services/relationships.ts`

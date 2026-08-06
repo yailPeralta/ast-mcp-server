@@ -312,6 +312,23 @@ export function collectSymbols(sourceFile: SourceFile): LocatedSymbol[] {
   return symbols;
 }
 
+export function containingSymbol(sourceFile: SourceFile, node: Node): LocatedSymbol | undefined {
+  return collectSymbols(sourceFile)
+    .filter(
+      (symbol) =>
+        symbol.node.getStart() <= node.getStart() && symbol.node.getEnd() >= node.getEnd(),
+    )
+    .sort((left, right) => {
+      const leftSize = left.node.getEnd() - left.node.getStart();
+      const rightSize = right.node.getEnd() - right.node.getStart();
+      return (
+        leftSize - rightSize ||
+        left.line - right.line ||
+        left.symbolPath.localeCompare(right.symbolPath)
+      );
+    })[0];
+}
+
 function parseSelector(symbolPath: string): { path: string; line?: number } {
   const match = /^(.*)@(\d+)$/.exec(symbolPath);
   return match ? { path: match[1], line: Number(match[2]) } : { path: symbolPath };

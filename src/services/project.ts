@@ -4,6 +4,7 @@ import { Project, type Node, type SourceFile } from "ts-morph";
 import type { FileFingerprint } from "./file-fingerprints.js";
 import { InMemorySymbolIndex, type SymbolIndexRefreshFile } from "./symbol-index.js";
 import { findDeclaration, sourceFileIndexSymbols } from "./symbols.js";
+import { collectCompilerRelationships, type RelationshipEdge } from "./relationships.js";
 import { createConfigSnapshot, createWorkspaceSnapshot } from "./workspace.js";
 import {
   createInitialProjectStatus,
@@ -22,6 +23,8 @@ export interface ProjectContext {
   status: ProjectStatus;
   symbolIndex: InMemorySymbolIndex;
   symbolIndexReady: boolean;
+  relationshipEdges: readonly RelationshipEdge[];
+  relationshipEdgesReady: boolean;
 }
 
 interface ProjectSession {
@@ -87,6 +90,8 @@ function buildProjectContext(tsConfigFilePath: string): ProjectContext {
     status,
     symbolIndex: new InMemorySymbolIndex(),
     symbolIndexReady: false,
+    relationshipEdges: [],
+    relationshipEdgesReady: false,
   };
 }
 
@@ -209,6 +214,20 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
       session.context = { ...session.context, symbolIndexReady: false };
     }
 
+    let relationshipEdges: readonly RelationshipEdge[] = [];
+    let relationshipEdgesReady = false;
+    try {
+      relationshipEdges = collectCompilerRelationships(project, session.context.projectRoot, {
+        state: "fresh",
+        causes: [],
+        checked_at: new Date().toISOString(),
+      });
+      relationshipEdgesReady = true;
+    } catch {
+      relationshipEdges = [];
+    }
+    session.context = { ...session.context, relationshipEdges, relationshipEdgesReady };
+
     const status = transitionProjectStatus(session.context.status, {
       type: "sync_succeeded",
       sourceCount: verificationSnapshot.sourceFileCount,
@@ -222,6 +241,11 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
     session.configDigest = verificationSnapshot.configDigest;
     session.fingerprints = verificationSnapshot.fingerprints;
   } catch (error) {
+    session.context = {
+      ...session.context,
+      relationshipEdges: [],
+      relationshipEdgesReady: false,
+    };
     const status = transitionProjectStatus(session.context.status, {
       type: "sync_failed",
       cause: syncFailureCause,
