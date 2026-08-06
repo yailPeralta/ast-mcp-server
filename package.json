@@ -57,6 +57,7 @@
     "benchmark:formats": "yarn build && node scripts/benchmark-formats.mjs",
     "benchmark:shapes": "yarn build && node scripts/benchmark-result-shapes.mjs",
     "benchmark:agent-workflows": "yarn build && node scripts/benchmark-agent-workflows.mjs",
+    "benchmark:index-storage": "yarn build && node scripts/benchmark-index-storage.mjs",
     "lint": "eslint src test scripts vitest.config.ts eslint.config.js",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -435,6 +435,8 @@ Watcher failure cannot hide changes or weaken mutations. Session eviction closes
 
 ### Task 7.1: Evaluate storage backends
 
+Status: complete — the reproducible benchmark measured memory, atomic JSON and native `node:sqlite` adapters, reported portable/WASM SQLite as unavailable, exercised restart/migration/corruption probes and the isolated tarball smoke, and selected no persistent backend until Node 20/22 evidence exists.
+
 Files:
 
 - Create: `docs/adr/0005-index-storage-backend.md` after evidence
