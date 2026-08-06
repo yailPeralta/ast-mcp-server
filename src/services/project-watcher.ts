@@ -211,6 +211,8 @@ function createWatcher(options: ProjectWatcherOptions): ProjectWatcher {
     if (!pendingPaths.has(relativePath)) {
       if (pendingPaths.size >= maxPendingPaths) {
         pendingPathsTruncated = true;
+        markFailed(new Error(`Watcher event limit exceeded (${maxPendingPaths} paths).`));
+        return;
       } else {
         pendingPaths.set(relativePath, true);
       }

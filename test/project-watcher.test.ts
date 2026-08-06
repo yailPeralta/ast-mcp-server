@@ -88,9 +88,9 @@ describe("project watcher", () => {
     expect(watcher.snapshot().pending_paths).toEqual([]);
   });
 
-  it("bounds a burst before delivering it to the session", () => {
+  it("fails closed on event overflow instead of delivering incomplete paths", () => {
     vi.useFakeTimers();
-    const { watcher, fake, changes } = createWatcher({ maxPendingPaths: 65 });
+    const { watcher, fake, changes, errors } = createWatcher({ maxPendingPaths: 65 });
 
     watcher.start();
     for (let index = 0; index < 200; index += 1) {
@@ -98,12 +98,15 @@ describe("project watcher", () => {
     }
 
     expect(watcher.snapshot()).toMatchObject({
-      pending_paths_truncated: true,
-      pending_paths: expect.arrayContaining(["src/file-0.ts", "src/file-64.ts"]),
+      state: "failed",
+      watched_directories: 0,
+      pending_paths: [],
+      pending_paths_truncated: false,
     });
     vi.advanceTimersByTime(25);
-    expect(changes).toHaveLength(1);
-    expect(changes[0]).toHaveLength(65);
+    expect(changes).toEqual([]);
+    expect(errors).toHaveLength(1);
+    expect(fake.handles.every((handle) => handle.closed())).toBe(true);
   });
 
   it("reports backend errors and closes all handles without late callbacks", () => {

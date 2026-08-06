@@ -396,12 +396,15 @@ Run: `yarn test test/project-watcher.test.ts`
 
 ### Task 6.2: Add degraded synchronous fallback
 
+Status: complete — watcher backend errors and bounded event overflow fail closed; the existing synchronous session synchronization refreshes exact reads from verified filesystem fingerprints while the status machine preserves `watcher_failure` and projects `degraded`.
+
 Files:
 
 - Modify: `src/services/project.ts`
 - Modify: `src/services/project-status.ts`
 - Test: `test/project.test.ts`
 - Test: `test/project-watcher.test.ts`
+- Test: `test/project-fallback.test.ts`
 
 Simulate watcher error/overflow and prove exact reads use synchronous fingerprint synchronization while status reports degraded state.
 
