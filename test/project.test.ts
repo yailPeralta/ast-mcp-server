@@ -41,6 +41,18 @@ describe("project sessions", () => {
     expect(synchronized.canonicalSnapshotFingerprint).toMatch(/^snapshot_/);
   });
 
+  it("starts a watcher for cached sessions without attaching one to fresh projects", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+
+    expect(createFreshProject(fixture.root).status.watcher).toEqual({ state: "disabled" });
+    const status = await getProjectStatus(fixture.root);
+
+    expect(status.watcher).toEqual({ state: "ready" });
+  });
+
   it("refreshes externally modified source files before the next operation", async () => {
     const fixture = await createProjectFixture({
       "src/value.ts": "export const before = 1;\n",

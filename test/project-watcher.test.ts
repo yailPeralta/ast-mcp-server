@@ -1,0 +1,162 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  createProjectWatcher,
+  type ProjectWatcher,
+  type WatchFactory,
+} from "../src/services/project-watcher.js";
+
+interface FakeHandle {
+  readonly directory: string;
+  readonly emit: (eventType: "rename" | "change", filename: string | null) => void;
+  readonly fail: (error: unknown) => void;
+  readonly closed: () => boolean;
+}
+
+function createFakeWatchFactory(): {
+  factory: WatchFactory;
+  handles: FakeHandle[];
+} {
+  const handles: FakeHandle[] = [];
+  const factory: WatchFactory = (directory, onEvent, onError) => {
+    let isClosed = false;
+    const handle: FakeHandle = {
+      directory,
+      emit: (eventType, filename) => {
+        if (!isClosed) onEvent(eventType, filename);
+      },
+      fail: (error) => {
+        if (!isClosed) onError(error);
+      },
+      closed: () => isClosed,
+    };
+    handles.push(handle);
+    return {
+      close: () => {
+        isClosed = true;
+      },
+    };
+  };
+  return { factory, handles };
+}
+
+function createWatcher(overrides: Partial<Parameters<typeof createProjectWatcher>[0]> = {}): {
+  watcher: ProjectWatcher;
+  fake: ReturnType<typeof createFakeWatchFactory>;
+  changes: string[][];
+  errors: unknown[];
+} {
+  const fake = createFakeWatchFactory();
+  const changes: string[][] = [];
+  const errors: unknown[] = [];
+  const watcher = createProjectWatcher({
+    projectRoot: "/project",
+    directories: ["/project", "/project/src"],
+    debounceMs: 25,
+    watchFactory: fake.factory,
+    onChange: (files) => changes.push([...files]),
+    onError: (error) => errors.push(error),
+    ...overrides,
+  });
+  return { watcher, fake, changes, errors };
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("project watcher", () => {
+  it("starts one handle per directory and debounces duplicate changes", () => {
+    vi.useFakeTimers();
+    const { watcher, fake, changes } = createWatcher();
+
+    watcher.start();
+    expect(watcher.snapshot()).toMatchObject({
+      state: "ready",
+      watched_directories: 2,
+      pending_paths: [],
+      pending_paths_truncated: false,
+    });
+
+    fake.handles[1].emit("change", "value.ts");
+    fake.handles[1].emit("change", "value.ts");
+    fake.handles[0].emit("change", "tsconfig.json");
+    vi.advanceTimersByTime(24);
+    expect(changes).toEqual([]);
+
+    vi.advanceTimersByTime(1);
+    expect(changes).toEqual([["src/value.ts", "tsconfig.json"]]);
+    expect(watcher.snapshot().pending_paths).toEqual([]);
+  });
+
+  it("bounds a burst before delivering it to the session", () => {
+    vi.useFakeTimers();
+    const { watcher, fake, changes } = createWatcher({ maxPendingPaths: 65 });
+
+    watcher.start();
+    for (let index = 0; index < 200; index += 1) {
+      fake.handles[1].emit("change", `file-${index}.ts`);
+    }
+
+    expect(watcher.snapshot()).toMatchObject({
+      pending_paths_truncated: true,
+      pending_paths: expect.arrayContaining(["src/file-0.ts", "src/file-64.ts"]),
+    });
+    vi.advanceTimersByTime(25);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toHaveLength(65);
+  });
+
+  it("reports backend errors and closes all handles without late callbacks", () => {
+    vi.useFakeTimers();
+    const { watcher, fake, changes, errors } = createWatcher();
+
+    watcher.start();
+    fake.handles[0].fail(new Error("watch failed"));
+    expect(watcher.snapshot()).toMatchObject({ state: "failed", watched_directories: 0 });
+    expect(errors).toHaveLength(1);
+
+    watcher.close();
+    expect(watcher.snapshot()).toMatchObject({ state: "disabled", pending_paths: [] });
+    expect(fake.handles.every((handle) => handle.closed())).toBe(true);
+    fake.handles[1].emit("change", "late.ts");
+    vi.advanceTimersByTime(25);
+    expect(changes).toEqual([]);
+  });
+
+  it("closes partial startup handles when a directory cannot be watched", () => {
+    const fake = createFakeWatchFactory();
+    const errors: unknown[] = [];
+    const watcher = createProjectWatcher({
+      projectRoot: "/project",
+      directories: ["/project", "/project/src"],
+      watchFactory: (
+        directory: string,
+        onEvent: Parameters<WatchFactory>[1],
+        onError: Parameters<WatchFactory>[2],
+      ) => {
+        if (directory === "/project/src") throw new Error("startup failed");
+        return fake.factory(directory, onEvent, onError);
+      },
+      onChange: () => undefined,
+      onError: (error: unknown) => errors.push(error),
+    });
+
+    watcher.start();
+
+    expect(watcher.snapshot()).toMatchObject({ state: "failed", watched_directories: 0 });
+    expect(errors).toHaveLength(1);
+    expect(fake.handles[0].closed()).toBe(true);
+  });
+
+  it("is idempotent when started or closed more than once", () => {
+    const { watcher, fake } = createWatcher();
+
+    watcher.start();
+    watcher.start();
+    expect(fake.handles).toHaveLength(2);
+
+    watcher.close();
+    watcher.close();
+    expect(fake.handles.every((handle) => handle.closed())).toBe(true);
+  });
+});

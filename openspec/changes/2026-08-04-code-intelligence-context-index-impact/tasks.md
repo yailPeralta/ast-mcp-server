@@ -382,6 +382,8 @@ Exact relationships and bounded impact pass the corpus. Heuristic/dynamic edges 
 
 ### Task 6.1: Implement session-owned watcher abstraction
 
+Status: complete — the watcher owns per-session `fs.watch` handles, debounces and deduplicates bounded paths, reports backend/startup failures, and closes on session invalidation, eviction and global cleanup. It only emits invalidation callbacks; it never writes code or executes tests.
+
 Files:
 
 - Create: `src/services/project-watcher.ts`

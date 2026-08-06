@@ -5,6 +5,7 @@ import type { FileFingerprint } from "./file-fingerprints.js";
 import { InMemorySymbolIndex, type SymbolIndexRefreshFile } from "./symbol-index.js";
 import { findDeclaration, sourceFileIndexSymbols } from "./symbols.js";
 import { collectCompilerRelationships, type RelationshipEdge } from "./relationships.js";
+import { createProjectWatcher, type ProjectWatcher } from "./project-watcher.js";
 import { createConfigSnapshot, createWorkspaceSnapshot } from "./workspace.js";
 import {
   createInitialProjectStatus,
@@ -29,6 +30,7 @@ export interface ProjectContext {
 
 interface ProjectSession {
   context: ProjectContext;
+  watcher: ProjectWatcher;
   configDigest: string;
   fingerprints: ReadonlyMap<string, FileFingerprint>;
   queue: Promise<void>;
@@ -106,7 +108,10 @@ function evictSessions(): void {
     .filter(([, session]) => session.activeOperations === 0)
     .sort((left, right) => left[1].lastAccessedAt - right[1].lastAccessedAt)[0];
 
-  if (candidate) projectSessions.delete(candidate[0]);
+  if (candidate) {
+    candidate[1].watcher.close();
+    projectSessions.delete(candidate[0]);
+  }
 }
 
 function getOrCreateSession(projectRoot: string): ProjectSession {
@@ -115,8 +120,30 @@ function getOrCreateSession(projectRoot: string): ProjectSession {
   if (existing) return existing;
 
   evictSessions();
+  const context = buildProjectContext(tsConfigFilePath);
   const session: ProjectSession = {
-    context: buildProjectContext(tsConfigFilePath),
+    context,
+    watcher: createProjectWatcher({
+      projectRoot: context.projectRoot,
+      onChange: (files) => {
+        session.context = {
+          ...session.context,
+          status: transitionProjectStatus(session.context.status, {
+            type: "source_changed",
+            files,
+          }),
+        };
+      },
+      onError: (error) => {
+        session.context = {
+          ...session.context,
+          status: transitionProjectStatus(session.context.status, {
+            type: "watcher_failed",
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        };
+      },
+    }),
     configDigest: createConfigSnapshot(tsConfigFilePath).digest,
     fingerprints: new Map(),
     queue: Promise.resolve(),
@@ -126,6 +153,13 @@ function getOrCreateSession(projectRoot: string): ProjectSession {
     lastAccessedAt: Date.now(),
   };
   projectSessions.set(tsConfigFilePath, session);
+  session.watcher.start();
+  if (session.watcher.snapshot().state === "ready") {
+    session.context = {
+      ...session.context,
+      status: transitionProjectStatus(session.context.status, { type: "watcher_recovered" }),
+    };
+  }
   return session;
 }
 
@@ -314,10 +348,13 @@ export function getProject(projectRoot: string): Project {
 
 export function invalidateProject(projectRoot: string): void {
   const tsConfigFilePath = resolveTsConfigPath(projectRoot);
+  const session = projectSessions.get(tsConfigFilePath);
+  session?.watcher.close();
   projectSessions.delete(tsConfigFilePath);
 }
 
 export function clearProjectSessions(): void {
+  for (const session of projectSessions.values()) session.watcher.close();
   projectSessions.clear();
 }
 
