@@ -309,6 +309,8 @@ Run: `yarn test test/relationships.test.ts`
 
 ### Task 5.3: Implement bounded impact traversal
 
+Status: complete — exact compiler root resolution, deterministic incoming/outgoing/both traversal, relationship-kind filters, depth/node/edge budgets, consistent node-edge output and explicit truncation/incomplete metadata are covered by focused tests and full gates.
+
 Files:
 
 - Create: `src/services/impact.ts`
