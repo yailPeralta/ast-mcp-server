@@ -9,7 +9,12 @@ import {
 } from "ts-morph";
 import { buildFileOutline } from "./outline.js";
 import type { SourceRange } from "./read-contracts.js";
-import type { SymbolIndexSymbol } from "./symbol-index.js";
+import type {
+  InMemorySymbolIndex,
+  SymbolIndexSymbol,
+  SymbolIndexSymbolMatch,
+} from "./symbol-index.js";
+import type { ProjectIdentity } from "./project-status.js";
 
 export interface LocatedSymbol {
   node: Node;
@@ -170,6 +175,61 @@ export function searchProjectSymbols(
     );
   });
   return matches;
+}
+
+export async function searchProjectSymbolsWithIndex(
+  project: Project,
+  projectRoot: string,
+  projectIdentity: ProjectIdentity,
+  symbolIndex: InMemorySymbolIndex,
+  symbolIndexReady: boolean,
+  options: ProjectSymbolSearchOptions,
+): Promise<ProjectSymbolRecord[] | undefined> {
+  if (!symbolIndexReady) return undefined;
+
+  try {
+    const matches = await symbolIndex.queryAllSymbols({
+      project: projectIdentity,
+      query: options.query,
+      filters: {
+        ...(options.kinds ? { kinds: options.kinds } : {}),
+        ...(options.fileFilter ? { file_path: options.fileFilter } : {}),
+      },
+    });
+    return matches.map((match) => validateIndexedSymbol(project, projectRoot, match));
+  } catch {
+    return undefined;
+  }
+}
+
+function validateIndexedSymbol(
+  project: Project,
+  projectRoot: string,
+  match: SymbolIndexSymbolMatch,
+): ProjectSymbolRecord {
+  const sourceFile = project.getSourceFile(path.resolve(projectRoot, match.file_path));
+  if (!sourceFile) {
+    throw new Error(
+      `Indexed source file "${match.file_path}" was not found in the compiler project.`,
+    );
+  }
+  const expectedFile = path.relative(projectRoot, sourceFile.getFilePath()).replaceAll("\\", "/");
+  if (expectedFile !== match.file_path.replaceAll("\\", "/")) {
+    throw new Error(`Indexed source file "${match.file_path}" resolved ambiguously.`);
+  }
+  const node = findDeclaration(sourceFile, match.selector);
+  if (node.getStartLineNumber() !== match.line || node.getKindName() !== match.kind) {
+    throw new Error(`Indexed symbol "${match.selector}" does not match the compiler declaration.`);
+  }
+  return {
+    file: match.file_path,
+    symbol_path: match.symbol_path,
+    selector: match.selector,
+    name: match.name,
+    kind: match.kind,
+    line: match.line,
+    signature: match.signature,
+  };
 }
 
 function namedNode(node: Node): string | undefined {

@@ -6,7 +6,7 @@ import {
   paginate,
 } from "../services/pagination.js";
 import { withProject } from "../services/project.js";
-import { searchProjectSymbols } from "../services/symbols.js";
+import { searchProjectSymbols, searchProjectSymbolsWithIndex } from "../services/symbols.js";
 import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
 
 const SEARCH_DEFAULT_LIMIT = 20;
@@ -110,13 +110,23 @@ export function registerSearchSymbols(server: McpServer): void {
     },
     async ({ project_root, query, kinds, file_filter, detail, output_format, offset, limit }) => {
       try {
-        const structuredContent = await withProject(project_root, ({ project, projectRoot }) => {
+        const structuredContent = await withProject(project_root, async (context) => {
+          const { project, projectRoot } = context;
           const startedAt = performance.now();
-          const matches = searchProjectSymbols(project, projectRoot, {
-            query,
-            kinds,
-            fileFilter: file_filter,
-          });
+          const matches =
+            (await searchProjectSymbolsWithIndex(
+              project,
+              projectRoot,
+              context.status.project,
+              context.symbolIndex,
+              context.symbolIndexReady,
+              { query, kinds, fileFilter: file_filter },
+            )) ??
+            searchProjectSymbols(project, projectRoot, {
+              query,
+              kinds,
+              fileFilter: file_filter,
+            });
           const page = paginate(matches, offset, limit);
           const { items, ...metadata } = page;
           return {

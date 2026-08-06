@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { Project, type Node, type SourceFile } from "ts-morph";
 import type { FileFingerprint } from "./file-fingerprints.js";
-import { findDeclaration } from "./symbols.js";
+import { InMemorySymbolIndex, type SymbolIndexRefreshFile } from "./symbol-index.js";
+import { findDeclaration, sourceFileIndexSymbols } from "./symbols.js";
 import { createConfigSnapshot, createWorkspaceSnapshot } from "./workspace.js";
 import {
   createInitialProjectStatus,
@@ -19,6 +20,8 @@ export interface ProjectContext {
   projectRoot: string;
   tsConfigFilePath: string;
   status: ProjectStatus;
+  symbolIndex: InMemorySymbolIndex;
+  symbolIndexReady: boolean;
 }
 
 interface ProjectSession {
@@ -77,7 +80,14 @@ function buildProjectContext(tsConfigFilePath: string): ProjectContext {
     createProjectIdentity({ projectRoot, configPath: tsConfigFilePath }),
     { sourceCount: project.getSourceFiles().length },
   );
-  return { project, projectRoot, tsConfigFilePath, status };
+  return {
+    project,
+    projectRoot,
+    tsConfigFilePath,
+    status,
+    symbolIndex: new InMemorySymbolIndex(),
+    symbolIndexReady: false,
+  };
 }
 
 export function createFreshProject(projectRoot: string): ProjectContext {
@@ -165,6 +175,38 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
     if (verificationSnapshot.sourceDigest !== snapshot.sourceDigest) {
       syncFailureCause = "source_change";
       throw new Error("Project source changed during synchronization. Retry the operation.");
+    }
+
+    const indexFiles: SymbolIndexRefreshFile[] = session.context.project
+      .getSourceFiles()
+      .map((sourceFile) => {
+        const absoluteFilePath = fs.realpathSync(sourceFile.getFilePath());
+        const fingerprint = verificationSnapshot.fingerprints.get(absoluteFilePath);
+        if (!fingerprint) {
+          throw new Error(`No verified fingerprint found for ${absoluteFilePath}.`);
+        }
+        return {
+          file_path: path.relative(session.context.projectRoot, sourceFile.getFilePath()),
+          content_hash: fingerprint.content_hash,
+          symbols: sourceFileIndexSymbols(sourceFile, session.context.projectRoot),
+        };
+      });
+    const changedFiles = [
+      ...verificationSnapshot.fingerprintChanges.added,
+      ...verificationSnapshot.fingerprintChanges.changed,
+    ].map((filePath) => path.relative(session.context.projectRoot, filePath));
+
+    try {
+      await session.context.symbolIndex.refresh({
+        project: session.context.status.project,
+        config_digest: verificationSnapshot.configDigest,
+        files: indexFiles,
+        changed_files: changedFiles,
+        last_indexed_at: new Date().toISOString(),
+      });
+      session.context = { ...session.context, symbolIndexReady: true };
+    } catch {
+      session.context = { ...session.context, symbolIndexReady: false };
     }
 
     const status = transitionProjectStatus(session.context.status, {

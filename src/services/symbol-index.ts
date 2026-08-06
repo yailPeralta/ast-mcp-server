@@ -304,6 +304,12 @@ export class InMemorySymbolIndex implements SymbolIndexStore {
     return matches.slice(0, query.limit);
   }
 
+  async queryAllSymbols(
+    query: Omit<SymbolIndexQuery, "limit">,
+  ): Promise<readonly SymbolIndexSymbolMatch[]> {
+    return this.querySymbols({ ...query, limit: Number.MAX_SAFE_INTEGER });
+  }
+
   async clear(project: ProjectIdentity): Promise<void> {
     for (const entry of await this.load(project, SYMBOL_INDEX_SCHEMA_VERSION)) {
       this.entries.delete(entryKey(project, entry.file_path));

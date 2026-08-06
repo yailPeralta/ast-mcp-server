@@ -6,7 +6,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import packageMetadata from "../package.json" with { type: "json" };
 import { createServer } from "../src/server.js";
 import { clearOperationsForTests } from "../src/services/operations.js";
-import { clearProjectSessions } from "../src/services/project.js";
+import { clearProjectSessions, withProject } from "../src/services/project.js";
+import {
+  createSymbolIndexSymbol,
+  SYMBOL_INDEX_SCHEMA_VERSION,
+} from "../src/services/symbol-index.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
 function structured(result: Awaited<ReturnType<Client["callTool"]>>): Record<string, unknown> {
@@ -260,6 +264,49 @@ export function formatValue(value: number): string { return String(value); }
       }),
     );
     expect(diagnostics.error_count).toBe(0);
+  });
+
+  it("falls back to compiler search when an indexed candidate is stale", async () => {
+    structured(
+      await client.callTool({
+        name: "ast_search_symbols",
+        arguments: { project_root: fixture.root, query: "formatValue" },
+      }),
+    );
+
+    await withProject(fixture.root, async (context) => {
+      const entry = (
+        await context.symbolIndex.load(context.status.project, SYMBOL_INDEX_SCHEMA_VERSION)
+      ).find((candidate) => candidate.file_path === "src/value.ts");
+      expect(entry).toBeDefined();
+      await context.symbolIndex.upsert({
+        ...entry!,
+        symbols: [
+          createSymbolIndexSymbol({
+            name: "formatValue",
+            symbol_path: "formatValue",
+            selector: "formatValue@999",
+            kind: "FunctionDeclaration",
+            signature: "export function formatValue(value: number): string;",
+            line: 999,
+            range: { start_line: 999 },
+          }),
+        ],
+      });
+    });
+
+    const result = structured(
+      await client.callTool({
+        name: "ast_search_symbols",
+        arguments: { project_root: fixture.root, query: "formatValue" },
+      }),
+    );
+    expect(result.symbols).toEqual(
+      expect.arrayContaining([expect.objectContaining({ selector: "formatValue@2" })]),
+    );
+    expect(result.symbols).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ selector: "formatValue@999" })]),
+    );
   });
 
   it("exposes project status without leaking the fixture path", async () => {

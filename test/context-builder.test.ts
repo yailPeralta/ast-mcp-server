@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { buildExploreContext, type ExploreRequest } from "../src/services/context-builder.js";
-import { clearProjectSessions, withProject } from "../src/services/project.js";
+import { clearProjectSessions, createFreshProject, withProject } from "../src/services/project.js";
+import {
+  createSymbolIndexSymbol,
+  SYMBOL_INDEX_SCHEMA_VERSION,
+} from "../src/services/symbol-index.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
 const fixtures: ProjectFixture[] = [];
@@ -121,5 +125,60 @@ export function formatValue(value: number): string { return String(value); }
     await expect(
       withProject(fixture.root, (context) => buildExploreContext(context, request())),
     ).rejects.toThrow("requires query");
+  });
+
+  it("falls back to compiler search when the index is not ready", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts":
+        "export function formatValue(value: number): string { return String(value); }\n",
+    });
+    fixtures.push(fixture);
+
+    const result = await buildExploreContext(
+      createFreshProject(fixture.root),
+      request({ query: "formatValue", detail: "full" }),
+    );
+
+    expect(result.symbols).toEqual([
+      expect.objectContaining({ selector: "formatValue@1", symbol_path: "formatValue" }),
+    ]);
+    expect(result.freshness.state).toBe("pending");
+  });
+
+  it("falls back to compiler search when an indexed selector mismatches", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts":
+        "export function formatValue(value: number): string { return String(value); }\n",
+    });
+    fixtures.push(fixture);
+
+    const result = await withProject(fixture.root, async (context) => {
+      const entry = (
+        await context.symbolIndex.load(context.status.project, SYMBOL_INDEX_SCHEMA_VERSION)
+      ).find((candidate) => candidate.file_path === "src/value.ts");
+      expect(entry).toBeDefined();
+      await context.symbolIndex.upsert({
+        ...entry!,
+        symbols: [
+          createSymbolIndexSymbol({
+            name: "formatValue",
+            symbol_path: "formatValue",
+            selector: "formatValue@999",
+            kind: "FunctionDeclaration",
+            signature: "export function formatValue(value: number): string;",
+            line: 999,
+            range: { start_line: 999 },
+          }),
+        ],
+      });
+      return buildExploreContext(context, request({ query: "formatValue", detail: "full" }));
+    });
+
+    expect(result.symbols).toEqual([
+      expect.objectContaining({ selector: "formatValue@1", symbol_path: "formatValue" }),
+    ]);
+    expect(result.symbols).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ selector: "formatValue@999" })]),
+    );
   });
 });

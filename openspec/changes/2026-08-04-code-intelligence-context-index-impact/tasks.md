@@ -247,6 +247,8 @@ Run: `yarn test test/symbol-index.test.ts`
 
 ### Task 4.4: Route search and explore through the index
 
+Status: complete — session refresh integration, indexed search/explore query routing, exact compiler selector validation, and compiler fallback for unavailable or mismatched index entries pass the full regression and MCP/CLI/package smoke gates.
+
 Files:
 
 - Modify: `src/tools/search_symbols.ts`

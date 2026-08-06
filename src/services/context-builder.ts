@@ -6,6 +6,7 @@ import { paginate } from "./pagination.js";
 import { findDeclarationByName, getSourceFileOrThrow, type ProjectContext } from "./project.js";
 import { collectSymbolReferences, type SymbolReferences } from "./references.js";
 import {
+  searchProjectSymbolsWithIndex,
   searchProjectSymbols,
   sourceFileSymbols,
   symbolMatchRank,
@@ -156,15 +157,15 @@ function fileRecords(sourceFile: SourceFile, projectRoot: string): ProjectSymbol
   return sourceFileSymbols(sourceFile, projectRoot);
 }
 
-function projectRecords(
+async function projectRecords(
   context: ProjectContext,
   request: ExploreRequest,
-): {
+): Promise<{
   route: ExploreRoute;
   file: string | null;
   symbol: string | null;
   records: ProjectSymbolRecord[];
-} {
+}> {
   const { project, projectRoot } = context;
   if (request.filePath) {
     const sourceFile = getSourceFileOrThrow(project, request.filePath);
@@ -204,11 +205,24 @@ function projectRecords(
     route: "query",
     file: null,
     symbol: null,
-    records: searchProjectSymbols(project, projectRoot, {
-      query: request.query,
-      kinds: request.kinds,
-      fileFilter: request.fileFilter,
-    }),
+    records:
+      (await searchProjectSymbolsWithIndex(
+        project,
+        projectRoot,
+        context.status.project,
+        context.symbolIndex,
+        context.symbolIndexReady,
+        {
+          query: request.query,
+          kinds: request.kinds,
+          fileFilter: request.fileFilter,
+        },
+      )) ??
+      searchProjectSymbols(project, projectRoot, {
+        query: request.query,
+        kinds: request.kinds,
+        fileFilter: request.fileFilter,
+      }),
   };
 }
 
@@ -238,11 +252,11 @@ function effectiveExpansion(request: ExploreRequest): { source: boolean; referen
   };
 }
 
-export function buildExploreContext(
+export async function buildExploreContext(
   context: ProjectContext,
   request: ExploreRequest,
-): ExploreResult {
-  const routed = projectRecords(context, request);
+): Promise<ExploreResult> {
+  const routed = await projectRecords(context, request);
   const page = paginate(routed.records, request.offset, request.limit);
   const expansion = effectiveExpansion(request);
   const unresolved: ExploreUnresolvedItem[] = [];
