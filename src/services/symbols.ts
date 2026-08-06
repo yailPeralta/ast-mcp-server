@@ -8,6 +8,8 @@ import {
   type Statement,
 } from "ts-morph";
 import { buildFileOutline } from "./outline.js";
+import type { SourceRange } from "./read-contracts.js";
+import type { SymbolIndexSymbol } from "./symbol-index.js";
 
 export interface LocatedSymbol {
   node: Node;
@@ -59,6 +61,48 @@ export function sourceFileSymbols(
     line: symbol.line,
     signature: signatures.get(`${symbol.symbolPath}@${symbol.line}`) ?? symbol.node.getText(),
   }));
+}
+
+export function sourceFileIndexSymbols(
+  sourceFile: SourceFile,
+  projectRoot: string,
+): SymbolIndexSymbol[] {
+  const outlineSignatures = new Map(
+    buildFileOutline(sourceFile).symbols.map((symbol) => [
+      `${symbol.symbolPath}@${symbol.startLine}`,
+      symbol.signature,
+    ]),
+  );
+  const locatedSymbols = new Map(
+    collectSymbols(sourceFile).map((symbol) => [`${symbol.symbolPath}@${symbol.line}`, symbol]),
+  );
+
+  return sourceFileSymbols(sourceFile, projectRoot).map((symbol) => {
+    const located = locatedSymbols.get(symbol.selector);
+    if (!located) {
+      throw new Error(`Unable to locate indexed symbol ${symbol.selector}.`);
+    }
+    const start = sourceFile.getLineAndColumnAtPos(located.node.getStart());
+    const end = sourceFile.getLineAndColumnAtPos(
+      Math.max(located.node.getStart(), located.node.getEnd() - 1),
+    );
+    const range: SourceRange = {
+      start_line: start.line,
+      start_column: start.column,
+      end_line: end.line,
+      end_column: end.column,
+    };
+
+    return {
+      name: symbol.name,
+      symbol_path: symbol.symbol_path,
+      selector: symbol.selector,
+      kind: symbol.kind,
+      signature: outlineSignatures.get(symbol.selector) ?? `${symbol.kind} ${symbol.name};`,
+      line: symbol.line,
+      range,
+    };
+  });
 }
 
 export function symbolMatchRank(query: string, symbol: SymbolMatchCandidate): number {

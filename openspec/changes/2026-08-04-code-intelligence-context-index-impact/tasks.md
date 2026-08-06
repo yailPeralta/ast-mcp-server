@@ -233,6 +233,8 @@ Run: `yarn test test/file-fingerprints.test.ts`
 
 ### Task 4.3: Implement in-memory symbol index
 
+Status: complete — compiler-backed symbol projection, body-free ranges/signatures, ranked bounded queries, affected-file rebuild reuse, and deleted-entry removal pass the full regression and smoke gates.
+
 Files:
 
 - Modify: `src/services/symbol-index.ts`

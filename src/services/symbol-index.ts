@@ -1,5 +1,6 @@
 import { createSourceLocation, type SourceRange } from "./read-contracts.js";
 import type { ProjectIdentity } from "./project-status.js";
+import { symbolMatchRank } from "./symbols.js";
 
 export const SYMBOL_INDEX_SCHEMA_VERSION = 1 as const;
 export type SymbolIndexSchemaVersion = typeof SYMBOL_INDEX_SCHEMA_VERSION;
@@ -48,6 +49,26 @@ export interface SymbolIndexQuery {
   readonly query: string;
   readonly filters?: SymbolIndexQueryFilters;
   readonly limit: number;
+}
+
+export interface SymbolIndexRefreshFile {
+  readonly file_path: string;
+  readonly content_hash: string;
+  readonly symbols: readonly CreateSymbolIndexSymbolInput[];
+}
+
+export interface SymbolIndexRefreshInput {
+  readonly project: ProjectIdentity;
+  readonly config_digest: string;
+  readonly files: readonly SymbolIndexRefreshFile[];
+  readonly changed_files?: readonly string[];
+  readonly last_indexed_at: string;
+}
+
+export interface SymbolIndexRefreshResult {
+  readonly rebuilt_files: readonly string[];
+  readonly reused_files: readonly string[];
+  readonly removed_files: readonly string[];
 }
 
 export interface SymbolIndexSymbolMatch extends SymbolIndexSymbol {
@@ -107,6 +128,28 @@ function assertProjectIdentity(value: unknown): asserts value is ProjectIdentity
 function assertPositiveInteger(value: unknown, name: string): asserts value is number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
     throw new Error(`${name} must be a positive integer.`);
+  }
+}
+
+function projectKey(project: ProjectIdentity): string {
+  return `${project.project_id}\u0000${project.config_id ?? ""}`;
+}
+
+function entryKey(project: ProjectIdentity, filePath: string): string {
+  return `${projectKey(project)}\u0000${filePath}`;
+}
+
+function sameProject(left: ProjectIdentity, right: ProjectIdentity): boolean {
+  return left.project_id === right.project_id && left.config_id === right.config_id;
+}
+
+function normalizedFilePath(filePath: string): string {
+  return createSourceLocation(filePath, { start_line: 1 }).file;
+}
+
+function assertQueryLimit(value: number): void {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error("Symbol index query limit must be a positive integer.");
   }
 }
 
@@ -173,4 +216,145 @@ export function createSymbolIndexFileEntry(
     symbols: input.symbols.map(createSymbolIndexSymbol),
     last_indexed_at: input.last_indexed_at,
   };
+}
+
+export class InMemorySymbolIndex implements SymbolIndexStore {
+  private readonly entries = new Map<string, SymbolIndexFileEntry>();
+
+  async load(
+    project: ProjectIdentity,
+    schemaVersion: SymbolIndexSchemaVersion,
+  ): Promise<readonly SymbolIndexFileEntry[]> {
+    return [...this.entries.values()]
+      .filter((entry) => sameProject(entry.project, project))
+      .filter((entry) => entry.index_schema_version === schemaVersion)
+      .sort((left, right) => left.file_path.localeCompare(right.file_path));
+  }
+
+  async upsert(entry: SymbolIndexFileEntry): Promise<void> {
+    if (entry.index_schema_version !== SYMBOL_INDEX_SCHEMA_VERSION) {
+      throw new Error("Unsupported symbol index schema version.");
+    }
+    const normalized = createSymbolIndexFileEntry({
+      project: entry.project,
+      file_path: entry.file_path,
+      content_hash: entry.content_hash,
+      config_digest: entry.config_digest,
+      symbols: entry.symbols,
+      last_indexed_at: entry.last_indexed_at,
+    });
+    this.entries.set(entryKey(normalized.project, normalized.file_path), normalized);
+  }
+
+  async remove(project: ProjectIdentity, filePath: string): Promise<void> {
+    this.entries.delete(entryKey(project, normalizedFilePath(filePath)));
+  }
+
+  async querySymbols(query: SymbolIndexQuery): Promise<readonly SymbolIndexSymbolMatch[]> {
+    assertQueryLimit(query.limit);
+    const normalizedQuery = query.query.toLowerCase();
+    const normalizedFileFilter = query.filters?.file_path?.toLowerCase();
+    const kindSet = query.filters?.kinds ? new Set(query.filters.kinds) : undefined;
+    const matches: SymbolIndexSymbolMatch[] = [];
+
+    for (const entry of await this.load(query.project, SYMBOL_INDEX_SCHEMA_VERSION)) {
+      if (normalizedFileFilter && !entry.file_path.toLowerCase().includes(normalizedFileFilter)) {
+        continue;
+      }
+      for (const symbol of entry.symbols) {
+        if (kindSet && !kindSet.has(symbol.kind)) continue;
+        if (
+          !symbol.name.toLowerCase().includes(normalizedQuery) &&
+          !symbol.symbol_path.toLowerCase().includes(normalizedQuery) &&
+          !symbol.selector.toLowerCase().includes(normalizedQuery)
+        ) {
+          continue;
+        }
+        matches.push({
+          ...symbol,
+          project: entry.project,
+          file_path: entry.file_path,
+          content_hash: entry.content_hash,
+          config_digest: entry.config_digest,
+          index_schema_version: entry.index_schema_version,
+        });
+      }
+    }
+
+    matches.sort((left, right) => {
+      const rank =
+        symbolMatchRank(query.query, {
+          symbolPath: left.symbol_path,
+          name: left.name,
+          line: left.line,
+        }) -
+        symbolMatchRank(query.query, {
+          symbolPath: right.symbol_path,
+          name: right.name,
+          line: right.line,
+        });
+      if (rank !== 0) return rank;
+      return (
+        left.file_path.localeCompare(right.file_path) ||
+        left.line - right.line ||
+        left.symbol_path.localeCompare(right.symbol_path) ||
+        left.kind.localeCompare(right.kind)
+      );
+    });
+    return matches.slice(0, query.limit);
+  }
+
+  async clear(project: ProjectIdentity): Promise<void> {
+    for (const entry of await this.load(project, SYMBOL_INDEX_SCHEMA_VERSION)) {
+      this.entries.delete(entryKey(project, entry.file_path));
+    }
+  }
+
+  async flush(): Promise<void> {}
+
+  async refresh(input: SymbolIndexRefreshInput): Promise<SymbolIndexRefreshResult> {
+    const changedFiles = new Set((input.changed_files ?? []).map(normalizedFilePath));
+    const candidates = input.files.map((file) =>
+      createSymbolIndexFileEntry({
+        project: input.project,
+        file_path: file.file_path,
+        content_hash: file.content_hash,
+        config_digest: input.config_digest,
+        symbols: file.symbols,
+        last_indexed_at: input.last_indexed_at,
+      }),
+    );
+    const existing = await this.load(input.project, SYMBOL_INDEX_SCHEMA_VERSION);
+    const existingByPath = new Map(existing.map((entry) => [entry.file_path, entry]));
+    const currentPaths = new Set(candidates.map((entry) => entry.file_path));
+    const rebuiltFiles: string[] = [];
+    const reusedFiles: string[] = [];
+
+    for (const candidate of candidates) {
+      const previous = existingByPath.get(candidate.file_path);
+      const shouldRebuild =
+        !previous ||
+        changedFiles.has(candidate.file_path) ||
+        previous.content_hash !== candidate.content_hash ||
+        previous.config_digest !== candidate.config_digest;
+      if (shouldRebuild) {
+        await this.upsert(candidate);
+        rebuiltFiles.push(candidate.file_path);
+      } else {
+        reusedFiles.push(candidate.file_path);
+      }
+    }
+
+    const removedFiles = existing
+      .filter((entry) => !currentPaths.has(entry.file_path))
+      .map((entry) => entry.file_path)
+      .sort();
+    for (const filePath of removedFiles) await this.remove(input.project, filePath);
+
+    return {
+      rebuilt_files: rebuiltFiles.sort(),
+      reused_files: reusedFiles.sort(),
+      removed_files: removedFiles,
+    };
+  }
 }
