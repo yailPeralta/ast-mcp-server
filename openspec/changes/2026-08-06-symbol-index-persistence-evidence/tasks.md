@@ -12,7 +12,7 @@ This change is phase-gated. It starts as an exploration/evidence SDD and must no
 
 ### Task 1.1: Run explicit supported-runtime probes
 
-Status: blocked — direct local probe found only Node `v24.16.0`; Node 20.19 and Node 22 executables are unavailable on this host. The existing CI matrix or explicitly provisioned binaries must close this gate.
+Status: complete — explicit Docker probes passed the project quality/package gates on Node `20.19.6` and Node `22.23.2`; the local Node `24.16.0` gate was already green. Native SQLite is unavailable on Node 20 and experimental on Node 22, so it cannot be selected as the sole backend for the current engine range.
 
 Files:
 

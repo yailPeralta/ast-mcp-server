@@ -40,7 +40,7 @@ Observed on Node `v24.16.0`:
 
 The timings are local observations on synthetic records. They are not capacity, latency-SLA or backend-selection evidence by themselves.
 
-A direct local runtime probe on 2026-08-06 found only `/home/yail/.nvm/versions/node/v24.16.0/bin/node`; no Node 20/22 executable or `nvm` shell function was available. The supported-runtime gate therefore remains open and cannot be marked PASS from this host.
+A direct local runtime probe on 2026-08-06 found only `/home/yail/.nvm/versions/node/v24.16.0/bin/node`; no Node 20/22 executable or `nvm` shell function was available. Explicit Docker probes then ran the package checkout on Node `20.19.6` and Node `22.23.2` without modifying the working tree. Both runtimes passed format, lint, typecheck, 29 test files/213 tests, build, MCP smoke, CLI smoke, package smoke and audit. Node 20 completed with a wrapper cleanup exit caused only by root-owned temporary files; the gate commands themselves and the storage benchmark completed, and the workspace was removed after explicit authorization. Node 20 has no `node:sqlite`; JSON passed the synthetic restart/migration/corruption fixture. Node 22 exposes experimental `node:sqlite`; native SQLite and JSON passed the same synthetic lifecycle fixture. Node 24 had already passed the equivalent gate and native SQLite probe. The supported-runtime gate is therefore satisfied for the existing project, but native SQLite alone is not a portable backend for the declared Node range.
 
 ## Forces and constraints
 
