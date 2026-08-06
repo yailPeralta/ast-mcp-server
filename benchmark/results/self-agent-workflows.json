@@ -1,18 +1,187 @@
 {
-  "schema_version": 1,
-  "generated_at": "2026-08-05T22:59:28.417Z",
+  "schema_version": 3,
+  "generated_at": "2026-08-06T03:39:01.675Z",
   "node_version": "v24.16.0",
   "project_root": "[deterministic-fixture]",
   "methodology": {
     "corpus": "benchmark/context-corpus.json",
     "note": "Characters, bytes and o200k_base values are local serialized-payload measurements, not provider billing or latency guarantees.",
     "model_round_trips": "Conceptual agent turns required by each workflow; tool_invocations are actual MCP calls.",
-    "fallback": "Any incomplete ast_explore evidence is reported; it is never treated as a successful complete context."
+    "fallback": "Any incomplete ast_explore evidence is reported; it is never treated as a successful complete context.",
+    "impact_corpus": "Compiler-backed relationships are checked against exact, stale, same-name, dynamic-dispatch and bounded-traversal controls; candidate tests are never executed."
   },
   "static_tool_metadata": {
-    "tool_count": 14,
-    "characters": 33083,
-    "bytes": 33083
+    "tool_count": 15,
+    "characters": 38240,
+    "bytes": 38240
+  },
+  "index_lifecycle": {
+    "schema_version": 1,
+    "query": "benchmarkTarget",
+    "timings_ms": {
+      "initial_build_ms": 239.843431,
+      "warm_query_ms": 0.4068209999999226,
+      "changed_file_rebuild_ms": 19.56079299999999,
+      "config_rebuild_ms": 147.163587,
+      "compiler_fallback_ms": 0.3719790000000103
+    },
+    "indexed_files": 1,
+    "warm_match_count": 1,
+    "compiler_fallback": true,
+    "compiler_fallback_match_count": 1
+  },
+  "impact_corpus": {
+    "schema_version": 1,
+    "corpus": "benchmark/impact-corpus.json",
+    "scenario_count": 5,
+    "scenarios": [
+      {
+        "id": "direct_exact_reference",
+        "description": "A direct test reference is returned with exact compiler evidence.",
+        "root": {
+          "file_path": "src/target.ts",
+          "symbol_path": "target"
+        },
+        "expected": {
+          "candidate_files": ["test/target.test.ts"],
+          "candidate_error": false,
+          "exact_edge_count": 2,
+          "incomplete": false,
+          "forbidden_edge_files": []
+        },
+        "observed": {
+          "candidate_files": ["test/target.test.ts"],
+          "candidate_error": false,
+          "exact_edge_count": 2,
+          "heuristic_edge_count": 0,
+          "heuristic_authority_violation_count": 0,
+          "forbidden_edge_count": 0,
+          "incomplete": false,
+          "truncation_reasons": [],
+          "visited_nodes": 3,
+          "visited_edges": 2
+        },
+        "pass": true
+      },
+      {
+        "id": "false_same_name_match",
+        "description": "An unrelated declaration with the same name does not become impact evidence.",
+        "root": {
+          "file_path": "src/target.ts",
+          "symbol_path": "target"
+        },
+        "expected": {
+          "candidate_files": ["test/target.test.ts"],
+          "candidate_error": false,
+          "exact_edge_count": 2,
+          "incomplete": false,
+          "forbidden_edge_files": ["src/other.ts"]
+        },
+        "observed": {
+          "candidate_files": ["test/target.test.ts"],
+          "candidate_error": false,
+          "exact_edge_count": 2,
+          "heuristic_edge_count": 0,
+          "heuristic_authority_violation_count": 0,
+          "forbidden_edge_count": 0,
+          "incomplete": false,
+          "truncation_reasons": [],
+          "visited_nodes": 3,
+          "visited_edges": 2
+        },
+        "pass": true
+      },
+      {
+        "id": "unsupported_dynamic_dispatch",
+        "description": "A string-keyed handler table does not create a guessed relationship to the exact target.",
+        "root": {
+          "file_path": "src/target.ts",
+          "symbol_path": "target"
+        },
+        "expected": {
+          "candidate_files": ["test/target.test.ts"],
+          "candidate_error": false,
+          "exact_edge_count": 2,
+          "incomplete": false,
+          "forbidden_edge_files": ["src/dynamic.ts"]
+        },
+        "observed": {
+          "candidate_files": ["test/target.test.ts"],
+          "candidate_error": false,
+          "exact_edge_count": 2,
+          "heuristic_edge_count": 0,
+          "heuristic_authority_violation_count": 0,
+          "forbidden_edge_count": 0,
+          "incomplete": false,
+          "truncation_reasons": [],
+          "visited_nodes": 3,
+          "visited_edges": 2
+        },
+        "pass": true
+      },
+      {
+        "id": "stale_relationships",
+        "description": "Stale relationship metadata cannot produce an exact candidate list.",
+        "root": {
+          "file_path": "src/target.ts",
+          "symbol_path": "target"
+        },
+        "expected": {
+          "candidate_files": [],
+          "candidate_error": true,
+          "exact_edge_count": 0,
+          "incomplete": false,
+          "forbidden_edge_files": []
+        },
+        "observed": {
+          "candidate_files": [],
+          "candidate_error": true,
+          "exact_edge_count": 0,
+          "heuristic_edge_count": 0,
+          "heuristic_authority_violation_count": 0,
+          "forbidden_edge_count": 0,
+          "incomplete": false,
+          "truncation_reasons": [],
+          "visited_nodes": 3,
+          "visited_edges": 2
+        },
+        "pass": true
+      },
+      {
+        "id": "truncated_transitive_impact",
+        "description": "A depth-limited traversal cannot present the transitive test as complete evidence.",
+        "root": {
+          "file_path": "src/leaf.ts",
+          "symbol_path": "leaf"
+        },
+        "expected": {
+          "candidate_files": [],
+          "candidate_error": true,
+          "exact_edge_count": 2,
+          "incomplete": true,
+          "forbidden_edge_files": []
+        },
+        "observed": {
+          "candidate_files": [],
+          "candidate_error": true,
+          "exact_edge_count": 2,
+          "heuristic_edge_count": 0,
+          "heuristic_authority_violation_count": 0,
+          "forbidden_edge_count": 0,
+          "incomplete": true,
+          "truncation_reasons": ["depth_limit"],
+          "visited_nodes": 3,
+          "visited_edges": 2
+        },
+        "pass": true
+      }
+    ],
+    "gates": {
+      "all_scenarios_pass": true,
+      "no_heuristic_presented_as_exact": true,
+      "negative_controls_pass": true,
+      "candidate_fail_closed": true
+    }
   },
   "scenarios": [
     {
@@ -22,7 +191,7 @@
         "full_file": {
           "model_round_trips": 1,
           "tool_invocations": 1,
-          "duration_ms": 156.45892799999996,
+          "duration_ms": 107.89257999999995,
           "payload": {
             "characters": 302,
             "bytes": 302,
@@ -36,10 +205,10 @@
         "primitives": {
           "model_round_trips": 2,
           "tool_invocations": 2,
-          "duration_ms": 15.866207999999915,
+          "duration_ms": 8.444884000000002,
           "payload": {
-            "characters": 408,
-            "bytes": 408,
+            "characters": 409,
+            "bytes": 409,
             "tokens_o200k_base": 108
           },
           "evidence_pass": true,
@@ -50,7 +219,7 @@
         "ast_explore": {
           "model_round_trips": 1,
           "tool_invocations": 1,
-          "duration_ms": 4.231169999999906,
+          "duration_ms": 5.770483000000013,
           "payload": {
             "characters": 861,
             "bytes": 861,
@@ -70,7 +239,7 @@
         "full_file": {
           "model_round_trips": 1,
           "tool_invocations": 2,
-          "duration_ms": 5.373262000000068,
+          "duration_ms": 13.975071999999955,
           "payload": {
             "characters": 635,
             "bytes": 635,
@@ -84,10 +253,10 @@
         "primitives": {
           "model_round_trips": 2,
           "tool_invocations": 2,
-          "duration_ms": 61.840218999999934,
+          "duration_ms": 6.704921000000013,
           "payload": {
-            "characters": 977,
-            "bytes": 977,
+            "characters": 976,
+            "bytes": 976,
             "tokens_o200k_base": 256
           },
           "evidence_pass": true,
@@ -98,7 +267,7 @@
         "ast_explore": {
           "model_round_trips": 1,
           "tool_invocations": 1,
-          "duration_ms": 3.734997000000021,
+          "duration_ms": 3.490239999999858,
           "payload": {
             "characters": 1643,
             "bytes": 1643,
@@ -114,6 +283,10 @@
   ],
   "gates": {
     "evidence_preserved": true,
-    "call_bounds_respected": true
+    "call_bounds_respected": true,
+    "impact_corpus_pass": true,
+    "impact_no_heuristic_authority": true,
+    "impact_negative_controls_pass": true,
+    "impact_candidate_fail_closed": true
   }
 }

@@ -93,6 +93,18 @@ The checked pre-5.4 run on 2026-08-05 with Node.js v24.16.0 exposed 14 tools and
 
 `ast_explore` is intentionally richer than the primitive payload in these tiny fixtures because it carries routing, freshness, completeness, truncation, budget, source and reference metadata in one response. The benchmark measures the tradeoff instead of treating payload reduction as the sole success criterion. The generated report is `benchmark/results/self-agent-workflows.json`.
 
+### Relationship and impact corpus
+
+`benchmark/impact-corpus.json` adds five deterministic controls to the same benchmark command:
+
+- direct compiler reference to a test file;
+- unrelated same-name declaration, which must not become an edge;
+- string-keyed dynamic dispatch, which must not create a guessed relationship;
+- stale relationship freshness, which must fail candidate resolution closed;
+- depth-truncated transitive impact, which must remain incomplete and fail candidate resolution closed.
+
+The runner builds a separate fixture, collects compiler relationships, traverses the declared root with the declared budgets, and invokes the pure candidate resolver without executing tests. It fails if heuristic evidence is marked compiler-authoritative, a forbidden file enters the impact, stale/truncated evidence produces candidates, or any expected scenario diverges. The current closure report covers all five scenarios with `impact_corpus_pass`, `impact_no_heuristic_authority`, `impact_negative_controls_pass`, and `impact_candidate_fail_closed` set to `true`.
+
 ## Incremental symbol-index lifecycle
 
 The `index_lifecycle` section of `scripts/benchmark-agent-workflows.mjs` measures the index independently from payload reduction:

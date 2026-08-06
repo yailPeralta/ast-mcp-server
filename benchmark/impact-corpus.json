@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "description": "Deterministic compiler-backed relationship and impact corpus with negative controls.",
+  "fixture": {
+    "include": ["src/**/*", "test/**/*"],
+    "files": {
+      "src/target.ts": "export function target(value: number): number { return value + 1; }\n",
+      "src/other.ts": "export function target(value: number): number { return value - 1; }\n",
+      "src/dynamic.ts": "type Handler = () => number;\nconst handlers: Record<string, Handler> = { target: () => 0 };\nexport function invokeDynamic(name: string): number { return handlers[name]?.() ?? 0; }\n",
+      "src/leaf.ts": "export function leaf(): number { return 1; }\n",
+      "src/adapter.ts": "import { leaf } from \"./leaf.js\";\nexport function adapter(): number { return leaf(); }\n",
+      "test/target.test.ts": "import { target } from \"../src/target.js\";\nexport const targetResult = target(1);\n",
+      "test/leaf.test.ts": "import { adapter } from \"../src/adapter.js\";\nexport const leafResult = adapter();\n"
+    }
+  },
+  "scenarios": [
+    {
+      "id": "direct_exact_reference",
+      "description": "A direct test reference is returned with exact compiler evidence.",
+      "root": { "file_path": "src/target.ts", "symbol_path": "target" },
+      "direction": "incoming",
+      "max_depth": 1,
+      "expected": {
+        "candidate_files": ["test/target.test.ts"],
+        "candidate_error": false,
+        "exact_edge_count": 2,
+        "incomplete": false,
+        "forbidden_edge_files": []
+      }
+    },
+    {
+      "id": "false_same_name_match",
+      "description": "An unrelated declaration with the same name does not become impact evidence.",
+      "root": { "file_path": "src/target.ts", "symbol_path": "target" },
+      "direction": "incoming",
+      "max_depth": 2,
+      "expected": {
+        "candidate_files": ["test/target.test.ts"],
+        "candidate_error": false,
+        "exact_edge_count": 2,
+        "incomplete": false,
+        "forbidden_edge_files": ["src/other.ts"]
+      }
+    },
+    {
+      "id": "unsupported_dynamic_dispatch",
+      "description": "A string-keyed handler table does not create a guessed relationship to the exact target.",
+      "root": { "file_path": "src/target.ts", "symbol_path": "target" },
+      "direction": "incoming",
+      "max_depth": 2,
+      "expected": {
+        "candidate_files": ["test/target.test.ts"],
+        "candidate_error": false,
+        "exact_edge_count": 2,
+        "incomplete": false,
+        "forbidden_edge_files": ["src/dynamic.ts"]
+      }
+    },
+    {
+      "id": "stale_relationships",
+      "description": "Stale relationship metadata cannot produce an exact candidate list.",
+      "root": { "file_path": "src/target.ts", "symbol_path": "target" },
+      "direction": "incoming",
+      "max_depth": 1,
+      "freshness": {
+        "state": "stale",
+        "causes": ["source_change"],
+        "checked_at": "2026-08-06T00:00:00.000Z"
+      },
+      "expected": {
+        "candidate_files": [],
+        "candidate_error": true,
+        "exact_edge_count": 0,
+        "incomplete": false,
+        "forbidden_edge_files": []
+      }
+    },
+    {
+      "id": "truncated_transitive_impact",
+      "description": "A depth-limited traversal cannot present the transitive test as complete evidence.",
+      "root": { "file_path": "src/leaf.ts", "symbol_path": "leaf" },
+      "direction": "incoming",
+      "max_depth": 1,
+      "expected": {
+        "candidate_files": [],
+        "candidate_error": true,
+        "exact_edge_count": 2,
+        "incomplete": true,
+        "forbidden_edge_files": []
+      }
+    }
+  ]
+}

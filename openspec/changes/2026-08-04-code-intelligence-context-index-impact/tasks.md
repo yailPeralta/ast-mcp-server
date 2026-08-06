@@ -359,17 +359,22 @@ Run: `yarn test test/test-candidates.test.ts`
 
 ### Task 5.6: Add relationship/impact corpus
 
+Status: complete — five-scenario deterministic corpus covers exact references, same-name false matches, unsupported string-keyed dynamic dispatch, stale freshness and depth truncation; the workflow report fails closed on heuristic authority and stale/incomplete candidate evidence.
+
 Files:
 
 - Create: `benchmark/impact-corpus.json`
 - Modify: `scripts/benchmark-agent-workflows.mjs`
 - Modify: `benchmark/README.md`
+- Modify: `benchmark/results/self-agent-workflows.json`
 
 Add negative controls for unsupported dynamic dispatch, false same-name matches, stale indexes and truncated traversals. Fail if heuristic evidence is presented as exact.
 
 Run: `yarn benchmark:agent-workflows`
 
 ### Phase 5 gate
+
+Status: complete — exact relationships, bounded impact, candidate-test resolution and the relationship/impact corpus pass with compiler authority preserved and negative controls green.
 
 Exact relationships and bounded impact pass the corpus. Heuristic/dynamic edges are either absent or correctly labelled incomplete/low-confidence. Existing reference, diagnostic and mutation tests remain green.
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Buffer } from "node:buffer";
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,17 +13,26 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { countTokens } from "gpt-tokenizer";
 import { createServer } from "../dist/server.js";
 import { clearProjectSessions, createFreshProject, withProject } from "../dist/services/project.js";
+import { findTestCandidates } from "../dist/services/test-candidates.js";
+import { collectCompilerRelationships } from "../dist/services/relationships.js";
+import { isExactImpactEdge, resolveImpactRoot, traverseImpact } from "../dist/services/impact.js";
 import { searchProjectSymbols, searchProjectSymbolsWithIndex } from "../dist/services/symbols.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultCorpus = path.join(repositoryRoot, "benchmark/context-corpus.json");
+const defaultImpactCorpus = path.join(repositoryRoot, "benchmark/impact-corpus.json");
 const defaultOutput = path.join(repositoryRoot, "benchmark/results/self-agent-workflows.json");
 
 function parseArgs(argv) {
-  const options = { corpus: defaultCorpus, output: defaultOutput };
+  const options = {
+    corpus: defaultCorpus,
+    impactCorpus: defaultImpactCorpus,
+    output: defaultOutput,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === "--corpus") options.corpus = path.resolve(argv[++index]);
+    else if (value === "--impact-corpus") options.impactCorpus = path.resolve(argv[++index]);
     else if (value === "--output") options.output = path.resolve(argv[++index]);
     else throw new Error(`Unknown argument: ${value}`);
   }
@@ -76,6 +86,45 @@ async function createFixture() {
   await writeFile(
     path.join(root, "src/use.ts"),
     'import { benchmarkTarget } from "./shared.js";\nexport const result = benchmarkTarget(42);\n',
+  );
+  return root;
+}
+
+async function createImpactFixture(impactCorpus) {
+  const root = await mkdtemp(path.join(os.tmpdir(), "ast-impact-corpus-"));
+  const fixture = impactCorpus.fixture;
+  if (
+    !fixture ||
+    typeof fixture !== "object" ||
+    !fixture.files ||
+    typeof fixture.files !== "object"
+  ) {
+    throw new Error("Impact corpus fixture.files must be an object.");
+  }
+  await writeFile(
+    path.join(root, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          strict: true,
+          target: "ES2022",
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+        },
+        include: fixture.include ?? ["src/**/*", "test/**/*"],
+      },
+      null,
+      2,
+    ),
+  );
+  await Promise.all(
+    Object.entries(fixture.files).map(async ([relativePath, content]) => {
+      if (typeof content !== "string")
+        throw new Error(`Impact fixture content is invalid: ${relativePath}.`);
+      const filePath = path.join(root, relativePath);
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, content);
+    }),
   );
   return root;
 }
@@ -240,11 +289,113 @@ async function runIndexLifecycleBenchmark(projectRoot) {
   return result;
 }
 
+function equalStringArrays(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+async function runImpactCorpus(impactCorpus) {
+  if (!Array.isArray(impactCorpus.scenarios) || impactCorpus.scenarios.length === 0) {
+    throw new Error("Impact corpus must contain at least one scenario.");
+  }
+
+  const projectRoot = await createImpactFixture(impactCorpus);
+  const defaultFreshness = {
+    state: "fresh",
+    causes: [],
+    checked_at: "2026-08-06T00:00:00.000Z",
+  };
+  try {
+    const context = createFreshProject(projectRoot);
+    const scenarios = [];
+    for (const scenario of impactCorpus.scenarios) {
+      const freshness = scenario.freshness ?? defaultFreshness;
+      const edges = collectCompilerRelationships(context.project, projectRoot, freshness);
+      const root = resolveImpactRoot(context.project, projectRoot, scenario.root);
+      const impact = traverseImpact(root, edges, {
+        direction: scenario.direction,
+        max_depth: scenario.max_depth,
+        max_nodes: scenario.max_nodes,
+        max_edges: scenario.max_edges,
+        relationship_kinds: scenario.relationship_kinds,
+      });
+      const exactEdges = impact.edges.filter(isExactImpactEdge);
+      const heuristicAuthorityViolations = impact.edges.filter(
+        (edge) => edge.provenance === "heuristic" && edge.compiler_authoritative === true,
+      );
+      const forbiddenEdgeFiles = scenario.expected.forbidden_edge_files ?? [];
+      const forbiddenEdges = impact.edges.filter(
+        (edge) =>
+          forbiddenEdgeFiles.includes(edge.source.file) ||
+          forbiddenEdgeFiles.includes(edge.target.file),
+      );
+      let candidates = [];
+      let candidateError = false;
+      try {
+        candidates = [...findTestCandidates(impact)].map((candidate) => candidate.file).sort();
+      } catch {
+        candidateError = true;
+      }
+
+      const expected = scenario.expected;
+      const observed = {
+        candidate_files: candidates,
+        candidate_error: candidateError,
+        exact_edge_count: exactEdges.length,
+        heuristic_edge_count: impact.edges.filter((edge) => edge.provenance === "heuristic").length,
+        heuristic_authority_violation_count: heuristicAuthorityViolations.length,
+        forbidden_edge_count: forbiddenEdges.length,
+        incomplete: impact.incomplete,
+        truncation_reasons: impact.truncation_reasons,
+        visited_nodes: impact.visited_nodes,
+        visited_edges: impact.visited_edges,
+      };
+      const pass =
+        equalStringArrays(observed.candidate_files, [...(expected.candidate_files ?? [])].sort()) &&
+        observed.candidate_error === expected.candidate_error &&
+        observed.exact_edge_count === expected.exact_edge_count &&
+        observed.incomplete === expected.incomplete &&
+        observed.forbidden_edge_count === 0 &&
+        observed.heuristic_authority_violation_count === 0;
+      scenarios.push({
+        id: scenario.id,
+        description: scenario.description,
+        root: scenario.root,
+        expected,
+        observed,
+        pass,
+      });
+    }
+
+    const gates = {
+      all_scenarios_pass: scenarios.every((scenario) => scenario.pass),
+      no_heuristic_presented_as_exact: scenarios.every(
+        (scenario) => scenario.observed.heuristic_authority_violation_count === 0,
+      ),
+      negative_controls_pass: scenarios.every(
+        (scenario) => scenario.observed.forbidden_edge_count === 0,
+      ),
+      candidate_fail_closed: scenarios.every(
+        (scenario) => !scenario.expected.candidate_error || scenario.observed.candidate_error,
+      ),
+    };
+    return {
+      schema_version: 1,
+      corpus: "benchmark/impact-corpus.json",
+      scenario_count: scenarios.length,
+      scenarios,
+      gates,
+    };
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+}
+
 const options = parseArgs(process.argv.slice(2));
 const corpus = JSON.parse(await readFile(options.corpus, "utf8"));
 if (!Array.isArray(corpus.scenarios) || corpus.scenarios.length === 0) {
   throw new Error("Context corpus must contain at least one scenario.");
 }
+const impactCorpus = JSON.parse(await readFile(options.impactCorpus, "utf8"));
 const projectRoot = await createFixture();
 const server = createServer();
 const client = new Client({ name: "ast-agent-workflow-benchmark", version: "1.0.0" });
@@ -253,6 +404,7 @@ const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 try {
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   const indexLifecycle = await runIndexLifecycleBenchmark(projectRoot);
+  const impactReport = await runImpactCorpus(impactCorpus);
   const tools = await client.listTools();
   const scenarios = [];
   for (const scenario of corpus.scenarios) {
@@ -263,7 +415,7 @@ try {
     });
   }
   const report = {
-    schema_version: 2,
+    schema_version: 3,
     generated_at: new Date().toISOString(),
     node_version: process.version,
     project_root: "[deterministic-fixture]",
@@ -274,6 +426,8 @@ try {
         "Conceptual agent turns required by each workflow; tool_invocations are actual MCP calls.",
       fallback:
         "Any incomplete ast_explore evidence is reported; it is never treated as a successful complete context.",
+      impact_corpus:
+        "Compiler-backed relationships are checked against exact, stale, same-name, dynamic-dispatch and bounded-traversal controls; candidate tests are never executed.",
     },
     static_tool_metadata: {
       tool_count: tools.tools.length,
@@ -281,6 +435,7 @@ try {
       bytes: Buffer.byteLength(JSON.stringify(tools.tools), "utf8"),
     },
     index_lifecycle: indexLifecycle,
+    impact_corpus: impactReport,
     scenarios,
     gates: {
       evidence_preserved: scenarios.every((scenario) =>
@@ -289,10 +444,21 @@ try {
       call_bounds_respected: scenarios.every((scenario) =>
         Object.values(scenario.workflows).every((workflow) => workflow.call_bound_pass),
       ),
+      impact_corpus_pass: impactReport.gates.all_scenarios_pass,
+      impact_no_heuristic_authority: impactReport.gates.no_heuristic_presented_as_exact,
+      impact_negative_controls_pass: impactReport.gates.negative_controls_pass,
+      impact_candidate_fail_closed: impactReport.gates.candidate_fail_closed,
     },
   };
   await mkdir(path.dirname(options.output), { recursive: true });
   await writeFile(options.output, `${JSON.stringify(report, null, 2)}\n`);
+  execFileSync("yarn", ["prettier", "--write", options.output], {
+    cwd: repositoryRoot,
+    stdio: "ignore",
+  });
+  if (Object.values(report.gates).some((gate) => gate !== true)) {
+    throw new Error(`Benchmark gates failed: ${JSON.stringify(report.gates)}`);
+  }
   process.stdout.write(
     `${JSON.stringify({ status: "ok", output: options.output, tool_count: tools.tools.length, gates: report.gates })}\n`,
   );
