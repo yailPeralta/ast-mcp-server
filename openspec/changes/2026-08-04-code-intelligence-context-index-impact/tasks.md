@@ -281,6 +281,8 @@ The warm path must demonstrate that unchanged files are reusable. Index corrupti
 
 ### Task 5.1: Define normalized relationship types
 
+Status: complete — normalized endpoints, edge kinds, provenance, confidence, resolution, freshness and derived compiler authority are validated; syntax/heuristic/stale evidence cannot serialize as compiler-authoritative.
+
 Files:
 
 - Create: `src/services/relationships.ts`
