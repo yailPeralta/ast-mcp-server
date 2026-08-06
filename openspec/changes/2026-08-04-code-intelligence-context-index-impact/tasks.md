@@ -551,6 +551,8 @@ Record decisions, alternatives, consequences and measured evidence. Do not turn 
 
 ### Task 9.3: Full quality gate
 
+Status: complete — final tree passed 29 test files / 213 tests, format, lint, typecheck, build, MCP/CLI/package smokes, audit and `git diff --check`; agent-workflows passed evidence/call/impact negative-control gates, batch and format benchmarks passed, and shapes reported `pass: true` with 15 tools.
+
 Run:
 
 ```bash
