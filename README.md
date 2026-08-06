@@ -21,15 +21,16 @@ Coding agents often fall back to two generic operations: read files as plain tex
 
 This MCP server gives the agent structural code tools in addition to generic file reads and writes. Under the hood, `ts-morph` uses the TypeScript compiler project model, so the server can reason about declarations and references as code rather than undifferentiated text.
 
-| Need                           | Structural operation      | Returned scope                                        |
-| ------------------------------ | ------------------------- | ----------------------------------------------------- |
-| Read a bounded file            | `ast_get_file`            | Exact selected source lines, hash, and snapshot state |
-| Explore bounded context        | `ast_explore`             | Ranked selectors plus optional source and references  |
-| Understand a file              | `ast_get_outline`         | Signatures without implementation bodies              |
-| Inspect one declaration        | `ast_get_symbol_source`   | Exact source for one function, method, class, or type |
-| Find usages across the project | `ast_find_references`     | Compiler-resolved reference locations                 |
-| Rename a symbol everywhere     | `ast_rename_symbol`       | A reviewed project-wide rename plan                   |
-| Change one implementation      | `ast_replace_symbol_body` | A body-only plan that preserves the declaration       |
+| Need                           | Structural operation      | Returned scope                                          |
+| ------------------------------ | ------------------------- | ------------------------------------------------------- |
+| Read a bounded file            | `ast_get_file`            | Exact selected source lines, hash, and snapshot state   |
+| Explore bounded context        | `ast_explore`             | Ranked selectors plus optional source and references    |
+| Understand a file              | `ast_get_outline`         | Signatures without implementation bodies                |
+| Inspect one declaration        | `ast_get_symbol_source`   | Exact source for one function, method, class, or type   |
+| Find usages across the project | `ast_find_references`     | Compiler-resolved reference locations                   |
+| Understand symbol impact       | `ast_get_impact`          | Bounded direct/transitive compiler-backed relationships |
+| Rename a symbol everywhere     | `ast_rename_symbol`       | A reviewed project-wide rename plan                     |
+| Change one implementation      | `ast_replace_symbol_body` | A body-only plan that preserves the declaration         |
 
 Reads can start with a bounded file slice, a compact outline, or exact source only for the declaration that needs inspection. Mutations are prepared in memory first, compared against baseline diagnostics, and returned as immutable, hash-bound plans. Nothing is written until the caller reviews and explicitly applies the plan.
 
@@ -40,6 +41,7 @@ Reads can start with a bounded file slice, a compact outline, or exact source on
 - Use `ast_explore` when the question spans discovery and evidence. Its default summary is bounded; use `detail: "context"` for selected source and `detail: "full"` for source plus compiler references.
 - Use `ast_get_outline` for a compact body-free view of a known file without source lines.
 - Use `ast_get_symbol_source` when one declaration or implementation is the required evidence.
+- Use `ast_get_impact` when the exact symbol is known and bounded direct/transitive compiler relationships are needed; it is read-only evidence, not a mutation plan.
 
 `snapshot_state: "fresh"` means that the returned file bytes match the synchronized compiler snapshot. It does not mean that the project has zero TypeScript diagnostics; use `ast_get_diagnostics` for compiler errors and warnings.
 
@@ -236,6 +238,7 @@ Project-scoped tools accept `project_root`, either the project directory or an e
 | `ast_get_symbol_source`     | Exact source for one declaration                                     | No            |
 | `ast_search_symbols`        | Paginated structural symbol discovery                                | No            |
 | `ast_find_references`       | Compiler-resolved references with bounded context                    | No            |
+| `ast_get_impact`            | Bounded incoming/outgoing compiler-backed impact evidence            | No            |
 | `ast_get_diagnostics`       | Project- or file-scoped TypeScript diagnostics                       | No            |
 | `ast_rename_symbol`         | Prepare a project-wide rename                                        | No            |
 | `ast_replace_symbol_body`   | Prepare a body-only replacement while preserving the signature       | No            |
@@ -251,9 +254,9 @@ Symbol search is relevance-ranked and defaults to at most 20 `summary` records c
 
 ### Optional TOON results
 
-`ast_search_symbols`, `ast_find_references`, and `ast_get_diagnostics` accept `output_format: "toon"` for collection-heavy results consumed directly by a model. JSON remains the default and preserves the canonical structured object.
+`ast_search_symbols`, `ast_find_references`, `ast_get_impact`, and `ast_get_diagnostics` accept `output_format: "toon"` for collection-heavy results consumed directly by a model. JSON remains the default and preserves the canonical structured object.
 
-MCP TOON is returned once as structured content shaped like `{ "format": "toon", "data": "..." }`; `data` is the lossless TOON document. The complete JSON result is not duplicated. These three tools validate their canonical Zod result and verify an encode/decode deep-equality round trip before presentation, but do not advertise a single MCP `outputSchema` because their successful structured content has two representations.
+MCP TOON is returned once as structured content shaped like `{ "format": "toon", "data": "..." }`; `data` is the lossless TOON document. The complete JSON result is not duplicated. These four tools validate their canonical Zod result and verify an encode/decode deep-equality round trip before presentation, but do not advertise a single MCP `outputSchema` because their successful structured content has two representations.
 
 Do not request TOON for source, outlines, file lists, previews, or mutation results. Checked negative controls show that the MCP envelope makes those shapes larger. TOON is an explicit shape-specific optimization, not a new dialect for every object in sight.
 

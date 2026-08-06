@@ -41,6 +41,7 @@ describe("MCP integration", () => {
 export function formatValue(value: number): string { return String(value); }
 `,
       "src/use.ts": `import { formatValue } from "./value.js";\nexport const result = formatValue(42);\n`,
+      "src/transitive.ts": `import { result } from "./use.js";\nexport const wrapped = result;\n`,
     });
     server = createServer();
     client = new Client({ name: "ast-mcp-test-client", version: "1.0.0" });
@@ -67,6 +68,7 @@ export function formatValue(value: number): string { return String(value); }
       "ast_get_symbol_source",
       "ast_search_symbols",
       "ast_find_references",
+      "ast_get_impact",
       "ast_get_diagnostics",
       "ast_get_file",
       "ast_rename_symbol",
@@ -266,6 +268,56 @@ export function formatValue(value: number): string { return String(value); }
     expect(diagnostics.error_count).toBe(0);
   });
 
+  it("exposes bounded direct and transitive compiler impact without mutation plans", async () => {
+    const impact = structured(
+      await client.callTool({
+        name: "ast_get_impact",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          direction: "incoming",
+          max_depth: 2,
+          max_nodes: 10,
+          max_edges: 10,
+        },
+      }),
+    );
+
+    expect(impact).toMatchObject({
+      root: {
+        file: "src/value.ts",
+        symbol_path: "formatValue",
+        selector: "formatValue@2",
+      },
+      direction: "incoming",
+      incomplete: false,
+      truncation: { truncated: false, reason: null },
+    });
+    expect(impact.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          endpoint: expect.objectContaining({ symbol_path: "result" }),
+          direct: true,
+          depth: 1,
+        }),
+        expect.objectContaining({
+          endpoint: expect.objectContaining({ symbol_path: "wrapped" }),
+          direct: false,
+          depth: 2,
+        }),
+      ]),
+    );
+    expect(impact.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "reference", provenance: "compiler" }),
+      ]),
+    );
+    expect(impact).not.toHaveProperty("operation_id");
+    expect(impact).not.toHaveProperty("plan_hash");
+    expect(impact).not.toHaveProperty("edits");
+  });
+
   it("falls back to compiler search when an indexed candidate is stale", async () => {
     structured(
       await client.callTool({
@@ -318,7 +370,7 @@ export function formatValue(value: number): string { return String(value); }
     );
 
     expect(status.state).toBe("fresh");
-    expect(status.source_count).toBe(2);
+    expect(status.source_count).toBe(3);
     expect(status.indexed_count).toBe(0);
     expect(status.index).toEqual({ state: "disabled" });
     expect(status.operation_queue).toEqual({
@@ -442,7 +494,12 @@ export function formatValue(value: number): string { return String(value); }
     );
 
     const tools = await client.listTools();
-    const eligible = new Set(["ast_search_symbols", "ast_find_references", "ast_get_diagnostics"]);
+    const eligible = new Set([
+      "ast_search_symbols",
+      "ast_find_references",
+      "ast_get_impact",
+      "ast_get_diagnostics",
+    ]);
     for (const tool of tools.tools) {
       const properties = (tool.inputSchema.properties ?? {}) as Record<string, unknown>;
       expect(Object.hasOwn(properties, "output_format")).toBe(eligible.has(tool.name));

@@ -47,7 +47,8 @@ El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reempl
 5. `ast_get_outline` para ver contratos sin cuerpos. No pedir `include_symbols` salvo que haga falta la metadata detallada.
 6. `ast_get_symbol_source` solo para las declaraciones cuya implementación haya que inspeccionar.
 7. `ast_find_references` antes de renames o cambios con impacto cross-file.
-8. `ast_get_diagnostics` para establecer y verificar el estado del proyecto.
+8. `ast_get_impact` para explorar impacto directo/transitivo con relaciones compiler-backed y límites explícitos.
+9. `ast_get_diagnostics` para establecer y verificar el estado del proyecto.
 
 `ast_search_symbols` devuelve por default hasta 20 records `summary` rankeados. Su campo `selector` es el valor que se pasa como `symbol_path` a la siguiente tool; pedir `detail: "selectors"` para routing puro o `detail: "full", limit: 100` para el perfil v0.4.0. `ast_find_references` devuelve `detail: "locations"` por default; expandir a `detail: "context"` únicamente cuando la línea fuente aporte evidencia necesaria.
 
@@ -61,9 +62,9 @@ Los clientes pueden prefijar los nombres publicados (`ast_*`) según su convenci
 
 ## Formato de resultado para el modelo
 
-`ast_search_symbols`, `ast_find_references` y `ast_get_diagnostics` aceptan `output_format: "toon"`. Usarlo cuando la respuesta vaya directo al modelo y se espere una colección uniforme con varios registros. Omitirlo, o usar `json`, para automatización que dependa del objeto canónico.
+`ast_search_symbols`, `ast_find_references`, `ast_get_impact` y `ast_get_diagnostics` aceptan `output_format: "toon"`. Usarlo cuando la respuesta vaya directo al modelo y se espere una colección uniforme con varios registros. Omitirlo, o usar `json`, para automatización que dependa del objeto canónico.
 
-En MCP, TOON llega como un único envelope estructurado `{ "format": "toon", "data": "..." }`; `data` contiene el documento TOON lossless. No hay una copia JSON completa en paralelo. Las tres tools validan primero el valor canónico con Zod, pero no publican un `outputSchema` MCP único porque tienen dos representaciones de éxito.
+En MCP, TOON llega como un único envelope estructurado `{ "format": "toon", "data": "..." }`; `data` contiene el documento TOON lossless. No hay una copia JSON completa en paralelo. Las cuatro tools validan primero el valor canónico con Zod, pero no publican un `outputSchema` MCP único porque tienen dos representaciones de éxito.
 
 No pedir TOON para `ast_list_files`, outlines, source, previews ni mutaciones: los benchmarks muestran que el envelope empeora esas formas pequeñas, multiline o diff-heavy. Para un pipeline read-only conocido, se puede compactar únicamente el resultado final con:
 

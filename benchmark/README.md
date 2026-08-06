@@ -80,7 +80,7 @@ Run:
 yarn benchmark:agent-workflows
 ```
 
-The checked run on 2026-08-05 with Node.js v24.16.0 exposed 14 tools and passed both corpus gates (`evidence_preserved` and `call_bounds_respected`):
+The checked pre-5.4 run on 2026-08-05 with Node.js v24.16.0 exposed 14 tools and passed both corpus gates (`evidence_preserved` and `call_bounds_respected`). `ast_get_impact` was added afterward; historical workflow measurements remain labeled as such:
 
 | Scenario / workflow          | Model turns | MCP calls | Characters | `o200k_base` |  Duration |
 | ---------------------------- | ----------: | --------: | ---------: | -----------: | --------: |
@@ -169,10 +169,10 @@ The checked model-facing format corpus used the complete MCP envelope for TOON:
 
 | Payload             | Records | JSON tokens | MCP TOON tokens | Reduction |
 | ------------------- | ------: | ----------: | --------------: | --------: |
-| Broad symbol search |     100 |       5,382 |           4,061 |    24.54% |
+| Broad symbol search |     100 |       5,492 |           4,191 |    23.69% |
 | References          |      71 |       3,094 |           2,159 |    30.22% |
 | Diagnostics         |      30 |       1,309 |           1,034 |    21.01% |
-| Eligible aggregate  |     201 |       9,785 |           7,254 |    25.87% |
+| Eligible aggregate  |     201 |       9,895 |           7,384 |    25.38% |
 
 All seven positive and negative payloads round-tripped exactly. File list, outline, source, and prepare envelopes were 5.13% to 13.56% worse in estimated tokens, which is why they remain JSON-only. The historical eleven-tool metadata snapshot is 3,372 serialized characters larger than the retained v0.3.0 baseline; this static protocol cost predates later additive tools and is reported separately from dynamic result savings.
 
@@ -185,4 +185,4 @@ The checked result-shaping corpus compares the v0.4.0-compatible `full/100/conte
 
 Every declared selector and reference coordinate remained present, and the aggregate reduction was 68.80%, above the checked 35% gate. `duration_ms` is omitted from both measured representations to make token counts deterministic; real JSON/TOON outputs are still decode-compared before measurement. These are local `o200k_base` estimates, not provider billing, cache, or latency evidence.
 
-The historical complete v0.5.0 `tools/list` metadata was 22,473 serialized characters versus the retained v0.4.0 value of 16,650 (`+5,823`). Removing only `ast_scaffold_class` from that historical list reduced it by 5,411 characters and 1,295 local `o200k_base` tokens. No v0.4.0 metadata token count was retained, so the report intentionally leaves the historical token delta unset. The current context-workflow report separately measured 14 tools and 33,083 serialized metadata characters.
+The historical complete v0.5.0 `tools/list` metadata was 22,473 serialized characters versus the retained v0.4.0 value of 16,650 (`+5,823`). Removing only `ast_scaffold_class` from that historical list reduced it by 5,411 characters and 1,295 local `o200k_base` tokens. No v0.4.0 token count was retained, so the report intentionally leaves the historical token delta unset. The post-5.4 result-shaping run measured 15 tools and 38,240 serialized metadata characters; its full JSON output was verified separately from these historical workflow tables.

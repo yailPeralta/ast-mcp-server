@@ -322,11 +322,22 @@ Run: `yarn test test/impact.test.ts`
 
 ### Task 5.4: Add `ast_get_impact`
 
+Status: complete — read-only MCP adapter over the synchronized compiler-backed relationship graph, exact root resolution, direct/transitive evidence, explicit freshness and bounded truncation metadata, JSON/TOON presentation, and mutation-field exclusion are covered by MCP integration, stdio, agent-setup and benchmark-manifest verification.
+
 Files:
 
 - Create: `src/tools/get_impact.ts`
 - Modify: `src/server.ts`
 - Test: `test/mcp.integration.test.ts`
+- Modify: `scripts/mcp-smoke.mjs`
+- Modify: `scripts/fixtures/fake-agent.mjs`
+- Modify: `test/agent-setup.test.ts`
+- Modify: `scripts/benchmark-result-shapes.mjs`
+- Modify: `benchmark/results/self-result-shapes.json`
+- Modify: `benchmark/results/self-formats.json`
+- Modify: `benchmark/README.md`
+- Modify: `README.md`
+- Modify: `skills/structural-code-editing/SKILL.md`
 
 Expose the read-only impact contract. Ensure it returns direct versus transitive evidence and never returns mutation coordinates as if they were a prepared plan.
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-05T23:14:04.336Z",
+  "generated_at": "2026-08-06T02:54:17.527Z",
   "node_version": "v24.16.0",
   "methodology": {
     "corpus": "deterministic exact-name, exact-path, prefix, broad-substring and multi-file reference workflows",
@@ -303,10 +303,10 @@
   "tool_metadata": {
     "baseline_version": "0.4.0",
     "baseline_serialized_characters": 16650,
-    "current_tool_count": 14,
-    "current_serialized_characters": 33083,
-    "current_tokens_o200k_base": 7509,
-    "character_delta": 16433,
+    "current_tool_count": 15,
+    "current_serialized_characters": 38240,
+    "current_tokens_o200k_base": 8661,
+    "character_delta": 21590,
     "scaffold_marginal_characters": 5411,
     "scaffold_marginal_tokens_o200k_base": 1295,
     "historical_token_delta": null,
