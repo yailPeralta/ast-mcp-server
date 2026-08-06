@@ -11,6 +11,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { countTokens } from "gpt-tokenizer";
 import { createServer } from "../dist/server.js";
+import { clearProjectSessions, createFreshProject, withProject } from "../dist/services/project.js";
+import { searchProjectSymbols, searchProjectSymbolsWithIndex } from "../dist/services/symbols.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultCorpus = path.join(repositoryRoot, "benchmark/context-corpus.json");
@@ -164,6 +166,80 @@ async function runWorkflows(client, projectRoot, scenario) {
   return { full_file: full, primitives: primitive, ast_explore: exploreResult };
 }
 
+async function runIndexLifecycleBenchmark(projectRoot) {
+  const sourcePath = path.join(projectRoot, "src/shared.ts");
+  const configPath = path.join(projectRoot, "tsconfig.json");
+  const originalSource = await readFile(sourcePath, "utf8");
+  const originalConfig = await readFile(configPath, "utf8");
+  const query = "benchmarkTarget";
+  const timings = {};
+
+  clearProjectSessions();
+  let indexedContext;
+  let startedAt = performance.now();
+  await withProject(projectRoot, (context) => {
+    indexedContext = context;
+  });
+  timings.initial_build_ms = performance.now() - startedAt;
+
+  startedAt = performance.now();
+  const warmMatches = await searchProjectSymbolsWithIndex(
+    indexedContext.project,
+    indexedContext.projectRoot,
+    indexedContext.status.project,
+    indexedContext.symbolIndex,
+    indexedContext.symbolIndexReady,
+    { query },
+  );
+  timings.warm_query_ms = performance.now() - startedAt;
+  if (!warmMatches || warmMatches.length === 0) {
+    throw new Error("Warm index benchmark did not return an indexed symbol.");
+  }
+
+  await writeFile(sourcePath, originalSource.replace("value + 1", "value + 2"));
+  startedAt = performance.now();
+  await withProject(projectRoot, () => undefined);
+  timings.changed_file_rebuild_ms = performance.now() - startedAt;
+  await writeFile(sourcePath, originalSource);
+  await withProject(projectRoot, () => undefined);
+
+  const changedConfig = JSON.parse(originalConfig);
+  changedConfig.compilerOptions = { ...changedConfig.compilerOptions, noUnusedLocals: true };
+  await writeFile(configPath, `${JSON.stringify(changedConfig, null, 2)}\n`);
+  startedAt = performance.now();
+  await withProject(projectRoot, () => undefined);
+  timings.config_rebuild_ms = performance.now() - startedAt;
+  await writeFile(configPath, originalConfig);
+  await withProject(projectRoot, () => undefined);
+
+  const fallbackContext = createFreshProject(projectRoot);
+  startedAt = performance.now();
+  const indexedFallback = await searchProjectSymbolsWithIndex(
+    fallbackContext.project,
+    fallbackContext.projectRoot,
+    fallbackContext.status.project,
+    fallbackContext.symbolIndex,
+    false,
+    { query },
+  );
+  const fallbackMatches =
+    indexedFallback ??
+    searchProjectSymbols(fallbackContext.project, fallbackContext.projectRoot, { query });
+  timings.compiler_fallback_ms = performance.now() - startedAt;
+
+  const result = {
+    schema_version: 1,
+    query,
+    timings_ms: timings,
+    indexed_files: new Set(warmMatches.map((match) => match.file_path)).size,
+    warm_match_count: warmMatches.length,
+    compiler_fallback: indexedFallback === undefined,
+    compiler_fallback_match_count: fallbackMatches.length,
+  };
+  clearProjectSessions();
+  return result;
+}
+
 const options = parseArgs(process.argv.slice(2));
 const corpus = JSON.parse(await readFile(options.corpus, "utf8"));
 if (!Array.isArray(corpus.scenarios) || corpus.scenarios.length === 0) {
@@ -176,6 +252,7 @@ const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
 try {
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const indexLifecycle = await runIndexLifecycleBenchmark(projectRoot);
   const tools = await client.listTools();
   const scenarios = [];
   for (const scenario of corpus.scenarios) {
@@ -186,7 +263,7 @@ try {
     });
   }
   const report = {
-    schema_version: 1,
+    schema_version: 2,
     generated_at: new Date().toISOString(),
     node_version: process.version,
     project_root: "[deterministic-fixture]",
@@ -203,6 +280,7 @@ try {
       characters: JSON.stringify(tools.tools).length,
       bytes: Buffer.byteLength(JSON.stringify(tools.tools), "utf8"),
     },
+    index_lifecycle: indexLifecycle,
     scenarios,
     gates: {
       evidence_preserved: scenarios.every((scenario) =>

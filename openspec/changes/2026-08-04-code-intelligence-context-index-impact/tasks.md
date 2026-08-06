@@ -262,6 +262,8 @@ Run: `yarn test test/mcp.integration.test.ts -t "indexed search"`
 
 ### Task 4.5: Add warm/cold index benchmark
 
+Status: complete — reproducible lifecycle report covers initial build, warm indexed query, changed-file rebuild, configuration rebuild, and compiler fallback; local measurements are documented without an absolute latency gate.
+
 Files:
 
 - Modify: `scripts/benchmark-agent-workflows.mjs`

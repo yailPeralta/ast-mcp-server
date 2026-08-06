@@ -93,6 +93,36 @@ The checked run on 2026-08-05 with Node.js v24.16.0 exposed 14 tools and passed 
 
 `ast_explore` is intentionally richer than the primitive payload in these tiny fixtures because it carries routing, freshness, completeness, truncation, budget, source and reference metadata in one response. The benchmark measures the tradeoff instead of treating payload reduction as the sole success criterion. The generated report is `benchmark/results/self-agent-workflows.json`.
 
+## Incremental symbol-index lifecycle
+
+The `index_lifecycle` section of `scripts/benchmark-agent-workflows.mjs` measures the index independently from payload reduction:
+
+- `initial_build_ms`: cold project synchronization and initial index build;
+- `warm_query_ms`: direct indexed candidate query plus compiler selector validation;
+- `changed_file_rebuild_ms`: synchronization after one source file changes;
+- `config_rebuild_ms`: synchronization after the TypeScript configuration changes;
+- `compiler_fallback_ms`: compiler search when the index is deliberately unavailable.
+
+Run it with a temporary output when comparing revisions:
+
+```bash
+yarn benchmark:agent-workflows --output /tmp/ast-agent-workflows.json
+```
+
+The lifecycle numbers are observations, not an absolute latency gate. Initial and configuration rebuilds include compiler work; warm query is intentionally measured separately. The report also records whether fallback happened and how many indexed/compiler matches were returned.
+
+The latest deterministic-fixture run on Node.js v24.16.0 recorded:
+
+| Lifecycle             |  Duration |
+| --------------------- | --------: |
+| Initial index build   | 168.12 ms |
+| Warm indexed query    |   0.47 ms |
+| Changed-file rebuild  |  14.92 ms |
+| Configuration rebuild |  80.60 ms |
+| Compiler fallback     |   0.34 ms |
+
+That run indexed one file, returned one warm match, returned one compiler-fallback match, and kept both existing workflow gates green. These values are local measurements on a tiny fixture, not production capacity claims.
+
 ## Model-facing JSON and TOON
 
 `scripts/benchmark-formats.mjs` compares compact JSON with TOON for actual MCP logical results. It uses this repository for broad symbol search and deterministic temporary TypeScript fixtures for repeated references and non-empty diagnostics. File lists, outlines, exact source, and a prepared rename are retained as negative controls.
