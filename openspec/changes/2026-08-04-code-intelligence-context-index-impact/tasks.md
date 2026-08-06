@@ -345,6 +345,8 @@ Run: `yarn test test/mcp.integration.test.ts -t "impact"`
 
 ### Task 5.5: Add candidate test resolver
 
+Status: complete — pure candidate resolver over complete fresh compiler-backed impact evidence, configurable test file globs/directories, deterministic direct/transitive reasons, confidence and bounded path evidence; it never executes tests.
+
 Files:
 
 - Create: `src/services/test-candidates.ts`

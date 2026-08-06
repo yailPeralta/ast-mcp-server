@@ -74,6 +74,36 @@ interface Neighbor {
   readonly endpoint: RelationshipEndpoint;
 }
 
+export function isExactImpactEdge(edge: RelationshipEdge): boolean {
+  return (
+    typeof edge === "object" &&
+    edge !== null &&
+    edge.provenance === "compiler" &&
+    edge.confidence === "exact" &&
+    edge.resolution === "resolved" &&
+    edge.compiler_authoritative === true &&
+    typeof edge.freshness === "object" &&
+    edge.freshness !== null &&
+    edge.freshness.state === "fresh" &&
+    Array.isArray(edge.freshness.causes) &&
+    edge.freshness.causes.length === 0
+  );
+}
+
+export function assertExactImpactEvidence(
+  impact: Pick<ImpactResult, "incomplete" | "edges">,
+): void {
+  if (typeof impact !== "object" || impact === null || !Array.isArray(impact.edges)) {
+    throw new Error("Impact evidence is invalid.");
+  }
+  if (impact.incomplete) {
+    throw new Error("Test candidates require complete impact evidence.");
+  }
+  if (!impact.edges.every(isExactImpactEdge)) {
+    throw new Error("Test candidates require fresh exact compiler impact evidence.");
+  }
+}
+
 interface QueuedNode {
   readonly key: string;
   readonly endpoint: RelationshipEndpoint;
