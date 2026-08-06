@@ -128,7 +128,7 @@ export function registerGetImpact(server: McpServer): void {
     {
       title: "Get bounded compiler-backed impact",
       description:
-        "Traverses exact compiler-backed relationships around a symbol with explicit direction, depth, node and edge budgets. Read-only evidence only; it never prepares or applies mutations.",
+        "Traverses exact compiler-backed relationships around a symbol with explicit direction, depth, node and edge budgets. Returns bounded session freshness metadata and fails closed when exact relationships are not fresh. Read-only evidence only; it never prepares or applies mutations.",
       inputSchema: AstGetImpactInputSchema,
       outputSchema: ImpactOutputSchema,
       annotations: {

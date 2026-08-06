@@ -7,6 +7,7 @@ import {
 } from "../services/file-snapshot.js";
 import { buildFileOutline } from "../services/outline.js";
 import { getSourceFileOrThrow, withProject } from "../services/project.js";
+import { FRESHNESS_CAUSES, SNAPSHOT_STATES } from "../services/read-contracts.js";
 import { errorResult, structuredResult } from "./result.js";
 
 const AstGetFileInputSchema = z.object({
@@ -54,6 +55,11 @@ const FileSnapshotBaseSchema = {
   file: z.string(),
   file_hash: z.string().regex(/^[0-9a-f]{64}$/),
   snapshot_state: z.enum(["fresh", "stale"]),
+  freshness: z.object({
+    state: z.enum(SNAPSHOT_STATES),
+    causes: z.array(z.enum(FRESHNESS_CAUSES)),
+    checked_at: z.string().nullable(),
+  }),
 };
 
 const AstGetFileOutputSchema = z.object({
@@ -70,7 +76,7 @@ export function registerGetFile(server: McpServer): void {
     {
       title: "Get bounded source file",
       description:
-        "Returns exact bounded source lines for one TypeScript/JavaScript file, or body-free symbols when symbols_only is true. Read-only; freshness is reported separately from compiler diagnostics.",
+        "Returns exact bounded source lines for one TypeScript/JavaScript file, or body-free symbols when symbols_only is true. Read-only; file snapshot freshness and project freshness are reported separately from compiler diagnostics.",
       inputSchema: AstGetFileInputSchema,
       outputSchema: AstGetFileOutputSchema,
       annotations: {
@@ -84,15 +90,21 @@ export function registerGetFile(server: McpServer): void {
       try {
         const structuredContent = await withProject(
           project_root,
-          async ({ project, projectRoot }) => {
+          async ({ project, projectRoot, status }) => {
             const snapshot = await readFileSnapshot(project, projectRoot, file_path, {
               offset,
               limit,
             });
+            const freshness = {
+              state: status.state,
+              causes: status.causes,
+              checked_at: status.lastSuccessfulSyncAt,
+            };
             if (!symbols_only) {
               return {
                 mode: "source" as const,
                 ...snapshot,
+                freshness,
               };
             }
 
@@ -102,6 +114,7 @@ export function registerGetFile(server: McpServer): void {
               file: snapshot.file,
               file_hash: snapshot.file_hash,
               snapshot_state: snapshot.snapshot_state,
+              freshness,
               symbols: buildFileOutline(sourceFile).symbols,
             };
           },

@@ -132,6 +132,11 @@ export function formatValue(value: number): string { return String(value); }
         },
       ],
       snapshot_state: "fresh",
+      freshness: {
+        state: "fresh",
+        causes: [],
+        checked_at: expect.any(String),
+      },
     });
     expect(file.file_hash).toMatch(/^[0-9a-f]{64}$/);
 
@@ -149,6 +154,11 @@ export function formatValue(value: number): string { return String(value); }
       mode: "symbols_only",
       file: "src/value.ts",
       snapshot_state: "fresh",
+      freshness: {
+        state: "fresh",
+        causes: [],
+        checked_at: expect.any(String),
+      },
     });
     expect(symbolsOnly.symbols).toEqual(
       expect.arrayContaining([expect.objectContaining({ symbolPath: "formatValue" })]),
@@ -293,6 +303,11 @@ export function formatValue(value: number): string { return String(value); }
       direction: "incoming",
       incomplete: false,
       truncation: { truncated: false, reason: null },
+      freshness: {
+        state: "fresh",
+        causes: [],
+        checked_at: expect.any(String),
+      },
     });
     expect(impact.nodes).toEqual(
       expect.arrayContaining([
@@ -403,6 +418,11 @@ export function formatValue(value: number): string { return String(value); }
       has_more: true,
       truncation: { truncated: true, reason: "record_limit" },
       completeness: { symbols_complete: false, evidence_complete: true },
+      freshness: {
+        state: "fresh",
+        causes: [],
+        checked_at: expect.any(String),
+      },
     });
     expect(explored.symbols).toEqual([
       expect.objectContaining({ selector: "formatValue@2", signature: expect.any(String) }),

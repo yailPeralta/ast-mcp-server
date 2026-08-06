@@ -167,7 +167,7 @@ export function registerExplore(server: McpServer): void {
     {
       title: "Explore project context",
       description:
-        "Composes bounded structural search, exact selectors, source evidence and compiler references without weakening the primitive AST tools.",
+        "Composes bounded structural search, exact selectors, source evidence and compiler references without weakening the primitive AST tools. Returns bounded session freshness metadata for fresh, pending, stale, rebuilding or degraded state.",
       inputSchema: ExploreInputSchema,
       outputSchema: ExploreOutputSchema,
       annotations: {

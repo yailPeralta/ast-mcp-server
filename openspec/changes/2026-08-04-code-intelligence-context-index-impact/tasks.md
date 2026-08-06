@@ -412,6 +412,8 @@ Run: `yarn test test/project.test.ts test/project-watcher.test.ts`
 
 ### Task 6.3: Integrate freshness into read responses
 
+Status: complete — `ast_get_file` now exposes bounded project freshness alongside its file-level snapshot state; `ast_explore` and `ast_get_impact` expose the same session metadata, while impact remains fail-closed when exact relationships are not fresh.
+
 Files:
 
 - Modify: `src/tools/get_file.ts`
@@ -424,6 +426,8 @@ Prove stale, pending, fresh and degraded responses are distinguishable and bound
 Run: `yarn test test/mcp.integration.test.ts -t "freshness"`
 
 ### Phase 6 gate
+
+Status: complete — watcher failure cannot hide changes or weaken mutations; session cleanup closes watchers; freshness is exposed on bounded read responses; full tests, MCP, CLI and package gates pass.
 
 Watcher failure cannot hide changes or weaken mutations. Session eviction closes watchers. Full test, MCP, CLI and package gates pass.
 
