@@ -205,6 +205,8 @@ The context corpus passes with required evidence preserved. Existing `yarn bench
 
 ### Task 4.1: Define index entry and store interfaces
 
+Status: complete — versioned project/file fingerprints, body-free symbol metadata, runtime boundary validation and async store contract pass focused tests, typecheck and lint.
+
 Files:
 
 - Create: `src/services/symbol-index.ts`
