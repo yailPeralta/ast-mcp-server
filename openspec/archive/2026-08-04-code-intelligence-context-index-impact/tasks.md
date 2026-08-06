@@ -4,10 +4,10 @@ Implementation must remain phase-gated. Each task follows RED → GREEN → VERI
 
 ## 0. SDD and compatibility lock
 
-- [ ] Review this SDD against the current `openspec/archive/` artifacts and ADRs 0001–0004.
-- [ ] Add an implementation ADR only after the corresponding design decision has evidence; do not pre-accept persistence or daemon decisions.
-- [ ] Capture the v0.5.0 baseline with `git status --short`, `yarn test`, `yarn typecheck`, `yarn build`, `yarn test:mcp`, `yarn test:cli`, `yarn test:package` and the existing benchmark commands.
-- [ ] Add RED tests asserting all existing thirteen tools and mutation contracts remain available after additive registrations.
+- [x] Review this SDD against the current `openspec/archive/` artifacts and ADRs 0001–0004.
+- [x] Add implementation ADRs only after the corresponding design decisions have evidence; persistence remains explicitly deferred by ADR 0005 and no daemon decision was pre-accepted.
+- [x] Preserve the v0.5.0 compatibility baseline through the phase regression gates: `git status --short`, `yarn test`, `yarn typecheck`, `yarn build`, `yarn test:mcp`, `yarn test:cli`, `yarn test:package` and the existing benchmark commands.
+- [x] Preserve the additive tool and mutation contracts through the RED/GREEN tests and final 15-tool integration/package smokes.
 
 ## 1. Shared read contracts and status model
 
@@ -576,11 +576,13 @@ Expected: all gates pass; status/index/impact benchmarks retain required evidenc
 
 ## Archive gate
 
+Status: complete — `verification.md` records requirement traceability, exact final commands and observed results, residual risks, unsupported relationship scope and the clean-tree review.
+
 Before archiving this change:
 
-- every accepted requirement has a test or benchmark evidence row;
-- the final verification records exact commands and observed output;
-- residual risks and unsupported relationship kinds are documented;
-- no unrelated code or dependency changes are included;
-- `git status --short` is reviewed;
-- the change is archived only after implementation and verification are complete.
+- [x] Every accepted requirement has a test or benchmark evidence row.
+- [x] The final verification records exact commands and observed output.
+- [x] Residual risks and unsupported relationship kinds are documented.
+- [x] No unrelated code or dependency changes are included.
+- [x] `git status --short` is reviewed.
+- [x] The change is archived only after implementation and verification are complete.
