@@ -40,6 +40,8 @@ Observed on Node `v24.16.0`:
 
 The timings are local observations on synthetic records. They are not capacity, latency-SLA or backend-selection evidence by themselves.
 
+A direct local runtime probe on 2026-08-06 found only `/home/yail/.nvm/versions/node/v24.16.0/bin/node`; no Node 20/22 executable or `nvm` shell function was available. The supported-runtime gate therefore remains open and cannot be marked PASS from this host.
+
 ## Forces and constraints
 
 1. Compiler/project snapshots remain authoritative for selectors, relationships, impact and every mutation decision.

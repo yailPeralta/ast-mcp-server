@@ -12,7 +12,7 @@ This change is phase-gated. It starts as an exploration/evidence SDD and must no
 
 ### Task 1.1: Run explicit supported-runtime probes
 
-Status: proposed.
+Status: blocked — direct local probe found only Node `v24.16.0`; Node 20.19 and Node 22 executables are unavailable on this host. The existing CI matrix or explicitly provisioned binaries must close this gate.
 
 Files:
 
