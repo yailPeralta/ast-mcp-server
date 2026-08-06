@@ -525,6 +525,8 @@ Existing Claude/Hermes behavior is unchanged. New targets are opt-in, conflict-s
 
 ### Task 9.1: Document trust and freshness model
 
+Status: complete — README, bundled skill and changelog document the public tools, compiler/index/syntax/heuristic trust boundary, fresh versus stale/degraded reads, bounded budgets/truncation, compiler-backed test-candidate rules and the prepare-review-apply mutation boundary.
+
 Files:
 
 - Modify: `README.md`

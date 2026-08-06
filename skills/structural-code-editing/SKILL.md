@@ -41,14 +41,15 @@ El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reempl
 ## Flujo compacto de lectura
 
 1. `ast_list_files` para descubrir archivos. Paginar; no pedir todo un monorepo si alcanza con un filtro.
-2. `ast_explore` para una pregunta de lectura que combine descubrimiento y evidencia. Usar `summary` por defecto, `context` para source seleccionado y `full` para source más referencias.
-3. `ast_get_file` si ya se conoce el archivo y hace falta source exacto. Usar `offset`/`limit`; no cargar el archivo completo por defecto.
-4. `ast_search_symbols` si todavía no se conoce el archivo o el selector exacto.
-5. `ast_get_outline` para ver contratos sin cuerpos. No pedir `include_symbols` salvo que haga falta la metadata detallada.
-6. `ast_get_symbol_source` solo para las declaraciones cuya implementación haya que inspeccionar.
-7. `ast_find_references` antes de renames o cambios con impacto cross-file.
-8. `ast_get_impact` para explorar impacto directo/transitivo con relaciones compiler-backed y límites explícitos.
-9. `ast_get_diagnostics` para establecer y verificar el estado del proyecto.
+2. `ast_get_project_status` para comprobar compiler, freshness, watcher, index y operation queue antes de confiar en una lectura sensible.
+3. `ast_explore` para una pregunta de lectura que combine descubrimiento y evidencia. Usar `summary` por defecto, `context` para source seleccionado y `full` para source más referencias.
+4. `ast_get_file` si ya se conoce el archivo y hace falta source exacto. Usar `offset`/`limit`; no cargar el archivo completo por defecto.
+5. `ast_search_symbols` si todavía no se conoce el archivo o el selector exacto.
+6. `ast_get_outline` para ver contratos sin cuerpos. No pedir `include_symbols` salvo que haga falta la metadata detallada.
+7. `ast_get_symbol_source` solo para las declaraciones cuya implementación haya que inspeccionar.
+8. `ast_find_references` antes de renames o cambios con impacto cross-file.
+9. `ast_get_impact` para explorar impacto directo/transitivo con relaciones compiler-backed y límites explícitos.
+10. `ast_get_diagnostics` para establecer y verificar el estado del proyecto.
 
 `ast_search_symbols` devuelve por default hasta 20 records `summary` rankeados. Su campo `selector` es el valor que se pasa como `symbol_path` a la siguiente tool; pedir `detail: "selectors"` para routing puro o `detail: "full", limit: 100` para el perfil v0.4.0. `ast_find_references` devuelve `detail: "locations"` por default; expandir a `detail: "context"` únicamente cuando la línea fuente aporte evidencia necesaria.
 
@@ -57,6 +58,21 @@ El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reempl
 `ast_get_file` es read-only y solo acepta archivos incluidos por el tsconfig activo. Su modo normal devuelve líneas exactas, paginadas y numeradas desde 1, junto con el hash SHA-256 de los bytes actuales. `symbols_only: true` devuelve selectors y signatures sin cuerpos. `snapshot_state: "fresh"` describe sincronización con el snapshot del compilador, no ausencia de diagnostics; consultar `ast_get_diagnostics` por separado.
 
 `ast_explore` es read-only y no prepara ni aplica operaciones. Sus selectors son directamente reutilizables por las tools primitivas y de mutación. La respuesta declara `freshness`, `completeness`, `truncation`, `unresolved` y `budget`; si el límite de bytes impide incluir todo el contexto, el resultado queda marcado como incompleto.
+
+## Modelo de confianza y freshness
+
+No tratar toda salida como evidencia equivalente. Cuando una relación expone metadata de trust:
+
+- `provenance: "compiler"` + `confidence: "exact"` + `resolution: "resolved"` + `freshness.state: "fresh"` es la única combinación que puede llevar `compiler_authoritative: true`.
+- `provenance: "syntax"` describe estructura AST sin resolución semántica; sirve para navegación, no para afirmar que dos símbolos están conectados.
+- `provenance: "heuristic"` describe una sugerencia por convención o nombre; nunca autoriza una mutación ni un candidato de test compiler-backed.
+- El índice es una aceleración derivada y no una autoridad. Validar cualquier selector contra el compilador; si el índice está stale, falta o no coincide, usar el fallback compiler-backed o fallar cerrado.
+
+`fresh` significa que la evidencia coincide con el snapshot sincronizado. `pending`, `rebuilding`, `stale` y `degraded` no deben presentarse como evidencia actual. Las respuestas preservan `causes` (`source_change`, `config_change`, `index_failure`, `watcher_failure`, `compiler_rebuild`) y `checked_at`. `ast_get_impact` rechaza relaciones que no estén fresh; `ast_explore` conserva `completeness`, `unresolved`, `budget` y `truncation` para que una lectura parcial no parezca un negativo.
+
+El resolver interno de candidatos de tests solo acepta impacto fresh y exacto, devuelve evidencia de relación directa o transitiva con IDs bounded y no ejecuta tests. Si la relación es stale, está truncada, es ambigua o solo heurística, no genera candidatos.
+
+Todos los reads son bounded. Respetar `limit`, `reference_limit`, `max_bytes`, y en impacto `max_depth`, `max_nodes` y `max_edges`; revisar siempre `budget` y `truncation` antes de razonar sobre ausencia. Los límites de batch son independientes y también deben mantenerse explícitos.
 
 Los clientes pueden prefijar los nombres publicados (`ast_*`) según su convención MCP; elegir por el nombre base y el schema, no adivinar el prefijo.
 

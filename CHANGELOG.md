@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `ast_get_file` now also returns bounded project freshness metadata, distinguishing fresh, pending, stale, rebuilding, and degraded session state from the file-level snapshot state.
 - Project-scoped file snapshot validation with UTF-8 checks, traversal rejection, symlink containment checks, and ambiguous-path failures.
 - Read-only `ast_explore` with query/file/symbol routing, progressive source and compiler-reference evidence, freshness/completeness metadata, unresolved selectors, and serialized byte budgets.
+- Public trust guidance for compiler, syntax, heuristic and derived-index evidence, including the fail-closed rules for stale/degraded reads and compiler-backed test candidates.
 - A deterministic context workflow benchmark comparing full-file, primitive, and composed exploration workflows.
 
 ## [0.5.1] - 2026-08-05
@@ -26,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Source synchronization verifies stability across refresh, snapshot, refresh, and verification before reporting fresh state.
 - Phase 1 keeps the symbol index disabled while exposing explicit stale/degraded recovery state.
+- Documentation now distinguishes file snapshot freshness from project freshness, reports bounded read budgets/truncation, and defines the prepare-review-apply mutation boundary.
 
 ### Security
 
