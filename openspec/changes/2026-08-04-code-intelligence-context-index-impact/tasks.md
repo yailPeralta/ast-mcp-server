@@ -218,6 +218,8 @@ Run: `yarn test test/symbol-index.test.ts`
 
 ### Task 4.2: Implement file fingerprint invalidation
 
+Status: complete — metadata-aware fingerprints with forced hash verification, deterministic add/change/delete classification, atomic-save and timestamp-collision coverage, config/reference digest coverage, and project/workspace snapshot integration pass the full regression and smoke gates.
+
 Files:
 
 - Create: `src/services/file-fingerprints.ts`

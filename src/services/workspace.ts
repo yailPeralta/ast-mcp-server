@@ -2,7 +2,16 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { ts } from "ts-morph";
+import {
+  collectFileFingerprints,
+  compareFileFingerprints,
+  hashBytes,
+  type FileFingerprint,
+  type FileFingerprintChanges,
+} from "./file-fingerprints.js";
 import type { ProjectContext } from "./project.js";
+
+export { hashBytes } from "./file-fingerprints.js";
 
 export interface WorkspaceSnapshot {
   digest: string;
@@ -11,15 +20,18 @@ export interface WorkspaceSnapshot {
   sourceFileCount: number;
   fileCount: number;
   files: ReadonlyMap<string, string>;
+  fingerprints: ReadonlyMap<string, FileFingerprint>;
+  fingerprintChanges: FileFingerprintChanges;
+}
+
+export interface WorkspaceSnapshotOptions {
+  readonly previousFingerprints?: ReadonlyMap<string, FileFingerprint>;
+  readonly verifyContentHash?: boolean;
 }
 
 export interface ConfigSnapshot {
   digest: string;
   files: readonly string[];
-}
-
-export function hashBytes(content: Uint8Array): string {
-  return createHash("sha256").update(content).digest("hex");
 }
 
 export function hashWorkspaceFiles(files: ReadonlyMap<string, string>): string {
@@ -88,21 +100,35 @@ export function createConfigSnapshot(rootConfigPath: string): ConfigSnapshot {
   return { digest: digest.digest("hex"), files };
 }
 
-export function createWorkspaceSnapshot(context: ProjectContext): WorkspaceSnapshot {
+export function createWorkspaceSnapshot(
+  context: ProjectContext,
+  options: WorkspaceSnapshotOptions = {},
+): WorkspaceSnapshot {
   const sourcePaths = context.project
     .getSourceFiles()
     .map((sourceFile) => canonicalPath(sourceFile.getFilePath()));
   const configSnapshot = createConfigSnapshot(context.tsConfigFilePath);
+  const allPaths = [...new Set([...sourcePaths, ...configSnapshot.files])];
+  const fingerprintCollection = collectFileFingerprints(allPaths, options.previousFingerprints, {
+    verifyContentHash: options.verifyContentHash,
+  });
+  const fingerprints = fingerprintCollection.files;
   const sourceFiles = new Map<string, string>();
 
   for (const filePath of [...new Set(sourcePaths)].sort()) {
-    const digest = hashBytes(fs.readFileSync(filePath));
-    sourceFiles.set(filePath, digest);
+    const fingerprint = fingerprints.get(filePath);
+    if (fingerprint) sourceFiles.set(filePath, fingerprint.content_hash);
   }
 
   const files = new Map(sourceFiles);
   for (const filePath of configSnapshot.files) {
-    const digest = hashBytes(fs.readFileSync(filePath));
+    const fingerprint = fingerprints.get(filePath);
+    if (!fingerprint) {
+      throw new Error(
+        `Configuration file disappeared while creating a workspace snapshot: ${filePath}`,
+      );
+    }
+    const digest = fingerprint.content_hash;
     const previous = files.get(filePath);
     if (previous && previous !== digest) {
       throw new Error(`Workspace identity collision for ${filePath}.`);
@@ -117,5 +143,10 @@ export function createWorkspaceSnapshot(context: ProjectContext): WorkspaceSnaps
     sourceFileCount: sourceFiles.size,
     fileCount: files.size,
     files,
+    fingerprints,
+    fingerprintChanges: compareFileFingerprints(
+      options.previousFingerprints ?? new Map(),
+      fingerprints,
+    ),
   };
 }

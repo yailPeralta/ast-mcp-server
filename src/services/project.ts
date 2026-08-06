@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Project, type Node, type SourceFile } from "ts-morph";
+import type { FileFingerprint } from "./file-fingerprints.js";
 import { findDeclaration } from "./symbols.js";
 import { createConfigSnapshot, createWorkspaceSnapshot } from "./workspace.js";
 import {
@@ -23,6 +24,7 @@ export interface ProjectContext {
 interface ProjectSession {
   context: ProjectContext;
   configDigest: string;
+  fingerprints: ReadonlyMap<string, FileFingerprint>;
   queue: Promise<void>;
   activeOperations: number;
   runningOperations: number;
@@ -101,6 +103,7 @@ function getOrCreateSession(projectRoot: string): ProjectSession {
   const session: ProjectSession = {
     context: buildProjectContext(tsConfigFilePath),
     configDigest: createConfigSnapshot(tsConfigFilePath).digest,
+    fingerprints: new Map(),
     queue: Promise.resolve(),
     activeOperations: 0,
     runningOperations: 0,
@@ -142,14 +145,19 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
     };
     await refreshSourceFiles();
 
-    const snapshot = createWorkspaceSnapshot(session.context);
+    const snapshot = createWorkspaceSnapshot(session.context, {
+      previousFingerprints: session.fingerprints,
+    });
     if (snapshot.configDigest !== currentConfigDigest) {
       syncFailureCause = "config_change";
       throw new Error("Project configuration changed during synchronization. Retry the operation.");
     }
 
     await refreshSourceFiles();
-    const verificationSnapshot = createWorkspaceSnapshot(session.context);
+    const verificationSnapshot = createWorkspaceSnapshot(session.context, {
+      previousFingerprints: snapshot.fingerprints,
+      verifyContentHash: true,
+    });
     if (verificationSnapshot.configDigest !== currentConfigDigest) {
       syncFailureCause = "config_change";
       throw new Error("Project configuration changed during synchronization. Retry the operation.");
@@ -170,6 +178,7 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
     });
     session.context = { ...session.context, status };
     session.configDigest = verificationSnapshot.configDigest;
+    session.fingerprints = verificationSnapshot.fingerprints;
   } catch (error) {
     const status = transitionProjectStatus(session.context.status, {
       type: "sync_failed",
