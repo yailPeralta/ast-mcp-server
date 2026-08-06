@@ -1,6 +1,8 @@
-export const AGENT_IDS = ["claude", "hermes"] as const;
+import { AGENT_IDS, getAgentTarget, type AgentTargetId } from "./agent-targets.js";
 
-export type AgentId = (typeof AGENT_IDS)[number];
+export { AGENT_IDS } from "./agent-targets.js";
+
+export type AgentId = AgentTargetId;
 
 export interface AgentDetection {
   id: AgentId;
@@ -11,11 +13,6 @@ export interface AgentDetection {
 }
 
 export type SetupQuestion = (question: string) => Promise<string>;
-
-const AGENT_LABELS: Record<AgentId, string> = {
-  claude: "Claude Code",
-  hermes: "Hermes",
-};
 
 function isAgentId(value: string): value is AgentId {
   return AGENT_IDS.includes(value as AgentId);
@@ -88,7 +85,7 @@ function renderSelectionQuestion(detections: AgentDetection[], validationMessage
       const detail = item.installed
         ? [item.version, item.executable].filter(Boolean).join(" · ")
         : "not installed";
-      return `  [${marker}] ${index + 1}. ${AGENT_LABELS[item.id]} (${detail})`;
+      return `  [${marker}] ${index + 1}. ${getAgentTarget(item.id).label} (${detail})`;
     })
     .join("\n");
   const validation = validationMessage === undefined ? "" : `\n${validationMessage}\n`;
@@ -96,7 +93,7 @@ function renderSelectionQuestion(detections: AgentDetection[], validationMessage
 }
 
 function renderConfirmation(agents: AgentId[], validationMessage?: string): string {
-  const labels = agents.map((agent) => AGENT_LABELS[agent]).join(", ");
+  const labels = agents.map((agent) => getAgentTarget(agent).label).join(", ");
   const validation = validationMessage === undefined ? "" : `\n${validationMessage}\n`;
   return `${validation}\nSetup will install the MCP server and skill for: ${labels}.\nContinue? [Y/n] `;
 }

@@ -486,6 +486,8 @@ If the backend cannot pass supported-version/package gates, ship the versioned i
 
 ### Task 8.1: Extract target contract
 
+Status: complete — `agent-targets.ts` is the registry/strategy seam for target identity, executable discovery metadata, MCP inspection/registration and skill target mapping; setup orchestration retains bounded command IO, conflict handling, force semantics and idempotency.
+
 Files:
 
 - Create: `src/services/agent-targets.ts`
@@ -500,6 +502,8 @@ Run: `yarn test test/agent-targets.test.ts test/setup-wizard.test.ts test/agent-
 
 ### Task 8.2: Add one new target only if justified
 
+Status: deferred — no additional target has a verified official configuration/MCP contract and isolated smoke in this change.
+
 Files:
 
 - Modify: `src/services/agent-targets.ts`
@@ -512,6 +516,8 @@ Add a further agent only after its official config/MCP contract and isolated smo
 Run: `yarn test:package`
 
 ### Phase 8 gate
+
+Status: complete — Claude/Hermes behavior is preserved behind the registry; no speculative target was added.
 
 Existing Claude/Hermes behavior is unchanged. New targets are opt-in, conflict-safe and covered by package smoke. No secrets are logged or persisted.
 

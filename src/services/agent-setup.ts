@@ -9,31 +9,18 @@ import {
   type SkillInstallation,
   type SkillTargetSelection,
 } from "./skill-installer.js";
-import { AGENT_IDS, type AgentDetection, type AgentId } from "./setup-wizard.js";
+import { type AgentDetection, type AgentId } from "./setup-wizard.js";
+import {
+  AGENT_IDS,
+  getAgentTarget,
+  MCP_SERVER_NAME,
+  type AgentTargetRuntime,
+} from "./agent-targets.js";
 
 export type { AgentDetection } from "./setup-wizard.js";
 
-const MCP_SERVER_NAME = "ast";
 const DEFAULT_COMMAND_TIMEOUT_MS = 120_000;
 const MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024;
-const EXPECTED_HERMES_TOOLS = [
-  "ast_list_files",
-  "ast_get_outline",
-  "ast_get_symbol_source",
-  "ast_search_symbols",
-  "ast_find_references",
-  "ast_get_diagnostics",
-  "ast_rename_symbol",
-  "ast_replace_symbol_body",
-  "ast_scaffold_class",
-  "ast_get_operation_preview",
-  "ast_apply_operation",
-] as const;
-
-const AGENT_DEFINITIONS: Record<AgentId, { label: string; command: string }> = {
-  claude: { label: "Claude Code", command: "claude" },
-  hermes: { label: "Hermes", command: "hermes" },
-};
 
 interface CommandResult {
   exitCode: number;
@@ -225,89 +212,25 @@ async function runCommand(
 function commandFailure(agent: AgentId, operation: string, result: CommandResult): AgentSetupError {
   const output = `${result.stdout}\n${result.stderr}`.trim().slice(0, 4000);
   return new AgentSetupError(
-    `${AGENT_DEFINITIONS[agent].label} ${operation} failed with exit code ${result.exitCode}.`,
+    `${getAgentTarget(agent).label} ${operation} failed with exit code ${result.exitCode}.`,
     "AGENT_COMMAND_FAILED",
     { agent, operation, output },
   );
 }
 
-function isMissingClaudeMcp(output: string): boolean {
-  return (
-    /\bno\s+mcp\s+server\b/i.test(output) &&
-    /(?:\bfound\b|\bnamed?\b)/i.test(output) &&
-    /\bast\b/i.test(output)
-  );
-}
-
-async function inspectClaudeMcp(
-  detection: AgentDetection,
-  serverEntryPath: string,
-  nodeExecutable: string,
-  environment: NodeJS.ProcessEnv,
-  timeoutMs: number,
-): Promise<McpInspection> {
-  const result = await runCommand(detection.executable!, ["mcp", "get", MCP_SERVER_NAME], {
-    environment,
-    timeoutMs,
-  });
-  const output = `${result.stdout}\n${result.stderr}`;
-  if (result.exitCode !== 0) {
-    if (isMissingClaudeMcp(output)) {
-      return { agent: "claude", status: "missing" };
-    }
-    throw commandFailure("claude", "MCP inspection", result);
-  }
-
-  const fields = new Map<string, string>();
-  for (const line of result.stdout.split(/\r?\n/)) {
-    const match = line.match(/^\s*(Status|Type|Command|Args):\s*(.*)$/i);
-    if (match !== null) {
-      fields.set(match[1].toLowerCase(), match[2].trim());
-    }
-  }
-  const current =
-    /connected/i.test(fields.get("status") ?? "") &&
-    fields.get("type")?.toLowerCase() === "stdio" &&
-    fields.get("command") === nodeExecutable &&
-    fields.get("args") === serverEntryPath;
-  return current
-    ? { agent: "claude", status: "current" }
-    : {
-        agent: "claude",
-        status: "conflict",
-        detail: "The existing user-scoped 'ast' registration does not match this package.",
-      };
-}
-
-async function inspectHermesMcp(
+function targetRuntime(
   detection: AgentDetection,
   environment: NodeJS.ProcessEnv,
   timeoutMs: number,
-): Promise<McpInspection> {
-  const listed = await runCommand(detection.executable!, ["mcp", "list"], {
-    environment,
-    timeoutMs,
-  });
-  if (listed.exitCode !== 0) {
-    throw commandFailure("hermes", "MCP list", listed);
-  }
-  if (!/^\s*ast(?:\s|$)/im.test(listed.stdout)) {
-    return { agent: "hermes", status: "missing" };
-  }
-
-  const tested = await runCommand(detection.executable!, ["mcp", "test", MCP_SERVER_NAME], {
-    environment,
-    timeoutMs,
-  });
-  const current =
-    tested.exitCode === 0 && EXPECTED_HERMES_TOOLS.every((tool) => tested.stdout.includes(tool));
-  return current
-    ? { agent: "hermes", status: "current" }
-    : {
-        agent: "hermes",
-        status: "conflict",
-        detail: "The existing 'ast' registration does not expose the expected structural tools.",
-      };
+): AgentTargetRuntime {
+  return {
+    run: (args, input) =>
+      runCommand(detection.executable!, [...args], {
+        environment,
+        timeoutMs,
+        input,
+      }),
+  };
 }
 
 async function inspectMcp(
@@ -318,38 +241,39 @@ async function inspectMcp(
   environment: NodeJS.ProcessEnv,
   timeoutMs: number,
 ): Promise<McpInspection> {
-  return agent === "claude"
-    ? inspectClaudeMcp(detection, serverEntryPath, nodeExecutable, environment, timeoutMs)
-    : inspectHermesMcp(detection, environment, timeoutMs);
+  const target = getAgentTarget(agent);
+  const inspection = await target.mcp.inspect(targetRuntime(detection, environment, timeoutMs), {
+    serverEntryPath,
+    nodeExecutable,
+  });
+  if (inspection.status === "error") {
+    throw commandFailure(agent, inspection.operation, inspection.result);
+  }
+  return {
+    agent,
+    status: inspection.status,
+    ...(inspection.detail ? { detail: inspection.detail } : {}),
+  };
 }
 
-async function configureClaudeMcp(
+async function configureMcp(
+  agent: AgentId,
   detection: AgentDetection,
   serverEntryPath: string,
   nodeExecutable: string,
   environment: NodeJS.ProcessEnv,
   timeoutMs: number,
 ): Promise<void> {
-  const added = await runCommand(
-    detection.executable!,
-    [
-      "mcp",
-      "add",
-      "--scope",
-      "user",
-      "--transport",
-      "stdio",
-      MCP_SERVER_NAME,
-      "--",
-      nodeExecutable,
-      serverEntryPath,
-    ],
-    { environment, timeoutMs },
-  );
-  if (added.exitCode !== 0) {
-    throw commandFailure("claude", "MCP registration", added);
+  const target = getAgentTarget(agent);
+  const added = await target.mcp.register(targetRuntime(detection, environment, timeoutMs), {
+    serverEntryPath,
+    nodeExecutable,
+  });
+  if (!target.mcp.registrationAccepted(added)) {
+    throw commandFailure(agent, "MCP registration", added);
   }
-  const verified = await inspectClaudeMcp(
+  const verified = await inspectMcp(
+    agent,
     detection,
     serverEntryPath,
     nodeExecutable,
@@ -358,34 +282,9 @@ async function configureClaudeMcp(
   );
   if (verified.status !== "current") {
     throw new AgentSetupError(
-      "Claude Code saved the MCP registration but verification did not match.",
+      `${target.label} saved the MCP registration but verification did not match.`,
       "AGENT_VERIFICATION_FAILED",
-      { agent: "claude", inspection: verified },
-    );
-  }
-}
-
-async function configureHermesMcp(
-  detection: AgentDetection,
-  serverEntryPath: string,
-  nodeExecutable: string,
-  environment: NodeJS.ProcessEnv,
-  timeoutMs: number,
-): Promise<void> {
-  const added = await runCommand(
-    detection.executable!,
-    ["mcp", "add", MCP_SERVER_NAME, "--command", nodeExecutable, "--args", serverEntryPath],
-    { environment, timeoutMs, input: "\n" },
-  );
-  if (added.exitCode !== 0 || !/saved\s+'ast'/i.test(added.stdout)) {
-    throw commandFailure("hermes", "MCP registration", added);
-  }
-  const verified = await inspectHermesMcp(detection, environment, timeoutMs);
-  if (verified.status !== "current") {
-    throw new AgentSetupError(
-      "Hermes saved the MCP registration but verification did not expose the expected tools.",
-      "AGENT_VERIFICATION_FAILED",
-      { agent: "hermes", inspection: verified },
+      { agent, inspection: verified },
     );
   }
 }
@@ -420,7 +319,7 @@ export async function detectInstalledAgents(
 
   return Promise.all(
     AGENT_IDS.map(async (id): Promise<AgentDetection> => {
-      const definition = AGENT_DEFINITIONS[id];
+      const definition = getAgentTarget(id);
       const executable = await findExecutable(definition.command, environment);
       if (executable === undefined) {
         return { id, label: definition.label, installed: false };
@@ -458,7 +357,7 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
     const detection = detectionMap.get(agent);
     if (!detection?.installed || detection.executable === undefined) {
       throw new AgentSetupError(
-        `${AGENT_DEFINITIONS[agent].label} is not installed or is not available in PATH.`,
+        `${getAgentTarget(agent).label} is not installed or is not available in PATH.`,
         "AGENT_NOT_INSTALLED",
         { agent },
       );
@@ -482,13 +381,14 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
   const conflict = inspections.find((item) => item.status === "conflict");
   if (conflict !== undefined) {
     throw new AgentSetupError(
-      `Conflicting ${AGENT_DEFINITIONS[conflict.agent].label} MCP registration: ${conflict.detail}`,
+      `Conflicting ${getAgentTarget(conflict.agent).label} MCP registration: ${conflict.detail}`,
       "AGENT_MCP_CONFLICT",
       { agent: conflict.agent },
     );
   }
 
-  const skillTarget: SkillTargetSelection = requested.length === 2 ? "all" : requested[0];
+  const skillTarget: SkillTargetSelection =
+    requested.length === AGENT_IDS.length ? "all" : getAgentTarget(requested[0]!).skillTarget;
   const skillResult = await installBundledSkill({
     target: skillTarget,
     scope: "user",
@@ -515,23 +415,14 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
     const inspection = inspections.find((item) => item.agent === agent)!;
     try {
       if (inspection.status === "missing") {
-        if (agent === "claude") {
-          await configureClaudeMcp(
-            detection,
-            options.serverEntryPath,
-            nodeExecutable,
-            environment,
-            timeoutMs,
-          );
-        } else {
-          await configureHermesMcp(
-            detection,
-            options.serverEntryPath,
-            nodeExecutable,
-            environment,
-            timeoutMs,
-          );
-        }
+        await configureMcp(
+          agent,
+          detection,
+          options.serverEntryPath,
+          nodeExecutable,
+          environment,
+          timeoutMs,
+        );
       }
       completed.push({
         agent,
