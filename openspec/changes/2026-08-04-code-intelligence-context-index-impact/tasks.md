@@ -449,6 +449,8 @@ Run: `yarn benchmark:index-storage`
 
 ### Task 7.2: Implement selected persistent store
 
+Status: deferred by ADR 0005 — Task 7.1 selected no persistent backend because the required Node 20/22 and portable/WASM evidence is unavailable.
+
 Files:
 
 - Create: `src/services/persistent-index.ts`
@@ -462,6 +464,8 @@ Run: `yarn test test/persistent-index.test.ts`
 
 ### Task 7.3: Add restart and package smoke coverage
 
+Status: deferred by ADR 0005 — restart, migration, corruption and isolated-package probes are covered by the evaluation runner; no production persistent adapter exists to wire into runtime smoke.
+
 Files:
 
 - Modify: `scripts/package-smoke.mjs`
@@ -473,6 +477,8 @@ Verify restart reuse, schema mismatch rebuild, malformed state recovery, two-pro
 Run: `yarn test:package && yarn test:cli`
 
 ### Phase 7 gate
+
+Status: complete — the versioned in-memory interface remains the production default and persistence is disabled by evidence, not by an untested stub.
 
 If the backend cannot pass supported-version/package gates, ship the versioned in-memory interface and disable persistence by default. Never trade package integrity or mutation safety for warm restart speed.
 
