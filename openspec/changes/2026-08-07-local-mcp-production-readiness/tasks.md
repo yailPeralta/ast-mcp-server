@@ -47,9 +47,9 @@ After edits, run `mkdir -p openspec/archive && mv openspec/changes/2026-08-06-sy
 
 ## 1. Runtime policy and strict session capacity
 
-### Task 1.1: RED runtime-policy contract
+### Task 1.1: RED/GREEN pure runtime policy
 
-Status: pending.
+Status: complete.
 
 Files:
 
@@ -62,6 +62,11 @@ Steps:
 2. Run `yarn test test/runtime-policy.test.ts`; confirm RED from missing implementation.
 3. Implement the pure parser with no process/global reads in the core function.
 4. Run `yarn test test/runtime-policy.test.ts && yarn prettier --check src/services/runtime-policy.ts test/runtime-policy.test.ts && yarn eslint src/services/runtime-policy.ts test/runtime-policy.test.ts && yarn typecheck`.
+
+Evidence:
+
+- RED: `yarn test test/runtime-policy.test.ts` failed because `src/services/runtime-policy.ts` did not exist.
+- GREEN/VERIFY: 20/20 focused assertions passed; touched-file Prettier and ESLint plus repository typecheck passed.
 
 ### Task 1.2: RED/GREEN strict session registry
 
