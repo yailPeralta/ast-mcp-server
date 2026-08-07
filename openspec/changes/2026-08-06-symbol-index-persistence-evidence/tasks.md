@@ -4,15 +4,15 @@ This change is phase-gated. It starts as an exploration/evidence SDD and must no
 
 ## 0. Compatibility lock
 
-- [ ] Re-read ADR 0005, `src/services/symbol-index.ts`, project lifecycle/fallback code, CI matrix and the current storage benchmark.
-- [ ] Preserve the current memory-only default and compiler/mutation authority.
-- [ ] Capture clean-tree state and the current Node 24 benchmark to a temporary path without modifying tracked benchmark results.
+- [x] Re-read ADR 0005, `src/services/symbol-index.ts`, project lifecycle/fallback code, CI matrix and the current storage benchmark.
+- [x] Preserve the current memory-only default and compiler/mutation authority.
+- [x] Capture clean-tree state and the current Node 24 benchmark to a temporary path without modifying tracked benchmark results.
 
 ## 1. Runtime and package probes
 
 ### Task 1.1: Run explicit supported-runtime probes
 
-Status: complete — explicit Docker probes passed the project quality/package gates on Node `22.23.2`; the local Node `24.16.0` gate was already green. The declared floor is now Node `22.5.0`, where the built-in SQLite API is available but active development. Native SQLite remains unselected until conformance and failure-injection gates pass.
+Status: complete — the full project quality/package gates passed on the declared Node `22.5.0` floor and the local Node 24 line. The benchmark explicitly executed both configured binaries and reported `pass`. The built-in SQLite API is available on Node `22.5.0` only with the explicit experimental flag. Native SQLite remains unselected until conformance and failure-injection gates pass.
 
 Files:
 
@@ -23,7 +23,7 @@ Run the storage workload with the Node 22.5.0 floor, Node 24 and explicitly prov
 
 ### Task 1.2: Establish dependency/package evidence
 
-Status: proposed.
+Status: partial — JSON and native SQLite were exercised only as disposable evidence adapters; no portable dependency was installed or added to the production manifest.
 
 Files:
 
@@ -36,18 +36,18 @@ For each portable candidate, measure package contents, lifecycle behavior, start
 
 ### Task 2.1: Write RED conformance tests
 
-Status: proposed.
+Status: complete for the current memory implementation and disposable benchmark adapters.
 
 Files:
 
 - Create: `test/symbol-index-store-conformance.test.ts`.
 - Modify: `src/services/symbol-index.ts` only if the existing interface cannot express the required failure classification.
 
-Cover semantic parity, deterministic ordering, limits, project/config isolation, schema filtering, body exclusion, upsert/remove/clear and flush behavior for every adapter.
+Cover semantic parity, deterministic ordering, limits, project/config isolation, schema filtering, body exclusion, upsert/remove/clear and flush behavior for every adapter. The TypeScript suite covers `InMemorySymbolIndex`; the benchmark applies the same basic matrix to JSON and native SQLite candidates.
 
 ### Task 2.2: Add lifecycle failure tests
 
-Status: proposed.
+Status: partial — clean restart, interrupted-flush recovery, native concurrent writers and the basic two-readers-plus-writer probe pass; JSON fails the lost-update negative control. The complete cross-project contention matrix, real row migration, typed failure classification and compiler fallback remain open.
 
 Files:
 
@@ -60,7 +60,7 @@ Cover clean restart, schema migration, malformed/truncated storage, interrupted 
 
 ### Task 3.1: Compare candidates against the acceptance matrix
 
-Status: proposed.
+Status: partial — the runtime/package/conformance/lifecycle report exists, but the remaining cross-project contention, real migration, fallback, observability, rollback and mutation-safety gates prevent candidate selection.
 
 Files:
 
@@ -71,7 +71,7 @@ Require pass/fail evidence for every runtime, packaging, lifecycle, concurrency,
 
 ### Task 3.2: Record the decision in an ADR
 
-Status: proposed.
+Status: complete — ADR 0009 reaffirms memory-only and records the exact missing evidence.
 
 Files:
 
@@ -105,8 +105,9 @@ Prove that disabling persistence returns to memory-only without source or operat
 
 ## 5. Final verification and archive
 
-- [ ] Run focused conformance/lifecycle tests and the full quality gates on the frozen tree.
-- [ ] Run Node 22.5.0/24 matrix and isolated package smoke.
-- [ ] Verify no source bodies, secrets, compiler objects or mutation plans enter the cache.
-- [ ] Create `verification.md` with requirement-to-evidence traceability and residual risks.
+- [x] Run focused conformance tests and the available lifecycle benchmark on the current tree.
+- [x] Re-run the full quality gates after the evidence changes on the frozen tree.
+- [x] Run Node 22.5.0/24 matrix and isolated package smoke.
+- [x] Verify no source bodies, secrets, compiler objects or mutation plans enter the cache for the exercised derived records.
+- [x] Create `verification.md` with requirement-to-evidence traceability and residual risks.
 - [ ] Archive only after the decision ADR and all acceptance gates are complete.

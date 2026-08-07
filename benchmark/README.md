@@ -135,6 +135,34 @@ The latest deterministic-fixture run on Node.js v24.16.0 recorded:
 
 That run indexed one file, returned one warm match, returned one compiler-fallback match, and kept both existing workflow gates green. These values are local measurements on a tiny fixture, not production capacity claims.
 
+## Symbol-index persistence evidence (disabled)
+
+`scripts/benchmark-index-storage.mjs` evaluates disposable memory, JSON-file and native SQLite adapters behind the existing `SymbolIndexStore` boundary. It does not change the production backend, install a persistence dependency, download a runtime or write a tracked benchmark result.
+
+The report covers:
+
+- runtime identity and native SQLite capability;
+- isolated package installation with lifecycle scripts disabled;
+- body-free synthetic workload;
+- conformance for load, query ranking/limits, schema filtering, project/config isolation, upsert, remove, clear and flush;
+- clean restart, schema-marker migration, interrupted flush and malformed-storage recovery with exact entry-count verification;
+- bounded concurrent writers, including the expected JSON lost-update negative control;
+- a basic native-SQLite probe with two readers plus one writer;
+- SQLite storage sizing including the main database, WAL and SHM sidecars;
+- failure of the command when required durable evidence is false.
+
+Run it with the declared floor using the explicit experimental SQLite flag:
+
+```bash
+PATH=/home/yail/.nvm/versions/node/v22.5.0/bin:$PATH \
+NODE_OPTIONS=--experimental-sqlite \
+INDEX_STORAGE_NODE22_5_BIN=/home/yail/.nvm/versions/node/v22.5.0/bin/node \
+INDEX_STORAGE_NODE24_BIN=/home/yail/.nvm/versions/node/v24.16.0/bin/node \
+yarn benchmark:index-storage --skip-package-smoke --output /tmp/ast-index-storage-node22.5.json
+```
+
+Node 24 can run the same command without `NODE_OPTIONS`. The configured runtime binaries are probed explicitly and reported as `pass`, `fail` or `not_available`. Missing portable candidates are reported as unavailable rather than installed implicitly. The basic reader/writer check is not a substitute for the complete cross-project reader/writer, real row-migration, compiler-fallback and production-observability gates; a passing benchmark does not authorize persistence.
+
 ## Model-facing JSON and TOON
 
 `scripts/benchmark-formats.mjs` compares compact JSON with TOON for actual MCP logical results. It uses this repository for broad symbol search and deterministic temporary TypeScript fixtures for repeated references and non-empty diagnostics. File lists, outlines, exact source, and a prepared rename are retained as negative controls.
