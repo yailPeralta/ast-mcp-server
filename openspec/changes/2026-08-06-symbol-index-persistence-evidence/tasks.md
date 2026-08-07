@@ -47,7 +47,7 @@ Cover semantic parity, deterministic ordering, limits, project/config isolation,
 
 ### Task 2.2: Add lifecycle failure tests
 
-Status: partial — clean restart, interrupted-flush recovery, native concurrent writers and the basic two-readers-plus-writer probe pass; JSON fails the lost-update negative control. The complete cross-project contention matrix, real row migration, typed failure classification and compiler fallback remain open.
+Status: partial — clean restart, interrupted-flush recovery, real row migration, native concurrent writers, cross-project writer isolation and the basic two-readers-plus-writer probe pass on Node 22.5.0 and Node 24; JSON fails the lost-update negative control. The complete cross-project reader/writer contention matrix, migration rollback, typed failure classification and compiler fallback remain open.
 
 Files:
 
@@ -60,7 +60,7 @@ Cover clean restart, schema migration, malformed/truncated storage, interrupted 
 
 ### Task 3.1: Compare candidates against the acceptance matrix
 
-Status: partial — the runtime/package/conformance/lifecycle report exists, but the remaining cross-project contention, real migration, fallback, observability, rollback and mutation-safety gates prevent candidate selection.
+Status: partial — the runtime/package/conformance/lifecycle report exists, but the remaining cross-project reader/writer contention, migration rollback, fallback, observability and mutation-safety gates prevent candidate selection.
 
 Files:
 

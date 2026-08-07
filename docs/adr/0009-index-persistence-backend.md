@@ -22,7 +22,7 @@ The disposable benchmark adapters were exercised under Node `v22.5.0` with `NODE
 | Native SQLite        | pass                                   | pass        | pass        | pass                       | not selected       |
 | Portable/WASM SQLite | unavailable; no dependency installed   | unavailable | unavailable | unavailable                | deferred           |
 
-The conformance evidence covers identity isolation, schema filtering, deterministic query semantics, limits, body exclusion, upsert, remove, clear and flush. The benchmark also performs restart, interrupted flush, malformed-storage recovery, concurrent writers, and a basic two-readers-plus-writer SQLite probe. Its schema migration scenario remains synthetic and does not yet migrate rows.
+The conformance evidence covers identity isolation, schema filtering, deterministic query semantics, limits, body exclusion, upsert, remove, clear and flush. The benchmark also performs restart, interrupted flush, malformed-storage recovery, real row migration with close/reopen verification, concurrent writers, cross-project writer isolation, and a basic two-readers-plus-writer SQLite probe.
 
 ## Why no durable backend is selected
 
@@ -30,8 +30,8 @@ The JSON candidate also failed the concurrent-writer check: only 1 of 2 committe
 
 The following required evidence is still missing:
 
-1. The complete cross-project multi-process reader/writer matrix, including typed contention failure and fallback behavior.
-2. Real row migration and rollback evidence rather than only a schema-marker migration.
+1. The complete cross-project multi-process reader/writer matrix, including typed contention failure and fallback behavior beyond the passing writer-isolation probe.
+2. Multi-version migration rollback evidence; forward row migration is now proven only in the disposable adapters.
 3. Production lifecycle integration proving typed failure classification and compiler fallback.
 4. Bounded status/metrics for disabled, hit, miss, stale, migration, corruption, write failure and fallback states.
 5. Disable/quarantine/rebuild rollback smoke and mutation-safety regression tests.

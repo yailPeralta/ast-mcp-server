@@ -33,14 +33,32 @@ const OTHER_PROJECT = Object.freeze({
 const ENTRY_COUNT = 128;
 const SYMBOLS_PER_ENTRY = 8;
 const QUERY_ITERATIONS = 30;
+const BACKENDS = new Set(["all", "memory", "json", "sqlite"]);
+const SCENARIOS = new Set(["all", "migration", "cross-project"]);
 
 function parseArgs(argv) {
-  const options = { output: undefined, skipPackageSmoke: false };
+  const options = {
+    output: undefined,
+    skipPackageSmoke: false,
+    backend: "all",
+    scenario: "all",
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === "--output") options.output = argv[++index];
     else if (value === "--skip-package-smoke") options.skipPackageSmoke = true;
+    else if (value === "--backend") options.backend = argv[++index];
+    else if (value === "--scenario") options.scenario = argv[++index];
     else throw new Error(`Unknown argument: ${value}`);
+  }
+  if (!BACKENDS.has(options.backend)) {
+    throw new Error(`Unsupported backend: ${options.backend}`);
+  }
+  if (!SCENARIOS.has(options.scenario)) {
+    throw new Error(`Unsupported scenario: ${options.scenario}`);
+  }
+  if (options.scenario !== "all" && !["json", "sqlite"].includes(options.backend)) {
+    throw new Error("Focused scenarios require --backend json or --backend sqlite.");
   }
   return options;
 }
@@ -270,6 +288,42 @@ class JsonFileAdapter {
     this.schemaVersion = version;
     await this.flush();
   }
+
+  async forceEntrySchemaVersion(version) {
+    await this.ensureLoaded();
+    this.schemaVersion = version;
+    this.entries = new Map(
+      [...this.entries.values()].map((entry) => [
+        entryKey(entry.project, entry.file_path),
+        { ...entry, index_schema_version: version },
+      ]),
+    );
+    await this.flush();
+  }
+
+  async migrateRows() {
+    await this.ensureLoaded();
+    const before = [...this.entries.values()].filter(
+      (entry) => entry.index_schema_version !== SCHEMA_VERSION,
+    ).length;
+    this.schemaVersion = SCHEMA_VERSION;
+    this.entries = new Map(
+      [...this.entries.values()].map((entry) => [
+        entryKey(entry.project, entry.file_path),
+        { ...entry, index_schema_version: SCHEMA_VERSION },
+      ]),
+    );
+    await this.flush();
+    const after = [...this.entries.values()].filter(
+      (entry) => entry.index_schema_version !== SCHEMA_VERSION,
+    ).length;
+    return {
+      status: before > 0 && after === 0 ? "pass" : "fail",
+      before,
+      after,
+      entries: this.entries.size,
+    };
+  }
 }
 
 class NativeSqliteAdapter {
@@ -381,6 +435,45 @@ class NativeSqliteAdapter {
     this.db
       .prepare("UPDATE metadata SET value = ? WHERE key = 'schema_version'")
       .run(String(version));
+  }
+
+  forceEntrySchemaVersion(version) {
+    this.db.exec("BEGIN IMMEDIATE");
+    this.db.prepare("UPDATE symbol_index SET schema_version = ?").run(version);
+    this.db
+      .prepare("UPDATE metadata SET value = ? WHERE key = 'schema_version'")
+      .run(String(version));
+    this.db.exec("COMMIT");
+  }
+
+  migrateRows() {
+    const before = Number(
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM symbol_index WHERE schema_version <> ?")
+        .get(SCHEMA_VERSION).count,
+    );
+    this.db.exec("BEGIN IMMEDIATE");
+    this.db
+      .prepare("UPDATE symbol_index SET schema_version = ? WHERE schema_version <> ?")
+      .run(SCHEMA_VERSION, SCHEMA_VERSION);
+    this.db
+      .prepare("UPDATE metadata SET value = ? WHERE key = 'schema_version'")
+      .run(String(SCHEMA_VERSION));
+    this.db.exec("COMMIT");
+    const after = Number(
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM symbol_index WHERE schema_version <> ?")
+        .get(SCHEMA_VERSION).count,
+    );
+    const entries = Number(
+      this.db.prepare("SELECT COUNT(*) AS count FROM symbol_index").get().count,
+    );
+    return {
+      status: before > 0 && after === 0 ? "pass" : "fail",
+      before,
+      after,
+      entries,
+    };
   }
 
   migrate() {
@@ -665,6 +758,68 @@ async function runConcurrentJsonWriters(filePath, entries) {
   };
 }
 
+async function runConcurrentJsonCrossProjectWriters(filePath, entries) {
+  const writers = [
+    {
+      entry: { ...entries[0], project: PROJECT, file_path: "src/cross-primary.ts" },
+      temporaryPath: `${filePath}.cross-primary.tmp`,
+    },
+    {
+      entry: { ...entries[1], project: OTHER_PROJECT, file_path: "src/cross-foreign.ts" },
+      temporaryPath: `${filePath}.cross-foreign.tmp`,
+    },
+  ];
+  const results = await Promise.allSettled(
+    writers.map(({ entry, temporaryPath }) => {
+      const script = `
+        import { readFile, rename, writeFile } from "node:fs/promises";
+        const filePath = ${JSON.stringify(filePath)};
+        const temporaryPath = ${JSON.stringify(temporaryPath)};
+        const entry = ${JSON.stringify(entry)};
+        const document = JSON.parse(await readFile(filePath, "utf8"));
+        const key = (item) => JSON.stringify([item.project.project_id, item.project.config_id, item.file_path]);
+        document.entries = document.entries.filter((item) => key(item) !== key(entry));
+        document.entries.push(entry);
+        await writeFile(temporaryPath, JSON.stringify(document, null, 2) + "\\n", "utf8");
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        await rename(temporaryPath, filePath);
+      `;
+      return execFileAsync(process.execPath, ["--input-type=module", "-e", script]);
+    }),
+  );
+  await Promise.all(writers.map(({ temporaryPath }) => rm(temporaryPath, { force: true })));
+  let primaryLoaded;
+  let foreignLoaded;
+  try {
+    const adapter = new JsonFileAdapter(filePath);
+    primaryLoaded = await adapter.load(PROJECT);
+    foreignLoaded = await adapter.load(OTHER_PROJECT);
+  } catch (error) {
+    return { status: "fail", reason: String(error?.message ?? error).slice(0, 256) };
+  }
+  const primaryPresent = primaryLoaded.some(
+    (entry) => entry.file_path === writers[0].entry.file_path,
+  );
+  const foreignPresent = foreignLoaded.some(
+    (entry) => entry.file_path === writers[1].entry.file_path,
+  );
+  const leaked =
+    primaryLoaded.some((entry) => entry.file_path === writers[1].entry.file_path) ||
+    foreignLoaded.some((entry) => entry.file_path === writers[0].entry.file_path);
+  return {
+    status:
+      results.every((result) => result.status === "fulfilled") &&
+      primaryPresent &&
+      foreignPresent &&
+      !leaked
+        ? "pass"
+        : "fail",
+    primary_present: primaryPresent,
+    foreign_present: foreignPresent,
+    leaked,
+  };
+}
+
 async function runConcurrentSqliteWriters(filePath, DatabaseSync, entries) {
   const writers = [
     { ...entries[0], file_path: "src/concurrent-left.ts" },
@@ -694,6 +849,47 @@ async function runConcurrentSqliteWriters(filePath, DatabaseSync, entries) {
       results.every((result) => result.status === "fulfilled") && present === 2 ? "pass" : "fail",
     present,
     reason: present === 2 ? undefined : "concurrent writers lost at least one committed entry",
+  };
+}
+
+async function runConcurrentSqliteCrossProjectWriters(filePath, DatabaseSync, entries) {
+  const writers = [
+    { ...entries[0], project: PROJECT, file_path: "src/cross-primary.ts" },
+    { ...entries[1], project: OTHER_PROJECT, file_path: "src/cross-foreign.ts" },
+  ];
+  const results = await Promise.allSettled(
+    writers.map((entry) => {
+      const script = `
+        import { DatabaseSync } from "node:sqlite";
+        const db = new DatabaseSync(${JSON.stringify(filePath)});
+        db.exec("PRAGMA busy_timeout = 1000");
+        db.prepare("INSERT OR REPLACE INTO symbol_index (project_id, config_id, file_path, content_hash, config_digest, symbols_json, last_indexed_at, schema_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+          .run(${JSON.stringify(entry.project.project_id)}, ${JSON.stringify(entry.project.config_id)}, ${JSON.stringify(entry.file_path)}, ${JSON.stringify(entry.content_hash)}, ${JSON.stringify(entry.config_digest)}, ${JSON.stringify(JSON.stringify(entry.symbols))}, ${JSON.stringify(entry.last_indexed_at)}, ${JSON.stringify(entry.index_schema_version)});
+        db.close();
+      `;
+      return execFileAsync(process.execPath, ["--input-type=module", "-e", script]);
+    }),
+  );
+  const recovered = new NativeSqliteAdapter(filePath, DatabaseSync);
+  const primaryLoaded = await recovered.load(PROJECT);
+  const foreignLoaded = await recovered.load(OTHER_PROJECT);
+  await recovered.close();
+  const primaryPresent = primaryLoaded.some((entry) => entry.file_path === writers[0].file_path);
+  const foreignPresent = foreignLoaded.some((entry) => entry.file_path === writers[1].file_path);
+  const leaked =
+    primaryLoaded.some((entry) => entry.file_path === writers[1].file_path) ||
+    foreignLoaded.some((entry) => entry.file_path === writers[0].file_path);
+  return {
+    status:
+      results.every((result) => result.status === "fulfilled") &&
+      primaryPresent &&
+      foreignPresent &&
+      !leaked
+        ? "pass"
+        : "fail",
+    primary_present: primaryPresent,
+    foreign_present: foreignPresent,
+    leaked,
   };
 }
 
@@ -799,18 +995,16 @@ async function runJsonBenchmark(filePath, entries) {
     seed(adapter, [{ ...entries[0], content_hash: digest("source-0-changed") }]),
   );
   const configResult = await timed(() => seed(adapter, createEntries(digest("config-v2"))));
+  await adapter.forceEntrySchemaVersion(SCHEMA_VERSION - 1);
+  const migrationResult = await timed(() => adapter.migrateRows());
   await adapter.close();
   const restarted = new JsonFileAdapter(filePath);
   const restartResult = await timed(() => restarted.load());
-  await restarted.forceSchemaVersion(0);
-  const migrationResult = await timed(async () => {
-    const migrated = new JsonFileAdapter(filePath);
-    await migrated.ensureLoaded();
-    await migrated.forceSchemaVersion(SCHEMA_VERSION);
-    return migrated.load();
-  });
   const interruptedResult = await timed(() => runInterruptedJsonFlush(filePath, entries.length));
   const concurrencyResult = await timed(() => runConcurrentJsonWriters(filePath, entries));
+  const crossProjectResult = await timed(() =>
+    runConcurrentJsonCrossProjectWriters(filePath, entries),
+  );
   await writeFile(filePath, "{ corrupted", "utf8");
   const corruptionResult = await timed(async () => {
     let recovered = false;
@@ -845,15 +1039,17 @@ async function runJsonBenchmark(filePath, entries) {
       migration: round(migrationResult.durationMs),
       interrupted_flush: round(interruptedResult.durationMs),
       concurrency: round(concurrencyResult.durationMs),
+      cross_project: round(crossProjectResult.durationMs),
       corruption_recovery: round(corruptionResult.durationMs),
     },
     evidence: {
       initial_entries: entries.length,
       warm_query_matches: queryCount,
       restart: { status: restartResult.value.length === entries.length ? "pass" : "fail" },
-      migration: { status: migrationResult.value.length === entries.length ? "pass" : "fail" },
+      migration: migrationResult.value,
       interrupted_flush: interruptedResult.value,
       concurrency: concurrencyResult.value,
+      cross_project: crossProjectResult.value,
       corruption_recovery: corruptionResult.value,
       source_bodies_persisted: corruptionResult.value.source_bodies_persisted,
       conformance,
@@ -887,8 +1083,8 @@ async function runNativeSqliteBenchmark(filePath, entries, DatabaseSync) {
     seed(adapter, [{ ...entries[0], content_hash: digest("source-0-changed") }]),
   );
   const configResult = await timed(() => seed(adapter, createEntries(digest("config-v2"))));
-  adapter.forceSchemaVersion(0);
-  const migrationResult = await timed(() => adapter.migrate());
+  adapter.forceEntrySchemaVersion(SCHEMA_VERSION - 1);
+  const migrationResult = await timed(() => adapter.migrateRows());
   await adapter.close();
   const restarted = new NativeSqliteAdapter(filePath, DatabaseSync);
   const restartResult = await timed(() => restarted.load());
@@ -898,6 +1094,9 @@ async function runNativeSqliteBenchmark(filePath, entries, DatabaseSync) {
   );
   const concurrencyResult = await timed(() =>
     runConcurrentSqliteWriters(filePath, DatabaseSync, entries),
+  );
+  const crossProjectResult = await timed(() =>
+    runConcurrentSqliteCrossProjectWriters(filePath, DatabaseSync, entries),
   );
   const readerWriterResult = await timed(() =>
     runConcurrentSqliteReadersAndWriter(filePath, DatabaseSync, entries),
@@ -939,6 +1138,7 @@ async function runNativeSqliteBenchmark(filePath, entries, DatabaseSync) {
       migration: round(migrationResult.durationMs),
       interrupted_flush: round(interruptedResult.durationMs),
       concurrency: round(concurrencyResult.durationMs),
+      cross_project: round(crossProjectResult.durationMs),
       reader_writer: round(readerWriterResult.durationMs),
       corruption_recovery: round(corruptionResult.durationMs),
     },
@@ -946,15 +1146,118 @@ async function runNativeSqliteBenchmark(filePath, entries, DatabaseSync) {
       initial_entries: entries.length,
       warm_query_matches: queryCount,
       restart: { status: restartResult.value.length === entries.length ? "pass" : "fail" },
-      migration: { status: migrationResult.value ? "pass" : "fail" },
+      migration: migrationResult.value,
       interrupted_flush: interruptedResult.value,
       concurrency: concurrencyResult.value,
+      cross_project: crossProjectResult.value,
       reader_writer: readerWriterResult.value,
       corruption_recovery: corruptionResult.value,
       source_bodies_persisted: corruptionResult.value.source_bodies_persisted,
       conformance,
     },
   };
+}
+
+async function runFocusedJsonScenario(filePath, entries, scenario) {
+  const adapter = new JsonFileAdapter(filePath);
+  const initial = await timed(() => seed(adapter, entries));
+  const evidenceKey = scenario === "cross-project" ? "cross_project" : scenario;
+  let operation;
+  let evidence;
+
+  if (scenario === "migration") {
+    await adapter.forceEntrySchemaVersion(SCHEMA_VERSION - 1);
+    operation = await timed(() => adapter.migrateRows());
+    await adapter.close();
+    const reopened = new JsonFileAdapter(filePath);
+    const currentEntries = await reopened.load(PROJECT, SCHEMA_VERSION);
+    const legacyEntries = await reopened.load(PROJECT, SCHEMA_VERSION - 1);
+    await reopened.close();
+    evidence = {
+      ...operation.value,
+      status:
+        operation.value.status === "pass" &&
+        currentEntries.length === entries.length &&
+        legacyEntries.length === 0
+          ? "pass"
+          : "fail",
+      reopened_entries: currentEntries.length,
+      legacy_entries_after_reopen: legacyEntries.length,
+    };
+  } else {
+    await adapter.close();
+    operation = await timed(() => runConcurrentJsonCrossProjectWriters(filePath, entries));
+    evidence = operation.value;
+  }
+
+  return {
+    backend: "file-json",
+    status: "available",
+    scenario,
+    storage_bytes: (await stat(filePath)).size,
+    operations: {
+      [evidenceKey]: round(operation.durationMs),
+      initial_seed: round(initial.durationMs),
+    },
+    evidence: { initial_entries: entries.length, [evidenceKey]: evidence },
+  };
+}
+
+async function runFocusedNativeSqliteScenario(filePath, entries, DatabaseSync, scenario) {
+  const adapter = new NativeSqliteAdapter(filePath, DatabaseSync);
+  const initial = await timed(() => seed(adapter, entries));
+  const evidenceKey = scenario === "cross-project" ? "cross_project" : scenario;
+  let operation;
+  let evidence;
+
+  if (scenario === "migration") {
+    adapter.forceEntrySchemaVersion(SCHEMA_VERSION - 1);
+    operation = await timed(() => adapter.migrateRows());
+    await adapter.close();
+    const reopened = new NativeSqliteAdapter(filePath, DatabaseSync);
+    const currentEntries = await reopened.load(PROJECT, SCHEMA_VERSION);
+    const legacyEntries = await reopened.load(PROJECT, SCHEMA_VERSION - 1);
+    await reopened.close();
+    evidence = {
+      ...operation.value,
+      status:
+        operation.value.status === "pass" &&
+        currentEntries.length === entries.length &&
+        legacyEntries.length === 0
+          ? "pass"
+          : "fail",
+      reopened_entries: currentEntries.length,
+      legacy_entries_after_reopen: legacyEntries.length,
+    };
+  } else {
+    await adapter.close();
+    operation = await timed(() =>
+      runConcurrentSqliteCrossProjectWriters(filePath, DatabaseSync, entries),
+    );
+    evidence = operation.value;
+  }
+
+  return {
+    backend: "native-sqlite",
+    status: "available",
+    scenario,
+    storage_bytes: await storageSize(filePath),
+    operations: {
+      [evidenceKey]: round(operation.durationMs),
+      initial_seed: round(initial.durationMs),
+    },
+    evidence: { initial_entries: entries.length, [evidenceKey]: evidence },
+  };
+}
+
+function assertFocusedEvidence(result, scenario) {
+  const evidenceKey = scenario === "cross-project" ? "cross_project" : scenario;
+  const status = result.evidence?.[evidenceKey]?.status;
+  const isExpectedJsonNegativeControl =
+    result.backend === "file-json" && scenario === "cross-project";
+  if (status !== "pass" && !isExpectedJsonNegativeControl) {
+    throw new Error(`${result.backend} ${scenario} evidence failed.`);
+  }
 }
 
 async function runPackageSmoke(repositoryRoot) {
@@ -983,6 +1286,9 @@ function assertDurableEvidence(results) {
     if (result.backend === "native-sqlite" && result.evidence?.reader_writer?.status !== "pass") {
       failures.push("reader_writer");
     }
+    if (result.backend === "native-sqlite" && result.evidence?.cross_project?.status !== "pass") {
+      failures.push("cross_project");
+    }
     if (result.evidence?.corruption_recovery?.recovered !== true) {
       failures.push("corruption_recovery");
     }
@@ -1009,46 +1315,85 @@ async function main() {
   const wasm = detectPortableWasm();
   let results;
   try {
-    results = [
-      await runMemoryBenchmark(entries),
-      await runJsonBenchmark(path.join(temporaryDirectory, "index.json"), entries),
-    ];
-    if (DatabaseSync) {
-      results.push(
-        await runNativeSqliteBenchmark(
-          path.join(temporaryDirectory, "index.sqlite"),
-          entries,
-          DatabaseSync,
-        ),
-      );
+    if (options.scenario !== "all") {
+      if (options.backend === "json") {
+        results = [
+          await runFocusedJsonScenario(
+            path.join(temporaryDirectory, "index.json"),
+            entries,
+            options.scenario,
+          ),
+        ];
+      } else {
+        if (!DatabaseSync) {
+          throw new Error(
+            "The requested SQLite scenario requires node:sqlite on the current runtime.",
+          );
+        }
+        results = [
+          await runFocusedNativeSqliteScenario(
+            path.join(temporaryDirectory, "index.sqlite"),
+            entries,
+            DatabaseSync,
+            options.scenario,
+          ),
+        ];
+      }
     } else {
-      results.push({
-        backend: "native-sqlite",
-        status: "unavailable",
-        reason: "node:sqlite is unavailable on this runtime; no native dependency was installed.",
-      });
-    }
-    results.push(
-      wasm
-        ? {
-            backend: "portable-wasm-sqlite",
-            status: "detected_not_benchmarked",
-            package: wasm.package,
-            resolved: path.basename(wasm.resolved),
-            reason:
-              "A portable WASM package is present but no dependency-specific adapter is selected.",
-          }
-        : {
-            backend: "portable-wasm-sqlite",
+      results = [];
+      if (["all", "memory"].includes(options.backend)) {
+        results.push(await runMemoryBenchmark(entries));
+      }
+      if (["all", "json"].includes(options.backend)) {
+        results.push(await runJsonBenchmark(path.join(temporaryDirectory, "index.json"), entries));
+      }
+      if (["all", "sqlite"].includes(options.backend)) {
+        if (DatabaseSync) {
+          results.push(
+            await runNativeSqliteBenchmark(
+              path.join(temporaryDirectory, "index.sqlite"),
+              entries,
+              DatabaseSync,
+            ),
+          );
+        } else if (options.backend === "sqlite") {
+          throw new Error(
+            "The requested SQLite backend requires node:sqlite on the current runtime.",
+          );
+        } else {
+          results.push({
+            backend: "native-sqlite",
             status: "unavailable",
             reason:
-              "No portable WASM SQLite package is installed; dependency selection is deferred to the ADR.",
-          },
-    );
+              "node:sqlite is unavailable on this runtime; no native dependency was installed.",
+          });
+        }
+      }
+      if (options.backend === "all") {
+        results.push(
+          wasm
+            ? {
+                backend: "portable-wasm-sqlite",
+                status: "detected_not_benchmarked",
+                package: wasm.package,
+                resolved: path.basename(wasm.resolved),
+                reason:
+                  "A portable WASM package is present but no dependency-specific adapter is selected.",
+              }
+            : {
+                backend: "portable-wasm-sqlite",
+                status: "unavailable",
+                reason:
+                  "No portable WASM SQLite package is installed; dependency selection is deferred to the ADR.",
+              },
+        );
+      }
+    }
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
   }
-  assertDurableEvidence(results);
+  if (options.scenario === "all") assertDurableEvidence(results);
+  else assertFocusedEvidence(results[0], options.scenario);
 
   const yarnConfig = await readFile(path.join(repositoryRoot, ".yarnrc.yml"), "utf8");
   const report = {
@@ -1064,9 +1409,16 @@ async function main() {
     },
     packaging: {
       lifecycle_scripts_disabled: /enableScripts:\s*false/.test(yarnConfig),
-      isolated_tarball_install: options.skipPackageSmoke
-        ? { status: "skipped", reason: "--skip-package-smoke was requested." }
-        : await runPackageSmoke(repositoryRoot),
+      isolated_tarball_install:
+        options.skipPackageSmoke || options.scenario !== "all"
+          ? {
+              status: "skipped",
+              reason:
+                options.scenario === "all"
+                  ? "--skip-package-smoke was requested."
+                  : "Focused scenarios do not run package smoke.",
+            }
+          : await runPackageSmoke(repositoryRoot),
     },
     workload: {
       files: ENTRY_COUNT,
@@ -1076,6 +1428,7 @@ async function main() {
       source_bodies_in_payload: false,
       note: "Synthetic body-free SymbolIndexFileEntry records; timings are local observations, not SLAs.",
     },
+    selection: { backend: options.backend, scenario: options.scenario },
     results,
   };
   const output = `${JSON.stringify(report, null, 2)}\n`;

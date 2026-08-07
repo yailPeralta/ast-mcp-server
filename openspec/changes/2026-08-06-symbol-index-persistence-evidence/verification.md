@@ -57,27 +57,26 @@ The TypeScript contract suite is `test/symbol-index-store-conformance.test.ts` a
 The benchmark report recorded the following for both durable evidence adapters:
 
 - clean restart: `pass`;
-- schema migration: `pass`;
+- row-level schema migration: `pass`; 128 legacy rows became 128 current rows, with zero legacy rows after close/reopen on Node 22.5.0 and Node 24;
 - interrupted flush simulation: `pass`; the killed child left the previous valid snapshot usable;
 - concurrent writers: native SQLite `pass` with 2/2 entries retained and bounded `busy_timeout=1000`; JSON `fail` with 1/2 entries retained;
-- two readers plus one writer: native SQLite `pass`; this is the basic reader/writer probe, not the complete cross-project contention matrix;
+- cross-project concurrent writers: native SQLite `pass`; both project/config entries remained visible only to their own identity on Node 22.5.0 and Node 24;
+- two readers plus one writer: native SQLite `pass`; this is the basic reader/writer probe, not the complete cross-project contention/fallback matrix;
 - malformed JSON / invalid SQLite header recovery: `recovered=true`;
 - source body exclusion: `false`.
 
-The benchmark now validates SQLite header/sidecar cleanup, verifies the exact rebuilt entry count, and measures the main database plus WAL/SHM bytes. Durable evidence assertions fail the benchmark process if restart, migration, corruption recovery, body exclusion or the native reader/writer probe fails.
+The benchmark now validates SQLite header/sidecar cleanup, verifies the exact rebuilt entry count, migrates stored rows rather than only metadata, and measures the main database plus WAL/SHM bytes. Focused `--backend` and `--scenario` runs isolate migration and cross-project evidence below runner timeouts. Durable evidence assertions fail the benchmark process if restart, migration, corruption recovery, body exclusion or the required native concurrency probes fail.
 
 ## Not yet proven
 
 These gates remain intentionally open and prevent selecting a production backend:
 
-- the complete cross-project multi-process reader/writer matrix, including typed contention failure and fallback behavior;
+- the complete cross-project multi-process reader/writer matrix, including typed contention failure and fallback behavior beyond the passing writer-isolation probe;
 - typed failure classification and compiler fallback in the production project/session lifecycle;
 - bounded status/metrics for disabled, hit, miss, stale, migration, corruption, write failure and fallback states;
-- operator disable/quarantine/rebuild rollback smoke;
+- multi-version migration rollback and operator disable/quarantine/rebuild smoke;
 - isolated candidate package/dependency evidence for a portable backend;
 - mutation regression tests proving persistence errors cannot authorize or weaken a mutation.
-
-The current migration scenario is also synthetic: it changes the stored schema marker and reloads the records, but does not yet exercise a real row-by-row schema migration or rollback.
 
 The current benchmark is therefore evidence for the adapter boundary and basic lifecycle behavior, not an authorization to enable persistence.
 

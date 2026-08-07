@@ -145,7 +145,7 @@ The report covers:
 - isolated package installation with lifecycle scripts disabled;
 - body-free synthetic workload;
 - conformance for load, query ranking/limits, schema filtering, project/config isolation, upsert, remove, clear and flush;
-- clean restart, schema-marker migration, interrupted flush and malformed-storage recovery with exact entry-count verification;
+- clean restart, row-level schema migration with reopen verification, interrupted flush and malformed-storage recovery with exact entry-count verification;
 - bounded concurrent writers, including the expected JSON lost-update negative control;
 - a basic native-SQLite probe with two readers plus one writer;
 - SQLite storage sizing including the main database, WAL and SHM sidecars;
@@ -161,7 +161,25 @@ INDEX_STORAGE_NODE24_BIN=/home/yail/.nvm/versions/node/v24.16.0/bin/node \
 yarn benchmark:index-storage --skip-package-smoke --output /tmp/ast-index-storage-node22.5.json
 ```
 
-Node 24 can run the same command without `NODE_OPTIONS`. The configured runtime binaries are probed explicitly and reported as `pass`, `fail` or `not_available`. Missing portable candidates are reported as unavailable rather than installed implicitly. The basic reader/writer check is not a substitute for the complete cross-project reader/writer, real row-migration, compiler-fallback and production-observability gates; a passing benchmark does not authorize persistence.
+Long-running evidence can be isolated by backend and scenario. Focused runs skip package smoke automatically and still report runtime identity and configured runtime probes:
+
+```bash
+# SQLite row migration, including close/reopen and zero legacy rows
+yarn benchmark:index-storage --backend sqlite --scenario migration \
+  --output /tmp/ast-index-storage-sqlite-migration.json
+
+# Concurrent writers for different project/config identities
+yarn benchmark:index-storage --backend sqlite --scenario cross-project \
+  --output /tmp/ast-index-storage-sqlite-cross-project.json
+
+# JSON negative control for cross-project lost updates
+yarn benchmark:index-storage --backend json --scenario cross-project \
+  --output /tmp/ast-index-storage-json-cross-project.json
+```
+
+Supported backends are `all`, `memory`, `json`, and `sqlite`. Supported scenarios are `all`, `migration`, and `cross-project`; focused scenarios require `json` or `sqlite`. The default remains `--backend all --scenario all`.
+
+Node 24 can run the same command without `NODE_OPTIONS`. The configured runtime binaries are probed explicitly and reported as `pass`, `fail` or `not_available`. Missing portable candidates are reported as unavailable rather than installed implicitly. The passing row migration and cross-project writer checks are not substitutes for multi-version rollback, the complete cross-project reader/writer matrix, compiler fallback or production observability; a passing benchmark does not authorize persistence.
 
 ## Model-facing JSON and TOON
 
