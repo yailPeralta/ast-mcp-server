@@ -2,7 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { Project, type Node, type SourceFile } from "ts-morph";
 import type { FileFingerprint } from "./file-fingerprints.js";
-import { InMemorySymbolIndex, type SymbolIndexRefreshFile } from "./symbol-index.js";
+import {
+  InMemorySymbolIndex,
+  SYMBOL_INDEX_SCHEMA_VERSION,
+  type SymbolIndexCurrentFile,
+  type SymbolIndexRefreshFile,
+} from "./symbol-index.js";
 import { findDeclaration, sourceFileIndexSymbols } from "./symbols.js";
 import { collectCompilerRelationships, type RelationshipEdge } from "./relationships.js";
 import { createProjectWatcher, type ProjectWatcher } from "./project-watcher.js";
@@ -216,8 +221,57 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
       throw new Error("Project source changed during synchronization. Retry the operation.");
     }
 
-    const indexFiles: SymbolIndexRefreshFile[] = session.context.project
-      .getSourceFiles()
+    const sourceFiles = session.context.project.getSourceFiles();
+    const currentIndexFiles: SymbolIndexCurrentFile[] = sourceFiles.map((sourceFile) => {
+      const absoluteFilePath = fs.realpathSync(sourceFile.getFilePath());
+      const fingerprint = verificationSnapshot.fingerprints.get(absoluteFilePath);
+      if (!fingerprint) {
+        throw new Error(`No verified fingerprint found for ${absoluteFilePath}.`);
+      }
+      return {
+        file_path: path
+          .relative(session.context.projectRoot, sourceFile.getFilePath())
+          .replaceAll(path.sep, "/"),
+        content_hash: fingerprint.content_hash,
+      };
+    });
+    const existingIndexEntries = await session.context.symbolIndex.load(
+      session.context.status.project,
+      SYMBOL_INDEX_SCHEMA_VERSION,
+    );
+    const existingByPath = new Map(existingIndexEntries.map((entry) => [entry.file_path, entry]));
+    const fingerprintChangedFiles = new Set(
+      [
+        ...verificationSnapshot.fingerprintChanges.added,
+        ...verificationSnapshot.fingerprintChanges.changed,
+      ].map((filePath) =>
+        path.relative(session.context.projectRoot, filePath).replaceAll(path.sep, "/"),
+      ),
+    );
+    const configChanged = existingIndexEntries.some(
+      (entry) => entry.config_digest !== verificationSnapshot.configDigest,
+    );
+    const filesToRebuild = new Set(
+      currentIndexFiles
+        .filter((file) => {
+          const previous = existingByPath.get(file.file_path);
+          return (
+            configChanged ||
+            fingerprintChangedFiles.has(file.file_path) ||
+            !previous ||
+            previous.content_hash !== file.content_hash ||
+            previous.config_digest !== verificationSnapshot.configDigest
+          );
+        })
+        .map((file) => file.file_path),
+    );
+    const indexFiles: SymbolIndexRefreshFile[] = sourceFiles
+      .filter((sourceFile) => {
+        const filePath = path
+          .relative(session.context.projectRoot, sourceFile.getFilePath())
+          .replaceAll(path.sep, "/");
+        return filesToRebuild.has(filePath);
+      })
       .map((sourceFile) => {
         const absoluteFilePath = fs.realpathSync(sourceFile.getFilePath());
         const fingerprint = verificationSnapshot.fingerprints.get(absoluteFilePath);
@@ -225,22 +279,20 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
           throw new Error(`No verified fingerprint found for ${absoluteFilePath}.`);
         }
         return {
-          file_path: path.relative(session.context.projectRoot, sourceFile.getFilePath()),
+          file_path: path
+            .relative(session.context.projectRoot, sourceFile.getFilePath())
+            .replaceAll(path.sep, "/"),
           content_hash: fingerprint.content_hash,
           symbols: sourceFileIndexSymbols(sourceFile, session.context.projectRoot),
         };
       });
-    const changedFiles = [
-      ...verificationSnapshot.fingerprintChanges.added,
-      ...verificationSnapshot.fingerprintChanges.changed,
-    ].map((filePath) => path.relative(session.context.projectRoot, filePath));
 
     try {
       await session.context.symbolIndex.refresh({
         project: session.context.status.project,
         config_digest: verificationSnapshot.configDigest,
+        current_files: currentIndexFiles,
         files: indexFiles,
-        changed_files: changedFiles,
         last_indexed_at: new Date().toISOString(),
       });
       session.context = { ...session.context, symbolIndexReady: true };

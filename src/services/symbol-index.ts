@@ -57,11 +57,17 @@ export interface SymbolIndexRefreshFile {
   readonly symbols: readonly CreateSymbolIndexSymbolInput[];
 }
 
+export interface SymbolIndexCurrentFile {
+  readonly file_path: string;
+  readonly content_hash: string;
+}
+
 export interface SymbolIndexRefreshInput {
   readonly project: ProjectIdentity;
   readonly config_digest: string;
+  readonly current_files: readonly SymbolIndexCurrentFile[];
+  /** Symbol projections are required only for files that must be rebuilt. */
   readonly files: readonly SymbolIndexRefreshFile[];
-  readonly changed_files?: readonly string[];
   readonly last_indexed_at: string;
 }
 
@@ -319,7 +325,14 @@ export class InMemorySymbolIndex implements SymbolIndexStore {
   async flush(): Promise<void> {}
 
   async refresh(input: SymbolIndexRefreshInput): Promise<SymbolIndexRefreshResult> {
-    const changedFiles = new Set((input.changed_files ?? []).map(normalizedFilePath));
+    const currentFiles = input.current_files.map((file) => ({
+      file_path: normalizedFilePath(file.file_path),
+      content_hash: file.content_hash,
+    }));
+    const currentPaths = new Set(currentFiles.map((file) => file.file_path));
+    if (currentPaths.size !== currentFiles.length) {
+      throw new Error("Symbol index refresh contains duplicate current file paths.");
+    }
     const candidates = input.files.map((file) =>
       createSymbolIndexFileEntry({
         project: input.project,
@@ -330,24 +343,41 @@ export class InMemorySymbolIndex implements SymbolIndexStore {
         last_indexed_at: input.last_indexed_at,
       }),
     );
+    const candidateByPath = new Map(candidates.map((entry) => [entry.file_path, entry]));
+    if (candidateByPath.size !== candidates.length) {
+      throw new Error("Symbol index refresh contains duplicate rebuild file paths.");
+    }
+    for (const candidate of candidates) {
+      if (!currentPaths.has(candidate.file_path)) {
+        throw new Error(
+          `Symbol index rebuild file is not in the current file set: ${candidate.file_path}`,
+        );
+      }
+      const current = currentFiles.find((file) => file.file_path === candidate.file_path)!;
+      if (current.content_hash !== candidate.content_hash) {
+        throw new Error(`Symbol index rebuild hash mismatch: ${candidate.file_path}`);
+      }
+    }
     const existing = await this.load(input.project, SYMBOL_INDEX_SCHEMA_VERSION);
     const existingByPath = new Map(existing.map((entry) => [entry.file_path, entry]));
-    const currentPaths = new Set(candidates.map((entry) => entry.file_path));
     const rebuiltFiles: string[] = [];
     const reusedFiles: string[] = [];
 
-    for (const candidate of candidates) {
-      const previous = existingByPath.get(candidate.file_path);
-      const shouldRebuild =
+    for (const current of currentFiles) {
+      const previous = existingByPath.get(current.file_path);
+      const candidate = candidateByPath.get(current.file_path);
+      const requiresRebuild =
         !previous ||
-        changedFiles.has(candidate.file_path) ||
-        previous.content_hash !== candidate.content_hash ||
-        previous.config_digest !== candidate.config_digest;
-      if (shouldRebuild) {
+        previous.content_hash !== current.content_hash ||
+        previous.config_digest !== input.config_digest;
+      if (requiresRebuild && !candidate) {
+        throw new Error(`Missing symbol projection for rebuild file: ${current.file_path}`);
+      }
+      if (candidate) {
         await this.upsert(candidate);
         rebuiltFiles.push(candidate.file_path);
       } else {
-        reusedFiles.push(candidate.file_path);
+        reusedFiles.push(current.file_path);
       }
     }
 

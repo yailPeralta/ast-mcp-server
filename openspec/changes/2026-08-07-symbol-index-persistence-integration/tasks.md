@@ -13,6 +13,8 @@ This phase is active and deliberately disabled by default. It may implement the 
 
 ### Task 1.1: RED/GREEN refresh contract
 
+Status: complete — refresh now separates current path/hash metadata from changed-file symbol projections; focused symbol-index and project tests pass.
+
 Files:
 
 - Modify: `src/services/symbol-index.ts`.

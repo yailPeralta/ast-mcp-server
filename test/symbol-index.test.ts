@@ -158,6 +158,7 @@ describe("symbol index contracts", () => {
     await index.refresh({
       project,
       config_digest: "e".repeat(64),
+      current_files: files.map(({ file_path, content_hash }) => ({ file_path, content_hash })),
       files,
       last_indexed_at: "2026-08-06T00:00:00.000Z",
     });
@@ -202,24 +203,27 @@ describe("symbol index contracts", () => {
     await index.refresh({
       project,
       config_digest: "e".repeat(64),
+      current_files: initialFiles.map(({ file_path, content_hash }) => ({
+        file_path,
+        content_hash,
+      })),
       files: initialFiles,
       last_indexed_at: "2026-08-06T00:00:00.000Z",
     });
     const rebuild = await index.refresh({
       project,
       config_digest: "e".repeat(64),
+      current_files: [
+        { file_path: "src/first.ts", content_hash: "1".repeat(64) },
+        { file_path: "src/second.ts", content_hash: "0".repeat(64) },
+      ],
       files: [
         {
           ...initialFiles[0],
           content_hash: "1".repeat(64),
           symbols: [secondSymbol],
         },
-        {
-          ...initialFiles[1],
-          symbols: [firstSymbol],
-        },
       ],
-      changed_files: ["src/first.ts"],
       last_indexed_at: "2026-08-06T00:01:00.000Z",
     });
 
@@ -261,11 +265,14 @@ describe("symbol index contracts", () => {
     const result = await index.refresh({
       project,
       config_digest: "e".repeat(64),
+      current_files: [{ file_path: "src/kept.ts", content_hash: "a".repeat(64) }],
       files: [
         {
           file_path: "src/kept.ts",
           content_hash: "a".repeat(64),
-          symbols: (await index.load(project, SYMBOL_INDEX_SCHEMA_VERSION))[0].symbols,
+          symbols: (await index.load(project, SYMBOL_INDEX_SCHEMA_VERSION)).find(
+            (candidate) => candidate.file_path === "src/kept.ts",
+          )!.symbols,
         },
       ],
       last_indexed_at: "2026-08-06T00:01:00.000Z",
