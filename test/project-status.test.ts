@@ -186,7 +186,7 @@ describe("project status", () => {
     });
   });
 
-  it("normalizes externally supplied future index states across Phase 1 transitions", () => {
+  it("preserves active index states across status transitions", () => {
     const futureIndexStates = ["ready", "rebuilding", "failed"] as const;
 
     for (const indexState of futureIndexStates) {
@@ -197,24 +197,27 @@ describe("project status", () => {
         lastSuccessfulIndexAt: "2026-08-04T12:00:00.000Z",
       };
 
-      const expectDisabledIndex = (current: ProjectStatus) => {
+      const expectIndex = (
+        current: ProjectStatus,
+        expectedState: typeof indexState | "rebuilding",
+      ) => {
         expect(projectStatusToProjection(current)).toMatchObject({
-          indexed_count: 0,
-          index: { state: "disabled" },
-          last_successful_index_at: null,
+          indexed_count: 99,
+          index: { state: expectedState },
+          last_successful_index_at: "2026-08-04T12:00:00.000Z",
         });
       };
 
-      expectDisabledIndex(status);
+      expectIndex(status, indexState);
       status = transitionProjectStatus(status, {
         type: "source_changed",
         files: ["src/value.ts"],
       });
-      expectDisabledIndex(status);
+      expectIndex(status, indexState);
       status = transitionProjectStatus(status, { type: "config_changed" });
-      expectDisabledIndex(status);
+      expectIndex(status, indexState);
       status = transitionProjectStatus(status, { type: "compiler_rebuild_started" });
-      expectDisabledIndex(status);
+      expectIndex(status, indexState === "ready" ? "rebuilding" : indexState);
       status = transitionProjectStatus(status, {
         type: "sync_succeeded",
         sourceCount: 5,
@@ -223,9 +226,19 @@ describe("project status", () => {
         configSnapshotFingerprint: configFingerprintV2,
         at: "2026-08-04T12:01:00.000Z",
       });
-      expectDisabledIndex(status);
+      expect(projectStatusToProjection(status)).toMatchObject({
+        indexed_count: indexState === "failed" ? 0 : 5,
+        index: { state: indexState === "failed" ? "failed" : "ready" },
+        last_successful_index_at:
+          indexState === "failed" ? "2026-08-04T12:00:00.000Z" : "2026-08-04T12:01:00.000Z",
+      });
       status = transitionProjectStatus(status, { type: "index_recovered" });
-      expectDisabledIndex(status);
+      expect(projectStatusToProjection(status)).toMatchObject({
+        indexed_count: indexState === "failed" ? 0 : 5,
+        index: { state: "ready" },
+        last_successful_index_at:
+          indexState === "failed" ? "2026-08-04T12:00:00.000Z" : "2026-08-04T12:01:00.000Z",
+      });
     }
   });
 
@@ -350,7 +363,7 @@ describe("project status", () => {
       state: "degraded",
       causes: expect.arrayContaining(["index_failure"]),
       indexed_count: 0,
-      index: { state: "disabled" },
+      index: { state: "failed" },
       last_successful_sync_at: "2026-08-04T12:00:00.000Z",
       last_successful_index_at: null,
       degraded_errors: ["index unavailable"],
@@ -362,7 +375,7 @@ describe("project status", () => {
     expect(projectStatusToProjection(recovered)).toMatchObject({
       state: "pending",
       causes: expect.not.arrayContaining(["index_failure"]),
-      index: { state: "disabled" },
+      index: { state: "ready" },
       degraded_errors: [],
     });
 
@@ -377,10 +390,10 @@ describe("project status", () => {
     expect(projectStatusToProjection(freshAgain)).toMatchObject({
       state: "fresh",
       causes: [],
-      indexed_count: 0,
-      index: { state: "disabled" },
+      indexed_count: 4,
+      index: { state: "ready" },
       last_successful_sync_at: "2026-08-04T12:02:00.000Z",
-      last_successful_index_at: null,
+      last_successful_index_at: "2026-08-04T12:02:00.000Z",
     });
   });
 
@@ -1236,7 +1249,7 @@ describe("project status", () => {
     expect(projection.state).toBe("degraded");
     expect(projection.causes).toEqual(["index_failure", "watcher_failure"]);
     expect(projection.compiler).toEqual({ state: "failed" });
-    expect(projection.index).toEqual({ state: "disabled" });
+    expect(projection.index).toEqual({ state: "failed" });
     expect(projection.watcher).toEqual({ state: "failed" });
     expect((projection.causes as readonly string[]).includes("not-a-cause")).toBe(false);
   });
@@ -1374,7 +1387,7 @@ describe("project status", () => {
     );
   });
 
-  it("keeps the disabled index state through index recovery", () => {
+  it("recovers a failed index to ready until a fresh synchronization", () => {
     const degraded = transitionProjectStatus(freshStatus(), {
       type: "index_failed",
       error: "index unavailable",
@@ -1387,7 +1400,7 @@ describe("project status", () => {
       state: "pending",
       causes: [],
       indexed_count: 0,
-      index: { state: "disabled" },
+      index: { state: "ready" },
       last_successful_index_at: null,
     });
   });

@@ -2,7 +2,7 @@ import { decode } from "@toon-format/toon";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import packageMetadata from "../package.json" with { type: "json" };
 import { createServer } from "../src/server.js";
 import { clearOperationsForTests } from "../src/services/operations.js";
@@ -56,6 +56,27 @@ export function formatValue(value: number): string { return String(value); }
     await fixture.cleanup();
     clearOperationsForTests();
     clearProjectSessions();
+    vi.unstubAllEnvs();
+  });
+
+  it("exposes the reserved enabled policy reason through MCP status", async () => {
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "enabled");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", `${fixture.root}/.symbol-index-cache`);
+
+    const status = structured(
+      await client.callTool({
+        name: "ast_get_project_status",
+        arguments: { project_root: fixture.root },
+      }),
+    );
+    expect(status).toMatchObject({
+      index: { state: "disabled" },
+      index_observability: {
+        policy: "disabled",
+        policy_reason: "enabled_not_released",
+        backend: "memory",
+      },
+    });
   });
 
   it("exposes compact structured read results", async () => {

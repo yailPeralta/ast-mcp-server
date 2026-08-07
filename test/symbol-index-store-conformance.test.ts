@@ -1,11 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   InMemorySymbolIndex,
+  MAX_SYMBOL_INDEX_QUERY_CANDIDATES,
   SYMBOL_INDEX_SCHEMA_VERSION,
   createSymbolIndexFileEntry,
   createSymbolIndexSymbol,
   type SymbolIndexStore,
 } from "../src/services/symbol-index.js";
+import {
+  openSQLiteSymbolIndexStore,
+  type SQLiteSymbolIndexStore,
+} from "../src/services/symbol-index-sqlite.js";
 
 const project = {
   project_id: `project_${"a".repeat(64)}`,
@@ -23,13 +31,33 @@ const indexedAt = "2026-08-06T00:00:00.000Z";
 
 type StoreFactory = {
   name: string;
-  create: () => SymbolIndexStore;
+  create: () => Promise<SymbolIndexStore>;
 };
+
+const sqliteStores: SQLiteSymbolIndexStore[] = [];
+const sqliteRoots: string[] = [];
+
+afterEach(async () => {
+  for (const store of sqliteStores.splice(0)) store.close();
+  await Promise.all(
+    sqliteRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+  );
+});
 
 const storeFactories: readonly StoreFactory[] = [
   {
     name: "InMemorySymbolIndex",
-    create: () => new InMemorySymbolIndex(),
+    create: async () => new InMemorySymbolIndex(),
+  },
+  {
+    name: "SQLiteSymbolIndexStore",
+    create: async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "ast-index-conformance-"));
+      sqliteRoots.push(root);
+      const store = await openSQLiteSymbolIndexStore(path.join(root, "index.sqlite"));
+      sqliteStores.push(store);
+      return store;
+    },
   },
 ];
 
@@ -58,7 +86,7 @@ function entry(owner = project, filePath = "src/index.ts", hash = "a", symbols =
 
 describe.each(storeFactories)("$name conformance", ({ create }) => {
   it("preserves project/config isolation and deterministic load ordering", async () => {
-    const store = create();
+    const store = await create();
 
     await store.upsert(entry(project, "src/z.ts", "a"));
     await store.upsert(entry(project, "src/a.ts", "b"));
@@ -82,7 +110,7 @@ describe.each(storeFactories)("$name conformance", ({ create }) => {
   });
 
   it("keeps persisted values body-free and filters by file and symbol kind", async () => {
-    const store = create();
+    const store = await create();
     const unsafeEntry = {
       ...entry(project, "src/worker.ts", "a", [
         symbol("runWorker", "FunctionDeclaration", 2),
@@ -115,8 +143,8 @@ describe.each(storeFactories)("$name conformance", ({ create }) => {
     ]);
   });
 
-  it("keeps query ordering stable and enforces positive limits", async () => {
-    const store = create();
+  it("keeps query ordering stable and enforces bounded positive limits", async () => {
+    const store = await create();
     await store.upsert(
       entry(project, "src/first.ts", "a", [symbol("runAlpha", "FunctionDeclaration", 1)]),
     );
@@ -130,11 +158,16 @@ describe.each(storeFactories)("$name conformance", ({ create }) => {
 
     expect(first).toHaveLength(1);
     expect(second).toEqual(first);
-    await expect(store.querySymbols({ ...query, limit: 0 })).rejects.toThrow(/positive integer/i);
+    await expect(store.querySymbols({ ...query, limit: 0 })).rejects.toThrow(
+      /between 1 and 10000/i,
+    );
+    await expect(
+      store.querySymbols({ ...query, limit: MAX_SYMBOL_INDEX_QUERY_CANDIDATES + 1 }),
+    ).rejects.toThrow(/between 1 and 10000/i);
   });
 
   it("filters schema versions and rejects writes for unsupported versions", async () => {
-    const store = create();
+    const store = await create();
     const validEntry = entry();
 
     await store.upsert(validEntry);
@@ -150,7 +183,7 @@ describe.each(storeFactories)("$name conformance", ({ create }) => {
   });
 
   it("supports remove, clear and flush without affecting another project", async () => {
-    const store = create();
+    const store = await create();
     await store.upsert(entry(project, "src/remove.ts", "a"));
     await store.upsert(entry(project, "src/clear.ts", "b"));
     await store.upsert(entry(otherProject, "src/keep.ts", "c"));

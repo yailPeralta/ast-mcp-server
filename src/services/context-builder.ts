@@ -3,7 +3,12 @@ import path from "node:path";
 import { Node, type SourceFile } from "ts-morph";
 import { buildFileOutline, nodeSourceWithLocation, type OutlineSymbol } from "./outline.js";
 import { paginate } from "./pagination.js";
-import { findDeclarationByName, getSourceFileOrThrow, type ProjectContext } from "./project.js";
+import {
+  findDeclarationByName,
+  getSourceFileOrThrow,
+  reportSymbolIndexFailure,
+  type ProjectContext,
+} from "./project.js";
 import { collectSymbolReferences, type SymbolReferences } from "./references.js";
 import {
   searchProjectSymbolsWithIndex,
@@ -161,6 +166,7 @@ async function projectRecords(
   context: ProjectContext,
   request: ExploreRequest,
 ): Promise<{
+  context: ProjectContext;
   route: ExploreRoute;
   file: string | null;
   symbol: string | null;
@@ -185,6 +191,7 @@ async function projectRecords(
         throw new Error(`Symbol "${requestedSymbolPath}" could not be projected from ${file}.`);
       }
       return {
+        context,
         route: "symbol",
         file,
         symbol: record.selector,
@@ -195,30 +202,42 @@ async function projectRecords(
     const records = fileRecords(sourceFile, projectRoot)
       .filter((record) => !request.query || matchesQuery(record, request.query))
       .filter((record) => !request.kinds || request.kinds.includes(record.kind));
-    return { route: "file", file, symbol: null, records: sortRecords(records, request.query) };
+    return {
+      context,
+      route: "file",
+      file,
+      symbol: null,
+      records: sortRecords(records, request.query),
+    };
   }
 
   if (!request.query) {
     throw new Error("ast_explore requires query, file_path, or both file_path and symbol_path.");
   }
+  let effectiveContext = context;
+  const indexedRecords = await searchProjectSymbolsWithIndex(
+    project,
+    projectRoot,
+    context.status.project,
+    context.symbolIndex,
+    context.symbolIndexReady,
+    {
+      query: request.query,
+      kinds: request.kinds,
+      fileFilter: request.fileFilter,
+    },
+    async (reason) => {
+      effectiveContext = (await reportSymbolIndexFailure(projectRoot, reason)) ?? effectiveContext;
+    },
+  );
   return {
+    context: effectiveContext,
     route: "query",
     file: null,
     symbol: null,
     records:
-      (await searchProjectSymbolsWithIndex(
-        project,
-        projectRoot,
-        context.status.project,
-        context.symbolIndex,
-        context.symbolIndexReady,
-        {
-          query: request.query,
-          kinds: request.kinds,
-          fileFilter: request.fileFilter,
-        },
-      )) ??
-      searchProjectSymbols(project, projectRoot, {
+      indexedRecords ??
+      searchProjectSymbols(effectiveContext.project, effectiveContext.projectRoot, {
         query: request.query,
         kinds: request.kinds,
         fileFilter: request.fileFilter,
@@ -257,6 +276,7 @@ export async function buildExploreContext(
   request: ExploreRequest,
 ): Promise<ExploreResult> {
   const routed = await projectRecords(context, request);
+  const effectiveContext = routed.context;
   const page = paginate(routed.records, request.offset, request.limit);
   const expansion = effectiveExpansion(request);
   const unresolved: ExploreUnresolvedItem[] = [];
@@ -265,7 +285,7 @@ export async function buildExploreContext(
   for (const record of page.items) {
     let sourceFile: SourceFile;
     try {
-      sourceFile = getSourceFileOrThrow(context.project, record.file);
+      sourceFile = getSourceFileOrThrow(effectiveContext.project, record.file);
     } catch {
       unresolved.push({ selector: record.selector, reason: "source_unresolved" });
       continue;
@@ -279,12 +299,12 @@ export async function buildExploreContext(
     }
     let source: ReturnType<typeof nodeSourceWithLocation> | undefined;
     let references: SymbolReferences | undefined;
-    if (expansion.source) source = nodeSourceWithLocation(node, context.projectRoot);
+    if (expansion.source) source = nodeSourceWithLocation(node, effectiveContext.projectRoot);
     if (expansion.references) {
       try {
         references = collectSymbolReferences(
           node,
-          context.projectRoot,
+          effectiveContext.projectRoot,
           record.selector,
           true,
           request.referenceDetail,
@@ -309,7 +329,7 @@ export async function buildExploreContext(
   let returnedEvidence = [...evidence];
   let reason: TruncationReason | null = page.has_more ? "record_limit" : null;
   let result = createResult(
-    context,
+    effectiveContext,
     request,
     routed.route,
     routed.file,
@@ -334,7 +354,7 @@ export async function buildExploreContext(
       returnedEvidence = returnedEvidence.filter((item) => selectors.has(item.selector));
     }
     result = createResult(
-      context,
+      effectiveContext,
       request,
       routed.route,
       routed.file,

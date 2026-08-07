@@ -5,7 +5,7 @@ import {
   PaginationOutputSchema,
   paginate,
 } from "../services/pagination.js";
-import { withProject } from "../services/project.js";
+import { withProject, reportSymbolIndexFailure } from "../services/project.js";
 import { searchProjectSymbols, searchProjectSymbolsWithIndex } from "../services/symbols.js";
 import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
 
@@ -121,6 +121,9 @@ export function registerSearchSymbols(server: McpServer): void {
               context.symbolIndex,
               context.symbolIndexReady,
               { query, kinds, fileFilter: file_filter },
+              async (reason) => {
+                await reportSymbolIndexFailure(projectRoot, reason);
+              },
             )) ??
             searchProjectSymbols(project, projectRoot, {
               query,

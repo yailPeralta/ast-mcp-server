@@ -154,10 +154,10 @@ The report covers:
 Run it with the declared floor using the explicit experimental SQLite flag:
 
 ```bash
-PATH=/home/yail/.nvm/versions/node/v22.5.0/bin:$PATH \
+PATH=<node-22.5-bin-directory>:$PATH \
 NODE_OPTIONS=--experimental-sqlite \
-INDEX_STORAGE_NODE22_5_BIN=/home/yail/.nvm/versions/node/v22.5.0/bin/node \
-INDEX_STORAGE_NODE24_BIN=/home/yail/.nvm/versions/node/v24.16.0/bin/node \
+INDEX_STORAGE_NODE22_5_BIN=<node-22.5-binary> \
+INDEX_STORAGE_NODE24_BIN=<node-24-binary> \
 yarn benchmark:index-storage --skip-package-smoke --output /tmp/ast-index-storage-node22.5.json
 ```
 
@@ -180,6 +180,35 @@ yarn benchmark:index-storage --backend json --scenario cross-project \
 Supported backends are `all`, `memory`, `json`, and `sqlite`. Supported scenarios are `all`, `migration`, and `cross-project`; focused scenarios require `json` or `sqlite`. The default remains `--backend all --scenario all`.
 
 Node 24 can run the same command without `NODE_OPTIONS`. The configured runtime binaries are probed explicitly and reported as `pass`, `fail` or `not_available`. Missing portable candidates are reported as unavailable rather than installed implicitly. The passing row migration and cross-project writer checks are not substitutes for multi-version rollback, the complete cross-project reader/writer matrix, compiler fallback or production observability; a passing benchmark does not authorize persistence.
+
+## Productive symbol-index integration
+
+`scripts/benchmark-symbol-index-integration.mjs` exercises the production adapter and project lifecycle over a deterministic temporary TypeScript fixture. It builds the current tree, keeps persistence disabled by default, enables only an explicit canary process, and verifies rollback to memory-only.
+
+Run the same fixture under both declared runtimes:
+
+```bash
+yarn benchmark:index-integration \
+  --output /tmp/ast-symbol-index-integration-final-node24.json
+
+PATH=<node-22.5-bin-directory>:$PATH \
+NODE_OPTIONS=--experimental-sqlite \
+yarn benchmark:index-integration \
+  --output /tmp/ast-symbol-index-integration-final-node22.5.json
+```
+
+The command fails unless all integration gates pass:
+
+- disabled default and explicit canary persistence;
+- changed-file-only incremental rebuild;
+- corruption quarantine, schema-v2 checksum recovery, self-consistent forged-projection quarantine with canonical compiler results, and immediate memory rollback;
+- unsupported capability and invalid path classification;
+- reserved `enabled` policy failing closed to memory-only with public `enabled_not_released` status;
+- injected read and migration failures;
+- non-contention transaction-COMMIT failure with rollback/reopen preservation and same-operation memory/compiler fallback;
+- writer-contention and flush-checkpoint failures.
+
+The 2026-08-07 second-remediation frozen-tree runs passed all 15 gates on Node.js v24.16.0 and v22.5.0. The script exits non-zero if any gate is false. Node 22.5 requires the experimental SQLite flag; the adapter uses bounded SQL pages because that runtime does not expose `StatementSync.iterate()`. Durations in the reports are local observations over a tiny synthetic fixture, not latency or capacity SLAs. Reports use placeholders for project/cache roots and contain no credentials or host paths.
 
 ## Model-facing JSON and TOON
 

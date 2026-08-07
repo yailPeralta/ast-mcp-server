@@ -1,9 +1,31 @@
 import { createSourceLocation, type SourceRange } from "./read-contracts.js";
 import type { ProjectIdentity } from "./project-status.js";
+import {
+  MAX_SYMBOL_INDEX_FILE_ENTRIES,
+  MAX_SYMBOL_INDEX_QUERY_CANDIDATES,
+  MAX_SYMBOL_INDEX_ROW_PAYLOAD_BYTES,
+  MAX_SYMBOL_INDEX_SCANNED_SYMBOLS,
+} from "./symbol-index-limits.js";
 import { symbolMatchRank } from "./symbols.js";
 
-export const SYMBOL_INDEX_SCHEMA_VERSION = 1 as const;
+export const SYMBOL_INDEX_SCHEMA_VERSION = 2 as const;
+export {
+  MAX_SYMBOL_INDEX_FILE_ENTRIES,
+  MAX_SYMBOL_INDEX_QUERY_CANDIDATES,
+  MAX_SYMBOL_INDEX_ROW_PAYLOAD_BYTES,
+  MAX_SYMBOL_INDEX_SCANNED_SYMBOLS,
+  MAX_SYMBOL_INDEX_TOTAL_PAYLOAD_BYTES,
+} from "./symbol-index-limits.js";
 export type SymbolIndexSchemaVersion = typeof SYMBOL_INDEX_SCHEMA_VERSION;
+
+export class SymbolIndexScanLimitError extends Error {
+  readonly code = "scan_limit_exceeded";
+
+  constructor() {
+    super("Symbol index scan limit exceeded.");
+    this.name = "SymbolIndexScanLimitError";
+  }
+}
 
 const SHA256_DIGEST = /^[a-f0-9]{64}$/;
 const CANONICAL_UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -93,8 +115,12 @@ export interface SymbolIndexStore {
   upsert(entry: SymbolIndexFileEntry): Promise<void>;
   remove(project: ProjectIdentity, filePath: string): Promise<void>;
   querySymbols(query: SymbolIndexQuery): Promise<readonly SymbolIndexSymbolMatch[]>;
+  queryAllSymbols(
+    query: Omit<SymbolIndexQuery, "limit">,
+  ): Promise<readonly SymbolIndexSymbolMatch[]>;
   clear(project: ProjectIdentity): Promise<void>;
   flush(): Promise<void>;
+  refresh(input: SymbolIndexRefreshInput): Promise<SymbolIndexRefreshResult>;
 }
 
 function assertNonEmptyString(value: unknown, name: string): asserts value is string {
@@ -153,9 +179,96 @@ function normalizedFilePath(filePath: string): string {
   return createSourceLocation(filePath, { start_line: 1 }).file;
 }
 
+export interface SymbolIndexRefreshPlan {
+  readonly entries_to_rebuild: readonly SymbolIndexFileEntry[];
+  readonly rebuilt_files: readonly string[];
+  readonly reused_files: readonly string[];
+  readonly removed_files: readonly string[];
+}
+
+export function createSymbolIndexRefreshPlan(
+  input: SymbolIndexRefreshInput,
+  existing: readonly SymbolIndexFileEntry[],
+): SymbolIndexRefreshPlan {
+  if (
+    input.current_files.length > MAX_SYMBOL_INDEX_FILE_ENTRIES ||
+    input.files.length > MAX_SYMBOL_INDEX_FILE_ENTRIES ||
+    existing.length > MAX_SYMBOL_INDEX_FILE_ENTRIES
+  ) {
+    throw new Error("Symbol index refresh file-entry limit was exceeded.");
+  }
+  const currentFiles = input.current_files.map((file) => {
+    const filePath = normalizedFilePath(file.file_path);
+    assertDigest(file.content_hash, "current_file.content_hash");
+    return { file_path: filePath, content_hash: file.content_hash };
+  });
+  const currentPaths = new Set(currentFiles.map((file) => file.file_path));
+  if (currentPaths.size !== currentFiles.length) {
+    throw new Error("Symbol index refresh contains duplicate current file paths.");
+  }
+
+  const candidates = input.files.map((file) =>
+    createSymbolIndexFileEntry({
+      project: input.project,
+      file_path: file.file_path,
+      content_hash: file.content_hash,
+      config_digest: input.config_digest,
+      symbols: file.symbols,
+      last_indexed_at: input.last_indexed_at,
+    }),
+  );
+  const candidateByPath = new Map(candidates.map((entry) => [entry.file_path, entry]));
+  if (candidateByPath.size !== candidates.length) {
+    throw new Error("Symbol index refresh contains duplicate rebuild file paths.");
+  }
+  for (const candidate of candidates) {
+    if (!currentPaths.has(candidate.file_path)) {
+      throw new Error(
+        `Symbol index rebuild file is not in the current file set: ${candidate.file_path}`,
+      );
+    }
+    const current = currentFiles.find((file) => file.file_path === candidate.file_path)!;
+    if (current.content_hash !== candidate.content_hash) {
+      throw new Error(`Symbol index rebuild hash mismatch: ${candidate.file_path}`);
+    }
+  }
+
+  const existingByPath = new Map(existing.map((entry) => [entry.file_path, entry]));
+  const entriesToRebuild: SymbolIndexFileEntry[] = [];
+  const reusedFiles: string[] = [];
+  for (const current of currentFiles) {
+    const previous = existingByPath.get(current.file_path);
+    const candidate = candidateByPath.get(current.file_path);
+    const requiresRebuild =
+      !previous ||
+      previous.content_hash !== current.content_hash ||
+      previous.config_digest !== input.config_digest;
+    if (requiresRebuild && !candidate) {
+      throw new Error(`Missing symbol projection for rebuild file: ${current.file_path}`);
+    }
+    if (candidate) entriesToRebuild.push(candidate);
+    else reusedFiles.push(current.file_path);
+  }
+
+  const removedFiles = existing
+    .filter((entry) => !currentPaths.has(entry.file_path))
+    .map((entry) => entry.file_path)
+    .sort();
+
+  entriesToRebuild.sort((left, right) => left.file_path.localeCompare(right.file_path));
+  return {
+    entries_to_rebuild: entriesToRebuild,
+    rebuilt_files: entriesToRebuild.map((entry) => entry.file_path),
+    reused_files: reusedFiles.sort(),
+    removed_files: removedFiles,
+  };
+}
+
 function assertQueryLimit(value: number): void {
-  if (!Number.isInteger(value) || value < 1) {
-    throw new Error("Symbol index query limit must be a positive integer.");
+  if (!Number.isInteger(value) || value < 1 || value > MAX_SYMBOL_INDEX_QUERY_CANDIDATES) {
+    throw new Error(
+      `Symbol index query limit must be between 1 and ${MAX_SYMBOL_INDEX_QUERY_CANDIDATES}.`,
+    );
   }
 }
 
@@ -195,6 +308,94 @@ export function createSymbolIndexSymbol(input: CreateSymbolIndexSymbolInput): Sy
   };
 }
 
+function jsonStringByteLength(value: string): number {
+  let bytes = 2;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 0x22 || code === 0x5c) {
+      bytes += 2;
+    } else if (code <= 0x1f) {
+      bytes +=
+        code === 0x08 || code === 0x09 || code === 0x0a || code === 0x0c || code === 0x0d ? 2 : 6;
+    } else if (code >= 0xd800 && code <= 0xdbff) {
+      const trailing = value.charCodeAt(index + 1);
+      if (trailing >= 0xdc00 && trailing <= 0xdfff) {
+        bytes += 4;
+        index += 1;
+      } else {
+        bytes += 6;
+      }
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      bytes += 6;
+    } else if (code <= 0x7f) {
+      bytes += 1;
+    } else if (code <= 0x7ff) {
+      bytes += 2;
+    } else {
+      bytes += 3;
+    }
+  }
+  return bytes;
+}
+
+function jsonIntegerByteLength(value: number): number {
+  return String(value).length;
+}
+
+function rangeJsonByteLength(range: SourceRange): number {
+  let bytes = 14 + jsonIntegerByteLength(range.start_line);
+  if (range.start_column !== undefined) bytes += 16 + jsonIntegerByteLength(range.start_column);
+  if (range.end_line !== undefined) bytes += 12 + jsonIntegerByteLength(range.end_line);
+  if (range.end_column !== undefined) bytes += 14 + jsonIntegerByteLength(range.end_column);
+  return bytes + 1;
+}
+
+export function symbolJsonByteLength(symbol: SymbolIndexSymbol): number {
+  return (
+    8 +
+    jsonStringByteLength(symbol.name) +
+    15 +
+    jsonStringByteLength(symbol.symbol_path) +
+    12 +
+    jsonStringByteLength(symbol.selector) +
+    8 +
+    jsonStringByteLength(symbol.kind) +
+    13 +
+    jsonStringByteLength(symbol.signature) +
+    8 +
+    jsonIntegerByteLength(symbol.line) +
+    9 +
+    rangeJsonByteLength(symbol.range) +
+    1
+  );
+}
+
+export function symbolProjectionJsonByteLength(symbols: readonly SymbolIndexSymbol[]): number {
+  let bytes = 2;
+  for (let index = 0; index < symbols.length; index += 1) {
+    bytes += (index === 0 ? 0 : 1) + symbolJsonByteLength(symbols[index]);
+    if (bytes > MAX_SYMBOL_INDEX_ROW_PAYLOAD_BYTES) return bytes;
+  }
+  return bytes;
+}
+
+function createSymbolIndexMatch(
+  entry: SymbolIndexFileEntry,
+  symbol: SymbolIndexSymbol,
+): SymbolIndexSymbolMatch {
+  return {
+    ...createSymbolIndexSymbol(symbol),
+    project: {
+      project_id: entry.project.project_id,
+      config_id: entry.project.config_id,
+    },
+    file_path: entry.file_path,
+    content_hash: entry.content_hash,
+    config_digest: entry.config_digest,
+    index_schema_version: entry.index_schema_version,
+  };
+}
+
 export function createSymbolIndexFileEntry(
   input: CreateSymbolIndexFileEntryInput,
 ): SymbolIndexFileEntry {
@@ -209,6 +410,20 @@ export function createSymbolIndexFileEntry(
   if (!Array.isArray(input.symbols)) {
     throw new Error("symbols must be an array.");
   }
+  if (input.symbols.length > MAX_SYMBOL_INDEX_SCANNED_SYMBOLS) {
+    throw new Error("Symbol index row symbol limit was exceeded.");
+  }
+
+  const symbols: SymbolIndexSymbol[] = [];
+  let payloadBytes = 2;
+  for (const inputSymbol of input.symbols) {
+    const symbol = createSymbolIndexSymbol(inputSymbol);
+    payloadBytes += (symbols.length === 0 ? 0 : 1) + symbolJsonByteLength(symbol);
+    if (payloadBytes > MAX_SYMBOL_INDEX_ROW_PAYLOAD_BYTES) {
+      throw new Error("Symbol index row payload limit was exceeded.");
+    }
+    symbols.push(symbol);
+  }
 
   return {
     index_schema_version: SYMBOL_INDEX_SCHEMA_VERSION,
@@ -219,7 +434,7 @@ export function createSymbolIndexFileEntry(
     file_path: filePath,
     content_hash: input.content_hash,
     config_digest: input.config_digest,
-    symbols: input.symbols.map(createSymbolIndexSymbol),
+    symbols,
     last_indexed_at: input.last_indexed_at,
   };
 }
@@ -227,14 +442,30 @@ export function createSymbolIndexFileEntry(
 export class InMemorySymbolIndex implements SymbolIndexStore {
   private readonly entries = new Map<string, SymbolIndexFileEntry>();
 
+  private projectEntries(
+    project: ProjectIdentity,
+    schemaVersion: SymbolIndexSchemaVersion,
+  ): SymbolIndexFileEntry[] {
+    const selected: SymbolIndexFileEntry[] = [];
+    for (const entry of this.entries.values()) {
+      if (!sameProject(entry.project, project) || entry.index_schema_version !== schemaVersion) {
+        continue;
+      }
+      if (selected.length >= MAX_SYMBOL_INDEX_FILE_ENTRIES) {
+        throw new SymbolIndexScanLimitError();
+      }
+      selected.push(entry);
+    }
+    return selected;
+  }
+
   async load(
     project: ProjectIdentity,
     schemaVersion: SymbolIndexSchemaVersion,
   ): Promise<readonly SymbolIndexFileEntry[]> {
-    return [...this.entries.values()]
-      .filter((entry) => sameProject(entry.project, project))
-      .filter((entry) => entry.index_schema_version === schemaVersion)
-      .sort((left, right) => left.file_path.localeCompare(right.file_path));
+    return this.projectEntries(project, schemaVersion)
+      .sort((left, right) => left.file_path.localeCompare(right.file_path))
+      .map((entry) => createSymbolIndexFileEntry(entry));
   }
 
   async upsert(entry: SymbolIndexFileEntry): Promise<void> {
@@ -249,7 +480,15 @@ export class InMemorySymbolIndex implements SymbolIndexStore {
       symbols: entry.symbols,
       last_indexed_at: entry.last_indexed_at,
     });
-    this.entries.set(entryKey(normalized.project, normalized.file_path), normalized);
+    const key = entryKey(normalized.project, normalized.file_path);
+    if (
+      !this.entries.has(key) &&
+      this.projectEntries(normalized.project, SYMBOL_INDEX_SCHEMA_VERSION).length >=
+        MAX_SYMBOL_INDEX_FILE_ENTRIES
+    ) {
+      throw new SymbolIndexScanLimitError();
+    }
+    this.entries.set(key, normalized);
   }
 
   async remove(project: ProjectIdentity, filePath: string): Promise<void> {
@@ -263,11 +502,24 @@ export class InMemorySymbolIndex implements SymbolIndexStore {
     const kindSet = query.filters?.kinds ? new Set(query.filters.kinds) : undefined;
     const matches: SymbolIndexSymbolMatch[] = [];
 
-    for (const entry of await this.load(query.project, SYMBOL_INDEX_SCHEMA_VERSION)) {
+    let scannedEntries = 0;
+    let scannedSymbols = 0;
+    const entries = this.projectEntries(query.project, SYMBOL_INDEX_SCHEMA_VERSION).sort(
+      (left, right) => left.file_path.localeCompare(right.file_path),
+    );
+    for (const entry of entries) {
       if (normalizedFileFilter && !entry.file_path.toLowerCase().includes(normalizedFileFilter)) {
         continue;
       }
+      scannedEntries += 1;
+      if (scannedEntries > MAX_SYMBOL_INDEX_FILE_ENTRIES) {
+        throw new SymbolIndexScanLimitError();
+      }
       for (const symbol of entry.symbols) {
+        scannedSymbols += 1;
+        if (scannedSymbols > MAX_SYMBOL_INDEX_SCANNED_SYMBOLS) {
+          throw new SymbolIndexScanLimitError();
+        }
         if (kindSet && !kindSet.has(symbol.kind)) continue;
         if (
           !symbol.name.toLowerCase().includes(normalizedQuery) &&
@@ -276,14 +528,7 @@ export class InMemorySymbolIndex implements SymbolIndexStore {
         ) {
           continue;
         }
-        matches.push({
-          ...symbol,
-          project: entry.project,
-          file_path: entry.file_path,
-          content_hash: entry.content_hash,
-          config_digest: entry.config_digest,
-          index_schema_version: entry.index_schema_version,
-        });
+        matches.push(createSymbolIndexMatch(entry, symbol));
       }
     }
 
@@ -313,7 +558,7 @@ export class InMemorySymbolIndex implements SymbolIndexStore {
   async queryAllSymbols(
     query: Omit<SymbolIndexQuery, "limit">,
   ): Promise<readonly SymbolIndexSymbolMatch[]> {
-    return this.querySymbols({ ...query, limit: Number.MAX_SAFE_INTEGER });
+    return this.querySymbols({ ...query, limit: MAX_SYMBOL_INDEX_QUERY_CANDIDATES });
   }
 
   async clear(project: ProjectIdentity): Promise<void> {
@@ -325,72 +570,15 @@ export class InMemorySymbolIndex implements SymbolIndexStore {
   async flush(): Promise<void> {}
 
   async refresh(input: SymbolIndexRefreshInput): Promise<SymbolIndexRefreshResult> {
-    const currentFiles = input.current_files.map((file) => ({
-      file_path: normalizedFilePath(file.file_path),
-      content_hash: file.content_hash,
-    }));
-    const currentPaths = new Set(currentFiles.map((file) => file.file_path));
-    if (currentPaths.size !== currentFiles.length) {
-      throw new Error("Symbol index refresh contains duplicate current file paths.");
-    }
-    const candidates = input.files.map((file) =>
-      createSymbolIndexFileEntry({
-        project: input.project,
-        file_path: file.file_path,
-        content_hash: file.content_hash,
-        config_digest: input.config_digest,
-        symbols: file.symbols,
-        last_indexed_at: input.last_indexed_at,
-      }),
-    );
-    const candidateByPath = new Map(candidates.map((entry) => [entry.file_path, entry]));
-    if (candidateByPath.size !== candidates.length) {
-      throw new Error("Symbol index refresh contains duplicate rebuild file paths.");
-    }
-    for (const candidate of candidates) {
-      if (!currentPaths.has(candidate.file_path)) {
-        throw new Error(
-          `Symbol index rebuild file is not in the current file set: ${candidate.file_path}`,
-        );
-      }
-      const current = currentFiles.find((file) => file.file_path === candidate.file_path)!;
-      if (current.content_hash !== candidate.content_hash) {
-        throw new Error(`Symbol index rebuild hash mismatch: ${candidate.file_path}`);
-      }
-    }
     const existing = await this.load(input.project, SYMBOL_INDEX_SCHEMA_VERSION);
-    const existingByPath = new Map(existing.map((entry) => [entry.file_path, entry]));
-    const rebuiltFiles: string[] = [];
-    const reusedFiles: string[] = [];
-
-    for (const current of currentFiles) {
-      const previous = existingByPath.get(current.file_path);
-      const candidate = candidateByPath.get(current.file_path);
-      const requiresRebuild =
-        !previous ||
-        previous.content_hash !== current.content_hash ||
-        previous.config_digest !== input.config_digest;
-      if (requiresRebuild && !candidate) {
-        throw new Error(`Missing symbol projection for rebuild file: ${current.file_path}`);
-      }
-      if (candidate) {
-        await this.upsert(candidate);
-        rebuiltFiles.push(candidate.file_path);
-      } else {
-        reusedFiles.push(current.file_path);
-      }
-    }
-
-    const removedFiles = existing
-      .filter((entry) => !currentPaths.has(entry.file_path))
-      .map((entry) => entry.file_path)
-      .sort();
-    for (const filePath of removedFiles) await this.remove(input.project, filePath);
+    const plan = createSymbolIndexRefreshPlan(input, existing);
+    for (const entry of plan.entries_to_rebuild) await this.upsert(entry);
+    for (const filePath of plan.removed_files) await this.remove(input.project, filePath);
 
     return {
-      rebuilt_files: rebuiltFiles.sort(),
-      reused_files: reusedFiles.sort(),
-      removed_files: removedFiles,
+      rebuilt_files: plan.rebuilt_files,
+      reused_files: plan.reused_files,
+      removed_files: plan.removed_files,
     };
   }
 }

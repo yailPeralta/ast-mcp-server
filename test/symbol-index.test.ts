@@ -3,9 +3,14 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   InMemorySymbolIndex,
+  MAX_SYMBOL_INDEX_FILE_ENTRIES,
+  MAX_SYMBOL_INDEX_QUERY_CANDIDATES,
+  MAX_SYMBOL_INDEX_SCANNED_SYMBOLS,
   SYMBOL_INDEX_SCHEMA_VERSION,
   createSymbolIndexFileEntry,
+  createSymbolIndexRefreshPlan,
   createSymbolIndexSymbol,
+  symbolProjectionJsonByteLength,
   type SymbolIndexStore,
 } from "../src/services/symbol-index.js";
 import { sourceFileIndexSymbols } from "../src/services/symbols.js";
@@ -126,8 +131,10 @@ describe("symbol index contracts", () => {
       upsert: async () => undefined,
       remove: async () => undefined,
       querySymbols: async () => [],
+      queryAllSymbols: async () => [],
       clear: async () => undefined,
       flush: async () => undefined,
+      refresh: async () => ({ rebuilt_files: [], reused_files: [], removed_files: [] }),
     };
 
     await expect(store.load(project, SYMBOL_INDEX_SCHEMA_VERSION)).resolves.toEqual([]);
@@ -139,6 +146,148 @@ describe("symbol index contracts", () => {
         limit: 10,
       }),
     ).resolves.toEqual([]);
+  });
+
+  it("bounds all-symbol candidate reads before consumer pagination", async () => {
+    const index = new InMemorySymbolIndex();
+    const symbols = Array.from({ length: MAX_SYMBOL_INDEX_QUERY_CANDIDATES + 1 }, (_, offset) =>
+      createSymbolIndexSymbol({
+        name: `symbol${offset}`,
+        symbol_path: `symbol${offset}`,
+        selector: `symbol${offset}@${offset + 1}`,
+        kind: "VariableDeclaration",
+        signature: `const symbol${offset}: number`,
+        line: offset + 1,
+        range: { start_line: offset + 1 },
+      }),
+    );
+    await index.upsert(
+      createSymbolIndexFileEntry({
+        project,
+        file_path: "src/many.ts",
+        content_hash: "c".repeat(64),
+        config_digest: "d".repeat(64),
+        symbols,
+        last_indexed_at: "2026-08-06T00:00:00.000Z",
+      }),
+    );
+
+    await expect(index.queryAllSymbols({ project, query: "symbol" })).resolves.toHaveLength(
+      MAX_SYMBOL_INDEX_QUERY_CANDIDATES,
+    );
+  });
+
+  it("rejects direct query limits above the candidate cap", async () => {
+    const index = new InMemorySymbolIndex();
+    await expect(
+      index.querySymbols({
+        project,
+        query: "value",
+        limit: MAX_SYMBOL_INDEX_QUERY_CANDIDATES + 1,
+      }),
+    ).rejects.toThrow("between 1 and");
+  });
+
+  it("abandons an over-capacity scan for canonical compiler fallback", async () => {
+    const index = new InMemorySymbolIndex();
+    const symbolsPerEntry = 10_000;
+    for (let chunk = 0; chunk < MAX_SYMBOL_INDEX_SCANNED_SYMBOLS / symbolsPerEntry; chunk += 1) {
+      const symbols = Array.from({ length: symbolsPerEntry }, (_, offset) => {
+        const ordinal = chunk * symbolsPerEntry + offset;
+        return createSymbolIndexSymbol({
+          name: `item${ordinal}`,
+          symbol_path: `item${ordinal}`,
+          selector: `item${ordinal}@${offset + 1}`,
+          kind: "VariableDeclaration",
+          signature: `const item${ordinal}: number`,
+          line: offset + 1,
+          range: { start_line: offset + 1 },
+        });
+      });
+      await index.upsert(
+        createSymbolIndexFileEntry({
+          project,
+          file_path: `src/capacity-${chunk}.ts`,
+          content_hash: `${chunk}`.repeat(64),
+          config_digest: "f".repeat(64),
+          symbols,
+          last_indexed_at: "2026-08-06T00:00:00.000Z",
+        }),
+      );
+    }
+    await index.upsert(
+      createSymbolIndexFileEntry({
+        project,
+        file_path: "src/over-capacity.ts",
+        content_hash: "e".repeat(64),
+        config_digest: "f".repeat(64),
+        symbols: [symbol],
+        last_indexed_at: "2026-08-06T00:00:00.000Z",
+      }),
+    );
+
+    await expect(index.queryAllSymbols({ project, query: "item" })).rejects.toMatchObject({
+      code: "scan_limit_exceeded",
+    });
+  });
+
+  it("rejects oversized collections before reading or mapping their elements", () => {
+    let symbolReads = 0;
+    const oversizedSymbols = new Array(MAX_SYMBOL_INDEX_SCANNED_SYMBOLS + 1);
+    Object.defineProperty(oversizedSymbols, 0, {
+      get() {
+        symbolReads += 1;
+        return symbol;
+      },
+    });
+    expect(() =>
+      createSymbolIndexFileEntry({
+        project,
+        file_path: "src/oversized.ts",
+        content_hash: "e".repeat(64),
+        config_digest: "f".repeat(64),
+        symbols: oversizedSymbols,
+        last_indexed_at: "2026-08-06T00:00:00.000Z",
+      }),
+    ).toThrow("symbol limit");
+    expect(symbolReads).toBe(0);
+
+    let fileReads = 0;
+    const oversizedFiles = new Array(MAX_SYMBOL_INDEX_FILE_ENTRIES + 1);
+    Object.defineProperty(oversizedFiles, 0, {
+      get() {
+        fileReads += 1;
+        return { file_path: "src/value.ts", content_hash: "e".repeat(64) };
+      },
+    });
+    expect(() =>
+      createSymbolIndexRefreshPlan(
+        {
+          project,
+          config_digest: "f".repeat(64),
+          current_files: oversizedFiles,
+          files: [],
+          last_indexed_at: "2026-08-06T00:00:00.000Z",
+        },
+        [],
+      ),
+    ).toThrow("file-entry limit");
+    expect(fileReads).toBe(0);
+  });
+
+  it("accounts projection JSON bytes exactly before serialization", () => {
+    const escaped = createSymbolIndexSymbol({
+      name: 'quote"\\\n',
+      symbol_path: "emoji.😀",
+      selector: "lone-\ud800@42",
+      kind: "MethodDeclaration",
+      signature: "control\u0001é",
+      line: 42,
+      range: { start_line: 42, start_column: 3, end_line: 44, end_column: 7 },
+    });
+    const serialized = JSON.stringify([escaped]);
+
+    expect(symbolProjectionJsonByteLength([escaped])).toBe(Buffer.byteLength(serialized, "utf8"));
   });
 
   it("indexes compiler symbols and reuses the existing ranking semantics", async () => {
@@ -280,5 +429,35 @@ describe("symbol index contracts", () => {
 
     expect(result.removed_files).toEqual(["src/deleted.ts"]);
     expect(await index.querySymbols({ project, query: "deleted", limit: 10 })).toEqual([]);
+  });
+
+  it("returns defensive snapshots that cannot mutate in-memory index state", async () => {
+    const index = new InMemorySymbolIndex();
+    await index.upsert(
+      createSymbolIndexFileEntry({
+        project,
+        file_path: "src/value.ts",
+        content_hash: "a".repeat(64),
+        config_digest: "e".repeat(64),
+        symbols: [symbol],
+        last_indexed_at: "2026-08-06T00:00:00.000Z",
+      }),
+    );
+
+    const loaded = await index.load(project, SYMBOL_INDEX_SCHEMA_VERSION);
+    (loaded[0].project as { project_id: string }).project_id = "mutated";
+    (loaded[0].symbols[0].range as { start_line: number }).start_line = 99;
+
+    const reloaded = await index.load(project, SYMBOL_INDEX_SCHEMA_VERSION);
+    expect(reloaded[0].project).toEqual(project);
+    expect(reloaded[0].symbols[0].range.start_line).toBe(4);
+
+    const queried = await index.querySymbols({ project, query: "createServer", limit: 1 });
+    (queried[0].project as { project_id: string }).project_id = "mutated";
+    (queried[0].range as { start_line: number }).start_line = 99;
+
+    const requeried = await index.querySymbols({ project, query: "createServer", limit: 1 });
+    expect(requeried[0].project).toEqual(project);
+    expect(requeried[0].range.start_line).toBe(4);
   });
 });

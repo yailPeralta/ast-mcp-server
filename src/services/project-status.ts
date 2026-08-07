@@ -139,6 +139,12 @@ export type ProjectStatusEvent =
       type: "index_recovered";
     }
   | {
+      type: "index_ready";
+    }
+  | {
+      type: "index_disabled";
+    }
+  | {
       type: "watcher_recovered";
     };
 
@@ -715,12 +721,13 @@ function normalizeProjectStatus(status: ProjectStatus): ProjectStatus {
     causes,
     boundaryInvalid,
     sourceCount: boundedCount(status.sourceCount),
-    indexedCount: 0,
-    index: { state: "disabled" },
+    indexedCount: rawIndexState === "disabled" ? 0 : boundedCount(status.indexedCount),
+    index: { state: isIndexStatusState(rawIndexState) ? rawIndexState : "failed" },
     compiler: { state: compilerValid ? rawCompilerState : "failed" },
     watcher: { state: watcherFailed ? "failed" : rawWatcherState },
     lastSuccessfulSyncAt,
-    lastSuccessfulIndexAt: null,
+    lastSuccessfulIndexAt:
+      rawIndexState === "disabled" ? null : normalizedTimestamp(status.lastSuccessfulIndexAt),
     sourceSnapshotFingerprint,
     configSnapshotFingerprint,
     canonicalSnapshotFingerprint,
@@ -866,9 +873,11 @@ export function transitionProjectStatus(
         compiler: { state: "rebuilding" },
         index: {
           state:
-            hasActiveIndexFailure(status) || status.index.state === "disabled"
-              ? "disabled"
-              : "rebuilding",
+            status.index.state === "failed"
+              ? "failed"
+              : status.index.state === "disabled"
+                ? "disabled"
+                : "rebuilding",
         },
       });
 
@@ -877,7 +886,10 @@ export function transitionProjectStatus(
         return markInvalidTransition(status, "[invalid-count]");
       }
       const hasFailure = hasActiveComponentFailure(status);
-      const indexDisabled = hasActiveIndexFailure(status) || status.index.state === "disabled";
+      const indexUnavailable =
+        hasActiveIndexFailure(status) ||
+        status.index.state === "disabled" ||
+        status.index.state === "failed";
       const sourceSnapshotFingerprint = nonEmptyFingerprint(
         event.sourceSnapshotFingerprint,
         "source",
@@ -917,7 +929,7 @@ export function transitionProjectStatus(
         state: nextState,
         causes: canClearInvalidation ? [] : status.causes,
         sourceCount: boundedCount(event.sourceCount),
-        indexedCount: indexDisabled ? 0 : boundedCount(event.indexedCount),
+        indexedCount: indexUnavailable ? 0 : boundedCount(event.indexedCount),
         pendingFiles: pending.files,
         pendingFilesTruncated:
           pending.recordTruncation.truncated || pending.filenameTruncation.truncated,
@@ -925,15 +937,16 @@ export function transitionProjectStatus(
         pendingFilesFilenameTruncation: pending.filenameTruncation,
         compiler: { state: "ready" },
         index: {
-          state: indexDisabled
-            ? "disabled"
-            : hasFailure && status.index.state === "failed"
+          state:
+            hasFailure && status.index.state === "failed"
               ? "failed"
-              : "ready",
+              : indexUnavailable
+                ? "disabled"
+                : "ready",
         },
         lastSuccessfulSyncAt: canClearInvalidation ? nextSyncAt : status.lastSuccessfulSyncAt,
         lastSuccessfulIndexAt:
-          !hasFreshEvidence || indexDisabled || (hasFailure && status.index.state === "failed")
+          !hasFreshEvidence || indexUnavailable
             ? status.lastSuccessfulIndexAt
             : (nextSyncAt ?? status.lastSuccessfulIndexAt),
         sourceSnapshotFingerprint: hasSnapshotEvidence
@@ -1002,7 +1015,7 @@ export function transitionProjectStatus(
       return statusWith(status, {
         state: "degraded",
         causes: appendCause(status.causes, "index_failure"),
-        index: { state: "disabled" },
+        index: { state: "failed" },
         degradedErrors: appended.errors,
         degradedErrorsTruncation: errorTruncation(countTruncated, textTruncated),
         degradedErrorsTextTruncation: createTruncationMetadata(
@@ -1039,6 +1052,17 @@ export function transitionProjectStatus(
     case "index_recovered":
       return recoverComponent(status, "index");
 
+    case "index_ready":
+      return statusWith(status, { index: { state: "ready" } });
+
+    case "index_disabled":
+      return statusWith(status, {
+        index: { state: "disabled" },
+        indexedCount: 0,
+        lastSuccessfulIndexAt: null,
+        causes: removeCause(status.causes, "index_failure"),
+      });
+
     case "watcher_recovered":
       return recoverComponent(status, "watcher");
 
@@ -1051,7 +1075,7 @@ function recoverComponent(status: ProjectStatus, component: "index" | "watcher")
   const recovered =
     component === "index"
       ? statusWith(status, {
-          index: { state: "disabled" },
+          index: { state: status.index.state === "failed" ? "ready" : status.index.state },
           causes: removeCause(status.causes, "index_failure"),
         })
       : statusWith(status, {
@@ -1077,16 +1101,16 @@ export function projectStatusToProjection(status: ProjectStatus): ProjectStatusP
     state: normalized.state,
     causes: [...normalized.causes],
     source_count: normalized.sourceCount,
-    indexed_count: 0,
+    indexed_count: normalized.indexedCount,
     pending_files: [...normalized.pendingFiles],
     pending_files_truncated: normalized.pendingFilesTruncated,
     pending_files_truncation: { ...normalized.pendingFilesTruncation },
     pending_files_filename_truncation: { ...normalized.pendingFilesFilenameTruncation },
     compiler: { ...normalized.compiler },
-    index: { state: "disabled" },
+    index: { ...normalized.index },
     watcher: { ...normalized.watcher },
     last_successful_sync_at: normalized.lastSuccessfulSyncAt,
-    last_successful_index_at: null,
+    last_successful_index_at: normalized.lastSuccessfulIndexAt,
     source_snapshot_fingerprint: normalized.sourceSnapshotFingerprint,
     config_snapshot_fingerprint: normalized.configSnapshotFingerprint,
     canonical_snapshot_fingerprint: normalized.canonicalSnapshotFingerprint,

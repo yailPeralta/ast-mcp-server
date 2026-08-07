@@ -7,7 +7,23 @@ import {
   SYMBOL_INDEX_SCHEMA_VERSION,
   type SymbolIndexCurrentFile,
   type SymbolIndexRefreshFile,
+  type SymbolIndexStore,
 } from "./symbol-index.js";
+import {
+  addSymbolIndexRuntimeCount,
+  createInitialSymbolIndexRuntimeObservability,
+  readSymbolIndexPersistencePolicy,
+  symbolIndexCachePath,
+  symbolIndexPolicyKey,
+  type SymbolIndexPersistencePolicy,
+  type SymbolIndexRuntimeObservability,
+} from "./symbol-index-policy.js";
+import {
+  openSQLiteSymbolIndexStore,
+  quarantineSQLiteSymbolIndexFile,
+  type SQLiteSymbolIndexStore,
+  type SymbolIndexStorageError,
+} from "./symbol-index-sqlite.js";
 import { findDeclaration, sourceFileIndexSymbols } from "./symbols.js";
 import { collectCompilerRelationships, type RelationshipEdge } from "./relationships.js";
 import { createProjectWatcher, type ProjectWatcher } from "./project-watcher.js";
@@ -27,8 +43,11 @@ export interface ProjectContext {
   projectRoot: string;
   tsConfigFilePath: string;
   status: ProjectStatus;
-  symbolIndex: InMemorySymbolIndex;
+  symbolIndex: SymbolIndexStore;
   symbolIndexReady: boolean;
+  symbolIndexBackend: "memory" | "sqlite";
+  symbolIndexFallbackReason: string | null;
+  symbolIndexObservability: SymbolIndexRuntimeObservability;
   relationshipEdges: readonly RelationshipEdge[];
   relationshipEdgesReady: boolean;
 }
@@ -43,6 +62,8 @@ interface ProjectSession {
   runningOperations: number;
   queuedOperations: number;
   lastAccessedAt: number;
+  symbolIndexPolicy: SymbolIndexPersistencePolicy;
+  persistentSymbolIndex?: SQLiteSymbolIndexStore;
 }
 
 export type ProjectQueueState = "idle" | "queued" | "running";
@@ -55,11 +76,161 @@ export interface ProjectOperationQueueStatus {
 
 export interface ProjectStatusSnapshot extends ProjectStatusProjection {
   readonly operation_queue: ProjectOperationQueueStatus;
+  readonly index_observability: SymbolIndexRuntimeObservability;
 }
 
 const MAX_PROJECT_SESSIONS = 8;
 const projectSessions = new Map<string, ProjectSession>();
 const projectRoots = new WeakMap<Project, string>();
+
+function closePersistentSymbolIndex(session: ProjectSession): void {
+  session.persistentSymbolIndex?.close();
+  session.persistentSymbolIndex = undefined;
+}
+
+function symbolIndexFailureOperation(reason: string): SymbolIndexRuntimeObservability["operation"] {
+  if (reason === "corrupt_storage") return "corruption";
+  if (reason === "migration_failed" || reason === "unsupported_schema") return "migration";
+  if (reason === "read_failed" || reason === "sqlite_read_failed") return "read_failure";
+  if (reason === "write_failed" || reason === "sqlite_write_failed" || reason === "contention") {
+    return "write_failure";
+  }
+  return "fallback";
+}
+
+function fallbackToMemory(session: ProjectSession, reason: string): void {
+  const persistentSymbolIndex = session.persistentSymbolIndex;
+  session.persistentSymbolIndex = undefined;
+  const boundedReason = reason.slice(0, 128);
+  const operation = symbolIndexFailureOperation(boundedReason);
+  const previous = session.context.symbolIndexObservability;
+  session.context = {
+    ...session.context,
+    status: transitionProjectStatus(session.context.status, {
+      type: "index_failed",
+      error: boundedReason,
+    }),
+    symbolIndex: new InMemorySymbolIndex(),
+    symbolIndexBackend: "memory",
+    symbolIndexFallbackReason: boundedReason,
+    symbolIndexReady: false,
+    symbolIndexObservability: {
+      ...session.context.symbolIndexObservability,
+      policy: session.symbolIndexPolicy.mode,
+      policy_reason: session.symbolIndexPolicy.reason,
+      backend: "memory",
+      state: "failed",
+      operation,
+      last_operation: operation,
+      rejected_entries: addSymbolIndexRuntimeCount(previous.rejected_entries),
+      fallback_count: addSymbolIndexRuntimeCount(previous.fallback_count),
+      migration_count: addSymbolIndexRuntimeCount(
+        previous.migration_count,
+        operation === "migration" ? 1 : 0,
+      ),
+      corruption_count: addSymbolIndexRuntimeCount(
+        previous.corruption_count,
+        operation === "corruption" ? 1 : 0,
+      ),
+      write_failure_count: addSymbolIndexRuntimeCount(
+        previous.write_failure_count,
+        operation === "write_failure" ? 1 : 0,
+      ),
+      last_error: boundedReason,
+    },
+  };
+  try {
+    persistentSymbolIndex?.close();
+  } catch {
+    // The compiler-backed memory context was already installed; cleanup is best effort.
+  }
+}
+
+export async function reportSymbolIndexFailure(
+  projectRoot: string,
+  reason: string,
+): Promise<ProjectContext | undefined> {
+  const session = projectSessions.get(resolveTsConfigPath(projectRoot));
+  if (!session) return undefined;
+  const cachePath = symbolIndexCachePath(session.symbolIndexPolicy, session.context.status.project);
+  fallbackToMemory(session, reason);
+  if (cachePath && reason === "corrupt_storage") {
+    try {
+      await quarantineSQLiteSymbolIndexFile(cachePath);
+    } catch {
+      // The compiler-backed memory fallback remains authoritative if quarantine fails.
+    }
+  }
+  return session.context;
+}
+
+async function ensureSessionSymbolIndex(session: ProjectSession): Promise<void> {
+  const policy = readSymbolIndexPersistencePolicy();
+  if (symbolIndexPolicyKey(policy) !== symbolIndexPolicyKey(session.symbolIndexPolicy)) {
+    closePersistentSymbolIndex(session);
+    session.symbolIndexPolicy = policy;
+    session.context = {
+      ...session.context,
+      status: transitionProjectStatus(session.context.status, { type: "index_disabled" }),
+      symbolIndex: new InMemorySymbolIndex(),
+      symbolIndexBackend: "memory",
+      symbolIndexFallbackReason: null,
+      symbolIndexReady: false,
+      symbolIndexObservability: createInitialSymbolIndexRuntimeObservability(policy),
+    };
+  }
+  if (policy.backend === "memory") return;
+  if (session.persistentSymbolIndex) return;
+
+  const cachePath = symbolIndexCachePath(policy, session.context.status.project);
+  if (!cachePath) return;
+  try {
+    const store = await openSQLiteSymbolIndexStore(cachePath, {
+      busyTimeoutMs: policy.busy_timeout_ms,
+    });
+    session.persistentSymbolIndex = store;
+    const migrationPerformed = store.migrationPerformed;
+    session.context = {
+      ...session.context,
+      status: session.context.status.causes.includes("index_failure")
+        ? transitionProjectStatus(session.context.status, { type: "index_recovered" })
+        : transitionProjectStatus(session.context.status, { type: "index_ready" }),
+      symbolIndex: store,
+      symbolIndexBackend: "sqlite",
+      symbolIndexFallbackReason: null,
+      symbolIndexReady: false,
+      symbolIndexObservability: {
+        ...session.context.symbolIndexObservability,
+        policy: policy.mode,
+        policy_reason: policy.reason,
+        backend: "sqlite",
+        state: "rebuilding",
+        operation: "miss",
+        last_operation: migrationPerformed ? "migration" : "miss",
+        migration_count: addSymbolIndexRuntimeCount(
+          session.context.symbolIndexObservability.migration_count,
+          migrationPerformed ? 1 : 0,
+        ),
+        last_error: null,
+      },
+    };
+  } catch (error) {
+    const reason = (error as Partial<SymbolIndexStorageError>).code ?? "sqlite_open_failed";
+    if (
+      reason === "corrupt_storage" ||
+      reason === "unsupported_schema" ||
+      reason === "migration_failed" ||
+      reason === "read_failed"
+    ) {
+      try {
+        await quarantineSQLiteSymbolIndexFile(cachePath);
+      } catch {
+        // Keep the memory fallback even when the corrupt artifact cannot be moved.
+      }
+    }
+    fallbackToMemory(session, String(reason));
+  }
+}
 
 export function resolveTsConfigPath(projectRoot: string): string {
   const abs = path.resolve(projectRoot);
@@ -97,6 +268,9 @@ function buildProjectContext(tsConfigFilePath: string): ProjectContext {
     status,
     symbolIndex: new InMemorySymbolIndex(),
     symbolIndexReady: false,
+    symbolIndexBackend: "memory",
+    symbolIndexFallbackReason: null,
+    symbolIndexObservability: createInitialSymbolIndexRuntimeObservability(),
     relationshipEdges: [],
     relationshipEdgesReady: false,
   };
@@ -115,6 +289,7 @@ function evictSessions(): void {
 
   if (candidate) {
     candidate[1].watcher.close();
+    closePersistentSymbolIndex(candidate[1]);
     projectSessions.delete(candidate[0]);
   }
 }
@@ -125,7 +300,12 @@ function getOrCreateSession(projectRoot: string): ProjectSession {
   if (existing) return existing;
 
   evictSessions();
-  const context = buildProjectContext(tsConfigFilePath);
+  const symbolIndexPolicy = readSymbolIndexPersistencePolicy();
+  const baseContext = buildProjectContext(tsConfigFilePath);
+  const context: ProjectContext = {
+    ...baseContext,
+    symbolIndexObservability: createInitialSymbolIndexRuntimeObservability(symbolIndexPolicy),
+  };
   const session: ProjectSession = {
     context,
     watcher: createProjectWatcher({
@@ -156,6 +336,7 @@ function getOrCreateSession(projectRoot: string): ProjectSession {
     runningOperations: 0,
     queuedOperations: 0,
     lastAccessedAt: Date.now(),
+    symbolIndexPolicy,
   };
   projectSessions.set(tsConfigFilePath, session);
   session.watcher.start();
@@ -185,6 +366,7 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
     if (currentConfigDigest !== session.configDigest) {
       let status = transitionProjectStatus(session.context.status, { type: "config_changed" });
       status = transitionProjectStatus(status, { type: "compiler_rebuild_started" });
+      closePersistentSymbolIndex(session);
       const rebuilt = buildProjectContext(session.context.tsConfigFilePath);
       session.context = { ...rebuilt, status };
     }
@@ -221,6 +403,8 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
       throw new Error("Project source changed during synchronization. Retry the operation.");
     }
 
+    await ensureSessionSymbolIndex(session);
+
     const sourceFiles = session.context.project.getSourceFiles();
     const currentIndexFiles: SymbolIndexCurrentFile[] = sourceFiles.map((sourceFile) => {
       const absoluteFilePath = fs.realpathSync(sourceFile.getFilePath());
@@ -235,10 +419,51 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
         content_hash: fingerprint.content_hash,
       };
     });
-    const existingIndexEntries = await session.context.symbolIndex.load(
-      session.context.status.project,
-      SYMBOL_INDEX_SCHEMA_VERSION,
-    );
+    let existingIndexEntries;
+    try {
+      existingIndexEntries = await session.context.symbolIndex.load(
+        session.context.status.project,
+        SYMBOL_INDEX_SCHEMA_VERSION,
+      );
+    } catch (error) {
+      if (session.context.symbolIndexBackend !== "sqlite") throw error;
+      fallbackToMemory(
+        session,
+        (error as Partial<SymbolIndexStorageError>).code ?? "sqlite_read_failed",
+      );
+      existingIndexEntries = await session.context.symbolIndex.load(
+        session.context.status.project,
+        SYMBOL_INDEX_SCHEMA_VERSION,
+      );
+    }
+    if (session.context.symbolIndexBackend === "sqlite") {
+      const cacheWarm = existingIndexEntries.length > 0;
+      session.context = {
+        ...session.context,
+        symbolIndexObservability: {
+          ...session.context.symbolIndexObservability,
+          state: "rebuilding",
+          operation: cacheWarm ? "hit" : "miss",
+          last_operation: cacheWarm ? "hit" : "miss",
+          loaded_entries: addSymbolIndexRuntimeCount(
+            session.context.symbolIndexObservability.loaded_entries,
+            existingIndexEntries.length,
+          ),
+          accepted_entries: addSymbolIndexRuntimeCount(
+            session.context.symbolIndexObservability.accepted_entries,
+            existingIndexEntries.length,
+          ),
+          cache_hits: addSymbolIndexRuntimeCount(
+            session.context.symbolIndexObservability.cache_hits,
+            cacheWarm ? 1 : 0,
+          ),
+          cache_misses: addSymbolIndexRuntimeCount(
+            session.context.symbolIndexObservability.cache_misses,
+            cacheWarm ? 0 : 1,
+          ),
+        },
+      };
+    }
     const existingByPath = new Map(existingIndexEntries.map((entry) => [entry.file_path, entry]));
     const fingerprintChangedFiles = new Set(
       [
@@ -288,16 +513,75 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
       });
 
     try {
-      await session.context.symbolIndex.refresh({
+      const refreshResult = await session.context.symbolIndex.refresh({
         project: session.context.status.project,
         config_digest: verificationSnapshot.configDigest,
         current_files: currentIndexFiles,
         files: indexFiles,
         last_indexed_at: new Date().toISOString(),
       });
-      session.context = { ...session.context, symbolIndexReady: true };
-    } catch {
-      session.context = { ...session.context, symbolIndexReady: false };
+      await session.context.symbolIndex.flush();
+      session.context = {
+        ...session.context,
+        symbolIndexReady: true,
+        symbolIndexObservability:
+          session.context.symbolIndexBackend === "sqlite"
+            ? {
+                ...session.context.symbolIndexObservability,
+                state: "ready",
+                operation: refreshResult.rebuilt_files.length > 0 ? "rebuild" : "hit",
+                last_operation: refreshResult.rebuilt_files.length > 0 ? "rebuild" : "hit",
+                last_successful_persistence_at: new Date().toISOString(),
+                rebuilt_files: addSymbolIndexRuntimeCount(
+                  session.context.symbolIndexObservability.rebuilt_files,
+                  refreshResult.rebuilt_files.length,
+                ),
+                reused_files: addSymbolIndexRuntimeCount(
+                  session.context.symbolIndexObservability.reused_files,
+                  refreshResult.reused_files.length,
+                ),
+                removed_files: addSymbolIndexRuntimeCount(
+                  session.context.symbolIndexObservability.removed_files,
+                  refreshResult.removed_files.length,
+                ),
+              }
+            : session.context.symbolIndexObservability,
+      };
+    } catch (error) {
+      if (session.context.symbolIndexBackend === "sqlite") {
+        fallbackToMemory(
+          session,
+          (error as Partial<SymbolIndexStorageError>).code ?? "sqlite_write_failed",
+        );
+        try {
+          const fallbackFiles: SymbolIndexRefreshFile[] = sourceFiles.map((sourceFile) => {
+            const absoluteFilePath = fs.realpathSync(sourceFile.getFilePath());
+            const fingerprint = verificationSnapshot.fingerprints.get(absoluteFilePath);
+            if (!fingerprint) {
+              throw new Error(`No verified fingerprint found for ${absoluteFilePath}.`);
+            }
+            return {
+              file_path: path
+                .relative(session.context.projectRoot, sourceFile.getFilePath())
+                .replaceAll(path.sep, "/"),
+              content_hash: fingerprint.content_hash,
+              symbols: sourceFileIndexSymbols(sourceFile, session.context.projectRoot),
+            };
+          });
+          await session.context.symbolIndex.refresh({
+            project: session.context.status.project,
+            config_digest: verificationSnapshot.configDigest,
+            current_files: currentIndexFiles,
+            files: fallbackFiles,
+            last_indexed_at: new Date().toISOString(),
+          });
+          session.context = { ...session.context, symbolIndexReady: true };
+        } catch {
+          session.context = { ...session.context, symbolIndexReady: false };
+        }
+      } else {
+        session.context = { ...session.context, symbolIndexReady: false };
+      }
     }
 
     let relationshipEdges: readonly RelationshipEdge[] = [];
@@ -385,10 +669,33 @@ export async function getProjectStatus(projectRoot: string): Promise<ProjectStat
   const session = getOrCreateSession(projectRoot);
   return runSessionWithSyncPolicy(
     session,
-    (context) => ({
-      ...projectStatusToProjection(context.status),
-      operation_queue: getQueueStatus(session),
-    }),
+    async (context) => {
+      let effectiveContext = context;
+      let indexedCount = 0;
+      if (context.symbolIndexBackend === "sqlite" && context.symbolIndexReady) {
+        try {
+          indexedCount = (
+            await context.symbolIndex.load(context.status.project, SYMBOL_INDEX_SCHEMA_VERSION)
+          ).length;
+        } catch (error) {
+          fallbackToMemory(
+            session,
+            (error as Partial<SymbolIndexStorageError>).code ?? "sqlite_read_failed",
+          );
+          effectiveContext = session.context;
+          indexedCount = 0;
+        }
+      }
+      return {
+        ...projectStatusToProjection(effectiveContext.status),
+        index: { state: effectiveContext.symbolIndexObservability.state },
+        indexed_count: indexedCount,
+        last_successful_index_at:
+          effectiveContext.symbolIndexObservability.last_successful_persistence_at,
+        index_observability: { ...effectiveContext.symbolIndexObservability },
+        operation_queue: getQueueStatus(session),
+      };
+    },
     true,
   );
 }
@@ -402,11 +709,15 @@ export function invalidateProject(projectRoot: string): void {
   const tsConfigFilePath = resolveTsConfigPath(projectRoot);
   const session = projectSessions.get(tsConfigFilePath);
   session?.watcher.close();
+  if (session) closePersistentSymbolIndex(session);
   projectSessions.delete(tsConfigFilePath);
 }
 
 export function clearProjectSessions(): void {
-  for (const session of projectSessions.values()) session.watcher.close();
+  for (const session of projectSessions.values()) {
+    session.watcher.close();
+    closePersistentSymbolIndex(session);
+  }
   projectSessions.clear();
 }
 

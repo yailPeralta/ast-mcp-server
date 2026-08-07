@@ -9,8 +9,9 @@ import {
 } from "ts-morph";
 import { buildFileOutline } from "./outline.js";
 import type { SourceRange } from "./read-contracts.js";
+import { MAX_SYMBOL_INDEX_QUERY_CANDIDATES } from "./symbol-index-limits.js";
 import type {
-  InMemorySymbolIndex,
+  SymbolIndexStore,
   SymbolIndexSymbol,
   SymbolIndexSymbolMatch,
 } from "./symbol-index.js";
@@ -34,6 +35,17 @@ export interface ProjectSymbolSearchOptions {
   readonly query: string;
   readonly kinds?: readonly string[];
   readonly fileFilter?: string;
+}
+
+export type SymbolIndexFailureHandler = (reason: string) => void | Promise<void>;
+
+class IndexedProjectionMismatchError extends Error {
+  readonly code = "corrupt_storage";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "IndexedProjectionMismatchError";
+  }
 }
 
 export interface ProjectSymbolRecord {
@@ -181,11 +193,13 @@ export async function searchProjectSymbolsWithIndex(
   project: Project,
   projectRoot: string,
   projectIdentity: ProjectIdentity,
-  symbolIndex: InMemorySymbolIndex,
+  symbolIndex: SymbolIndexStore,
   symbolIndexReady: boolean,
   options: ProjectSymbolSearchOptions,
+  onIndexFailure?: SymbolIndexFailureHandler,
 ): Promise<ProjectSymbolRecord[] | undefined> {
   if (!symbolIndexReady) return undefined;
+  const canonical = searchProjectSymbols(project, projectRoot, options);
 
   try {
     const matches = await symbolIndex.queryAllSymbols({
@@ -196,9 +210,43 @@ export async function searchProjectSymbolsWithIndex(
         ...(options.fileFilter ? { file_path: options.fileFilter } : {}),
       },
     });
-    return matches.map((match) => validateIndexedSymbol(project, projectRoot, match));
-  } catch {
-    return undefined;
+    const indexed = matches.map((match) => validateIndexedSymbol(project, projectRoot, match));
+    const expectedIndexedLength = Math.min(canonical.length, MAX_SYMBOL_INDEX_QUERY_CANDIDATES);
+    const complete =
+      indexed.length === expectedIndexedLength &&
+      indexed.every((record, index) => {
+        const expected = canonical[index];
+        return (
+          record.file === expected.file &&
+          record.symbol_path === expected.symbol_path &&
+          record.selector === expected.selector &&
+          record.name === expected.name &&
+          record.kind === expected.kind &&
+          record.line === expected.line &&
+          record.signature === expected.signature
+        );
+      });
+    if (!complete) {
+      try {
+        await onIndexFailure?.("corrupt_storage");
+      } catch {
+        // Failure reporting cannot suppress the compiler-authoritative result.
+      }
+      return canonical;
+    }
+    return canonical;
+  } catch (error) {
+    if ((error as { code?: unknown }).code === "scan_limit_exceeded") return canonical;
+    try {
+      await onIndexFailure?.(
+        typeof (error as { code?: unknown })?.code === "string"
+          ? (error as { code: string }).code
+          : "sqlite_read_failed",
+      );
+    } catch {
+      // Failure reporting cannot suppress the compiler-authoritative result.
+    }
+    return canonical;
   }
 }
 
@@ -209,17 +257,42 @@ function validateIndexedSymbol(
 ): ProjectSymbolRecord {
   const sourceFile = project.getSourceFile(path.resolve(projectRoot, match.file_path));
   if (!sourceFile) {
-    throw new Error(
+    throw new IndexedProjectionMismatchError(
       `Indexed source file "${match.file_path}" was not found in the compiler project.`,
     );
   }
   const expectedFile = path.relative(projectRoot, sourceFile.getFilePath()).replaceAll("\\", "/");
   if (expectedFile !== match.file_path.replaceAll("\\", "/")) {
-    throw new Error(`Indexed source file "${match.file_path}" resolved ambiguously.`);
+    throw new IndexedProjectionMismatchError(
+      `Indexed source file "${match.file_path}" resolved ambiguously.`,
+    );
   }
-  const node = findDeclaration(sourceFile, match.selector);
+  let node: Node;
+  try {
+    node = findDeclaration(sourceFile, match.selector);
+  } catch {
+    throw new IndexedProjectionMismatchError(
+      `Indexed symbol "${match.selector}" does not exist in the compiler project.`,
+    );
+  }
   if (node.getStartLineNumber() !== match.line || node.getKindName() !== match.kind) {
-    throw new Error(`Indexed symbol "${match.selector}" does not match the compiler declaration.`);
+    throw new IndexedProjectionMismatchError(
+      `Indexed symbol "${match.selector}" does not match the compiler declaration.`,
+    );
+  }
+  const canonical = sourceFileIndexSymbols(sourceFile, projectRoot).find(
+    (symbol) => symbol.selector === match.selector,
+  );
+  if (
+    !canonical ||
+    canonical.symbol_path !== match.symbol_path ||
+    canonical.name !== match.name ||
+    canonical.signature !== match.signature ||
+    canonical.range.start_line !== match.range.start_line
+  ) {
+    throw new IndexedProjectionMismatchError(
+      `Indexed symbol "${match.selector}" does not match canonical compiler metadata.`,
+    );
   }
   return {
     file: match.file_path,

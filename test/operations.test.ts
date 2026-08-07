@@ -1,6 +1,6 @@
 import { access, readFile, symlink, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   applyOperation,
   clearOperationsForTests,
@@ -22,6 +22,7 @@ const fixtures: ProjectFixture[] = [];
 afterEach(async () => {
   clearOperationsForTests();
   clearProjectSessions();
+  vi.unstubAllEnvs();
   await Promise.all(fixtures.splice(0).map((fixture) => fixture.cleanup()));
 });
 
@@ -80,6 +81,37 @@ describe("prepared structural operations", () => {
 
     const replay = await applyOperation(prepared.operation_id, prepared.plan_hash);
     expect(replay.idempotent_replay).toBe(true);
+  });
+
+  it("keeps prepare and apply independent from the opt-in persistence backend", async () => {
+    const fixture = await renameFixture();
+    const cacheRoot = path.join(fixture.root, ".symbol-index-cache");
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", cacheRoot);
+
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "formatValue",
+      newName: "renderValue",
+    });
+
+    expect(prepared).toMatchObject({
+      status: "prepared",
+      blocked: false,
+      block_reason: null,
+      reference_count: 2,
+      diagnostics: { addedErrors: [] },
+    });
+    await expect(access(cacheRoot)).rejects.toThrow();
+
+    await expect(applyOperation(prepared.operation_id, prepared.plan_hash)).resolves.toMatchObject({
+      status: "applied",
+      idempotent_replay: false,
+    });
+    await expect(access(cacheRoot)).rejects.toThrow();
+    expect(await fixture.read("src/value.ts")).toContain("renderValue");
+    expect(await fixture.read("src/use.ts")).toContain("renderValue");
   });
 
   it("rejects a stale plan before writing any files", async () => {
