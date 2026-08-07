@@ -21,7 +21,7 @@ Introduce a non-secret environment policy with safe defaults:
 
 - `AST_SYMBOL_INDEX_PERSISTENCE=disabled` (default): use memory only and create no cache files.
 - `AST_SYMBOL_INDEX_PERSISTENCE=canary`: use SQLite only in an explicitly configured canary process and only when `AST_SYMBOL_INDEX_CACHE_ROOT` is present.
-- `AST_SYMBOL_INDEX_PERSISTENCE=enabled`: reserved for a later gate; it is not the default of this phase.
+- `AST_SYMBOL_INDEX_PERSISTENCE=enabled`: reserved for a later ADR gate and therefore fails closed to memory-only in this phase.
 
 The cache root is operator-selected, canonicalized and used only to derive project/config-scoped filenames from opaque identities. No source or host path is used as a public identifier. Changing the policy to `disabled` is the immediate rollback and must not require code rollback or source-data repair.
 

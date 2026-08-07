@@ -1,51 +1,48 @@
-# ADR 0009: Reaffirm memory-only symbol-index storage
+# ADR 0009: Select native SQLite for explicit symbol-index canary
 
 - Status: accepted
-- Date: 2026-08-06
+- Date: 2026-08-07
 - Decision type: evidence gate
 - Scope: symbol-index persistence candidates
 
 ## Decision
 
-Keep `InMemorySymbolIndex` as the only production symbol-index backend for the current release. Do not add a native SQLite, portable/WASM SQLite or JSON persistence dependency, and do not change the default policy from memory-only.
+Select native `node:sqlite` as an explicit canary backend for the derived symbol index. The default remains `AST_SYMBOL_INDEX_PERSISTENCE=disabled`, which uses `InMemorySymbolIndex` and does not open or create a SQLite cache. Canary requires both:
 
-The persistence SDD produced useful adapter-boundary and basic lifecycle evidence, but no candidate has passed every acceptance gate required by `openspec/changes/2026-08-06-symbol-index-persistence-evidence/spec.md`.
+- `AST_SYMBOL_INDEX_PERSISTENCE=canary`;
+- `AST_SYMBOL_INDEX_CACHE_ROOT=<absolute-normalized-cache-root>`.
+
+The reserved value `enabled` remains unreleased and fails closed to memory with public reason `enabled_not_released`. This ADR authorizes opt-in evaluation only; it does not enable canary globally or change the production default.
+
+The compiler/project remains the sole semantic authority. SQLite is a body-free, replaceable read projection. Exact reads, references, relationships, diagnostics, operation preparation and apply checks remain compiler/workspace-derived.
 
 ## Evidence considered
 
-The disposable benchmark adapters were exercised under Node `v22.5.0` with `NODE_OPTIONS=--experimental-sqlite` and Node `v24.16.0`. The benchmark explicitly probed both runtime binaries:
+The integration SDD under `openspec/archive/2026-08-07-symbol-index-persistence-integration/` closes the missing production evidence from the earlier disposable-candidate study:
 
-| Candidate            | Basic conformance                      | Restart     | Migration   | Malformed/corrupt recovery | Decision           |
-| -------------------- | -------------------------------------- | ----------- | ----------- | -------------------------- | ------------------ |
-| Memory               | pass; durable lifecycle not applicable | N/A         | N/A         | N/A                        | production backend |
-| File JSON            | pass                                   | pass        | pass        | pass                       | reference only     |
-| Native SQLite        | pass                                   | pass        | pass        | pass                       | not selected       |
-| Portable/WASM SQLite | unavailable; no dependency installed   | unavailable | unavailable | unavailable                | deferred           |
+- focused authority/lifecycle/consumer suite: 73 tests;
+- SQLite plus common-store conformance: 33 tests;
+- full repository suite: 271 tests across 32 files;
+- format, lint, typecheck, build, MCP 15-tool smoke, CLI, package, audit and 57-file pack checks;
+- Node `v24.16.0` and Node `v22.5.0` with `NODE_OPTIONS=--experimental-sqlite`: 15/15 integration gates on each runtime;
+- schema-v2 constraints and byte digest, atomic v0/v1 migration, corruption quarantine, sidecar cleanup, bounded paging/payloads, contention, non-contention COMMIT rollback, compiler fallback, status observability and mutation isolation;
+- definitive read-only review `PASS` for candidate digest `c3d2d8ed11200562066eeb295e0426fa8e221d0ada5a2577771ee627fd7fd9d1`.
 
-The conformance evidence covers identity isolation, schema filtering, deterministic query semantics, limits, body exclusion, upsert, remove, clear and flush. The benchmark also performs restart, interrupted flush, malformed-storage recovery, real row migration with close/reopen verification, concurrent writers, cross-project writer isolation, and a basic two-readers-plus-writer SQLite probe.
-
-## Why no durable backend is selected
-
-The JSON candidate also failed the concurrent-writer check: only 1 of 2 committed entries remained. Native SQLite retained both entries with a bounded `busy_timeout=1000`, but that is still only the writer subset of the full production acceptance matrix.
-
-The following required evidence is still missing:
-
-1. The complete cross-project multi-process reader/writer matrix, including typed contention failure and fallback behavior beyond the passing writer-isolation probe.
-2. Multi-version migration rollback evidence; forward row migration is now proven only in the disposable adapters.
-3. Production lifecycle integration proving typed failure classification and compiler fallback.
-4. Bounded status/metrics for disabled, hit, miss, stale, migration, corruption, write failure and fallback states.
-5. Disable/quarantine/rebuild rollback smoke and mutation-safety regression tests.
-6. Complete package/dependency evidence for any portable candidate.
-
-Native SQLite is also experimental on the Node `22.5.0` floor and requires an explicit runtime flag. That is acceptable for exploration, not sufficient for a production default.
+The digest on persisted rows proves byte integrity only. Every indexed query still compares the complete ranked projection against canonical compiler search; omissions or forged metadata trigger canonical fallback and quarantine.
 
 ## Consequences
 
-- No production cache files, migrations, native artifacts or new dependencies are introduced.
-- Exact compiler reads and mutation checks remain independent of derived-index storage.
-- The existing `SymbolIndexStore` interface remains the seam for a future adapter.
-- Future work must reopen the decision with a new evidence report or an update to the persistence SDD; benchmark performance alone is not sufficient.
+- No new package dependency is introduced; the canary uses runtime-provided `node:sqlite`.
+- Memory remains the default backend and immediate rollback path.
+- A canary cache is per project/config identity, derived under the operator-selected root, and may be deleted or quarantined without semantic data loss.
+- Any capability, path, open, migration, integrity, read, query, write or flush failure abandons SQLite and continues from compiler/memory with bounded degraded evidence.
+- Node `22.5.0` still exposes SQLite as experimental and requires `NODE_OPTIONS=--experimental-sqlite`; absence of capability fails closed.
+- Portable/WASM SQLite and a globally enabled native backend remain deferred.
 
-## Reconsideration criteria
+## Rollback
 
-A future ADR may select a backend only when the full runtime/package matrix and every conformance, lifecycle, concurrency, fallback, observability, rollback and mutation-safety gate has a reproducible PASS or an explicitly justified not-applicable result.
+Set `AST_SYMBOL_INDEX_PERSISTENCE=disabled` or remove the variable, then invalidate/reopen the project session or restart the process. The reopened session uses memory only and does not open existing SQLite files. Cache files may remain on disk for later inspection; they are not semantic authority.
+
+## Promotion criteria
+
+Promoting reserved `enabled` requires a separate decision with operational canary evidence. It must preserve compiler authority, disabled/memory rollback, bounded failure behavior and the complete conformance/runtime/package matrix. Benchmark speed alone is not a promotion criterion.
