@@ -2,6 +2,8 @@
 
 This change is phase-gated. It starts as an exploration/evidence SDD and must not enable production persistence until the selection gate and ADR are complete.
 
+Closure status: archived historical evidence. The partial/blocked task statuses below describe the evidence available when this study closed; they are not active work. `openspec/archive/2026-08-07-symbol-index-persistence-integration/` subsequently closed the conformance, failure, isolation, fallback, observability and mutation-safety gates. ADR 0009 now authorizes only explicit `canary`; `disabled`/memory remains the default and `enabled` remains unreleased/fail-closed.
+
 ## 0. Compatibility lock
 
 - [x] Re-read ADR 0005, `src/services/symbol-index.ts`, project lifecycle/fallback code, CI matrix and the current storage benchmark.
@@ -110,4 +112,4 @@ Prove that disabling persistence returns to memory-only without source or operat
 - [x] Run Node 22.5.0/24 matrix and isolated package smoke.
 - [x] Verify no source bodies, secrets, compiler objects or mutation plans enter the cache for the exercised derived records.
 - [x] Create `verification.md` with requirement-to-evidence traceability and residual risks.
-- [ ] Archive only after the decision ADR and all acceptance gates are complete.
+- [x] Archive after the successor integration SDD, ADR 0009 canary-only decision and final acceptance evidence superseded this provisional study.

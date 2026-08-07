@@ -1,12 +1,18 @@
 # Verification: symbol-index persistence evidence
 
-Status: evidence phase complete for the current decision; production persistence remains disabled.
+Status: archived historical evidence; superseded by the accepted canary-only integration decision.
 
 ## Scope
 
 This verification records the evidence collected without changing the production backend. `InMemorySymbolIndex` remains the only production implementation and the compiler remains authoritative for exact reads, freshness, references, diagnostics and mutation eligibility.
 
 The durable adapters exercised by the benchmark are disposable evidence adapters only. They are not package dependencies and are not selected for production.
+
+## Supersession
+
+This document records the point-in-time evidence that originally reaffirmed memory-only operation. The later integration under `openspec/archive/2026-08-07-symbol-index-persistence-integration/` closed the missing conformance, failure, isolation, fallback, observability and mutation-safety gates. ADR 0009 now selects native `node:sqlite` only for explicit `AST_SYMBOL_INDEX_PERSISTENCE=canary`; `disabled`/memory remains the default and rollback, while `enabled` remains unreleased with `enabled_not_released`.
+
+The historical “Not yet proven” and decision sections below are retained as dated evidence, not current blockers or policy.
 
 ## Runtime and package evidence
 
@@ -24,8 +30,8 @@ The benchmark never downloads or implicitly installs a runtime or dependency. Mi
 Commands:
 
 ```text
-INDEX_STORAGE_NODE22_5_BIN=/home/yail/.nvm/versions/node/v22.5.0/bin/node \
-INDEX_STORAGE_NODE24_BIN=/home/yail/.nvm/versions/node/v24.16.0/bin/node \
+INDEX_STORAGE_NODE22_5_BIN=<absolute-node-22.5-bin> \
+INDEX_STORAGE_NODE24_BIN=<absolute-node-24-bin> \
 NODE_OPTIONS=--experimental-sqlite \
 node scripts/benchmark-index-storage.mjs --skip-package-smoke \
   --output /tmp/ast-index-storage-node22.5-isolated.json
@@ -37,7 +43,7 @@ Runtime identity in the report:
 
 ```text
 node v22.5.0
-executable /home/yail/.nvm/versions/node/v22.5.0/bin/node
+executable [REDACTED]
 native_sqlite true
 ```
 
@@ -80,7 +86,7 @@ These gates remain intentionally open and prevent selecting a production backend
 
 The current benchmark is therefore evidence for the adapter boundary and basic lifecycle behavior, not an authorization to enable persistence.
 
-## Decision
+## Historical decision
 
 See `docs/adr/0009-index-persistence-backend.md`. The decision is to reaffirm memory-only for the current release and defer backend selection until the remaining failure, concurrency, fallback and observability gates have real evidence.
 
