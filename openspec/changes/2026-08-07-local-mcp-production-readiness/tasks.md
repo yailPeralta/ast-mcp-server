@@ -70,7 +70,7 @@ Evidence:
 
 ### Task 1.2: RED/GREEN strict session registry
 
-Status: pending.
+Status: complete.
 
 Files:
 
@@ -81,9 +81,15 @@ Prove idle LRU eviction, all-busy rejection before compiler/watcher/cache constr
 
 Run `yarn test test/runtime-policy.test.ts test/project.test.ts test/project-watcher.test.ts test/project-status.test.ts test/symbol-index-policy.test.ts test/symbol-index-sqlite.test.ts`.
 
+Evidence:
+
+- RED: three new project-session tests failed against the soft-cap implementation because the bounded registry snapshot and strict admission contract did not exist.
+- GREEN: 131/131 assertions passed across the exact six-file focused command.
+- The all-busy fixture contains an invalid `tsconfig.json`; receiving `PROJECT_CAPACITY_EXCEEDED` proves rejection precedes compiler/config, watcher and cache construction.
+
 ### Task 1.3: Verify and commit strict capacity
 
-Status: pending.
+Status: complete.
 
 Run:
 
@@ -95,6 +101,10 @@ Run:
 - `git diff --check`.
 
 Update requirement traceability in this task file and commit `feat(runtime): enforce project session capacity`.
+
+Evidence:
+
+- `yarn format:check`, `yarn lint`, `yarn typecheck`, the 131/131 focused matrix, `yarn build` and `git diff --check` passed on the post-documentation tree.
 
 ## 2. Bounded project operation scheduler
 

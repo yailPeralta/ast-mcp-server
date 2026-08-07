@@ -6,6 +6,7 @@ import {
   clearProjectSessions,
   createFreshProject,
   getProjectStatus,
+  getProjectSessionRegistrySnapshot,
   getSourceFileOrThrow,
   invalidateProject,
   reportSymbolIndexFailure,
@@ -21,6 +22,14 @@ import * as symbolsModule from "../src/services/symbols.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
 const fixtures: ProjectFixture[] = [];
+
+function createDeferred(): { readonly promise: Promise<void>; readonly resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
 
 afterEach(async () => {
   clearProjectSessions();
@@ -753,5 +762,129 @@ describe("project sessions", () => {
 
     await Promise.all([first, second]);
     expect(events).toEqual(["first:start", "first:end", "second:start"]);
+  });
+
+  it("evicts the least-recently-used idle session without exceeding capacity", async () => {
+    vi.stubEnv("AST_MAX_PROJECT_SESSIONS", "2");
+    const firstFixture = await createProjectFixture({
+      "src/value.ts": "export const first = 1;\n",
+    });
+    const secondFixture = await createProjectFixture({
+      "src/value.ts": "export const second = 2;\n",
+    });
+    const thirdFixture = await createProjectFixture({
+      "src/value.ts": "export const third = 3;\n",
+    });
+    fixtures.push(firstFixture, secondFixture, thirdFixture);
+
+    const firstProject = await withProject(firstFixture.root, ({ project }) => project);
+    const secondProject = await withProject(secondFixture.root, ({ project }) => project);
+    await withProject(firstFixture.root, () => undefined);
+    await withProject(thirdFixture.root, () => undefined);
+
+    expect(getProjectSessionRegistrySnapshot()).toEqual({
+      session_count: 2,
+      active_sessions: 0,
+      idle_sessions: 2,
+      session_capacity: 2,
+    });
+    await expect(withProject(firstFixture.root, ({ project }) => project)).resolves.toBe(
+      firstProject,
+    );
+    await expect(withProject(secondFixture.root, ({ project }) => project)).resolves.not.toBe(
+      secondProject,
+    );
+    expect(getProjectSessionRegistrySnapshot().session_count).toBe(2);
+  });
+
+  it("rejects a new project before admission when every retained session is busy", async () => {
+    vi.stubEnv("AST_MAX_PROJECT_SESSIONS", "2");
+    const firstFixture = await createProjectFixture({
+      "src/value.ts": "export const first = 1;\n",
+    });
+    const secondFixture = await createProjectFixture({
+      "src/value.ts": "export const second = 2;\n",
+    });
+    const rejectedFixture = await createProjectFixture({
+      "src/value.ts": "export const rejected = 3;\n",
+    });
+    fixtures.push(firstFixture, secondFixture, rejectedFixture);
+    await rejectedFixture.write("tsconfig.json", "{ invalid json");
+    const firstStarted = createDeferred();
+    const secondStarted = createDeferred();
+    const release = createDeferred();
+    let rejectedOperationCalled = false;
+
+    const first = withProject(firstFixture.root, async () => {
+      firstStarted.resolve();
+      await release.promise;
+    });
+    const second = withProject(secondFixture.root, async () => {
+      secondStarted.resolve();
+      await release.promise;
+    });
+
+    try {
+      await Promise.all([firstStarted.promise, secondStarted.promise]);
+      expect(getProjectSessionRegistrySnapshot()).toEqual({
+        session_count: 2,
+        active_sessions: 2,
+        idle_sessions: 0,
+        session_capacity: 2,
+      });
+      await expect(
+        withProject(rejectedFixture.root, () => {
+          rejectedOperationCalled = true;
+        }),
+      ).rejects.toMatchObject({
+        name: "ProjectCapacityError",
+        code: "PROJECT_CAPACITY_EXCEEDED",
+        message: "Project session capacity exceeded.",
+      });
+      expect(rejectedOperationCalled).toBe(false);
+      expect(getProjectSessionRegistrySnapshot()).toEqual({
+        session_count: 2,
+        active_sessions: 2,
+        idle_sessions: 0,
+        session_capacity: 2,
+      });
+    } finally {
+      release.resolve();
+      await Promise.all([first, second]);
+    }
+  });
+
+  it("deduplicates concurrent requests for the same new project at capacity one", async () => {
+    vi.stubEnv("AST_MAX_PROJECT_SESSIONS", "1");
+    const fixture = await createProjectFixture({ "src/value.ts": "export const value = 1;\n" });
+    fixtures.push(fixture);
+    const firstStarted = createDeferred();
+    const release = createDeferred();
+    let firstProject: unknown;
+
+    const first = withProject(fixture.root, async ({ project }) => {
+      firstProject = project;
+      firstStarted.resolve();
+      await release.promise;
+      return project;
+    });
+    await firstStarted.promise;
+    const second = withProject(fixture.root, ({ project }) => project);
+
+    expect(getProjectSessionRegistrySnapshot()).toEqual({
+      session_count: 1,
+      active_sessions: 1,
+      idle_sessions: 0,
+      session_capacity: 1,
+    });
+    release.resolve();
+    await expect(first).resolves.toBe(firstProject);
+    await expect(second).resolves.toBe(firstProject);
+    expect(getProjectSessionRegistrySnapshot()).toEqual({
+      session_count: 1,
+      active_sessions: 0,
+      idle_sessions: 1,
+      session_capacity: 1,
+    });
   });
 });

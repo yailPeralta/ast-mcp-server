@@ -37,6 +37,7 @@ import {
   type ProjectStatusProjection,
   type SynchronizationCause,
 } from "./project-status.js";
+import { readRuntimePolicy } from "./runtime-policy.js";
 
 export interface ProjectContext {
   project: Project;
@@ -61,7 +62,7 @@ interface ProjectSession {
   activeOperations: number;
   runningOperations: number;
   queuedOperations: number;
-  lastAccessedAt: number;
+  lastAccessSequence: bigint;
   symbolIndexPolicy: SymbolIndexPersistencePolicy;
   persistentSymbolIndex?: SQLiteSymbolIndexStore;
 }
@@ -79,9 +80,36 @@ export interface ProjectStatusSnapshot extends ProjectStatusProjection {
   readonly index_observability: SymbolIndexRuntimeObservability;
 }
 
-const MAX_PROJECT_SESSIONS = 8;
+export interface ProjectSessionRegistrySnapshot {
+  readonly session_count: number;
+  readonly active_sessions: number;
+  readonly idle_sessions: number;
+  readonly session_capacity: number;
+}
+
+export class ProjectCapacityError extends Error {
+  readonly code = "PROJECT_CAPACITY_EXCEEDED";
+
+  constructor() {
+    super("Project session capacity exceeded.");
+    this.name = "ProjectCapacityError";
+  }
+}
+
 const projectSessions = new Map<string, ProjectSession>();
 const projectRoots = new WeakMap<Project, string>();
+let projectSessionAccessSequence = 0n;
+let projectSessionCapacity: number | undefined;
+
+function nextProjectSessionAccessSequence(): bigint {
+  projectSessionAccessSequence += 1n;
+  return projectSessionAccessSequence;
+}
+
+function getProjectSessionCapacity(): number {
+  projectSessionCapacity ??= readRuntimePolicy().maxProjectSessions;
+  return projectSessionCapacity;
+}
 
 function closePersistentSymbolIndex(session: ProjectSession): void {
   session.persistentSymbolIndex?.close();
@@ -280,16 +308,25 @@ export function createFreshProject(projectRoot: string): ProjectContext {
   return buildProjectContext(resolveTsConfigPath(projectRoot));
 }
 
-function evictSessions(): void {
-  if (projectSessions.size < MAX_PROJECT_SESSIONS) return;
+function closeProjectSession(session: ProjectSession): void {
+  session.watcher.close();
+  closePersistentSymbolIndex(session);
+}
 
-  const candidate = [...projectSessions.entries()]
-    .filter(([, session]) => session.activeOperations === 0)
-    .sort((left, right) => left[1].lastAccessedAt - right[1].lastAccessedAt)[0];
+function ensureProjectSessionCapacity(sessionCapacity: number): void {
+  while (projectSessions.size >= sessionCapacity) {
+    const candidate = [...projectSessions.entries()]
+      .filter(([, session]) => session.activeOperations === 0)
+      .sort((left, right) =>
+        left[1].lastAccessSequence < right[1].lastAccessSequence
+          ? -1
+          : left[1].lastAccessSequence > right[1].lastAccessSequence
+            ? 1
+            : 0,
+      )[0];
 
-  if (candidate) {
-    candidate[1].watcher.close();
-    closePersistentSymbolIndex(candidate[1]);
+    if (!candidate) throw new ProjectCapacityError();
+    closeProjectSession(candidate[1]);
     projectSessions.delete(candidate[0]);
   }
 }
@@ -299,7 +336,7 @@ function getOrCreateSession(projectRoot: string): ProjectSession {
   const existing = projectSessions.get(tsConfigFilePath);
   if (existing) return existing;
 
-  evictSessions();
+  ensureProjectSessionCapacity(getProjectSessionCapacity());
   const symbolIndexPolicy = readSymbolIndexPersistencePolicy();
   const baseContext = buildProjectContext(tsConfigFilePath);
   const context: ProjectContext = {
@@ -335,7 +372,7 @@ function getOrCreateSession(projectRoot: string): ProjectSession {
     activeOperations: 0,
     runningOperations: 0,
     queuedOperations: 0,
-    lastAccessedAt: Date.now(),
+    lastAccessSequence: nextProjectSessionAccessSequence(),
     symbolIndexPolicy,
   };
   projectSessions.set(tsConfigFilePath, session);
@@ -356,6 +393,18 @@ function getQueueStatus(session: ProjectSession): ProjectOperationQueueStatus {
     active_operations: session.runningOperations,
     queued_operations: session.queuedOperations,
   };
+}
+
+export function getProjectSessionRegistrySnapshot(): ProjectSessionRegistrySnapshot {
+  const activeSessions = [...projectSessions.values()].filter(
+    (session) => session.activeOperations > 0,
+  ).length;
+  return Object.freeze({
+    session_count: projectSessions.size,
+    active_sessions: activeSessions,
+    idle_sessions: projectSessions.size - activeSessions,
+    session_capacity: getProjectSessionCapacity(),
+  });
 }
 
 async function synchronizeSession(session: ProjectSession): Promise<void> {
@@ -649,7 +698,7 @@ async function runSessionWithSyncPolicy<T>(
     } catch (error) {
       if (!allowSynchronizationFailure) throw error;
     }
-    session.lastAccessedAt = Date.now();
+    session.lastAccessSequence = nextProjectSessionAccessSequence();
     return await operation(session.context);
   } finally {
     session.runningOperations -= 1;
@@ -708,17 +757,17 @@ export function getProject(projectRoot: string): Project {
 export function invalidateProject(projectRoot: string): void {
   const tsConfigFilePath = resolveTsConfigPath(projectRoot);
   const session = projectSessions.get(tsConfigFilePath);
-  session?.watcher.close();
-  if (session) closePersistentSymbolIndex(session);
+  if (session) closeProjectSession(session);
   projectSessions.delete(tsConfigFilePath);
 }
 
 export function clearProjectSessions(): void {
   for (const session of projectSessions.values()) {
-    session.watcher.close();
-    closePersistentSymbolIndex(session);
+    closeProjectSession(session);
   }
   projectSessions.clear();
+  projectSessionAccessSequence = 0n;
+  projectSessionCapacity = undefined;
 }
 
 export function getSourceFileOrThrow(project: Project, filePath: string): SourceFile {
