@@ -22,7 +22,7 @@ Run `yarn prettier --check openspec/changes/2026-08-07-local-mcp-production-read
 
 ### Task 0.2: Record the lasting runtime decision
 
-Status: pending.
+Status: complete.
 
 Files:
 
@@ -30,9 +30,11 @@ Files:
 
 Record local stdio/Linux support, in-process bounded scheduling versus worker isolation, cooperative cancellation, completion-critical shutdown, the frozen public error/status contracts, `next -> verify-next -> latest` release recovery and rollback/evolution. Run `yarn prettier --check docs/adr/0010-local-stdio-runtime-governance.md` and `git diff --check`; obtain a read-only ADR delta review, stage only that file, run `git diff --cached --check`, and commit `docs(adr): record local stdio runtime governance`.
 
+Evidence: commit `f6079a814608a3554e23e0194ef66c75d1dd12c6` created only `docs/adr/0010-local-stdio-runtime-governance.md` with the required conventional subject.
+
 ### Task 0.3: Archive superseded persistence evidence
 
-Status: pending.
+Status: complete.
 
 Files:
 
@@ -44,6 +46,8 @@ Files:
 Record that ADR 0009 and `openspec/archive/2026-08-07-symbol-index-persistence-integration/` supersede the earlier provisional memory-only conclusion while preserving it as dated evidence. The exact destination manifest is `design.md`, `exploration.md`, `proposal.md`, `spec.md`, `tasks.md`, `verification.md`.
 
 After edits, run `mkdir -p openspec/archive && mv openspec/changes/2026-08-06-symbol-index-persistence-evidence openspec/archive/2026-08-06-symbol-index-persistence-evidence` exactly once. Then run `for file in design.md exploration.md proposal.md spec.md tasks.md verification.md; do test -f "openspec/archive/2026-08-06-symbol-index-persistence-evidence/$file" || exit 1; done`, `test ! -e openspec/changes/2026-08-06-symbol-index-persistence-evidence`, `yarn prettier --check openspec/archive/2026-08-06-symbol-index-persistence-evidence/*.md` and `git diff --check`. Obtain a read-only archive delta review. Stage only the six renames/modifications with `git add -A -- openspec/changes/2026-08-06-symbol-index-persistence-evidence openspec/archive/2026-08-06-symbol-index-persistence-evidence`, run `git diff --cached --check`, and commit `docs(sdd): archive symbol index persistence evidence`.
+
+Evidence: commit `ff95c01a5f79fd9cdeb38abd74235304b80dd744` moved the complete six-file change to `openspec/archive/2026-08-06-symbol-index-persistence-evidence/`. Its actual conventional subject is `docs(sdd): archive persistence evidence`, a documented variance from the task's planned `docs(sdd): archive symbol index persistence evidence` subject; history is not rewritten for that cosmetic difference.
 
 ## 1. Runtime policy and strict session capacity
 
@@ -189,7 +193,7 @@ Evidence:
 
 ### Task 2.5: Verify and commit scheduler/cancellation
 
-Status: in progress.
+Status: complete.
 
 Run:
 
@@ -215,7 +219,7 @@ Evidence:
 - `yarn format:check`, `yarn lint`, `yarn typecheck`, `yarn build` and `git diff --check` passed.
 - `yarn test:mcp` passed over real stdio with 15 tools and TOON output.
 - `yarn test:cli` passed read composition, TOON output, persisted apply, lock contention, replay, skill installation and agent setup.
-- Final exact-tree review, staged-tree readback and the conventional commit remain pending closure gates; any later edit invalidates the recorded gate run and review.
+- The final 37-file staged tree `2777557da5c849e11d07bb265e8990c335ca6349` received independent exact-tree `PASS` verdicts for spec compliance and code quality/regressions. Commit `6b4eb840283d6c2287444ad6bd8b3501d7743f80` (`feat(runtime): bound and cancel project operations`) preserves that exact tree, and the post-commit working tree was clean.
 
 ## 3. Public error boundary
 
