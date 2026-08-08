@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getOperationPreview } from "../services/operations.js";
+import { createRequestContext } from "../services/request-context.js";
 import { errorResult, structuredResult } from "./result.js";
 
 const AstGetOperationPreviewInputSchema = z.object({
@@ -30,9 +31,11 @@ export function registerGetOperationPreview(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ operation_id, file }) => {
+    async ({ operation_id, file }, extra) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
-        return structuredResult(getOperationPreview(operation_id, file));
+        const output = await getOperationPreview(operation_id, file, requestContext);
+        return structuredResult(output);
       } catch (error) {
         return errorResult(error);
       }

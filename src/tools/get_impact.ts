@@ -17,6 +17,7 @@ import {
   TRUNCATION_REASONS,
 } from "../services/read-contracts.js";
 import { withProject } from "../services/project.js";
+import { createRequestContext } from "../services/request-context.js";
 import {
   RELATIONSHIP_CONFIDENCES,
   RELATIONSHIP_EDGE_KINDS,
@@ -138,42 +139,53 @@ export function registerGetImpact(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({
-      project_root,
-      file_path,
-      symbol_path,
-      direction,
-      max_depth,
-      max_nodes,
-      max_edges,
-      relationship_kinds,
-      output_format,
-    }) => {
+    async (
+      {
+        project_root,
+        file_path,
+        symbol_path,
+        direction,
+        max_depth,
+        max_nodes,
+        max_edges,
+        relationship_kinds,
+        output_format,
+      },
+      extra,
+    ) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
-        const structuredContent = await withProject(project_root, (context) => {
-          if (!context.relationshipEdgesReady || context.status.state !== "fresh") {
-            throw new Error("Compiler-backed impact relationships are not fresh. Retry the read.");
-          }
-          const root = resolveImpactRoot(context.project, context.projectRoot, {
-            file_path,
-            symbol_path,
-          });
-          const impact = traverseImpact(root, context.relationshipEdges, {
-            direction,
-            max_depth,
-            max_nodes,
-            max_edges,
-            relationship_kinds,
-          });
-          return {
-            ...impact,
-            freshness: {
-              state: context.status.state,
-              causes: context.status.causes,
-              checked_at: context.status.lastSuccessfulSyncAt,
-            },
-          };
-        });
+        const structuredContent = await withProject(
+          project_root,
+          (context, operationContext) => {
+            if (!context.relationshipEdgesReady || context.status.state !== "fresh") {
+              throw new Error(
+                "Compiler-backed impact relationships are not fresh. Retry the read.",
+              );
+            }
+            const root = resolveImpactRoot(
+              context.project,
+              context.projectRoot,
+              { file_path, symbol_path },
+              operationContext,
+            );
+            const impact = traverseImpact(
+              root,
+              context.relationshipEdges,
+              { direction, max_depth, max_nodes, max_edges, relationship_kinds },
+              operationContext,
+            );
+            return {
+              ...impact,
+              freshness: {
+                state: context.status.state,
+                causes: context.status.causes,
+                checked_at: context.status.lastSuccessfulSyncAt,
+              },
+            };
+          },
+          requestContext,
+        );
         return formattedResult(ImpactOutputSchema, structuredContent, output_format);
       } catch (error) {
         return errorResult(error);

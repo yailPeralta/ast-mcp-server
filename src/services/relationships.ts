@@ -8,6 +8,7 @@ import {
   type SourceRange,
 } from "./read-contracts.js";
 import { collectSymbols, containingSymbol, type LocatedSymbol } from "./symbols.js";
+import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
 
 export const RELATIONSHIP_EDGE_KINDS = Object.freeze([
   "reference",
@@ -257,9 +258,11 @@ function addEdge(
 function projectLocatedDeclarations(
   state: CompilerRelationshipState,
   declarations: readonly Node[],
+  requestContext: RequestContext,
 ): LocatedSymbol[] {
   const unique = new Set<LocatedSymbol>();
   for (const declaration of declarations) {
+    requestContext.checkpoint();
     const sourceFile = declaration.getSourceFile();
     if (!state.sourceFiles.has(sourceFileKey(sourceFile.getFilePath()))) continue;
     const located = state.locatedSymbols.get(declaration);
@@ -268,10 +271,12 @@ function projectLocatedDeclarations(
   return [...unique];
 }
 
-function addReferenceEdges(state: CompilerRelationshipState): void {
+function addReferenceEdges(state: CompilerRelationshipState, requestContext: RequestContext): void {
   for (const target of new Set(state.locatedSymbols.values())) {
+    requestContext.checkpoint();
     if (!Node.isReferenceFindable(target.node)) continue;
     for (const reference of target.node.findReferencesAsNodes()) {
+      requestContext.checkpoint();
       const sourceFile = reference.getSourceFile();
       if (!state.sourceFiles.has(sourceFileKey(sourceFile.getFilePath()))) continue;
       const source = containingSymbol(sourceFile, reference);
@@ -286,14 +291,16 @@ function addReferenceEdges(state: CompilerRelationshipState): void {
   }
 }
 
-function addHeritageEdges(state: CompilerRelationshipState): void {
+function addHeritageEdges(state: CompilerRelationshipState, requestContext: RequestContext): void {
   for (const source of new Set(state.locatedSymbols.values())) {
+    requestContext.checkpoint();
     if (Node.isClassDeclaration(source.node)) {
       const base = source.node.getExtends();
       if (base) {
         for (const target of projectLocatedDeclarations(
           state,
           declarationsForType(base.getType()),
+          requestContext,
         )) {
           addEdge(
             state,
@@ -304,9 +311,11 @@ function addHeritageEdges(state: CompilerRelationshipState): void {
         }
       }
       for (const implemented of source.node.getImplements()) {
+        requestContext.checkpoint();
         for (const target of projectLocatedDeclarations(
           state,
           declarationsForType(implemented.getType()),
+          requestContext,
         )) {
           addEdge(
             state,
@@ -320,7 +329,12 @@ function addHeritageEdges(state: CompilerRelationshipState): void {
 
     if (Node.isInterfaceDeclaration(source.node)) {
       for (const base of source.node.getBaseTypes()) {
-        for (const target of projectLocatedDeclarations(state, declarationsForType(base))) {
+        requestContext.checkpoint();
+        for (const target of projectLocatedDeclarations(
+          state,
+          declarationsForType(base),
+          requestContext,
+        )) {
           addEdge(
             state,
             symbolEndpoint(source, state.projectRoot),
@@ -333,9 +347,11 @@ function addHeritageEdges(state: CompilerRelationshipState): void {
   }
 }
 
-function addModuleEdges(state: CompilerRelationshipState): void {
+function addModuleEdges(state: CompilerRelationshipState, requestContext: RequestContext): void {
   for (const sourceFile of state.sourceFiles.values()) {
+    requestContext.checkpoint();
     for (const declaration of sourceFile.getImportDeclarations()) {
+      requestContext.checkpoint();
       const targetFile = declaration.getModuleSpecifierSourceFile();
       if (!targetFile || !state.sourceFiles.has(sourceFileKey(targetFile.getFilePath()))) continue;
       const source = moduleEndpoint(sourceFile, state.projectRoot, declaration);
@@ -344,6 +360,7 @@ function addModuleEdges(state: CompilerRelationshipState): void {
         const targets = projectLocatedDeclarations(
           state,
           declarationsForSymbol(symbolFromNameNode(specifier.getNameNode())),
+          requestContext,
         );
         for (const target of targets) {
           addEdge(state, source, symbolEndpoint(target, state.projectRoot), "import");
@@ -355,6 +372,7 @@ function addModuleEdges(state: CompilerRelationshipState): void {
         for (const target of projectLocatedDeclarations(
           state,
           declarationsForSymbol(identifier.getSymbol()),
+          requestContext,
         )) {
           addEdge(state, source, symbolEndpoint(target, state.projectRoot), "import");
           emitted = true;
@@ -364,6 +382,7 @@ function addModuleEdges(state: CompilerRelationshipState): void {
     }
 
     for (const declaration of sourceFile.getExportDeclarations()) {
+      requestContext.checkpoint();
       const targetFile = declaration.getModuleSpecifierSourceFile();
       const source = moduleEndpoint(sourceFile, state.projectRoot, declaration);
       let emitted = false;
@@ -374,7 +393,7 @@ function addModuleEdges(state: CompilerRelationshipState): void {
             ...(targetFile.getExportedDeclarations().get(specifier.getName()) ?? []),
           );
         }
-        for (const target of projectLocatedDeclarations(state, declarations)) {
+        for (const target of projectLocatedDeclarations(state, declarations, requestContext)) {
           addEdge(state, source, symbolEndpoint(target, state.projectRoot), "export");
           emitted = true;
         }
@@ -390,13 +409,19 @@ export function collectCompilerRelationships(
   project: Project,
   projectRoot: string,
   freshness: FreshnessMetadata,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): RelationshipEdge[] {
+  requestContext.checkpoint();
   const sourceFiles = project
     .getSourceFiles()
     .sort((left, right) => left.getFilePath().localeCompare(right.getFilePath()));
   const locatedSymbols = new Map<Node, LocatedSymbol>();
   for (const sourceFile of sourceFiles) {
-    for (const symbol of collectSymbols(sourceFile)) locatedSymbols.set(symbol.node, symbol);
+    requestContext.checkpoint();
+    for (const symbol of collectSymbols(sourceFile)) {
+      requestContext.checkpoint();
+      locatedSymbols.set(symbol.node, symbol);
+    }
   }
 
   const state: CompilerRelationshipState = {
@@ -408,10 +433,14 @@ export function collectCompilerRelationships(
     freshness: normalizeFreshness(freshness),
     edges: new Map(),
   };
-  addReferenceEdges(state);
-  addModuleEdges(state);
-  addHeritageEdges(state);
+  requestContext.checkpoint();
+  addReferenceEdges(state, requestContext);
+  requestContext.checkpoint();
+  addModuleEdges(state, requestContext);
+  requestContext.checkpoint();
+  addHeritageEdges(state, requestContext);
 
+  requestContext.checkpoint();
   return [...state.edges.values()].sort((left, right) =>
     [left.kind, left.source.file, left.source.selector, left.target.file, left.target.selector]
       .join("\u0000")

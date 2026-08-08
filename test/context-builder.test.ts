@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { buildExploreContext, type ExploreRequest } from "../src/services/context-builder.js";
 import { clearProjectSessions, createFreshProject, withProject } from "../src/services/project.js";
+import { RequestContextError } from "../src/services/request-context.js";
 import {
   createSymbolIndexSymbol,
   SYMBOL_INDEX_SCHEMA_VERSION,
@@ -99,6 +100,61 @@ export function formatValue(value: number): string { return String(value); }
       evidence_complete: true,
       unresolved: [],
     });
+  });
+
+  it("propagates cooperative interruption from reference collection", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts":
+        "export function formatValue(value: number): string { return String(value); }\n",
+    });
+    fixtures.push(fixture);
+    const context = createFreshProject(fixture.root);
+    const countCheckpoints = async (includeReferences: boolean): Promise<number> => {
+      let count = 0;
+      await buildExploreContext(
+        context,
+        request({
+          filePath: "src/value.ts",
+          symbolPath: "formatValue",
+          detail: "full",
+          includeSource: false,
+          includeReferences,
+        }),
+        {
+          signal: new AbortController().signal,
+          checkpoint: () => {
+            count += 1;
+          },
+        },
+      );
+      return count;
+    };
+    const withoutReferences = await countCheckpoints(false);
+    const withReferences = await countCheckpoints(true);
+    expect(withReferences).toBeGreaterThan(withoutReferences);
+    let checkpoints = 0;
+
+    await expect(
+      buildExploreContext(
+        context,
+        request({
+          filePath: "src/value.ts",
+          symbolPath: "formatValue",
+          detail: "full",
+          includeSource: false,
+        }),
+        {
+          signal: new AbortController().signal,
+          checkpoint: () => {
+            checkpoints += 1;
+            if (checkpoints === withoutReferences) {
+              throw new RequestContextError("REQUEST_CANCELLED");
+            }
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+    expect(checkpoints).toBe(withoutReferences);
   });
 
   it("uses a known file route without requiring a query", async () => {

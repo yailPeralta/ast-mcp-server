@@ -9,6 +9,7 @@ import {
 } from "../services/context-builder.js";
 import { createPaginationInputSchema } from "../services/pagination.js";
 import { withProject } from "../services/project.js";
+import { createRequestContext } from "../services/request-context.js";
 import {
   FRESHNESS_CAUSES,
   SNAPSHOT_STATES,
@@ -177,39 +178,50 @@ export function registerExplore(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({
-      project_root,
-      query,
-      file_path,
-      symbol_path,
-      kinds,
-      file_filter,
-      detail,
-      include_source,
-      include_references,
-      reference_detail,
-      reference_limit,
-      offset,
-      limit,
-      max_bytes,
-    }) => {
+    async (
+      {
+        project_root,
+        query,
+        file_path,
+        symbol_path,
+        kinds,
+        file_filter,
+        detail,
+        include_source,
+        include_references,
+        reference_detail,
+        reference_limit,
+        offset,
+        limit,
+        max_bytes,
+      },
+      extra,
+    ) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
-        const output = await withProject(project_root, (context) =>
-          buildExploreContext(context, {
-            query,
-            filePath: file_path,
-            symbolPath: symbol_path,
-            kinds,
-            fileFilter: file_filter,
-            detail,
-            includeSource: include_source,
-            includeReferences: include_references,
-            referenceDetail: reference_detail,
-            offset,
-            limit,
-            referenceLimit: reference_limit,
-            maxBytes: max_bytes,
-          }),
+        const output = await withProject(
+          project_root,
+          (context, operationContext) =>
+            buildExploreContext(
+              context,
+              {
+                query,
+                filePath: file_path,
+                symbolPath: symbol_path,
+                kinds,
+                fileFilter: file_filter,
+                detail,
+                includeSource: include_source,
+                includeReferences: include_references,
+                referenceDetail: reference_detail,
+                offset,
+                limit,
+                referenceLimit: reference_limit,
+                maxBytes: max_bytes,
+              },
+              operationContext,
+            ),
+          requestContext,
         );
         return structuredResult(ExploreOutputSchema.parse(output));
       } catch (error) {

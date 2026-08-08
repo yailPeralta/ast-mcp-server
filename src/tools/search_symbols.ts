@@ -6,6 +6,7 @@ import {
   paginate,
 } from "../services/pagination.js";
 import { withProject, reportSymbolIndexFailure } from "../services/project.js";
+import { createRequestContext } from "../services/request-context.js";
 import { searchProjectSymbols, searchProjectSymbolsWithIndex } from "../services/symbols.js";
 import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
 
@@ -108,36 +109,46 @@ export function registerSearchSymbols(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root, query, kinds, file_filter, detail, output_format, offset, limit }) => {
+    async (
+      { project_root, query, kinds, file_filter, detail, output_format, offset, limit },
+      extra,
+    ) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
-        const structuredContent = await withProject(project_root, async (context) => {
-          const { project, projectRoot } = context;
-          const startedAt = performance.now();
-          const matches =
-            (await searchProjectSymbolsWithIndex(
-              project,
-              projectRoot,
-              context.status.project,
-              context.symbolIndex,
-              context.symbolIndexReady,
-              { query, kinds, fileFilter: file_filter },
-              async (reason) => {
-                await reportSymbolIndexFailure(projectRoot, reason);
-              },
-            )) ??
-            searchProjectSymbols(project, projectRoot, {
-              query,
-              kinds,
-              fileFilter: file_filter,
-            });
-          const page = paginate(matches, offset, limit);
-          const { items, ...metadata } = page;
-          return {
-            symbols: projectSymbols(detail, items),
-            duration_ms: performance.now() - startedAt,
-            ...metadata,
-          };
-        });
+        const structuredContent = await withProject(
+          project_root,
+          async (context, operationContext) => {
+            const { project, projectRoot } = context;
+            const startedAt = performance.now();
+            const matches =
+              (await searchProjectSymbolsWithIndex(
+                project,
+                projectRoot,
+                context.status.project,
+                context.symbolIndex,
+                context.symbolIndexReady,
+                { query, kinds, fileFilter: file_filter },
+                async (reason) => {
+                  await reportSymbolIndexFailure(projectRoot, reason);
+                },
+                operationContext,
+              )) ??
+              searchProjectSymbols(
+                project,
+                projectRoot,
+                { query, kinds, fileFilter: file_filter },
+                operationContext,
+              );
+            const page = paginate(matches, offset, limit);
+            const { items, ...metadata } = page;
+            return {
+              symbols: projectSymbols(detail, items),
+              duration_ms: performance.now() - startedAt,
+              ...metadata,
+            };
+          },
+          requestContext,
+        );
         const outputSchema = SearchOutputSchemas[detail] as z.ZodType<Record<string, unknown>>;
         return formattedResult(outputSchema, structuredContent, output_format);
       } catch (error) {

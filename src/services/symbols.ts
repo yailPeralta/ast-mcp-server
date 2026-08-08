@@ -8,6 +8,11 @@ import {
   type Statement,
 } from "ts-morph";
 import { buildFileOutline } from "./outline.js";
+import {
+  isCooperativeInterruption,
+  NO_REQUEST_CONTEXT,
+  type RequestContext,
+} from "./request-context.js";
 import type { SourceRange } from "./read-contracts.js";
 import { MAX_SYMBOL_INDEX_QUERY_CANDIDATES } from "./symbol-index-limits.js";
 import type {
@@ -61,10 +66,11 @@ export interface ProjectSymbolRecord {
 export function sourceFileSymbols(
   sourceFile: SourceFile,
   projectRoot: string,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): ProjectSymbolRecord[] {
   const file = path.relative(projectRoot, sourceFile.getFilePath());
   const signatures = new Map(
-    buildFileOutline(sourceFile).symbols.map((symbol) => [
+    buildFileOutline(sourceFile, requestContext).symbols.map((symbol) => [
       `${symbol.symbolPath}@${symbol.startLine}`,
       symbol.signature,
     ]),
@@ -141,6 +147,7 @@ export function searchProjectSymbols(
   project: Project,
   projectRoot: string,
   options: ProjectSymbolSearchOptions,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): ProjectSymbolRecord[] {
   const normalizedQuery = options.query.toLowerCase();
   const normalizedFileFilter = options.fileFilter?.toLowerCase();
@@ -148,17 +155,20 @@ export function searchProjectSymbols(
   const matches: ProjectSymbolRecord[] = [];
 
   for (const sourceFile of project.getSourceFiles()) {
+    requestContext.checkpoint();
     const file = path.relative(projectRoot, sourceFile.getFilePath());
     if (normalizedFileFilter && !file.toLowerCase().includes(normalizedFileFilter)) continue;
 
-    const matchingSymbols = sourceFileSymbols(sourceFile, projectRoot).filter((symbol) => {
-      return (
-        (!kindSet || kindSet.has(symbol.kind)) &&
-        (symbol.name.toLowerCase().includes(normalizedQuery) ||
-          symbol.symbol_path.toLowerCase().includes(normalizedQuery) ||
-          symbol.selector.toLowerCase().includes(normalizedQuery))
-      );
-    });
+    const matchingSymbols = sourceFileSymbols(sourceFile, projectRoot, requestContext).filter(
+      (symbol) => {
+        return (
+          (!kindSet || kindSet.has(symbol.kind)) &&
+          (symbol.name.toLowerCase().includes(normalizedQuery) ||
+            symbol.symbol_path.toLowerCase().includes(normalizedQuery) ||
+            symbol.selector.toLowerCase().includes(normalizedQuery))
+        );
+      },
+    );
     if (matchingSymbols.length === 0) continue;
 
     for (const symbol of matchingSymbols) {
@@ -166,6 +176,7 @@ export function searchProjectSymbols(
     }
   }
 
+  requestContext.checkpoint();
   matches.sort((left, right) => {
     const rank =
       symbolMatchRank(options.query, {
@@ -197,11 +208,14 @@ export async function searchProjectSymbolsWithIndex(
   symbolIndexReady: boolean,
   options: ProjectSymbolSearchOptions,
   onIndexFailure?: SymbolIndexFailureHandler,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): Promise<ProjectSymbolRecord[] | undefined> {
+  requestContext.checkpoint();
   if (!symbolIndexReady) return undefined;
-  const canonical = searchProjectSymbols(project, projectRoot, options);
+  const canonical = searchProjectSymbols(project, projectRoot, options, requestContext);
 
   try {
+    requestContext.checkpoint();
     const matches = await symbolIndex.queryAllSymbols({
       project: projectIdentity,
       query: options.query,
@@ -210,7 +224,11 @@ export async function searchProjectSymbolsWithIndex(
         ...(options.fileFilter ? { file_path: options.fileFilter } : {}),
       },
     });
-    const indexed = matches.map((match) => validateIndexedSymbol(project, projectRoot, match));
+    requestContext.checkpoint();
+    const indexed = matches.map((match) => {
+      requestContext.checkpoint();
+      return validateIndexedSymbol(project, projectRoot, match);
+    });
     const expectedIndexedLength = Math.min(canonical.length, MAX_SYMBOL_INDEX_QUERY_CANDIDATES);
     const complete =
       indexed.length === expectedIndexedLength &&
@@ -227,15 +245,20 @@ export async function searchProjectSymbolsWithIndex(
         );
       });
     if (!complete) {
+      requestContext.checkpoint();
       try {
         await onIndexFailure?.("corrupt_storage");
-      } catch {
+      } catch (error) {
+        if (isCooperativeInterruption(error)) throw error;
         // Failure reporting cannot suppress the compiler-authoritative result.
       }
+      requestContext.checkpoint();
       return canonical;
     }
     return canonical;
   } catch (error) {
+    requestContext.checkpoint();
+    if (isCooperativeInterruption(error)) throw error;
     if ((error as { code?: unknown }).code === "scan_limit_exceeded") return canonical;
     try {
       await onIndexFailure?.(
@@ -243,9 +266,11 @@ export async function searchProjectSymbolsWithIndex(
           ? (error as { code: string }).code
           : "sqlite_read_failed",
       );
-    } catch {
+    } catch (reportError) {
+      if (isCooperativeInterruption(reportError)) throw reportError;
       // Failure reporting cannot suppress the compiler-authoritative result.
     }
+    requestContext.checkpoint();
     return canonical;
   }
 }

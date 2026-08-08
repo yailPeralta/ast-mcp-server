@@ -110,7 +110,7 @@ Evidence:
 
 ### Task 2.1: RED scheduler state machine
 
-Status: pending.
+Status: complete.
 
 Files:
 
@@ -119,9 +119,15 @@ Files:
 
 Test FIFO, cap-before-retention, overflow, queued cancellation, queue timeout, cooperative deadline, callback failure, listener/timer cleanup, saturating counters and shutdown admission closure. Use fake monotonic time where practical; do not create flaky wall-clock sleeps.
 
+Evidence:
+
+- RED: `yarn test test/project-operation-scheduler.test.ts` failed because the scheduler module did not exist.
+- GREEN: 10/10 deterministic tests passed, including 50 repeated O(1) queued cancellations with zero retained nodes/listeners/timers.
+- Touched-file Prettier and ESLint, repository typecheck and `git diff --check` passed.
+
 ### Task 2.2: Integrate scheduler with project sessions
 
-Status: pending.
+Status: complete.
 
 Files:
 
@@ -131,9 +137,16 @@ Files:
 
 Replace the raw promise-chain counters with the scheduler while preserving one serialized compiler operation per project. Fix the exact public status schema through RED tests before implementation. Keep telemetry independent from freshness.
 
+Evidence:
+
+- `ProjectOperationScheduler` owns one active operation plus the bounded waiting queue for each canonical project session; session capacity treats admitted work as active and never evicts it.
+- The runtime-status projection and MCP schema expose the exact bounded queue vocabulary without using telemetry as compiler freshness evidence.
+- `test/project.test.ts`, `test/project-status.test.ts` and `test/mcp.integration.test.ts` cover serialized execution, queue capacity, active-session retention and the protocol projection.
+- A final exact-file read-only review of `src/services/project-status.ts` and `test/project-status.test.ts` returned `PASS` with no critical, important or minor issues before the cancellation integration expanded the candidate.
+
 ### Task 2.3: Propagate MCP cancellation
 
-Status: pending.
+Status: complete.
 
 Files:
 
@@ -144,9 +157,18 @@ Files:
 
 Use the SDK callback `extra.signal`. Add checkpoints from the design. Prove queued cancellation does no sync work, active read cancellation stops at a checkpoint, prepare retains no operation and successful uncancelled contracts remain unchanged.
 
+Evidence:
+
+- All 15 tool callbacks adapt `extra.signal` through the SDK-independent `RequestContext`; services receive the scheduler-owned active context rather than importing MCP types.
+- Checkpoints cover admission, queue wait, synchronization, index operations, relationships, tool traversal/serialization and prepared-operation retention.
+- Queued cancellation is unlinked before synchronization/callback work, and the in-memory MCP test exercises cancellation through `Client.callTool(..., { signal })`.
+- Running MCP apply cancellation is observed at the final pre-write checkpoint, returns cancellation, retains no plan/write side effect and drains the active session.
+- Prepare/apply use the same bounded project scheduler without opening or refreshing the optional persistence backend; the existing mutation-persistence isolation regression remains green.
+- The production `ast_explore` query route propagates the scheduler context through outline, compiler search and indexed search. Cancellation that wins while an index query is pending bypasses failure reporting and leaves the SQLite session ready without incrementing fallback telemetry.
+
 ### Task 2.4: Protect apply completion-critical work
 
-Status: pending.
+Status: complete.
 
 Files:
 
@@ -156,13 +178,22 @@ Files:
 
 Add explicit cancellation checks before lock/first replacement. Inject cancellation before and after the first write; prove pre-write cancellation writes nothing and post-write cancellation cannot skip rollback/postimage/receipt completion. Preserve replay and conflict behavior.
 
+Evidence:
+
+- Apply checkpoints before lock acquisition, while staging and immediately after the final pre-write test hook.
+- The first `link`/`rename` transition enters completion-critical exactly once; later cancellation cannot interrupt remaining writes, rollback, postimage verification, directory sync or receipt persistence.
+- Cancellation observed during completion-critical increments bounded telemetry without aborting the active signal, restoring the execution deadline or changing the successful terminal outcome.
+- Post-apply invalidation runs only after the scheduler operation reaches its terminal result and only while the session is idle; a same-project operation already promoted by the scheduler retains ownership of the session.
+- Cross-session write-lock waiters release their queue node from `finally` even when cancellation is observed immediately after the prior owner releases, so later retries cannot remain behind an unresolved promise.
+- Direct tests prove zero writes on pre-write cancellation, a deterministic applied result plus cancellation telemetry after cancellation immediately following the first source write, and continued execution of queued same-project work; the full mutation suite preserves rollback, conflict, recovery and idempotent replay behavior.
+
 ### Task 2.5: Verify and commit scheduler/cancellation
 
-Status: pending.
+Status: in progress.
 
 Run:
 
-- `yarn test test/project-operation-scheduler.test.ts test/runtime-policy.test.ts test/project.test.ts test/project-status.test.ts test/mcp.integration.test.ts test/operations.test.ts test/runtime-state.test.ts test/context-builder.test.ts`;
+- `yarn test test/project-operation-scheduler.test.ts test/runtime-policy.test.ts test/project.test.ts test/project-status.test.ts test/mcp.integration.test.ts test/operations.test.ts test/runtime-state.test.ts test/context-builder.test.ts test/explore.test.ts test/symbols.test.ts`;
 - `yarn format:check`;
 - `yarn lint`;
 - `yarn typecheck`;
@@ -173,6 +204,18 @@ Run:
 - `git diff --check`.
 
 Commit `feat(runtime): bound and cancel project operations` only after exact-tree review.
+
+Evidence:
+
+- The prior 35-file candidate at staged tree `a0f287bdde63ba7238ed8f7dea488b3795802044` received two exact-tree `REQUEST_CHANGES` verdicts and was not committed.
+- The later 36-file candidate at staged tree `53dd1acf45d621c5674cde4d634a6940075c73e1` was not committed: its spec review returned `REQUEST_CHANGES` because `ast_explore` dropped the active context in query/index traversal. The parallel quality review timed out after reproducing a cancelled cross-session write-lock waiter that retained an unresolved queue promise.
+- The repaired scheduler enforces queue and execution deadlines from monotonic checkpoints even before timer delivery; prepares remove plans canceled after retention; operation previews run through the project scheduler; cooperative cancellation/deadline errors bypass index/reference fallback catches; `ast_explore` threads the active context through query traversal; and cancelled write-lock waiters release later retries.
+- Focused matrix on 2026-08-07 with Node.js `v24.16.0` and Yarn `4.15.0`: 10 files, 171/171 tests passed.
+- Full regression: 35 files, 328/328 tests passed.
+- `yarn format:check`, `yarn lint`, `yarn typecheck`, `yarn build` and `git diff --check` passed.
+- `yarn test:mcp` passed over real stdio with 15 tools and TOON output.
+- `yarn test:cli` passed read composition, TOON output, persisted apply, lock contention, replay, skill installation and agent setup.
+- Final exact-tree review, staged-tree readback and the conventional commit remain pending closure gates; any later edit invalidates the recorded gate run and review.
 
 ## 3. Public error boundary
 

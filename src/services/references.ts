@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Node } from "ts-morph";
 import { paginate, type Page } from "./pagination.js";
+import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
 
 export type ReferenceDetail = "locations" | "context";
 
@@ -30,7 +31,9 @@ export function collectSymbolReferences(
   detail: ReferenceDetail,
   offset: number,
   limit: number,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): SymbolReferences {
+  requestContext.checkpoint();
   if (!Node.isReferenceFindable(node)) {
     throw new Error(
       `Symbol "${symbolPath}" (${node.getKindName()}) does not support semantic reference search.`,
@@ -39,6 +42,7 @@ export function collectSymbolReferences(
 
   const lineCache = new Map<string, string[]>();
   const location = (referenceNode: Node, isDeclaration: boolean): SymbolReference => {
+    requestContext.checkpoint();
     const referenceSource = referenceNode.getSourceFile();
     const absoluteFile = referenceSource.getFilePath();
     let lines = lineCache.get(absoluteFile);
@@ -59,9 +63,11 @@ export function collectSymbolReferences(
     };
   };
 
+  requestContext.checkpoint();
   const references = node.findReferencesAsNodes().map((reference) => location(reference, false));
   const declaration = location(node, true);
   const allLocations = includeDeclaration ? [declaration, ...references] : references;
+  requestContext.checkpoint();
   allLocations.sort((left, right) =>
     `${left.file}:${left.line}:${left.column}:${left.is_declaration ? 0 : 1}`.localeCompare(
       `${right.file}:${right.line}:${right.column}:${right.is_declaration ? 0 : 1}`,
@@ -70,6 +76,7 @@ export function collectSymbolReferences(
   const affectedFiles = [...new Set([declaration, ...references].map((item) => item.file))].sort();
   const page = paginate(allLocations, offset, limit);
 
+  requestContext.checkpoint();
   return {
     symbol: symbolPath,
     include_declaration: includeDeclaration,

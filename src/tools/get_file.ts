@@ -7,6 +7,7 @@ import {
 } from "../services/file-snapshot.js";
 import { buildFileOutline } from "../services/outline.js";
 import { getSourceFileOrThrow, withProject } from "../services/project.js";
+import { createRequestContext } from "../services/request-context.js";
 import { FRESHNESS_CAUSES, SNAPSHOT_STATES } from "../services/read-contracts.js";
 import { errorResult, structuredResult } from "./result.js";
 
@@ -86,15 +87,19 @@ export function registerGetFile(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root, file_path, offset, limit, symbols_only }) => {
+    async ({ project_root, file_path, offset, limit, symbols_only }, extra) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
         const structuredContent = await withProject(
           project_root,
-          async ({ project, projectRoot, status }) => {
-            const snapshot = await readFileSnapshot(project, projectRoot, file_path, {
-              offset,
-              limit,
-            });
+          async ({ project, projectRoot, status }, operationContext) => {
+            const snapshot = await readFileSnapshot(
+              project,
+              projectRoot,
+              file_path,
+              { offset, limit },
+              operationContext,
+            );
             const freshness = {
               state: status.state,
               causes: status.causes,
@@ -115,9 +120,10 @@ export function registerGetFile(server: McpServer): void {
               file_hash: snapshot.file_hash,
               snapshot_state: snapshot.snapshot_state,
               freshness,
-              symbols: buildFileOutline(sourceFile).symbols,
+              symbols: buildFileOutline(sourceFile, operationContext).symbols,
             };
           },
+          requestContext,
         );
         return structuredResult(structuredContent);
       } catch (error) {

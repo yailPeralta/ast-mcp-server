@@ -6,6 +6,7 @@ import {
   TRUNCATION_REASONS,
 } from "../services/read-contracts.js";
 import { getProjectStatus } from "../services/project.js";
+import { createRequestContext } from "../services/request-context.js";
 import { errorResult, structuredResult } from "./result.js";
 
 const AstGetProjectStatusInputSchema = z.object({
@@ -88,8 +89,26 @@ const ProjectStatusOutputSchema = z.object({
   index: z.object({ state: z.enum(["disabled", "ready", "rebuilding", "failed"]) }),
   operation_queue: z.object({
     state: z.enum(["idle", "queued", "running"]),
-    active_operations: z.number().int().min(0),
-    queued_operations: z.number().int().min(0),
+    admission: z.enum(["open", "closed"]),
+    queue_capacity: z.number().int().min(1).max(256),
+    active_operations: z.number().int().min(0).max(1),
+    queued_operations: z.number().int().min(0).max(256),
+    rejected_operations: z.number().int().min(0).max(2_147_483_647),
+    cancelled_operations: z.number().int().min(0).max(2_147_483_647),
+    queue_timeout_operations: z.number().int().min(0).max(2_147_483_647),
+    deadline_exceeded_operations: z.number().int().min(0).max(2_147_483_647),
+    last_outcome: z.enum([
+      "none",
+      "succeeded",
+      "failed",
+      "rejected",
+      "cancelled",
+      "queue_timeout",
+      "deadline_exceeded",
+      "internal_error",
+    ]),
+    max_queue_wait_ms: z.number().int().min(0).max(86_400_000),
+    max_execution_ms: z.number().int().min(0).max(86_400_000),
   }),
   watcher: z.object({ state: z.enum(["disabled", "ready", "failed"]) }),
   last_successful_sync_at: z.string().nullable(),
@@ -119,9 +138,10 @@ export function registerGetProjectStatus(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root }) => {
+    async ({ project_root }, extra) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
-        const output = await getProjectStatus(project_root);
+        const output = await getProjectStatus(project_root, requestContext);
         return structuredResult({ ...output });
       } catch (error) {
         return errorResult(error);

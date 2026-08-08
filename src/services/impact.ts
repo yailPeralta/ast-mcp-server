@@ -8,6 +8,7 @@ import {
 } from "./read-contracts.js";
 import { getSourceFileOrThrow } from "./project.js";
 import { collectSymbols, findDeclaration } from "./symbols.js";
+import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
 import {
   RELATIONSHIP_EDGE_KINDS,
   type RelationshipEdge,
@@ -199,7 +200,9 @@ export function resolveImpactRoot(
   project: Project,
   projectRoot: string,
   request: ImpactRootRequest,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): RelationshipEndpoint {
+  requestContext.checkpoint();
   if (
     typeof request !== "object" ||
     request === null ||
@@ -210,7 +213,11 @@ export function resolveImpactRoot(
   }
   const sourceFile = getSourceFileOrThrow(project, request.file_path);
   const node = findDeclaration(sourceFile, request.symbol_path);
-  const located = collectSymbols(sourceFile).find((symbol) => symbol.node === node);
+  requestContext.checkpoint();
+  const located = collectSymbols(sourceFile).find((symbol) => {
+    requestContext.checkpoint();
+    return symbol.node === node;
+  });
   if (!located) {
     throw new Error(`Impact root "${request.symbol_path}" is not an indexed compiler declaration.`);
   }
@@ -255,6 +262,7 @@ function collectNeighbors(
   current: RelationshipEndpoint,
   edges: readonly RelationshipEdge[],
   options: NormalizedImpactOptions,
+  requestContext: RequestContext,
 ): Neighbor[] {
   const currentKey = endpointKey(current);
   const kinds = new Set(options.relationship_kinds);
@@ -262,6 +270,7 @@ function collectNeighbors(
   const orderedEdges = [...edges].sort(edgeOrder);
 
   for (const edge of orderedEdges) {
+    requestContext.checkpoint();
     if (!kinds.has(edge.kind)) continue;
     const matchesSource = endpointKey(edge.source) === currentKey;
     const matchesTarget = endpointKey(edge.target) === currentKey;
@@ -286,7 +295,9 @@ export function traverseImpact(
   root: RelationshipEndpoint,
   edges: readonly RelationshipEdge[],
   options: ImpactTraversalOptions = {},
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): ImpactResult {
+  requestContext.checkpoint();
   if (typeof root !== "object" || root === null || !Array.isArray(edges)) {
     throw new Error("Impact traversal input is invalid.");
   }
@@ -300,9 +311,11 @@ export function traverseImpact(
   let maxDepthReached = 0;
 
   while (queue.length > 0) {
+    requestContext.checkpoint();
     const current = queue.shift()!;
-    const neighbors = collectNeighbors(current.endpoint, edges, normalized);
+    const neighbors = collectNeighbors(current.endpoint, edges, normalized, requestContext);
     for (const neighbor of neighbors) {
+      requestContext.checkpoint();
       const nextKey = endpointKey(neighbor.endpoint);
       const nextDepth = current.depth + 1;
       const isKnownNode = nodes.has(nextKey);
@@ -336,6 +349,7 @@ export function traverseImpact(
     truncationReasons.has(reason as TruncationReason),
   ) as TruncationReason[];
   const truncated = orderedReasons.length > 0;
+  requestContext.checkpoint();
   return {
     root,
     direction: normalized.direction,

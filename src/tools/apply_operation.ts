@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { applyOperation } from "../services/operations.js";
+import { createRequestContext } from "../services/request-context.js";
 import { errorResult, structuredResult } from "./result.js";
 
 const AstApplyOperationInputSchema = z.object({
@@ -33,9 +34,12 @@ export function registerApplyOperation(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ operation_id, plan_hash }) => {
+    async ({ operation_id, plan_hash }, extra) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
-        return structuredResult({ ...(await applyOperation(operation_id, plan_hash)) });
+        return structuredResult({
+          ...(await applyOperation(operation_id, plan_hash, requestContext)),
+        });
       } catch (error) {
         return errorResult(error);
       }

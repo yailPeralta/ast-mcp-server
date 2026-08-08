@@ -14,8 +14,10 @@ import {
   createFreshProject,
   findDeclarationByName,
   getSourceFileOrThrow,
-  invalidateProject,
+  invalidateProjectIfIdle,
+  withProjectOperation,
 } from "./project.js";
+import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
 import { executableDeclaration } from "./symbols.js";
 import { buildClassScaffold, type ClassScaffoldSpec } from "./scaffold.js";
 import { withWorkspaceFileLock, type RuntimeStateOptions } from "./runtime-state.js";
@@ -105,6 +107,8 @@ const operations = new Map<string, OperationRecord>();
 const writeQueues = new Map<string, Promise<void>>();
 
 interface OperationTestHooks {
+  afterRetain?: (operationId: string) => Promise<void> | void;
+  afterWriteLockEnqueue?: () => Promise<void> | void;
   beforeReplace?: (file: string, index: number) => Promise<void> | void;
   afterReplace?: (file: string, index: number) => Promise<void> | void;
 }
@@ -180,9 +184,10 @@ function pruneOperations(): void {
 function normalizeProjectDiagnostics(
   project: Project,
   projectRoot: string,
+  requestContext: RequestContext,
 ): NormalizedDiagnostic[] {
   return [...project.getConfigFileParsingDiagnostics(), ...project.getPreEmitDiagnostics()].map(
-    (diagnostic) => normalizeDiagnostic(diagnostic, projectRoot),
+    (diagnostic) => normalizeDiagnostic(diagnostic, projectRoot, requestContext),
   );
 }
 
@@ -300,144 +305,184 @@ async function createPlan(
   kind: OperationKind,
   allowNewErrors: boolean,
   mutate: (project: Project, projectRoot: string) => number,
+  requestContext: RequestContext,
 ): Promise<PreparedOperation> {
-  pruneOperations();
-  const context = createFreshProject(projectRootInput);
-  const workspaceBefore = createWorkspaceSnapshot(context);
-  const beforeDiagnostics = normalizeProjectDiagnostics(context.project, context.projectRoot);
-  const originals = new Map(
-    context.project
-      .getSourceFiles()
-      .map((sourceFile) => [sourceFile.getFilePath(), sourceFile.getFullText()]),
-  );
-
-  for (const [filePath, sourceText] of originals) {
-    assertSafeOperationFile(
-      context.projectRoot,
-      filePath,
-      path.relative(context.projectRoot, filePath),
-    );
-    const diskText = decodeSource(await readFile(filePath), filePath);
-    if (diskText !== sourceText) {
-      throw new Error(
-        `Workspace changed while the operation was being prepared (${path.relative(context.projectRoot, filePath)}). Retry preparation.`,
+  requestContext.checkpoint();
+  let retainedOperationId: string | undefined;
+  return withProjectOperation(
+    projectRootInput,
+    async (operationContext) => {
+      operationContext.checkpoint();
+      pruneOperations();
+      const context = createFreshProject(projectRootInput);
+      const workspaceBefore = createWorkspaceSnapshot(context);
+      operationContext.checkpoint();
+      const beforeDiagnostics = normalizeProjectDiagnostics(
+        context.project,
+        context.projectRoot,
+        operationContext,
       );
-    }
-  }
-
-  const referenceCount = mutate(context.project, context.projectRoot);
-  const afterDiagnostics = normalizeProjectDiagnostics(context.project, context.projectRoot);
-  const diagnosticDelta = compareDiagnostics(beforeDiagnostics, afterDiagnostics);
-  const files: PlannedFileInternal[] = [];
-
-  for (const sourceFile of context.project.getSourceFiles()) {
-    const absolutePath = sourceFile.getFilePath();
-    const originalText = originals.get(absolutePath);
-    const updatedText = sourceFile.getFullText();
-
-    if (originalText === undefined) {
-      const file = path.relative(context.projectRoot, absolutePath);
-      assertSafeNewOperationFile(context.projectRoot, absolutePath, file);
-      const originalBytes = Buffer.alloc(0);
-      const updatedBytes = Buffer.from(updatedText, "utf8");
-      files.push({
-        absolutePath,
-        file,
-        originalHash: ABSENT_FILE_HASH,
-        updatedHash: hashBytes(updatedBytes),
-        originalText: "",
-        updatedText,
-        originalBytes,
-        updatedBytes,
-        diff: createTwoFilesPatch("/dev/null", file, "", updatedText, "before", "after", {
-          context: 3,
-        }),
-        mode: DEFAULT_NEW_FILE_MODE,
-      });
-      continue;
-    }
-    if (updatedText === originalText) continue;
-    const originalBytes = await readFile(absolutePath);
-    if (decodeSource(originalBytes, absolutePath) !== originalText) {
-      throw new Error(
-        `Workspace changed while the operation was being prepared (${path.relative(context.projectRoot, absolutePath)}). Retry preparation.`,
+      const originals = new Map(
+        context.project
+          .getSourceFiles()
+          .map((sourceFile) => [sourceFile.getFilePath(), sourceFile.getFullText()]),
       );
-    }
-    const updatedBytes = encodeUpdatedSource(originalBytes, updatedText);
-    const fileStat = await stat(absolutePath);
-    const file = path.relative(context.projectRoot, absolutePath);
-    files.push({
-      absolutePath,
-      file,
-      originalHash: hashBytes(originalBytes),
-      updatedHash: hashBytes(updatedBytes),
-      originalText,
-      updatedText,
-      originalBytes,
-      updatedBytes,
-      diff: createTwoFilesPatch(file, file, originalText, updatedText, "before", "after", {
-        context: 3,
-      }),
-      mode: fileStat.mode,
-    });
-  }
 
-  files.sort((left, right) => left.file.localeCompare(right.file));
-  if (files.length === 0) {
-    throw new Error("The structural operation produced no file changes.");
-  }
+      for (const [filePath, sourceText] of originals) {
+        operationContext.checkpoint();
+        assertSafeOperationFile(
+          context.projectRoot,
+          filePath,
+          path.relative(context.projectRoot, filePath),
+        );
+        const diskText = decodeSource(await readFile(filePath), filePath);
+        operationContext.checkpoint();
+        if (diskText !== sourceText) {
+          throw new Error(
+            `Workspace changed while the operation was being prepared (${path.relative(context.projectRoot, filePath)}). Retry preparation.`,
+          );
+        }
+      }
 
-  const postWorkspaceFiles = new Map(workspaceBefore.files);
-  for (const file of files) {
-    if (!isCreatedFile(file) && !postWorkspaceFiles.has(file.absolutePath)) {
-      throw new Error(`Affected file is missing from the workspace snapshot: ${file.file}`);
-    }
-    postWorkspaceFiles.set(file.absolutePath, file.updatedHash);
-  }
-  const postWorkspaceHash = hashWorkspaceFiles(postWorkspaceFiles);
+      operationContext.checkpoint();
+      const referenceCount = mutate(context.project, context.projectRoot);
+      operationContext.checkpoint();
+      const afterDiagnostics = normalizeProjectDiagnostics(
+        context.project,
+        context.projectRoot,
+        operationContext,
+      );
+      const diagnosticDelta = compareDiagnostics(
+        beforeDiagnostics,
+        afterDiagnostics,
+        operationContext,
+      );
+      const files: PlannedFileInternal[] = [];
 
-  const workspaceAfter = createWorkspaceSnapshot(createFreshProject(context.tsConfigFilePath));
-  if (workspaceAfter.digest !== workspaceBefore.digest) {
-    throw new Error("Workspace changed while the operation was being prepared. Retry preparation.");
-  }
+      for (const sourceFile of context.project.getSourceFiles()) {
+        operationContext.checkpoint();
+        const absolutePath = sourceFile.getFilePath();
+        const originalText = originals.get(absolutePath);
+        const updatedText = sourceFile.getFullText();
 
-  const fullPreview = files.map((file) => file.diff).join("\n");
-  const blocked = !allowNewErrors && diagnosticDelta.addedErrors.length > 0;
-  const now = operationNow();
-  const operationId = randomUUID();
-  const recordWithoutHash = {
-    operation_id: operationId,
-    kind,
-    status: "prepared",
-    project_root: context.projectRoot,
-    tsConfigFilePath: context.tsConfigFilePath,
-    created_at: new Date(now).toISOString(),
-    expires_at: new Date(now + operationTtlMs).toISOString(),
-    affected_files: files.map((file) => ({
-      file: file.file,
-      original_hash: file.originalHash,
-      updated_hash: file.updatedHash,
-    })),
-    reference_count: referenceCount,
-    workspace_hash: workspaceBefore.digest,
-    post_workspace_hash: postWorkspaceHash,
-    workspace_file_count: workspaceBefore.fileCount,
-    diagnostics: diagnosticDelta,
-    allow_new_errors: allowNewErrors,
-    blocked,
-    block_reason: blocked
-      ? `${diagnosticDelta.addedErrors.length} new TypeScript error(s) would be introduced. Prepare again with allow_new_errors=true only after explicit review.`
-      : null,
-    preview: fullPreview.length <= MAX_INLINE_PREVIEW_CHARS ? fullPreview : null,
-    preview_truncated: fullPreview.length > MAX_INLINE_PREVIEW_CHARS,
-    files,
-  } satisfies Omit<OperationRecord, "plan_hash">;
-  const record: OperationRecord = {
-    ...recordWithoutHash,
-    plan_hash: planHashFor(recordWithoutHash),
-  };
-  operations.set(operationId, record);
-  return publicOperation(record);
+        if (originalText === undefined) {
+          const file = path.relative(context.projectRoot, absolutePath);
+          assertSafeNewOperationFile(context.projectRoot, absolutePath, file);
+          const originalBytes = Buffer.alloc(0);
+          const updatedBytes = Buffer.from(updatedText, "utf8");
+          files.push({
+            absolutePath,
+            file,
+            originalHash: ABSENT_FILE_HASH,
+            updatedHash: hashBytes(updatedBytes),
+            originalText: "",
+            updatedText,
+            originalBytes,
+            updatedBytes,
+            diff: createTwoFilesPatch("/dev/null", file, "", updatedText, "before", "after", {
+              context: 3,
+            }),
+            mode: DEFAULT_NEW_FILE_MODE,
+          });
+          continue;
+        }
+        if (updatedText === originalText) continue;
+        const originalBytes = await readFile(absolutePath);
+        operationContext.checkpoint();
+        if (decodeSource(originalBytes, absolutePath) !== originalText) {
+          throw new Error(
+            `Workspace changed while the operation was being prepared (${path.relative(context.projectRoot, absolutePath)}). Retry preparation.`,
+          );
+        }
+        const updatedBytes = encodeUpdatedSource(originalBytes, updatedText);
+        const fileStat = await stat(absolutePath);
+        operationContext.checkpoint();
+        const file = path.relative(context.projectRoot, absolutePath);
+        files.push({
+          absolutePath,
+          file,
+          originalHash: hashBytes(originalBytes),
+          updatedHash: hashBytes(updatedBytes),
+          originalText,
+          updatedText,
+          originalBytes,
+          updatedBytes,
+          diff: createTwoFilesPatch(file, file, originalText, updatedText, "before", "after", {
+            context: 3,
+          }),
+          mode: fileStat.mode,
+        });
+      }
+
+      files.sort((left, right) => left.file.localeCompare(right.file));
+      if (files.length === 0) {
+        throw new Error("The structural operation produced no file changes.");
+      }
+
+      const postWorkspaceFiles = new Map(workspaceBefore.files);
+      for (const file of files) {
+        operationContext.checkpoint();
+        if (!isCreatedFile(file) && !postWorkspaceFiles.has(file.absolutePath)) {
+          throw new Error(`Affected file is missing from the workspace snapshot: ${file.file}`);
+        }
+        postWorkspaceFiles.set(file.absolutePath, file.updatedHash);
+      }
+      const postWorkspaceHash = hashWorkspaceFiles(postWorkspaceFiles);
+
+      const workspaceAfter = createWorkspaceSnapshot(createFreshProject(context.tsConfigFilePath));
+      operationContext.checkpoint();
+      if (workspaceAfter.digest !== workspaceBefore.digest) {
+        throw new Error(
+          "Workspace changed while the operation was being prepared. Retry preparation.",
+        );
+      }
+
+      const fullPreview = files.map((file) => file.diff).join("\n");
+      const blocked = !allowNewErrors && diagnosticDelta.addedErrors.length > 0;
+      const now = operationNow();
+      const operationId = randomUUID();
+      const recordWithoutHash = {
+        operation_id: operationId,
+        kind,
+        status: "prepared",
+        project_root: context.projectRoot,
+        tsConfigFilePath: context.tsConfigFilePath,
+        created_at: new Date(now).toISOString(),
+        expires_at: new Date(now + operationTtlMs).toISOString(),
+        affected_files: files.map((file) => ({
+          file: file.file,
+          original_hash: file.originalHash,
+          updated_hash: file.updatedHash,
+        })),
+        reference_count: referenceCount,
+        workspace_hash: workspaceBefore.digest,
+        post_workspace_hash: postWorkspaceHash,
+        workspace_file_count: workspaceBefore.fileCount,
+        diagnostics: diagnosticDelta,
+        allow_new_errors: allowNewErrors,
+        blocked,
+        block_reason: blocked
+          ? `${diagnosticDelta.addedErrors.length} new TypeScript error(s) would be introduced. Prepare again with allow_new_errors=true only after explicit review.`
+          : null,
+        preview: fullPreview.length <= MAX_INLINE_PREVIEW_CHARS ? fullPreview : null,
+        preview_truncated: fullPreview.length > MAX_INLINE_PREVIEW_CHARS,
+        files,
+      } satisfies Omit<OperationRecord, "plan_hash">;
+      const record: OperationRecord = {
+        ...recordWithoutHash,
+        plan_hash: planHashFor(recordWithoutHash),
+      };
+      operationContext.checkpoint();
+      operations.set(operationId, record);
+      retainedOperationId = operationId;
+      await operationTestHooks.afterRetain?.(operationId);
+      return publicOperation(record);
+    },
+    requestContext,
+  ).catch((error: unknown) => {
+    if (retainedOperationId) operations.delete(retainedOperationId);
+    throw error;
+  });
 }
 
 function publicOperation(record: OperationRecord): PreparedOperation {
@@ -463,13 +508,17 @@ function publicOperation(record: OperationRecord): PreparedOperation {
   };
 }
 
-export async function prepareRename(args: {
-  projectRoot: string;
-  filePath: string;
-  symbolPath: string;
-  newName: string;
-  allowNewErrors?: boolean;
-}): Promise<PreparedOperation> {
+export async function prepareRename(
+  args: {
+    projectRoot: string;
+    filePath: string;
+    symbolPath: string;
+    newName: string;
+    allowNewErrors?: boolean;
+  },
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): Promise<PreparedOperation> {
+  requestContext.checkpoint();
   const scanner = ts.createScanner(
     ScriptTarget.Latest,
     false,
@@ -482,27 +531,38 @@ export async function prepareRename(args: {
     throw new Error(`"${args.newName}" is not a valid TypeScript identifier.`);
   }
 
-  return createPlan(args.projectRoot, "rename_symbol", args.allowNewErrors ?? false, (project) => {
-    const sourceFile = getSourceFileOrThrow(project, args.filePath);
-    const node = findDeclarationByName(sourceFile, args.symbolPath);
-    if (!Node.isRenameable(node)) {
-      throw new Error(
-        `Symbol "${args.symbolPath}" (${node.getKindName()}) does not support structural rename.`,
-      );
-    }
-    const referenceCount = Node.isReferenceFindable(node) ? node.findReferencesAsNodes().length : 0;
-    node.rename(args.newName);
-    return referenceCount;
-  });
+  return createPlan(
+    args.projectRoot,
+    "rename_symbol",
+    args.allowNewErrors ?? false,
+    (project) => {
+      const sourceFile = getSourceFileOrThrow(project, args.filePath);
+      const node = findDeclarationByName(sourceFile, args.symbolPath);
+      if (!Node.isRenameable(node)) {
+        throw new Error(
+          `Symbol "${args.symbolPath}" (${node.getKindName()}) does not support structural rename.`,
+        );
+      }
+      const referenceCount = Node.isReferenceFindable(node)
+        ? node.findReferencesAsNodes().length
+        : 0;
+      node.rename(args.newName);
+      return referenceCount;
+    },
+    requestContext,
+  );
 }
 
-export async function prepareReplaceBody(args: {
-  projectRoot: string;
-  filePath: string;
-  symbolPath: string;
-  newBody: string;
-  allowNewErrors?: boolean;
-}): Promise<PreparedOperation> {
+export async function prepareReplaceBody(
+  args: {
+    projectRoot: string;
+    filePath: string;
+    symbolPath: string;
+    newBody: string;
+    allowNewErrors?: boolean;
+  },
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): Promise<PreparedOperation> {
   return createPlan(
     args.projectRoot,
     "replace_symbol_body",
@@ -522,6 +582,7 @@ export async function prepareReplaceBody(args: {
       executable.setBodyText(args.newBody);
       return 0;
     },
+    requestContext,
   );
 }
 
@@ -533,12 +594,16 @@ export interface PreparedClassScaffold {
   pendingMethods: string[];
 }
 
-export async function prepareScaffoldClass(args: {
-  projectRoot: string;
-  filePath: string;
-  spec: ClassScaffoldSpec;
-  allowNewErrors?: boolean;
-}): Promise<PreparedClassScaffold> {
+export async function prepareScaffoldClass(
+  args: {
+    projectRoot: string;
+    filePath: string;
+    spec: ClassScaffoldSpec;
+    allowNewErrors?: boolean;
+  },
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): Promise<PreparedClassScaffold> {
+  requestContext.checkpoint();
   if (path.isAbsolute(args.filePath)) {
     throw new Error("Scaffold file_path must be project-relative.");
   }
@@ -570,6 +635,7 @@ export async function prepareScaffoldClass(args: {
       };
       return 0;
     },
+    requestContext,
   );
   if (!metadata) throw new Error("Scaffold generation did not produce metadata.");
   return {
@@ -581,15 +647,22 @@ export async function prepareScaffoldClass(args: {
   };
 }
 
-async function withWriteLock<T>(key: string, callback: () => Promise<T>): Promise<T> {
+async function withWriteLock<T>(
+  key: string,
+  requestContext: RequestContext,
+  callback: () => Promise<T>,
+): Promise<T> {
+  requestContext.checkpoint();
   const previous = writeQueues.get(key) ?? Promise.resolve();
   let release!: () => void;
   const next = new Promise<void>((resolve) => {
     release = resolve;
   });
   writeQueues.set(key, next);
-  await previous;
   try {
+    await operationTestHooks.afterWriteLockEnqueue?.();
+    await previous;
+    requestContext.checkpoint();
     return await callback();
   } finally {
     release();
@@ -643,19 +716,26 @@ async function syncDirectories(files: readonly PlannedFileInternal[]): Promise<v
   }
 }
 
-async function currentWorkspaceHash(operation: OperationRecord): Promise<string> {
+async function currentWorkspaceHash(
+  operation: OperationRecord,
+  requestContext: RequestContext,
+): Promise<string> {
+  requestContext.checkpoint();
   const context = createFreshProject(operation.tsConfigFilePath);
   const snapshot = createWorkspaceSnapshot(context);
   const files = new Map(snapshot.files);
   for (const file of operation.files) {
+    requestContext.checkpoint();
     if (!isCreatedFile(file)) continue;
     try {
       files.set(file.absolutePath, hashBytes(await readFile(file.absolutePath)));
+      requestContext.checkpoint();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       files.delete(file.absolutePath);
     }
   }
+  requestContext.checkpoint();
   return hashWorkspaceFiles(files);
 }
 
@@ -685,7 +765,9 @@ export function configureOperationApply(
 export async function applyOperation(
   operationId: string,
   planHash: string,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): Promise<AppliedOperation> {
+  requestContext.checkpoint();
   const operation = operations.get(operationId);
   if (!operation) {
     throw new Error(`Prepared operation "${operationId}" was not found or has expired.`);
@@ -693,6 +775,8 @@ export async function applyOperation(
   if (planHash !== operation.plan_hash) {
     throw new Error(`Plan hash mismatch for operation "${operationId}". No files were written.`);
   }
+  requestContext.checkpoint();
+  let invalidateAfterCompletion = false;
 
   const persistReceipt = async (): Promise<void> => {
     if (!operation.receiptWriter) return;
@@ -706,185 +790,251 @@ export async function applyOperation(
     }
   };
 
-  return withWriteLock(operation.tsConfigFilePath, async () =>
-    withWorkspaceFileLock(
+  try {
+    return await withProjectOperation(
       operation.tsConfigFilePath,
-      { stateDirectory: operation.lockStateDirectory },
-      async () => {
-        if (operation.status === "applied") {
-          for (const file of operation.files) {
-            assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
-            const currentBytes = await readFile(file.absolutePath);
-            if (hashBytes(currentBytes) !== file.updatedHash) {
-              throw new Error(
-                `Applied receipt conflict: ${file.file} no longer matches the recorded postimage.`,
-              );
-            }
-          }
-          await persistReceipt();
-          return appliedResult(operation, true);
-        }
-        if (Date.parse(operation.expires_at) <= operationNow()) {
-          operations.delete(operationId);
-          throw new Error(`Prepared operation "${operationId}" has expired.`);
-        }
-        if (operation.blocked) {
-          throw new Error(
-            operation.block_reason ?? "The operation is blocked by validation errors.",
-          );
-        }
-
-        for (const file of operation.files) {
-          if (isCreatedFile(file)) {
-            assertSafeCreationState(operation.project_root, file.absolutePath, file.file);
-          } else {
-            assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
-          }
-        }
-
-        const workspaceHash = await currentWorkspaceHash(operation);
-        if (workspaceHash === operation.post_workspace_hash) {
-          for (const file of operation.files) {
-            assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
-            const currentBytes = await readFile(file.absolutePath);
-            if (hashBytes(currentBytes) !== file.updatedHash) {
-              throw new Error(
-                `Postimage recovery conflict: ${file.file} does not match the reviewed postimage.`,
-              );
-            }
-          }
-          operation.status = "applied";
-          operation.applied_at ??= new Date().toISOString();
-          invalidateProject(operation.tsConfigFilePath);
-          await persistReceipt();
-          return appliedResult(operation, true);
-        }
-        if (workspaceHash !== operation.workspace_hash) {
-          throw new Error(
-            "Conflict: the project source/config workspace changed after preparation. No files were written.",
-          );
-        }
-
-        for (const file of operation.files) {
-          if (isCreatedFile(file)) continue;
-          const currentBytes = await readFile(file.absolutePath);
-          if (hashBytes(currentBytes) !== file.originalHash) {
-            throw new Error(
-              `Conflict: ${file.file} changed after the operation was prepared. No files were written.`,
-            );
-          }
-        }
-
-        const staged = new Map<PlannedFileInternal, string>();
-        const applied: PlannedFileInternal[] = [];
-        try {
-          for (const file of operation.files) {
-            staged.set(file, await stageFile(file, operationId));
-          }
-          for (const file of operation.files) {
-            if (isCreatedFile(file)) {
-              assertSafeNewOperationFile(operation.project_root, file.absolutePath, file.file);
-              continue;
-            }
-            const currentBytes = await readFile(file.absolutePath);
-            if (hashBytes(currentBytes) !== file.originalHash) {
-              throw new Error(
-                `Conflict: ${file.file} changed while the operation was being staged. No files were written.`,
-              );
-            }
-          }
-          for (const [index, file] of operation.files.entries()) {
-            await operationTestHooks.beforeReplace?.(file.file, index);
-            if (isCreatedFile(file)) {
-              await link(staged.get(file)!, file.absolutePath);
-              applied.push(file);
-              await safeUnlink(staged.get(file)!);
-              staged.delete(file);
-            } else {
-              await rename(staged.get(file)!, file.absolutePath);
-              staged.delete(file);
-              applied.push(file);
-            }
-            await operationTestHooks.afterReplace?.(file.file, index);
-            const writtenBytes = await readFile(file.absolutePath);
-            if (hashBytes(writtenBytes) !== file.updatedHash) {
-              throw new Error(`Post-write verification failed for ${file.file}.`);
-            }
-          }
-          await syncDirectories(operation.files);
-        } catch (error) {
-          const rollbackErrors: string[] = [];
-          for (const file of [...applied].reverse()) {
-            try {
-              const currentBytes = await readFile(file.absolutePath);
-              if (hashBytes(currentBytes) !== file.updatedHash) {
-                rollbackErrors.push(
-                  `${file.file}: current bytes no longer match this operation's postimage`,
+      async (operationContext) => {
+        operationContext.checkpoint();
+        return withWriteLock(operation.tsConfigFilePath, operationContext, async () => {
+          operationContext.checkpoint();
+          return withWorkspaceFileLock(
+            operation.tsConfigFilePath,
+            { stateDirectory: operation.lockStateDirectory },
+            async () => {
+              operationContext.checkpoint();
+              if (operation.status === "applied") {
+                for (const file of operation.files) {
+                  operationContext.checkpoint();
+                  assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
+                  const currentBytes = await readFile(file.absolutePath);
+                  operationContext.checkpoint();
+                  if (hashBytes(currentBytes) !== file.updatedHash) {
+                    throw new Error(
+                      `Applied receipt conflict: ${file.file} no longer matches the recorded postimage.`,
+                    );
+                  }
+                }
+                operationContext.enterCompletionCritical();
+                invalidateAfterCompletion = true;
+                await persistReceipt();
+                return appliedResult(operation, true);
+              }
+              if (Date.parse(operation.expires_at) <= operationNow()) {
+                operations.delete(operationId);
+                throw new Error(`Prepared operation "${operationId}" has expired.`);
+              }
+              if (operation.blocked) {
+                throw new Error(
+                  operation.block_reason ?? "The operation is blocked by validation errors.",
                 );
-                continue;
               }
-              if (isCreatedFile(file)) {
-                assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
-                await safeUnlink(file.absolutePath);
-              } else {
-                await restoreFile(file, operationId);
-              }
-            } catch (rollbackError) {
-              rollbackErrors.push(
-                `${file.file}: ${
-                  rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
-                }`,
-              );
-            }
-          }
-          for (const temporaryPath of staged.values()) await safeUnlink(temporaryPath);
-          if (applied.length > 0 && rollbackErrors.length === 0) {
-            await syncDirectories(applied);
-            throw new Error(
-              `Operation failed after replacing ${applied.length} file(s); rollback succeeded and original bytes were restored. Original error: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-              { cause: error },
-            );
-          }
-          if (rollbackErrors.length > 0) {
-            throw new Error(
-              `Operation failed and rollback was incomplete: ${rollbackErrors.join("; ")}. Original error: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-              { cause: error },
-            );
-          }
-          throw error;
-        }
 
-        operation.status = "applied";
-        operation.applied_at = new Date().toISOString();
-        invalidateProject(operation.tsConfigFilePath);
-        await persistReceipt();
-        return appliedResult(operation, false);
+              for (const file of operation.files) {
+                operationContext.checkpoint();
+                if (isCreatedFile(file)) {
+                  assertSafeCreationState(operation.project_root, file.absolutePath, file.file);
+                } else {
+                  assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
+                }
+              }
+
+              const workspaceHash = await currentWorkspaceHash(operation, operationContext);
+              if (workspaceHash === operation.post_workspace_hash) {
+                for (const file of operation.files) {
+                  operationContext.checkpoint();
+                  assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
+                  const currentBytes = await readFile(file.absolutePath);
+                  operationContext.checkpoint();
+                  if (hashBytes(currentBytes) !== file.updatedHash) {
+                    throw new Error(
+                      `Postimage recovery conflict: ${file.file} does not match the reviewed postimage.`,
+                    );
+                  }
+                }
+                operationContext.enterCompletionCritical();
+                invalidateAfterCompletion = true;
+                operation.status = "applied";
+                operation.applied_at ??= new Date().toISOString();
+                await persistReceipt();
+                return appliedResult(operation, true);
+              }
+              if (workspaceHash !== operation.workspace_hash) {
+                throw new Error(
+                  "Conflict: the project source/config workspace changed after preparation. No files were written.",
+                );
+              }
+
+              for (const file of operation.files) {
+                operationContext.checkpoint();
+                if (isCreatedFile(file)) continue;
+                const currentBytes = await readFile(file.absolutePath);
+                operationContext.checkpoint();
+                if (hashBytes(currentBytes) !== file.originalHash) {
+                  throw new Error(
+                    `Conflict: ${file.file} changed after the operation was prepared. No files were written.`,
+                  );
+                }
+              }
+
+              const staged = new Map<PlannedFileInternal, string>();
+              const applied: PlannedFileInternal[] = [];
+              let completionCritical = false;
+              try {
+                for (const file of operation.files) {
+                  staged.set(file, await stageFile(file, operationId));
+                  operationContext.checkpoint();
+                }
+                for (const file of operation.files) {
+                  operationContext.checkpoint();
+                  if (isCreatedFile(file)) {
+                    assertSafeNewOperationFile(
+                      operation.project_root,
+                      file.absolutePath,
+                      file.file,
+                    );
+                    continue;
+                  }
+                  const currentBytes = await readFile(file.absolutePath);
+                  operationContext.checkpoint();
+                  if (hashBytes(currentBytes) !== file.originalHash) {
+                    throw new Error(
+                      `Conflict: ${file.file} changed while the operation was being staged. No files were written.`,
+                    );
+                  }
+                }
+                for (const [index, file] of operation.files.entries()) {
+                  operationContext.checkpoint();
+                  await operationTestHooks.beforeReplace?.(file.file, index);
+                  if (!completionCritical) {
+                    operationContext.enterCompletionCritical();
+                    completionCritical = true;
+                    invalidateAfterCompletion = true;
+                  }
+                  if (isCreatedFile(file)) {
+                    await link(staged.get(file)!, file.absolutePath);
+                    applied.push(file);
+                    await safeUnlink(staged.get(file)!);
+                    staged.delete(file);
+                  } else {
+                    await rename(staged.get(file)!, file.absolutePath);
+                    staged.delete(file);
+                    applied.push(file);
+                  }
+                  await operationTestHooks.afterReplace?.(file.file, index);
+                  const writtenBytes = await readFile(file.absolutePath);
+                  if (hashBytes(writtenBytes) !== file.updatedHash) {
+                    throw new Error(`Post-write verification failed for ${file.file}.`);
+                  }
+                }
+                await syncDirectories(operation.files);
+              } catch (error) {
+                const rollbackErrors: string[] = [];
+                for (const file of [...applied].reverse()) {
+                  try {
+                    const currentBytes = await readFile(file.absolutePath);
+                    if (hashBytes(currentBytes) !== file.updatedHash) {
+                      rollbackErrors.push(
+                        `${file.file}: current bytes no longer match this operation's postimage`,
+                      );
+                      continue;
+                    }
+                    if (isCreatedFile(file)) {
+                      assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
+                      await safeUnlink(file.absolutePath);
+                    } else {
+                      await restoreFile(file, operationId);
+                    }
+                  } catch (rollbackError) {
+                    rollbackErrors.push(
+                      `${file.file}: ${
+                        rollbackError instanceof Error
+                          ? rollbackError.message
+                          : String(rollbackError)
+                      }`,
+                    );
+                  }
+                }
+                for (const temporaryPath of staged.values()) await safeUnlink(temporaryPath);
+                if (applied.length > 0 && rollbackErrors.length === 0) {
+                  await syncDirectories(applied);
+                  throw new Error(
+                    `Operation failed after replacing ${applied.length} file(s); rollback succeeded and original bytes were restored. Original error: ${
+                      error instanceof Error ? error.message : String(error)
+                    }`,
+                    { cause: error },
+                  );
+                }
+                if (rollbackErrors.length > 0) {
+                  throw new Error(
+                    `Operation failed and rollback was incomplete: ${rollbackErrors.join("; ")}. Original error: ${
+                      error instanceof Error ? error.message : String(error)
+                    }`,
+                    { cause: error },
+                  );
+                }
+                throw error;
+              }
+
+              operation.status = "applied";
+              operation.applied_at = new Date().toISOString();
+              await persistReceipt();
+              return appliedResult(operation, false);
+            },
+          );
+        });
       },
-    ),
-  );
+      requestContext,
+    );
+  } finally {
+    if (invalidateAfterCompletion) {
+      invalidateProjectIfIdle(operation.tsConfigFilePath, {
+        preserveCancellationTelemetry: true,
+      });
+    }
+  }
 }
 
-export function getOperationPreview(
+export async function getOperationPreview(
   operationId: string,
   file?: string,
-): { operation_id: string; plan_hash: string; files: Array<{ file: string; diff: string }> } {
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): Promise<{
+  operation_id: string;
+  plan_hash: string;
+  files: Array<{ file: string; diff: string }>;
+}> {
+  requestContext.checkpoint();
   const operation = operations.get(operationId);
   if (!operation) {
     throw new Error(`Prepared operation "${operationId}" was not found or has expired.`);
   }
-  const files = file ? operation.files.filter((item) => item.file === file) : operation.files;
-  if (file && files.length === 0) {
-    throw new Error(`File "${file}" is not part of operation "${operationId}".`);
-  }
-  return {
-    operation_id: operationId,
-    plan_hash: operation.plan_hash,
-    files: files.map((item) => ({ file: item.file, diff: item.diff })),
-  };
+  const tsConfigFilePath = operation.tsConfigFilePath;
+  return withProjectOperation(
+    tsConfigFilePath,
+    (operationContext) => {
+      operationContext.checkpoint();
+      const retainedOperation = operations.get(operationId);
+      if (!retainedOperation) {
+        throw new Error(`Prepared operation "${operationId}" was not found or has expired.`);
+      }
+      const files = file
+        ? retainedOperation.files.filter((item) => item.file === file)
+        : retainedOperation.files;
+      if (file && files.length === 0) {
+        throw new Error(`File "${file}" is not part of operation "${operationId}".`);
+      }
+      operationContext.checkpoint();
+      return {
+        operation_id: operationId,
+        plan_hash: retainedOperation.plan_hash,
+        files: files.map((item) => {
+          operationContext.checkpoint();
+          return { file: item.file, diff: item.diff };
+        }),
+      };
+    },
+    requestContext,
+  );
 }
 
 function decodePersistedBytes(value: string, label: string): Buffer {

@@ -31,13 +31,24 @@ import { createConfigSnapshot, createWorkspaceSnapshot } from "./workspace.js";
 import {
   createInitialProjectStatus,
   createProjectIdentity,
+  projectOperationQueueToProjection,
   projectStatusToProjection,
+  type ProjectOperationQueueProjection,
   transitionProjectStatus,
   type ProjectStatus,
   type ProjectStatusProjection,
   type SynchronizationCause,
 } from "./project-status.js";
-import { readRuntimePolicy } from "./runtime-policy.js";
+import {
+  ProjectOperationScheduler,
+  type ProjectOperationContext,
+} from "./project-operation-scheduler.js";
+import {
+  isCooperativeInterruption,
+  NO_REQUEST_CONTEXT,
+  type RequestContext,
+} from "./request-context.js";
+import { readRuntimePolicy, type RuntimePolicy } from "./runtime-policy.js";
 
 export interface ProjectContext {
   project: Project;
@@ -58,25 +69,14 @@ interface ProjectSession {
   watcher: ProjectWatcher;
   configDigest: string;
   fingerprints: ReadonlyMap<string, FileFingerprint>;
-  queue: Promise<void>;
-  activeOperations: number;
-  runningOperations: number;
-  queuedOperations: number;
+  scheduler: ProjectOperationScheduler;
   lastAccessSequence: bigint;
   symbolIndexPolicy: SymbolIndexPersistencePolicy;
   persistentSymbolIndex?: SQLiteSymbolIndexStore;
 }
 
-export type ProjectQueueState = "idle" | "queued" | "running";
-
-export interface ProjectOperationQueueStatus {
-  readonly state: ProjectQueueState;
-  readonly active_operations: number;
-  readonly queued_operations: number;
-}
-
 export interface ProjectStatusSnapshot extends ProjectStatusProjection {
-  readonly operation_queue: ProjectOperationQueueStatus;
+  readonly operation_queue: ProjectOperationQueueProjection;
   readonly index_observability: SymbolIndexRuntimeObservability;
 }
 
@@ -99,16 +99,16 @@ export class ProjectCapacityError extends Error {
 const projectSessions = new Map<string, ProjectSession>();
 const projectRoots = new WeakMap<Project, string>();
 let projectSessionAccessSequence = 0n;
-let projectSessionCapacity: number | undefined;
+let projectRuntimePolicy: RuntimePolicy | undefined;
 
 function nextProjectSessionAccessSequence(): bigint {
   projectSessionAccessSequence += 1n;
   return projectSessionAccessSequence;
 }
 
-function getProjectSessionCapacity(): number {
-  projectSessionCapacity ??= readRuntimePolicy().maxProjectSessions;
-  return projectSessionCapacity;
+function getProjectRuntimePolicy(): RuntimePolicy {
+  projectRuntimePolicy ??= readRuntimePolicy();
+  return projectRuntimePolicy;
 }
 
 function closePersistentSymbolIndex(session: ProjectSession): void {
@@ -192,7 +192,11 @@ export async function reportSymbolIndexFailure(
   return session.context;
 }
 
-async function ensureSessionSymbolIndex(session: ProjectSession): Promise<void> {
+async function ensureSessionSymbolIndex(
+  session: ProjectSession,
+  requestContext: ProjectOperationContext,
+): Promise<void> {
+  requestContext.checkpoint();
   const policy = readSymbolIndexPersistencePolicy();
   if (symbolIndexPolicyKey(policy) !== symbolIndexPolicyKey(session.symbolIndexPolicy)) {
     closePersistentSymbolIndex(session);
@@ -213,9 +217,16 @@ async function ensureSessionSymbolIndex(session: ProjectSession): Promise<void> 
   const cachePath = symbolIndexCachePath(policy, session.context.status.project);
   if (!cachePath) return;
   try {
+    requestContext.checkpoint();
     const store = await openSQLiteSymbolIndexStore(cachePath, {
       busyTimeoutMs: policy.busy_timeout_ms,
     });
+    try {
+      requestContext.checkpoint();
+    } catch (error) {
+      store.close();
+      throw error;
+    }
     session.persistentSymbolIndex = store;
     const migrationPerformed = store.migrationPerformed;
     session.context = {
@@ -243,6 +254,7 @@ async function ensureSessionSymbolIndex(session: ProjectSession): Promise<void> 
       },
     };
   } catch (error) {
+    if (isCooperativeInterruption(error)) throw error;
     const reason = (error as Partial<SymbolIndexStorageError>).code ?? "sqlite_open_failed";
     if (
       reason === "corrupt_storage" ||
@@ -313,10 +325,15 @@ function closeProjectSession(session: ProjectSession): void {
   closePersistentSymbolIndex(session);
 }
 
+function sessionHasAdmittedOperations(session: ProjectSession): boolean {
+  const snapshot = session.scheduler.snapshot();
+  return snapshot.active_operations + snapshot.queued_operations > 0;
+}
+
 function ensureProjectSessionCapacity(sessionCapacity: number): void {
   while (projectSessions.size >= sessionCapacity) {
     const candidate = [...projectSessions.entries()]
-      .filter(([, session]) => session.activeOperations === 0)
+      .filter(([, session]) => !sessionHasAdmittedOperations(session))
       .sort((left, right) =>
         left[1].lastAccessSequence < right[1].lastAccessSequence
           ? -1
@@ -331,13 +348,19 @@ function ensureProjectSessionCapacity(sessionCapacity: number): void {
   }
 }
 
-function getOrCreateSession(projectRoot: string): ProjectSession {
+function getOrCreateSession(
+  projectRoot: string,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): ProjectSession {
+  requestContext.checkpoint();
   const tsConfigFilePath = resolveTsConfigPath(projectRoot);
   const existing = projectSessions.get(tsConfigFilePath);
   if (existing) return existing;
 
-  ensureProjectSessionCapacity(getProjectSessionCapacity());
+  const runtimePolicy = getProjectRuntimePolicy();
+  ensureProjectSessionCapacity(runtimePolicy.maxProjectSessions);
   const symbolIndexPolicy = readSymbolIndexPersistencePolicy();
+  requestContext.checkpoint();
   const baseContext = buildProjectContext(tsConfigFilePath);
   const context: ProjectContext = {
     ...baseContext,
@@ -366,12 +389,16 @@ function getOrCreateSession(projectRoot: string): ProjectSession {
         };
       },
     }),
-    configDigest: createConfigSnapshot(tsConfigFilePath).digest,
+    configDigest: (() => {
+      requestContext.checkpoint();
+      return createConfigSnapshot(tsConfigFilePath).digest;
+    })(),
     fingerprints: new Map(),
-    queue: Promise.resolve(),
-    activeOperations: 0,
-    runningOperations: 0,
-    queuedOperations: 0,
+    scheduler: new ProjectOperationScheduler({
+      queueCapacity: runtimePolicy.maxQueuedOperationsPerProject,
+      queueWaitTimeoutMs: runtimePolicy.queueWaitTimeoutMs,
+      operationDeadlineMs: runtimePolicy.operationDeadlineMs,
+    }),
     lastAccessSequence: nextProjectSessionAccessSequence(),
     symbolIndexPolicy,
   };
@@ -386,31 +413,39 @@ function getOrCreateSession(projectRoot: string): ProjectSession {
   return session;
 }
 
-function getQueueStatus(session: ProjectSession): ProjectOperationQueueStatus {
-  return {
-    state:
-      session.runningOperations > 0 ? "running" : session.queuedOperations > 0 ? "queued" : "idle",
-    active_operations: session.runningOperations,
-    queued_operations: session.queuedOperations,
-  };
+function getQueueStatus(session: ProjectSession): ProjectOperationQueueProjection {
+  const snapshot = session.scheduler.snapshot();
+  return projectOperationQueueToProjection(snapshot, snapshot.queue_capacity);
+}
+
+export function getProjectOperationQueueSnapshot(
+  projectRoot: string,
+): ProjectOperationQueueProjection {
+  const session = projectSessions.get(resolveTsConfigPath(projectRoot));
+  if (!session) throw new Error("Project session not found.");
+  return getQueueStatus(session);
 }
 
 export function getProjectSessionRegistrySnapshot(): ProjectSessionRegistrySnapshot {
-  const activeSessions = [...projectSessions.values()].filter(
-    (session) => session.activeOperations > 0,
+  const activeSessions = [...projectSessions.values()].filter((session) =>
+    sessionHasAdmittedOperations(session),
   ).length;
   return Object.freeze({
     session_count: projectSessions.size,
     active_sessions: activeSessions,
     idle_sessions: projectSessions.size - activeSessions,
-    session_capacity: getProjectSessionCapacity(),
+    session_capacity: getProjectRuntimePolicy().maxProjectSessions,
   });
 }
 
-async function synchronizeSession(session: ProjectSession): Promise<void> {
+async function synchronizeSession(
+  session: ProjectSession,
+  requestContext: ProjectOperationContext,
+): Promise<void> {
   let syncFailureCause: SynchronizationCause = "compiler_rebuild";
   let currentConfigDigest: string;
   try {
+    requestContext.checkpoint();
     currentConfigDigest = createConfigSnapshot(session.context.tsConfigFilePath).digest;
     if (currentConfigDigest !== session.configDigest) {
       let status = transitionProjectStatus(session.context.status, { type: "config_changed" });
@@ -428,7 +463,9 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
         project.getSourceFiles().map((sourceFile) => sourceFile.refreshFromFileSystem()),
       );
     };
+    requestContext.checkpoint();
     await refreshSourceFiles();
+    requestContext.checkpoint();
 
     const snapshot = createWorkspaceSnapshot(session.context, {
       previousFingerprints: session.fingerprints,
@@ -438,11 +475,14 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
       throw new Error("Project configuration changed during synchronization. Retry the operation.");
     }
 
+    requestContext.checkpoint();
     await refreshSourceFiles();
+    requestContext.checkpoint();
     const verificationSnapshot = createWorkspaceSnapshot(session.context, {
       previousFingerprints: snapshot.fingerprints,
       verifyContentHash: true,
     });
+    requestContext.checkpoint();
     if (verificationSnapshot.configDigest !== currentConfigDigest) {
       syncFailureCause = "config_change";
       throw new Error("Project configuration changed during synchronization. Retry the operation.");
@@ -452,10 +492,12 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
       throw new Error("Project source changed during synchronization. Retry the operation.");
     }
 
-    await ensureSessionSymbolIndex(session);
+    requestContext.checkpoint();
+    await ensureSessionSymbolIndex(session, requestContext);
 
     const sourceFiles = session.context.project.getSourceFiles();
     const currentIndexFiles: SymbolIndexCurrentFile[] = sourceFiles.map((sourceFile) => {
+      requestContext.checkpoint();
       const absoluteFilePath = fs.realpathSync(sourceFile.getFilePath());
       const fingerprint = verificationSnapshot.fingerprints.get(absoluteFilePath);
       if (!fingerprint) {
@@ -470,20 +512,25 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
     });
     let existingIndexEntries;
     try {
+      requestContext.checkpoint();
       existingIndexEntries = await session.context.symbolIndex.load(
         session.context.status.project,
         SYMBOL_INDEX_SCHEMA_VERSION,
       );
+      requestContext.checkpoint();
     } catch (error) {
+      if (isCooperativeInterruption(error)) throw error;
       if (session.context.symbolIndexBackend !== "sqlite") throw error;
       fallbackToMemory(
         session,
         (error as Partial<SymbolIndexStorageError>).code ?? "sqlite_read_failed",
       );
+      requestContext.checkpoint();
       existingIndexEntries = await session.context.symbolIndex.load(
         session.context.status.project,
         SYMBOL_INDEX_SCHEMA_VERSION,
       );
+      requestContext.checkpoint();
     }
     if (session.context.symbolIndexBackend === "sqlite") {
       const cacheWarm = existingIndexEntries.length > 0;
@@ -541,12 +588,14 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
     );
     const indexFiles: SymbolIndexRefreshFile[] = sourceFiles
       .filter((sourceFile) => {
+        requestContext.checkpoint();
         const filePath = path
           .relative(session.context.projectRoot, sourceFile.getFilePath())
           .replaceAll(path.sep, "/");
         return filesToRebuild.has(filePath);
       })
       .map((sourceFile) => {
+        requestContext.checkpoint();
         const absoluteFilePath = fs.realpathSync(sourceFile.getFilePath());
         const fingerprint = verificationSnapshot.fingerprints.get(absoluteFilePath);
         if (!fingerprint) {
@@ -562,6 +611,7 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
       });
 
     try {
+      requestContext.checkpoint();
       const refreshResult = await session.context.symbolIndex.refresh({
         project: session.context.status.project,
         config_digest: verificationSnapshot.configDigest,
@@ -569,7 +619,9 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
         files: indexFiles,
         last_indexed_at: new Date().toISOString(),
       });
+      requestContext.checkpoint();
       await session.context.symbolIndex.flush();
+      requestContext.checkpoint();
       session.context = {
         ...session.context,
         symbolIndexReady: true,
@@ -597,6 +649,7 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
             : session.context.symbolIndexObservability,
       };
     } catch (error) {
+      if (isCooperativeInterruption(error)) throw error;
       if (session.context.symbolIndexBackend === "sqlite") {
         fallbackToMemory(
           session,
@@ -604,6 +657,7 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
         );
         try {
           const fallbackFiles: SymbolIndexRefreshFile[] = sourceFiles.map((sourceFile) => {
+            requestContext.checkpoint();
             const absoluteFilePath = fs.realpathSync(sourceFile.getFilePath());
             const fingerprint = verificationSnapshot.fingerprints.get(absoluteFilePath);
             if (!fingerprint) {
@@ -617,6 +671,7 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
               symbols: sourceFileIndexSymbols(sourceFile, session.context.projectRoot),
             };
           });
+          requestContext.checkpoint();
           await session.context.symbolIndex.refresh({
             project: session.context.status.project,
             config_digest: verificationSnapshot.configDigest,
@@ -624,8 +679,10 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
             files: fallbackFiles,
             last_indexed_at: new Date().toISOString(),
           });
+          requestContext.checkpoint();
           session.context = { ...session.context, symbolIndexReady: true };
-        } catch {
+        } catch (fallbackError) {
+          if (isCooperativeInterruption(fallbackError)) throw fallbackError;
           session.context = { ...session.context, symbolIndexReady: false };
         }
       } else {
@@ -636,13 +693,20 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
     let relationshipEdges: readonly RelationshipEdge[] = [];
     let relationshipEdgesReady = false;
     try {
-      relationshipEdges = collectCompilerRelationships(project, session.context.projectRoot, {
-        state: "fresh",
-        causes: [],
-        checked_at: new Date().toISOString(),
-      });
+      requestContext.checkpoint();
+      relationshipEdges = collectCompilerRelationships(
+        project,
+        session.context.projectRoot,
+        {
+          state: "fresh",
+          causes: [],
+          checked_at: new Date().toISOString(),
+        },
+        requestContext,
+      );
       relationshipEdgesReady = true;
-    } catch {
+    } catch (error) {
+      if (isCooperativeInterruption(error)) throw error;
       relationshipEdges = [];
     }
     session.context = { ...session.context, relationshipEdges, relationshipEdgesReady };
@@ -660,6 +724,7 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
     session.configDigest = verificationSnapshot.configDigest;
     session.fingerprints = verificationSnapshot.fingerprints;
   } catch (error) {
+    if (isCooperativeInterruption(error)) throw error;
     session.context = {
       ...session.context,
       relationshipEdges: [],
@@ -677,56 +742,80 @@ async function synchronizeSession(session: ProjectSession): Promise<void> {
 
 async function runSessionWithSyncPolicy<T>(
   session: ProjectSession,
-  operation: (context: ProjectContext) => Promise<T> | T,
+  operation: (context: ProjectContext, requestContext: ProjectOperationContext) => Promise<T> | T,
   allowSynchronizationFailure: boolean,
+  requestContext: RequestContext,
 ): Promise<T> {
-  session.activeOperations += 1;
-  session.queuedOperations += 1;
-
-  let release: (() => void) | undefined;
-  const previous = session.queue;
-  session.queue = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-
-  await previous;
-  session.queuedOperations -= 1;
-  session.runningOperations += 1;
-  try {
-    try {
-      await synchronizeSession(session);
-    } catch (error) {
-      if (!allowSynchronizationFailure) throw error;
-    }
-    session.lastAccessSequence = nextProjectSessionAccessSequence();
-    return await operation(session.context);
-  } finally {
-    session.runningOperations -= 1;
-    session.activeOperations -= 1;
-    release?.();
-  }
+  requestContext.checkpoint();
+  return session.scheduler.run(
+    async (operationContext) => {
+      operationContext.checkpoint();
+      try {
+        await synchronizeSession(session, operationContext);
+      } catch (error) {
+        if (!allowSynchronizationFailure || isCooperativeInterruption(error)) throw error;
+      }
+      operationContext.checkpoint();
+      operationContext.markExecuting();
+      session.lastAccessSequence = nextProjectSessionAccessSequence();
+      return operation(session.context, operationContext);
+    },
+    { signal: requestContext.signal },
+  );
 }
 
 export async function withProject<T>(
   projectRoot: string,
-  operation: (context: ProjectContext) => Promise<T> | T,
+  operation: (context: ProjectContext, requestContext: ProjectOperationContext) => Promise<T> | T,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): Promise<T> {
-  return runSessionWithSyncPolicy(getOrCreateSession(projectRoot), operation, false);
+  requestContext.checkpoint();
+  return runSessionWithSyncPolicy(
+    getOrCreateSession(projectRoot, requestContext),
+    operation,
+    false,
+    requestContext,
+  );
 }
 
-export async function getProjectStatus(projectRoot: string): Promise<ProjectStatusSnapshot> {
-  const session = getOrCreateSession(projectRoot);
+export async function withProjectOperation<T>(
+  projectRoot: string,
+  operation: (requestContext: ProjectOperationContext) => Promise<T> | T,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): Promise<T> {
+  requestContext.checkpoint();
+  const session = getOrCreateSession(projectRoot, requestContext);
+  return session.scheduler.run(
+    (operationContext) => {
+      operationContext.checkpoint();
+      operationContext.markExecuting();
+      session.lastAccessSequence = nextProjectSessionAccessSequence();
+      return operation(operationContext);
+    },
+    { signal: requestContext.signal },
+  );
+}
+
+export async function getProjectStatus(
+  projectRoot: string,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): Promise<ProjectStatusSnapshot> {
+  requestContext.checkpoint();
+  const session = getOrCreateSession(projectRoot, requestContext);
   return runSessionWithSyncPolicy(
     session,
-    async (context) => {
+    async (context, operationContext) => {
       let effectiveContext = context;
       let indexedCount = 0;
       if (context.symbolIndexBackend === "sqlite" && context.symbolIndexReady) {
         try {
+          operationContext.checkpoint();
           indexedCount = (
             await context.symbolIndex.load(context.status.project, SYMBOL_INDEX_SCHEMA_VERSION)
           ).length;
+          operationContext.checkpoint();
         } catch (error) {
+          if (isCooperativeInterruption(error)) throw error;
           fallbackToMemory(
             session,
             (error as Partial<SymbolIndexStorageError>).code ?? "sqlite_read_failed",
@@ -746,6 +835,7 @@ export async function getProjectStatus(projectRoot: string): Promise<ProjectStat
       };
     },
     true,
+    requestContext,
   );
 }
 
@@ -761,13 +851,33 @@ export function invalidateProject(projectRoot: string): void {
   projectSessions.delete(tsConfigFilePath);
 }
 
+export function invalidateProjectIfIdle(
+  projectRoot: string,
+  options: { readonly preserveCancellationTelemetry?: boolean } = {},
+): boolean {
+  const tsConfigFilePath = resolveTsConfigPath(projectRoot);
+  const session = projectSessions.get(tsConfigFilePath);
+  if (!session) return true;
+  const queue = session.scheduler.snapshot();
+  if (
+    queue.active_operations > 0 ||
+    queue.queued_operations > 0 ||
+    (options.preserveCancellationTelemetry === true && queue.cancelled_operations > 0)
+  ) {
+    return false;
+  }
+  closeProjectSession(session);
+  projectSessions.delete(tsConfigFilePath);
+  return true;
+}
+
 export function clearProjectSessions(): void {
   for (const session of projectSessions.values()) {
     closeProjectSession(session);
   }
   projectSessions.clear();
   projectSessionAccessSequence = 0n;
-  projectSessionCapacity = undefined;
+  projectRuntimePolicy = undefined;
 }
 
 export function getSourceFileOrThrow(project: Project, filePath: string): SourceFile {

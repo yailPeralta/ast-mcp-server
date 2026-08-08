@@ -4,6 +4,11 @@ import { Node, type SourceFile } from "ts-morph";
 import { buildFileOutline, nodeSourceWithLocation, type OutlineSymbol } from "./outline.js";
 import { paginate } from "./pagination.js";
 import {
+  isCooperativeInterruption,
+  NO_REQUEST_CONTEXT,
+  type RequestContext,
+} from "./request-context.js";
+import {
   findDeclarationByName,
   getSourceFileOrThrow,
   reportSymbolIndexFailure,
@@ -152,19 +157,24 @@ function recordFromOutlineSymbol(
   };
 }
 
-function fileRecords(sourceFile: SourceFile, projectRoot: string): ProjectSymbolRecord[] {
-  const outline = buildFileOutline(sourceFile);
+function fileRecords(
+  sourceFile: SourceFile,
+  projectRoot: string,
+  requestContext: RequestContext,
+): ProjectSymbolRecord[] {
+  const outline = buildFileOutline(sourceFile, requestContext);
   if (outline.symbols.length > 0) {
     return outline.symbols.map((symbol) =>
       recordFromOutlineSymbol(sourceFile, projectRoot, symbol),
     );
   }
-  return sourceFileSymbols(sourceFile, projectRoot);
+  return sourceFileSymbols(sourceFile, projectRoot, requestContext);
 }
 
 async function projectRecords(
   context: ProjectContext,
   request: ExploreRequest,
+  requestContext: RequestContext,
 ): Promise<{
   context: ProjectContext;
   route: ExploreRoute;
@@ -180,7 +190,7 @@ async function projectRecords(
     const requestedSymbolPath = request.symbolPath;
     if (requestedSymbolPath) {
       const node = findDeclarationByName(sourceFile, requestedSymbolPath);
-      const record = fileRecords(sourceFile, projectRoot).find(
+      const record = fileRecords(sourceFile, projectRoot, requestContext).find(
         (candidate) =>
           candidate.symbol_path === requestedSymbolPath ||
           candidate.selector === requestedSymbolPath ||
@@ -199,7 +209,7 @@ async function projectRecords(
       };
     }
 
-    const records = fileRecords(sourceFile, projectRoot)
+    const records = fileRecords(sourceFile, projectRoot, requestContext)
       .filter((record) => !request.query || matchesQuery(record, request.query))
       .filter((record) => !request.kinds || request.kinds.includes(record.kind));
     return {
@@ -229,6 +239,7 @@ async function projectRecords(
     async (reason) => {
       effectiveContext = (await reportSymbolIndexFailure(projectRoot, reason)) ?? effectiveContext;
     },
+    requestContext,
   );
   return {
     context: effectiveContext,
@@ -237,11 +248,16 @@ async function projectRecords(
     symbol: null,
     records:
       indexedRecords ??
-      searchProjectSymbols(effectiveContext.project, effectiveContext.projectRoot, {
-        query: request.query,
-        kinds: request.kinds,
-        fileFilter: request.fileFilter,
-      }),
+      searchProjectSymbols(
+        effectiveContext.project,
+        effectiveContext.projectRoot,
+        {
+          query: request.query,
+          kinds: request.kinds,
+          fileFilter: request.fileFilter,
+        },
+        requestContext,
+      ),
   };
 }
 
@@ -274,8 +290,11 @@ function effectiveExpansion(request: ExploreRequest): { source: boolean; referen
 export async function buildExploreContext(
   context: ProjectContext,
   request: ExploreRequest,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): Promise<ExploreResult> {
-  const routed = await projectRecords(context, request);
+  requestContext.checkpoint();
+  const routed = await projectRecords(context, request, requestContext);
+  requestContext.checkpoint();
   const effectiveContext = routed.context;
   const page = paginate(routed.records, request.offset, request.limit);
   const expansion = effectiveExpansion(request);
@@ -283,6 +302,7 @@ export async function buildExploreContext(
   const evidence: ExploreEvidence[] = [];
 
   for (const record of page.items) {
+    requestContext.checkpoint();
     let sourceFile: SourceFile;
     try {
       sourceFile = getSourceFileOrThrow(effectiveContext.project, record.file);
@@ -299,7 +319,9 @@ export async function buildExploreContext(
     }
     let source: ReturnType<typeof nodeSourceWithLocation> | undefined;
     let references: SymbolReferences | undefined;
-    if (expansion.source) source = nodeSourceWithLocation(node, effectiveContext.projectRoot);
+    if (expansion.source) {
+      source = nodeSourceWithLocation(node, effectiveContext.projectRoot, requestContext);
+    }
     if (expansion.references) {
       try {
         references = collectSymbolReferences(
@@ -310,8 +332,10 @@ export async function buildExploreContext(
           request.referenceDetail,
           0,
           request.referenceLimit,
+          requestContext,
         );
-      } catch {
+      } catch (error) {
+        if (isCooperativeInterruption(error)) throw error;
         unresolved.push({ selector: record.selector, reason: "references_unresolved" });
       }
     }
@@ -345,6 +369,7 @@ export async function buildExploreContext(
     jsonBytes(result) > request.maxBytes &&
     (returnedEvidence.length > 0 || returnedSymbols.length > 0)
   ) {
+    requestContext.checkpoint();
     reason = "byte_limit";
     if (returnedEvidence.length > 0) {
       returnedEvidence = returnedEvidence.slice(0, -1);
@@ -367,6 +392,7 @@ export async function buildExploreContext(
     );
   }
 
+  requestContext.checkpoint();
   const usedBytes = jsonBytes(result);
   return {
     ...result,

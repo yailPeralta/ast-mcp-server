@@ -6,6 +6,7 @@ import {
   MAX_STATUS_TEXT_LENGTH,
   createInitialProjectStatus,
   createProjectIdentity,
+  projectOperationQueueToProjection,
   projectStatusToProjection,
   transitionProjectStatus,
   type ProjectStatus,
@@ -39,6 +40,118 @@ function freshStatus() {
 }
 
 describe("project status", () => {
+  it("normalizes operation queue telemetry without trusting supplied state", () => {
+    const projection = projectOperationQueueToProjection(
+      {
+        state: "idle",
+        admission: "unexpected",
+        queue_capacity: 999,
+        active_operations: 9,
+        queued_operations: 999,
+        rejected_operations: 2_147_483_648,
+        cancelled_operations: -1,
+        queue_timeout_operations: 1.5,
+        deadline_exceeded_operations: Number.NaN,
+        last_outcome: "unexpected",
+        max_queue_wait_ms: 100_000_000,
+        max_execution_ms: Number.POSITIVE_INFINITY,
+      },
+      16,
+    );
+
+    expect(projection).toEqual({
+      state: "running",
+      admission: "closed",
+      queue_capacity: 16,
+      active_operations: 1,
+      queued_operations: 16,
+      rejected_operations: 2_147_483_647,
+      cancelled_operations: 0,
+      queue_timeout_operations: 0,
+      deadline_exceeded_operations: 0,
+      last_outcome: "internal_error",
+      max_queue_wait_ms: 86_400_000,
+      max_execution_ms: 0,
+    });
+    expect(Object.isFrozen(projection)).toBe(true);
+  });
+
+  it("derives idle and queued operation states from normalized counts", () => {
+    const common = {
+      admission: "open",
+      queue_capacity: 2,
+      rejected_operations: 0,
+      cancelled_operations: 0,
+      queue_timeout_operations: 0,
+      deadline_exceeded_operations: 0,
+      last_outcome: "none",
+      max_queue_wait_ms: 0,
+      max_execution_ms: 0,
+    };
+
+    expect(
+      projectOperationQueueToProjection(
+        { ...common, state: "running", active_operations: -1, queued_operations: 0 },
+        32,
+      ).state,
+    ).toBe("idle");
+    expect(
+      projectOperationQueueToProjection(
+        { ...common, state: "idle", active_operations: 0, queued_operations: 1 },
+        32,
+      ).state,
+    ).toBe("queued");
+    expect(projectOperationQueueToProjection(null, Number.NaN)).toMatchObject({
+      state: "idle",
+      admission: "closed",
+      queue_capacity: 32,
+      active_operations: 0,
+      queued_operations: 0,
+      last_outcome: "internal_error",
+    });
+  });
+
+  it("fails closed without executing inherited fields, accessors or proxies", () => {
+    const openTelemetry = {
+      admission: "open",
+      queue_capacity: 8,
+      active_operations: 1,
+      queued_operations: 4,
+      last_outcome: "succeeded",
+    };
+    const inherited = Object.create(openTelemetry) as unknown;
+    let getterCalls = 0;
+    const accessor: Record<string, unknown> = {};
+    Object.defineProperty(accessor, "admission", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        throw new Error("getter executed");
+      },
+    });
+    const proxied = new Proxy(openTelemetry, {});
+    const revoked = Proxy.revocable(openTelemetry, {});
+    revoked.revoke();
+
+    for (const malformed of [inherited, accessor, proxied, revoked.proxy]) {
+      expect(projectOperationQueueToProjection(malformed, 16)).toEqual({
+        state: "idle",
+        admission: "closed",
+        queue_capacity: 16,
+        active_operations: 0,
+        queued_operations: 0,
+        rejected_operations: 0,
+        cancelled_operations: 0,
+        queue_timeout_operations: 0,
+        deadline_exceeded_operations: 0,
+        last_outcome: "internal_error",
+        max_queue_wait_ms: 0,
+        max_execution_ms: 0,
+      });
+    }
+    expect(getterCalls).toBe(0);
+  });
+
   it("canonicalizes untrusted fingerprint values before projection", () => {
     const projection = projectStatusToProjection({
       ...freshStatus(),

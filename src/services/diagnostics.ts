@@ -1,5 +1,6 @@
 import path from "node:path";
 import { DiagnosticCategory, type Diagnostic, ts } from "ts-morph";
+import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
 
 export interface NormalizedDiagnostic {
   code: number;
@@ -19,7 +20,9 @@ export interface DiagnosticDelta {
 export function normalizeDiagnostic(
   diagnostic: Diagnostic,
   projectRoot: string,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): NormalizedDiagnostic {
+  requestContext.checkpoint();
   const sourceFile = diagnostic.getSourceFile();
   const start = diagnostic.getStart();
   const location =
@@ -46,15 +49,18 @@ function identity(diagnostic: NormalizedDiagnostic): string {
 function subtract(
   candidates: readonly NormalizedDiagnostic[],
   baseline: readonly NormalizedDiagnostic[],
+  requestContext: RequestContext,
 ): NormalizedDiagnostic[] {
   const counts = new Map<string, number>();
   for (const diagnostic of baseline) {
+    requestContext.checkpoint();
     const key = identity(diagnostic);
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
 
   const difference: NormalizedDiagnostic[] = [];
   for (const diagnostic of candidates) {
+    requestContext.checkpoint();
     const key = identity(diagnostic);
     const remaining = counts.get(key) ?? 0;
     if (remaining > 0) {
@@ -69,9 +75,11 @@ function subtract(
 export function compareDiagnostics(
   before: readonly NormalizedDiagnostic[],
   after: readonly NormalizedDiagnostic[],
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): DiagnosticDelta {
-  const added = subtract(after, before);
-  const removed = subtract(before, after);
+  requestContext.checkpoint();
+  const added = subtract(after, before, requestContext);
+  const removed = subtract(before, after, requestContext);
   return {
     added,
     removed,

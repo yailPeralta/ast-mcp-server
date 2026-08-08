@@ -11,6 +11,7 @@ import {
   type SourceFile,
   type VariableStatement,
 } from "ts-morph";
+import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
 
 export interface OutlineSymbol {
   symbolPath: string;
@@ -129,7 +130,11 @@ function symbolOf(node: Node, symbolPath: string, name: string, signature: strin
   };
 }
 
-function formatClass(statement: ClassDeclaration, prefix = ""): FormattedStatement {
+function formatClass(
+  statement: ClassDeclaration,
+  prefix = "",
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): FormattedStatement {
   const name = statement.getName() ?? "<anonymous>";
   const symbolPath = prefix ? `${prefix}.${name}` : name;
   const heritage = statement.getExtends()?.getText();
@@ -144,6 +149,7 @@ function formatClass(statement: ClassDeclaration, prefix = ""): FormattedStateme
   const symbols = [symbolOf(statement, symbolPath, name, declaration)];
 
   for (const member of statement.getMembers()) {
+    requestContext.checkpoint();
     const signature = memberSignature(member);
     if (!signature) continue;
     const memberName = Node.isConstructorDeclaration(member) ? "constructor" : member.getName();
@@ -155,7 +161,11 @@ function formatClass(statement: ClassDeclaration, prefix = ""): FormattedStateme
   return { lines, symbols };
 }
 
-function formatInterface(statement: InterfaceDeclaration, prefix = ""): FormattedStatement {
+function formatInterface(
+  statement: InterfaceDeclaration,
+  prefix = "",
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): FormattedStatement {
   const name = statement.getName();
   const symbolPath = prefix ? `${prefix}.${name}` : name;
   const extensions = statement.getExtends().map((item) => item.getText());
@@ -168,6 +178,7 @@ function formatInterface(statement: InterfaceDeclaration, prefix = ""): Formatte
   const symbols = [symbolOf(statement, symbolPath, name, declaration)];
 
   for (const member of statement.getMembers()) {
+    requestContext.checkpoint();
     const signature = member.getText().trim();
     lines.push(`  ${signature}`);
     const memberName = "getName" in member ? member.getName() : member.getKindName();
@@ -178,13 +189,17 @@ function formatInterface(statement: InterfaceDeclaration, prefix = ""): Formatte
   return { lines, symbols };
 }
 
-function formatVariable(statement: VariableStatement): FormattedStatement {
+function formatVariable(
+  statement: VariableStatement,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): FormattedStatement {
   const lines: string[] = [];
   const symbols: OutlineSymbol[] = [];
   const keyword = statement.getDeclarationKind();
   const modifiers = modifiersOf(statement);
 
   for (const declaration of statement.getDeclarations()) {
+    requestContext.checkpoint();
     const name = declaration.getName();
     const explicitType = declaration.getTypeNode()?.getText();
     const initializer = declaration.getInitializer();
@@ -211,9 +226,16 @@ function moduleStatements(module: ModuleDeclaration): Node[] {
   return [];
 }
 
-function formatStatement(statement: Node, prefix = ""): FormattedStatement | undefined {
-  if (Node.isClassDeclaration(statement)) return formatClass(statement, prefix);
-  if (Node.isInterfaceDeclaration(statement)) return formatInterface(statement, prefix);
+function formatStatement(
+  statement: Node,
+  prefix = "",
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): FormattedStatement | undefined {
+  requestContext.checkpoint();
+  if (Node.isClassDeclaration(statement)) return formatClass(statement, prefix, requestContext);
+  if (Node.isInterfaceDeclaration(statement)) {
+    return formatInterface(statement, prefix, requestContext);
+  }
 
   if (Node.isFunctionDeclaration(statement)) {
     const name = statement.getName() ?? "<anonymous>";
@@ -237,13 +259,16 @@ function formatStatement(statement: Node, prefix = ""): FormattedStatement | und
     const symbolPath = prefix ? `${prefix}.${name}` : name;
     const members = statement
       .getMembers()
-      .map((member) => member.getName())
+      .map((member) => {
+        requestContext.checkpoint();
+        return member.getName();
+      })
       .join(", ");
     const signature = joinPresent([modifiersOf(statement), `enum ${name} { ${members} }`]);
     return { lines: [signature], symbols: [symbolOf(statement, symbolPath, name, signature)] };
   }
 
-  if (Node.isVariableStatement(statement)) return formatVariable(statement);
+  if (Node.isVariableStatement(statement)) return formatVariable(statement, requestContext);
 
   if (Node.isModuleDeclaration(statement)) {
     const name = statement.getName();
@@ -252,7 +277,8 @@ function formatStatement(statement: Node, prefix = ""): FormattedStatement | und
     const lines = [`${declaration} {`];
     const symbols = [symbolOf(statement, symbolPath, name, declaration)];
     for (const child of moduleStatements(statement)) {
-      const formatted = formatStatement(child, symbolPath);
+      requestContext.checkpoint();
+      const formatted = formatStatement(child, symbolPath, requestContext);
       if (!formatted) continue;
       lines.push(...formatted.lines.map((line) => `  ${line}`));
       symbols.push(...formatted.symbols);
@@ -264,11 +290,15 @@ function formatStatement(statement: Node, prefix = ""): FormattedStatement | und
   return undefined;
 }
 
-export function buildFileOutline(sourceFile: SourceFile): FileOutline {
+export function buildFileOutline(
+  sourceFile: SourceFile,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): FileOutline {
   const lines: string[] = [];
   const symbols: OutlineSymbol[] = [];
   for (const statement of sourceFile.getStatements()) {
-    const formatted = formatStatement(statement);
+    requestContext.checkpoint();
+    const formatted = formatStatement(statement, "", requestContext);
     if (!formatted) continue;
     lines.push(...formatted.lines);
     symbols.push(...formatted.symbols);
@@ -283,12 +313,14 @@ export function fileOutline(sourceFile: SourceFile): string {
 export function nodeSourceWithLocation(
   node: Node,
   projectRoot?: string,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): {
   file: string;
   startLine: number;
   endLine: number;
   text: string;
 } {
+  requestContext.checkpoint();
   const sourceFile = node.getSourceFile();
   return {
     file: projectRoot

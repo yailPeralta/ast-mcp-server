@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { prepareScaffoldClass } from "../services/operations.js";
 import type { ClassScaffoldSpec } from "../services/scaffold.js";
+import { createRequestContext } from "../services/request-context.js";
 import { errorResult, structuredResult } from "./result.js";
 import { PreparedOperationOutputSchema, serializePreparedOperation } from "./operation-schema.js";
 
@@ -96,7 +97,7 @@ type ScaffoldToolRegistrar = (
       openWorldHint: boolean;
     };
   },
-  handler: (args: ScaffoldClassArgs) => Promise<unknown>,
+  handler: (args: ScaffoldClassArgs, extra: { signal: AbortSignal }) => Promise<unknown>,
 ) => void;
 
 function toSpec(args: ScaffoldClassArgs): ClassScaffoldSpec {
@@ -155,14 +156,18 @@ export function registerScaffoldClass(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async (args) => {
+    async (args, extra) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
-        const prepared = await prepareScaffoldClass({
-          projectRoot: args.project_root,
-          filePath: args.file_path,
-          spec: toSpec(args),
-          allowNewErrors: args.allow_new_errors,
-        });
+        const prepared = await prepareScaffoldClass(
+          {
+            projectRoot: args.project_root,
+            filePath: args.file_path,
+            spec: toSpec(args),
+            allowNewErrors: args.allow_new_errors,
+          },
+          requestContext,
+        );
         const structuredContent = {
           ...serializePreparedOperation(prepared.operation),
           file: prepared.file,

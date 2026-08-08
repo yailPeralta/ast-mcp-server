@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { buildFileOutline } from "../services/outline.js";
 import { getSourceFileOrThrow, withProject } from "../services/project.js";
+import { createRequestContext } from "../services/request-context.js";
 import { errorResult, structuredResult } from "./result.js";
 
 const AstGetOutlineInputSchema = z.object({
@@ -47,17 +48,22 @@ export function registerGetOutline(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root, file_path, include_symbols }) => {
+    async ({ project_root, file_path, include_symbols }, extra) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
-        const structuredContent = await withProject(project_root, ({ project, projectRoot }) => {
-          const sourceFile = getSourceFileOrThrow(project, file_path);
-          const outline = buildFileOutline(sourceFile);
-          return {
-            file: path.relative(projectRoot, sourceFile.getFilePath()),
-            outline: outline.text,
-            ...(include_symbols ? { symbols: outline.symbols } : {}),
-          };
-        });
+        const structuredContent = await withProject(
+          project_root,
+          ({ project, projectRoot }, operationContext) => {
+            const sourceFile = getSourceFileOrThrow(project, file_path);
+            const outline = buildFileOutline(sourceFile, operationContext);
+            return {
+              file: path.relative(projectRoot, sourceFile.getFilePath()),
+              outline: outline.text,
+              ...(include_symbols ? { symbols: outline.symbols } : {}),
+            };
+          },
+          requestContext,
+        );
         return structuredResult(structuredContent);
       } catch (error) {
         return errorResult(error);

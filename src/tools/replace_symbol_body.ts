@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { prepareReplaceBody } from "../services/operations.js";
+import { createRequestContext } from "../services/request-context.js";
 import { PreparedOperationOutputSchema, serializePreparedOperation } from "./operation-schema.js";
 import { errorResult, structuredResult } from "./result.js";
 
@@ -35,20 +36,27 @@ export function registerReplaceSymbolBody(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root, file_path, symbol_path, new_body, dry_run, allow_new_errors }) => {
+    async (
+      { project_root, file_path, symbol_path, new_body, dry_run, allow_new_errors },
+      extra,
+    ) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
         if (!dry_run) {
           throw new Error(
             "Direct body replacement is disabled. Prepare with dry_run=true, then call ast_apply_operation with the returned operation_id.",
           );
         }
-        const operation = await prepareReplaceBody({
-          projectRoot: project_root,
-          filePath: file_path,
-          symbolPath: symbol_path,
-          newBody: new_body,
-          allowNewErrors: allow_new_errors,
-        });
+        const operation = await prepareReplaceBody(
+          {
+            projectRoot: project_root,
+            filePath: file_path,
+            symbolPath: symbol_path,
+            newBody: new_body,
+            allowNewErrors: allow_new_errors,
+          },
+          requestContext,
+        );
         return structuredResult(serializePreparedOperation(operation));
       } catch (error) {
         return errorResult(error);

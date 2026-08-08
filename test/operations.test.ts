@@ -14,7 +14,14 @@ import {
   setOperationStoreConfigForTests,
   setOperationTestHooksForTests,
 } from "../src/services/operations.js";
-import { clearProjectSessions } from "../src/services/project.js";
+import {
+  clearProjectSessions,
+  getProjectOperationQueueSnapshot,
+  getProjectSessionRegistrySnapshot,
+  invalidateProject,
+  withProjectOperation,
+} from "../src/services/project.js";
+import { createRequestContext } from "../src/services/request-context.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
 const fixtures: ProjectFixture[] = [];
@@ -78,9 +85,272 @@ describe("prepared structural operations", () => {
     expect(applied.idempotent_replay).toBe(false);
     expect(await fixture.read("src/value.ts")).toContain("renderValue");
     expect(await fixture.read("src/use.ts")).toContain("renderValue");
+    expect(getProjectSessionRegistrySnapshot()).toMatchObject({
+      session_count: 0,
+      active_sessions: 0,
+    });
 
     const replay = await applyOperation(prepared.operation_id, prepared.plan_hash);
     expect(replay.idempotent_replay).toBe(true);
+  });
+
+  it("removes every prepared-operation kind when cancellation wins after retention", async () => {
+    const fixture = await renameFixture();
+    const preparations = [
+      (requestContext: ReturnType<typeof createRequestContext>) =>
+        prepareRename(
+          {
+            projectRoot: fixture.root,
+            filePath: "src/value.ts",
+            symbolPath: "formatValue",
+            newName: "renderValue",
+          },
+          requestContext,
+        ),
+      (requestContext: ReturnType<typeof createRequestContext>) =>
+        prepareReplaceBody(
+          {
+            projectRoot: fixture.root,
+            filePath: "src/value.ts",
+            symbolPath: "formatValue",
+            newBody: "return `value:${value}`;",
+          },
+          requestContext,
+        ),
+      (requestContext: ReturnType<typeof createRequestContext>) =>
+        prepareScaffoldClass(
+          {
+            projectRoot: fixture.root,
+            filePath: "src/user-service.ts",
+            spec: scaffoldSpec(),
+          },
+          requestContext,
+        ),
+    ];
+
+    for (const prepare of preparations) {
+      const controller = new AbortController();
+      let retainedOperationId: string | undefined;
+      setOperationTestHooksForTests({
+        afterRetain: (operationId) => {
+          retainedOperationId = operationId;
+          controller.abort();
+        },
+      });
+
+      await expect(prepare(createRequestContext(controller.signal))).rejects.toMatchObject({
+        code: "REQUEST_CANCELLED",
+      });
+      expect(retainedOperationId).toBeDefined();
+      await expect(
+        Promise.resolve().then(() => getOperationPreview(retainedOperationId!)),
+      ).rejects.toThrow(/not found or has expired/);
+      clearOperationsForTests();
+    }
+  });
+
+  it("serializes operation previews through the project scheduler", async () => {
+    const fixture = await renameFixture();
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "formatValue",
+      newName: "renderValue",
+    });
+    let markBlockerStarted!: () => void;
+    const blockerStarted = new Promise<void>((resolve) => {
+      markBlockerStarted = resolve;
+    });
+    let releaseBlocker!: () => void;
+    const blockerRelease = new Promise<void>((resolve) => {
+      releaseBlocker = resolve;
+    });
+    const blocker = withProjectOperation(fixture.root, async () => {
+      markBlockerStarted();
+      await blockerRelease;
+    });
+    await blockerStarted;
+    const controller = new AbortController();
+    const preview = Promise.resolve().then(() =>
+      getOperationPreview(
+        prepared.operation_id,
+        undefined,
+        createRequestContext(controller.signal),
+      ),
+    );
+    await Promise.resolve();
+
+    try {
+      expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+        active_operations: 1,
+        queued_operations: 1,
+      });
+      controller.abort();
+      await expect(preview).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+    } finally {
+      releaseBlocker();
+    }
+    await blocker;
+  });
+
+  it("enforces the server execution deadline while building an operation preview", async () => {
+    const fixture = await renameFixture();
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "formatValue",
+      newName: "renderValue",
+    });
+    clearProjectSessions();
+    process.env.AST_OPERATION_DEADLINE_MS = "1000";
+    let now = 0;
+    const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => (now += 250));
+    try {
+      await expect(getOperationPreview(prepared.operation_id)).rejects.toMatchObject({
+        code: "OPERATION_DEADLINE_EXCEEDED",
+      });
+      expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+        active_operations: 0,
+        deadline_exceeded_operations: 1,
+        last_outcome: "deadline_exceeded",
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("ignores cancellation after the first source write until apply is consistent", async () => {
+    const fixture = await renameFixture();
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "formatValue",
+      newName: "renderValue",
+    });
+    const controller = new AbortController();
+
+    let markPostWrite!: () => void;
+    const postWrite = new Promise<void>((resolve) => {
+      markPostWrite = resolve;
+    });
+    let releasePostWrite!: () => void;
+    const release = new Promise<void>((resolve) => {
+      releasePostWrite = resolve;
+    });
+    setOperationTestHooksForTests({
+      afterReplace: async (_file, index) => {
+        if (index !== 0) return;
+        controller.abort();
+        markPostWrite();
+        await release;
+      },
+    });
+
+    const applying = applyOperation(
+      prepared.operation_id,
+      prepared.plan_hash,
+      createRequestContext(controller.signal),
+    );
+    const terminal = applying.then((result) => {
+      expect(result).toMatchObject({ status: "applied", idempotent_replay: false });
+      return result;
+    });
+    let settled = false;
+    void terminal.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+
+    try {
+      await postWrite;
+      await Promise.resolve();
+      expect(controller.signal.aborted).toBe(true);
+      expect(settled).toBe(false);
+      expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+        active_operations: 1,
+        queued_operations: 0,
+        cancelled_operations: 1,
+        deadline_exceeded_operations: 0,
+      });
+      expect(getProjectSessionRegistrySnapshot()).toMatchObject({
+        session_count: 1,
+        active_sessions: 1,
+      });
+    } finally {
+      releasePostWrite();
+    }
+
+    await terminal;
+    expect(await fixture.read("src/value.ts")).toContain("renderValue");
+    expect(await fixture.read("src/use.ts")).toContain("renderValue");
+    expect(getProjectSessionRegistrySnapshot()).toMatchObject({
+      session_count: 1,
+      active_sessions: 0,
+    });
+  });
+
+  it("does not orphan a queued same-project operation after apply completes", async () => {
+    const fixture = await renameFixture();
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "formatValue",
+      newName: "renderValue",
+    });
+    let markPostWrite!: () => void;
+    const postWrite = new Promise<void>((resolve) => {
+      markPostWrite = resolve;
+    });
+    let releasePostWrite!: () => void;
+    const postWriteRelease = new Promise<void>((resolve) => {
+      releasePostWrite = resolve;
+    });
+    setOperationTestHooksForTests({
+      afterReplace: async (_file, index) => {
+        if (index !== 0) return;
+        markPostWrite();
+        await postWriteRelease;
+      },
+    });
+    const applying = applyOperation(prepared.operation_id, prepared.plan_hash);
+    await postWrite;
+
+    let markSiblingStarted!: () => void;
+    const siblingStarted = new Promise<void>((resolve) => {
+      markSiblingStarted = resolve;
+    });
+    let releaseSibling!: () => void;
+    const siblingRelease = new Promise<void>((resolve) => {
+      releaseSibling = resolve;
+    });
+    const sibling = withProjectOperation(fixture.root, async () => {
+      markSiblingStarted();
+      await siblingRelease;
+      return "sibling";
+    });
+    releasePostWrite();
+    await applying;
+    await siblingStarted;
+
+    const third = withProjectOperation(fixture.root, () => "third");
+    try {
+      expect(getProjectSessionRegistrySnapshot()).toMatchObject({
+        session_count: 1,
+        active_sessions: 1,
+      });
+      expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+        active_operations: 1,
+        queued_operations: 1,
+      });
+    } finally {
+      releaseSibling();
+    }
+    await expect(sibling).resolves.toBe("sibling");
+    await expect(third).resolves.toBe("third");
   });
 
   it("keeps prepare and apply independent from the opt-in persistence backend", async () => {
@@ -206,6 +476,60 @@ describe("prepared structural operations", () => {
     expect(results.map((result) => result.idempotent_replay).sort()).toEqual([false, true]);
   });
 
+  it("releases a cancelled cross-session write-lock waiter for later retries", async () => {
+    const fixture = await renameFixture();
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "formatValue",
+      newName: "renderValue",
+    });
+    let releaseFirstReplace!: () => void;
+    const firstReplaceBlocked = new Promise<void>((resolve) => {
+      releaseFirstReplace = resolve;
+    });
+    let firstReplaceStarted!: () => void;
+    const firstReplaceReached = new Promise<void>((resolve) => {
+      firstReplaceStarted = resolve;
+    });
+    let secondLockEnqueued!: () => void;
+    const secondLockReached = new Promise<void>((resolve) => {
+      secondLockEnqueued = resolve;
+    });
+    let lockEnqueues = 0;
+    setOperationTestHooksForTests({
+      afterWriteLockEnqueue: () => {
+        lockEnqueues += 1;
+        if (lockEnqueues === 2) secondLockEnqueued();
+      },
+      beforeReplace: async (_file, index) => {
+        if (index !== 0 || lockEnqueues !== 1) return;
+        firstReplaceStarted();
+        await firstReplaceBlocked;
+      },
+    });
+
+    const first = applyOperation(prepared.operation_id, prepared.plan_hash);
+    await firstReplaceReached;
+    invalidateProject(fixture.root);
+
+    const controller = new AbortController();
+    const second = applyOperation(
+      prepared.operation_id,
+      prepared.plan_hash,
+      createRequestContext(controller.signal),
+    );
+    const secondExpectation = expect(second).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+    await secondLockReached;
+    controller.abort();
+    const third = applyOperation(prepared.operation_id, prepared.plan_hash);
+
+    releaseFirstReplace();
+    await expect(first).resolves.toMatchObject({ status: "applied", idempotent_replay: false });
+    await secondExpectation;
+    await expect(third).resolves.toMatchObject({ status: "applied", idempotent_replay: true });
+  });
+
   it("expires prepared operations using the operation clock", async () => {
     const fixture = await renameFixture();
     let now = 1_000;
@@ -238,9 +562,11 @@ describe("prepared structural operations", () => {
       );
     }
 
-    expect(() => getOperationPreview(plans[0]!.operation_id)).toThrow(/not found or has expired/);
-    expect(getOperationPreview(plans[1]!.operation_id).plan_hash).toBe(plans[1]!.plan_hash);
-    expect(getOperationPreview(plans[2]!.operation_id).plan_hash).toBe(plans[2]!.plan_hash);
+    await expect(getOperationPreview(plans[0]!.operation_id)).rejects.toThrow(
+      /not found or has expired/,
+    );
+    expect((await getOperationPreview(plans[1]!.operation_id)).plan_hash).toBe(plans[1]!.plan_hash);
+    expect((await getOperationPreview(plans[2]!.operation_id)).plan_hash).toBe(plans[2]!.plan_hash);
   });
 
   it("blocks a replacement that introduces a new TypeScript error", async () => {
@@ -355,7 +681,7 @@ describe("prepared structural operations", () => {
     expect(prepared.operation.blocked).toBe(false);
     expect(prepared.pendingMethods).toEqual(["UserService.findUser"]);
     expect(prepared.outline).toContain("findUser(id: string): Promise<string>;");
-    expect(getOperationPreview(prepared.operation.operation_id).files[0]?.diff).toContain(
+    expect((await getOperationPreview(prepared.operation.operation_id)).files[0]?.diff).toContain(
       "/dev/null",
     );
     await expect(access(target)).rejects.toThrow();

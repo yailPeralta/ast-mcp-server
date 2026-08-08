@@ -3,6 +3,7 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import type { Project } from "ts-morph";
 import { getSourceFileOrThrow } from "./project.js";
+import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
 import { hashBytes } from "./workspace.js";
 
 export const DEFAULT_FILE_LINE_LIMIT = 200;
@@ -94,25 +95,31 @@ export async function readFileSnapshot(
   projectRoot: string,
   filePath: string,
   options: FileSnapshotOptions,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): Promise<FileSnapshot> {
+  requestContext.checkpoint();
   assertBoundedRange(options);
   rejectTraversalPath(filePath);
 
   const sourceFile = getSourceFileOrThrow(project, filePath);
+  requestContext.checkpoint();
   const canonicalRoot = await realpath(projectRoot);
   const sourcePath = sourceFile.getFilePath();
   const canonicalFile = await realpath(sourcePath);
+  requestContext.checkpoint();
 
   if (!isContained(canonicalRoot, canonicalFile)) {
     throw new Error("Source file resolves outside the configured project root.");
   }
 
   const stat = await lstat(canonicalFile);
+  requestContext.checkpoint();
   if (!stat.isFile()) {
     throw new Error("Source file is not a regular file.");
   }
 
   const bytes = await readFile(canonicalFile);
+  requestContext.checkpoint();
   const source = decodeUtf8(bytes, projectRelative(canonicalRoot, canonicalFile));
   const fileHash = hashBytes(bytes);
   const compilerHashes = compilerSnapshotHashes(sourceFile.getFullText());
@@ -120,6 +127,7 @@ export async function readFileSnapshot(
   const allLines = splitLines(source);
   const selectedLines = allLines.slice(options.offset, options.offset + options.limit);
 
+  requestContext.checkpoint();
   return {
     file: projectRelative(canonicalRoot, canonicalFile),
     range: {

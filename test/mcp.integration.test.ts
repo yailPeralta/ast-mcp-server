@@ -5,8 +5,16 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import packageMetadata from "../package.json" with { type: "json" };
 import { createServer } from "../src/server.js";
-import { clearOperationsForTests } from "../src/services/operations.js";
-import { clearProjectSessions, withProject } from "../src/services/project.js";
+import {
+  clearOperationsForTests,
+  prepareRename,
+  setOperationTestHooksForTests,
+} from "../src/services/operations.js";
+import {
+  clearProjectSessions,
+  getProjectOperationQueueSnapshot,
+  withProject,
+} from "../src/services/project.js";
 import {
   createSymbolIndexSymbol,
   SYMBOL_INDEX_SCHEMA_VERSION,
@@ -77,6 +85,113 @@ export function formatValue(value: number): string { return String(value); }
         backend: "memory",
       },
     });
+  });
+
+  it("propagates MCP cancellation to a queued project operation and unlinks it", async () => {
+    let markRunning!: () => void;
+    const running = new Promise<void>((resolve) => {
+      markRunning = resolve;
+    });
+    let releaseRunning!: () => void;
+    const release = new Promise<void>((resolve) => {
+      releaseRunning = resolve;
+    });
+    const blocker = withProject(fixture.root, async () => {
+      markRunning();
+      await release;
+    });
+    await running;
+
+    const controller = new AbortController();
+    const cancelledCall = client.callTool(
+      {
+        name: "ast_list_files",
+        arguments: { project_root: fixture.root, offset: 0, limit: 10 },
+      },
+      undefined,
+      { signal: controller.signal },
+    );
+    const cancelledExpectation = expect(cancelledCall).rejects.toThrow();
+
+    try {
+      await vi.waitFor(() => {
+        expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+          active_operations: 1,
+          queued_operations: 1,
+        });
+      });
+      controller.abort();
+      await cancelledExpectation;
+      await vi.waitFor(() => {
+        expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+          active_operations: 1,
+          queued_operations: 0,
+          cancelled_operations: 1,
+        });
+      });
+    } finally {
+      releaseRunning();
+      await blocker;
+    }
+  });
+
+  it("cancels a running MCP apply at the final pre-write checkpoint", async () => {
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "formatValue",
+      newName: "renderValue",
+    });
+    const originalValue = await fixture.read("src/value.ts");
+    const originalUse = await fixture.read("src/use.ts");
+
+    let markBeforeWrite!: () => void;
+    const beforeWrite = new Promise<void>((resolve) => {
+      markBeforeWrite = resolve;
+    });
+    let releaseBeforeWrite!: () => void;
+    const release = new Promise<void>((resolve) => {
+      releaseBeforeWrite = resolve;
+    });
+    setOperationTestHooksForTests({
+      beforeReplace: async (_file, index) => {
+        if (index !== 0) return;
+        markBeforeWrite();
+        await release;
+      },
+    });
+
+    const controller = new AbortController();
+    const applyCall = client.callTool(
+      {
+        name: "ast_apply_operation",
+        arguments: {
+          operation_id: prepared.operation_id,
+          plan_hash: prepared.plan_hash,
+        },
+      },
+      undefined,
+      { signal: controller.signal },
+    );
+    const cancelledExpectation = expect(applyCall).rejects.toThrow();
+
+    await beforeWrite;
+    controller.abort();
+    await cancelledExpectation;
+    expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+      active_operations: 1,
+      queued_operations: 0,
+    });
+
+    releaseBeforeWrite();
+    await vi.waitFor(() => {
+      expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+        active_operations: 0,
+        cancelled_operations: 1,
+      });
+    });
+    expect(await fixture.read("src/value.ts")).toBe(originalValue);
+    expect(await fixture.read("src/use.ts")).toBe(originalUse);
   });
 
   it("exposes compact structured read results", async () => {
@@ -411,8 +526,17 @@ export function formatValue(value: number): string { return String(value); }
     expect(status.index).toEqual({ state: "disabled" });
     expect(status.operation_queue).toEqual({
       state: "running",
+      admission: "open",
+      queue_capacity: 32,
       active_operations: 1,
       queued_operations: 0,
+      rejected_operations: 0,
+      cancelled_operations: 0,
+      queue_timeout_operations: 0,
+      deadline_exceeded_operations: 0,
+      last_outcome: "none",
+      max_queue_wait_ms: expect.any(Number),
+      max_execution_ms: 0,
     });
     expect(status.project).toEqual({
       project_id: expect.stringMatching(/^project_[0-9a-f]{20}$/),

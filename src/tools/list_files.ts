@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { PaginationInputSchema, PaginationOutputSchema, paginate } from "../services/pagination.js";
 import { withProject } from "../services/project.js";
+import { createRequestContext } from "../services/request-context.js";
 import { errorResult, structuredResult } from "./result.js";
 
 const AstListFilesInputSchema = z.object({
@@ -37,19 +38,27 @@ export function registerListFiles(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root, glob_filter, offset, limit }) => {
+    async ({ project_root, glob_filter, offset, limit }, extra) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
-        const output = await withProject(project_root, ({ project, projectRoot }) => {
-          const filter = glob_filter?.toLowerCase();
-          const files = project
-            .getSourceFiles()
-            .map((sourceFile) => path.relative(projectRoot, sourceFile.getFilePath()))
-            .filter((file) => !filter || file.toLowerCase().includes(filter))
-            .sort((left, right) => left.localeCompare(right));
-          const page = paginate(files, offset, limit);
-          const { items, ...metadata } = page;
-          return { files: items, ...metadata };
-        });
+        const output = await withProject(
+          project_root,
+          ({ project, projectRoot }, operationContext) => {
+            const filter = glob_filter?.toLowerCase();
+            const files = project
+              .getSourceFiles()
+              .map((sourceFile) => {
+                operationContext.checkpoint();
+                return path.relative(projectRoot, sourceFile.getFilePath());
+              })
+              .filter((file) => !filter || file.toLowerCase().includes(filter))
+              .sort((left, right) => left.localeCompare(right));
+            const page = paginate(files, offset, limit);
+            const { items, ...metadata } = page;
+            return { files: items, ...metadata };
+          },
+          requestContext,
+        );
 
         return structuredResult(output);
       } catch (error) {

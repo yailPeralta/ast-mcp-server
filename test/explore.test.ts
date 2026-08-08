@@ -1,9 +1,10 @@
+import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer } from "../src/server.js";
-import { clearProjectSessions } from "../src/services/project.js";
+import { clearProjectSessions, withProject } from "../src/services/project.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
 type ExplorePayload = {
@@ -17,6 +18,14 @@ function structured(result: Awaited<ReturnType<Client["callTool"]>>): ExplorePay
   expect(result.isError).not.toBe(true);
   expect(result.structuredContent).toBeTypeOf("object");
   return result.structuredContent as unknown as ExplorePayload;
+}
+
+function deferred(): { readonly promise: Promise<void>; readonly resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 describe("ast_explore", () => {
@@ -39,6 +48,66 @@ describe("ast_explore", () => {
     await server.close();
     await fixture.cleanup();
     clearProjectSessions();
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it("does not degrade the index when cancellation wins during an ast_explore query", async () => {
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", path.join(fixture.root, ".symbol-index-cache"));
+    const queryStarted = deferred();
+    const releaseQuery = deferred();
+
+    await withProject(fixture.root, (context) => {
+      expect(context.symbolIndexBackend).toBe("sqlite");
+      expect(context.symbolIndexReady).toBe(true);
+      vi.spyOn(context.symbolIndex, "queryAllSymbols").mockImplementationOnce(async () => {
+        queryStarted.resolve();
+        await releaseQuery.promise;
+        throw Object.assign(new Error("injected read failure after cancellation"), {
+          code: "read_failed",
+        });
+      });
+    });
+
+    const controller = new AbortController();
+    const call = client.callTool(
+      {
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          query: "target",
+          detail: "summary",
+        },
+      },
+      undefined,
+      { signal: controller.signal },
+    );
+    const cancelled = expect(call).rejects.toThrow();
+
+    await queryStarted.promise;
+    controller.abort();
+    releaseQuery.resolve();
+    await cancelled;
+
+    const indexState = await withProject(fixture.root, (context) => ({
+      backend: context.symbolIndexBackend,
+      ready: context.symbolIndexReady,
+      state: context.status.state,
+      causes: context.status.causes,
+      observability: context.symbolIndexObservability,
+    }));
+    expect(indexState).toMatchObject({
+      backend: "sqlite",
+      ready: true,
+      state: "fresh",
+      causes: [],
+      observability: {
+        state: "ready",
+        fallback_count: 0,
+        last_error: null,
+      },
+    });
   });
 
   it("reports byte-budget truncation instead of silently dropping context", async () => {

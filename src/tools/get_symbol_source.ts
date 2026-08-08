@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { nodeSourceWithLocation } from "../services/outline.js";
 import { findDeclarationByName, getSourceFileOrThrow, withProject } from "../services/project.js";
+import { createRequestContext } from "../services/request-context.js";
 import { errorResult, structuredResult } from "./result.js";
 
 const AstGetSymbolSourceInputSchema = z.object({
@@ -35,13 +36,18 @@ export function registerGetSymbolSource(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root, file_path, symbol_path }) => {
+    async ({ project_root, file_path, symbol_path }, extra) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
-        const structuredContent = await withProject(project_root, ({ project, projectRoot }) => {
-          const sourceFile = getSourceFileOrThrow(project, file_path);
-          const node = findDeclarationByName(sourceFile, symbol_path);
-          return nodeSourceWithLocation(node, projectRoot);
-        });
+        const structuredContent = await withProject(
+          project_root,
+          ({ project, projectRoot }, operationContext) => {
+            const sourceFile = getSourceFileOrThrow(project, file_path);
+            const node = findDeclarationByName(sourceFile, symbol_path);
+            return nodeSourceWithLocation(node, projectRoot, operationContext);
+          },
+          requestContext,
+        );
         return structuredResult(structuredContent);
       } catch (error) {
         return errorResult(error);

@@ -6,12 +6,15 @@ import {
   clearProjectSessions,
   createFreshProject,
   getProjectStatus,
+  getProjectOperationQueueSnapshot,
   getProjectSessionRegistrySnapshot,
   getSourceFileOrThrow,
   invalidateProject,
   reportSymbolIndexFailure,
   withProject,
 } from "../src/services/project.js";
+import { buildFileOutline } from "../src/services/outline.js";
+import { createRequestContext } from "../src/services/request-context.js";
 import {
   readSymbolIndexPersistencePolicy,
   symbolIndexCachePath,
@@ -38,6 +41,152 @@ afterEach(async () => {
 });
 
 describe("project sessions", () => {
+  it("bounds waiting operations while preserving one running operation separately", async () => {
+    vi.stubEnv("AST_MAX_QUEUED_OPERATIONS_PER_PROJECT", "1");
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    const firstStarted = createDeferred();
+    const releaseFirst = createDeferred();
+    let queuedCalls = 0;
+    let rejectedCalls = 0;
+
+    const first = withProject(fixture.root, async () => {
+      firstStarted.resolve();
+      await releaseFirst.promise;
+      return "first";
+    });
+    await firstStarted.promise;
+    const queued = withProject(fixture.root, () => {
+      queuedCalls += 1;
+      return "queued";
+    });
+
+    expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+      state: "running",
+      admission: "open",
+      queue_capacity: 1,
+      active_operations: 1,
+      queued_operations: 1,
+    });
+    await expect(
+      withProject(fixture.root, () => {
+        rejectedCalls += 1;
+      }),
+    ).rejects.toMatchObject({ code: "PROJECT_QUEUE_FULL" });
+    expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+      active_operations: 1,
+      queued_operations: 1,
+      rejected_operations: 1,
+      last_outcome: "rejected",
+    });
+
+    releaseFirst.resolve();
+    await expect(first).resolves.toBe("first");
+    await expect(queued).resolves.toBe("queued");
+    expect(queuedCalls).toBe(1);
+    expect(rejectedCalls).toBe(0);
+    expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+      state: "idle",
+      active_operations: 0,
+      queued_operations: 0,
+      last_outcome: "succeeded",
+    });
+  });
+
+  it("rejects a pre-aborted request before project session lookup or creation", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    const controller = new AbortController();
+    controller.abort();
+    let operationCalled = false;
+
+    await expect(
+      withProject(
+        fixture.root,
+        () => {
+          operationCalled = true;
+        },
+        createRequestContext(controller.signal),
+      ),
+    ).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+
+    expect(operationCalled).toBe(false);
+    expect(getProjectSessionRegistrySnapshot()).toMatchObject({ session_count: 0 });
+  });
+
+  it("unlinks a cancelled queued request before synchronization or callback work", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    const firstStarted = createDeferred();
+    const releaseFirst = createDeferred();
+    const controller = new AbortController();
+    let queuedCallbackCalled = false;
+
+    const first = withProject(fixture.root, async () => {
+      firstStarted.resolve();
+      await releaseFirst.promise;
+    });
+    await firstStarted.promise;
+    const queued = withProject(
+      fixture.root,
+      () => {
+        queuedCallbackCalled = true;
+      },
+      createRequestContext(controller.signal),
+    );
+    const queuedExpectation = expect(queued).rejects.toMatchObject({
+      code: "REQUEST_CANCELLED",
+    });
+    expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+      active_operations: 1,
+      queued_operations: 1,
+    });
+
+    controller.abort();
+    await queuedExpectation;
+    expect(queuedCallbackCalled).toBe(false);
+    expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+      active_operations: 1,
+      queued_operations: 0,
+    });
+
+    releaseFirst.resolve();
+    await first;
+  });
+
+  it("stops active read traversal at a cooperative checkpoint", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    const controller = new AbortController();
+
+    await expect(
+      withProject(
+        fixture.root,
+        (context, operationContext) => {
+          controller.abort();
+          return buildFileOutline(
+            getSourceFileOrThrow(context.project, "src/value.ts"),
+            operationContext,
+          );
+        },
+        createRequestContext(controller.signal),
+      ),
+    ).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+    expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+      active_operations: 0,
+      cancelled_operations: 1,
+      last_outcome: "cancelled",
+    });
+  });
+
   it("tracks bounded freshness metadata on the serialized project session", async () => {
     const fixture = await createProjectFixture({
       "src/value.ts": "export const value = 1;\n",
@@ -215,6 +364,55 @@ describe("project sessions", () => {
         query: "value",
       }),
     ).toHaveLength(1);
+  });
+
+  it("does not classify cooperative symbol-search interruption as index failure", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", path.join(fixture.root, ".symbol-index-cache"));
+    const controller = new AbortController();
+    const onIndexFailure = vi.fn();
+
+    const search = withProject(
+      fixture.root,
+      async (context, operationContext) => {
+        const valid = await context.symbolIndex.queryAllSymbols({
+          project: context.status.project,
+          query: "value",
+        });
+        const querySpy = vi
+          .spyOn(context.symbolIndex, "queryAllSymbols")
+          .mockImplementationOnce(async () => {
+            controller.abort();
+            return valid;
+          });
+        try {
+          return await symbolsModule.searchProjectSymbolsWithIndex(
+            context.project,
+            context.projectRoot,
+            context.status.project,
+            context.symbolIndex,
+            context.symbolIndexReady,
+            { query: "value" },
+            onIndexFailure,
+            operationContext,
+          );
+        } finally {
+          querySpy.mockRestore();
+        }
+      },
+      createRequestContext(controller.signal),
+    );
+
+    await expect(search).rejects.toMatchObject({ code: "REQUEST_CANCELLED" });
+    expect(onIndexFailure).not.toHaveBeenCalled();
+    expect(getProjectSessionRegistrySnapshot()).toMatchObject({
+      session_count: 1,
+      active_sessions: 0,
+    });
   });
 
   it("rejects persisted symbol metadata that disagrees with the compiler", async () => {

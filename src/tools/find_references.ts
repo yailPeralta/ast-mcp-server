@@ -3,6 +3,7 @@ import { z } from "zod";
 import { PaginationInputSchema, PaginationOutputSchema } from "../services/pagination.js";
 import { findDeclarationByName, getSourceFileOrThrow, withProject } from "../services/project.js";
 import { collectSymbolReferences } from "../services/references.js";
+import { createRequestContext } from "../services/request-context.js";
 import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
 
 const ReferenceDetailSchema = z.enum(["locations", "context"]).default("locations");
@@ -65,44 +66,50 @@ export function registerFindReferences(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({
-      project_root,
-      file_path,
-      symbol_path,
-      include_declaration,
-      detail,
-      output_format,
-      offset,
-      limit,
-    }) => {
+    async (
+      {
+        project_root,
+        file_path,
+        symbol_path,
+        include_declaration,
+        detail,
+        output_format,
+        offset,
+        limit,
+      },
+      extra,
+    ) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
-        const structuredContent = await withProject(project_root, ({ project, projectRoot }) => {
-          const sourceFile = getSourceFileOrThrow(project, file_path);
-          const node = findDeclarationByName(sourceFile, symbol_path);
-          const collected = collectSymbolReferences(
-            node,
-            projectRoot,
-            symbol_path,
-            include_declaration,
-            detail,
-            offset,
-            limit,
-          );
-          const { references, ...metadata } = collected;
-          return {
-            ...metadata,
-            references:
-              detail === "context"
-                ? references
-                : references.map(({ file, line, column, kind, is_declaration }) => ({
-                    file,
-                    line,
-                    column,
-                    kind,
-                    is_declaration,
-                  })),
-          };
-        });
+        const structuredContent = await withProject(
+          project_root,
+          ({ project, projectRoot }, operationContext) => {
+            const sourceFile = getSourceFileOrThrow(project, file_path);
+            const node = findDeclarationByName(sourceFile, symbol_path);
+            const collected = collectSymbolReferences(
+              node,
+              projectRoot,
+              symbol_path,
+              include_declaration,
+              detail,
+              offset,
+              limit,
+              operationContext,
+            );
+            const { references, ...metadata } = collected;
+            return {
+              ...metadata,
+              references:
+                detail === "context"
+                  ? references
+                  : references.map(({ file, line, column, kind, is_declaration }) => {
+                      operationContext.checkpoint();
+                      return { file, line, column, kind, is_declaration };
+                    }),
+            };
+          },
+          requestContext,
+        );
         const outputSchema = ReferenceOutputSchemas[detail] as z.ZodType<Record<string, unknown>>;
         return formattedResult(outputSchema, structuredContent, output_format);
       } catch (error) {

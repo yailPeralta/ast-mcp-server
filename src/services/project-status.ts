@@ -1,4 +1,11 @@
 import { createHash } from "node:crypto";
+import { types as utilTypes } from "node:util";
+import {
+  MAX_PROJECT_OPERATION_COUNTER,
+  MAX_PROJECT_OPERATION_DURATION_MS,
+  type ProjectOperationAdmission,
+  type ProjectOperationOutcome,
+} from "./project-operation-scheduler.js";
 import {
   createTruncationMetadata,
   isFreshnessCause,
@@ -169,6 +176,23 @@ export interface ProjectStatusProjection {
   readonly degraded_errors: readonly string[];
   readonly degraded_errors_truncation: TruncationMetadata;
   readonly degraded_errors_text_truncation: TruncationMetadata;
+}
+
+export type ProjectQueueState = "idle" | "queued" | "running";
+
+export interface ProjectOperationQueueProjection {
+  readonly state: ProjectQueueState;
+  readonly admission: ProjectOperationAdmission;
+  readonly queue_capacity: number;
+  readonly active_operations: number;
+  readonly queued_operations: number;
+  readonly rejected_operations: number;
+  readonly cancelled_operations: number;
+  readonly queue_timeout_operations: number;
+  readonly deadline_exceeded_operations: number;
+  readonly last_outcome: ProjectOperationOutcome;
+  readonly max_queue_wait_ms: number;
+  readonly max_execution_ms: number;
 }
 
 function canonicalIdentityPath(value: string): string {
@@ -1118,4 +1142,127 @@ export function projectStatusToProjection(status: ProjectStatus): ProjectStatusP
     degraded_errors_truncation: { ...normalized.degradedErrorsTruncation },
     degraded_errors_text_truncation: { ...normalized.degradedErrorsTextTruncation },
   };
+}
+
+const OPERATION_QUEUE_FIELDS = Object.freeze([
+  "admission",
+  "queue_capacity",
+  "active_operations",
+  "queued_operations",
+  "rejected_operations",
+  "cancelled_operations",
+  "queue_timeout_operations",
+  "deadline_exceeded_operations",
+  "last_outcome",
+  "max_queue_wait_ms",
+  "max_execution_ms",
+] as const);
+
+function operationQueueRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null) return {};
+
+  try {
+    if (utilTypes.isProxy(value) || Array.isArray(value)) return {};
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return {};
+
+    const ownKeys = Reflect.ownKeys(value);
+    if (ownKeys.some((key) => typeof key === "symbol")) return {};
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    for (const key of ownKeys) {
+      const descriptor = descriptors[key as string];
+      if (!descriptor?.enumerable || !("value" in descriptor)) return {};
+    }
+
+    const record: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+    for (const field of OPERATION_QUEUE_FIELDS) {
+      const descriptor = descriptors[field];
+      if (descriptor && "value" in descriptor) record[field] = descriptor.value;
+    }
+    return record;
+  } catch {
+    return {};
+  }
+}
+
+function normalizeQueueCapacity(value: unknown, configuredCapacity: unknown): number {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 1 && value <= 256) {
+    return value;
+  }
+  if (
+    typeof configuredCapacity === "number" &&
+    Number.isSafeInteger(configuredCapacity) &&
+    configuredCapacity >= 1 &&
+    configuredCapacity <= 256
+  ) {
+    return configuredCapacity;
+  }
+  return 32;
+}
+
+function normalizeRuntimeMetric(value: unknown, maximum: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) return 0;
+  if (value < 0) return 0;
+  return Math.min(value, maximum);
+}
+
+function normalizeOperationOutcome(value: unknown): ProjectOperationOutcome {
+  if (
+    value === "none" ||
+    value === "succeeded" ||
+    value === "failed" ||
+    value === "rejected" ||
+    value === "cancelled" ||
+    value === "queue_timeout" ||
+    value === "deadline_exceeded" ||
+    value === "internal_error"
+  ) {
+    return value;
+  }
+  return "internal_error";
+}
+
+export function projectOperationQueueToProjection(
+  input: unknown,
+  configuredCapacity: unknown,
+): ProjectOperationQueueProjection {
+  const record = operationQueueRecord(input);
+  const queueCapacity = normalizeQueueCapacity(record.queue_capacity, configuredCapacity);
+  const activeOperations = normalizeRuntimeMetric(record.active_operations, 1);
+  const queuedOperations = normalizeRuntimeMetric(record.queued_operations, queueCapacity);
+  const state: ProjectQueueState =
+    activeOperations > 0 ? "running" : queuedOperations > 0 ? "queued" : "idle";
+
+  return Object.freeze({
+    state,
+    admission: record.admission === "open" ? "open" : "closed",
+    queue_capacity: queueCapacity,
+    active_operations: activeOperations,
+    queued_operations: queuedOperations,
+    rejected_operations: normalizeRuntimeMetric(
+      record.rejected_operations,
+      MAX_PROJECT_OPERATION_COUNTER,
+    ),
+    cancelled_operations: normalizeRuntimeMetric(
+      record.cancelled_operations,
+      MAX_PROJECT_OPERATION_COUNTER,
+    ),
+    queue_timeout_operations: normalizeRuntimeMetric(
+      record.queue_timeout_operations,
+      MAX_PROJECT_OPERATION_COUNTER,
+    ),
+    deadline_exceeded_operations: normalizeRuntimeMetric(
+      record.deadline_exceeded_operations,
+      MAX_PROJECT_OPERATION_COUNTER,
+    ),
+    last_outcome: normalizeOperationOutcome(record.last_outcome),
+    max_queue_wait_ms: normalizeRuntimeMetric(
+      record.max_queue_wait_ms,
+      MAX_PROJECT_OPERATION_DURATION_MS,
+    ),
+    max_execution_ms: normalizeRuntimeMetric(
+      record.max_execution_ms,
+      MAX_PROJECT_OPERATION_DURATION_MS,
+    ),
+  });
 }

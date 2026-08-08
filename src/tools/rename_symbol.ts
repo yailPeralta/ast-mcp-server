@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { prepareRename } from "../services/operations.js";
+import { createRequestContext } from "../services/request-context.js";
 import { PreparedOperationOutputSchema, serializePreparedOperation } from "./operation-schema.js";
 import { errorResult, structuredResult } from "./result.js";
 
@@ -35,20 +36,27 @@ export function registerRenameSymbol(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root, file_path, symbol_path, new_name, dry_run, allow_new_errors }) => {
+    async (
+      { project_root, file_path, symbol_path, new_name, dry_run, allow_new_errors },
+      extra,
+    ) => {
+      const requestContext = createRequestContext(extra.signal);
       try {
         if (!dry_run) {
           throw new Error(
             "Direct rename application is disabled. Prepare with dry_run=true, then call ast_apply_operation with the returned operation_id.",
           );
         }
-        const operation = await prepareRename({
-          projectRoot: project_root,
-          filePath: file_path,
-          symbolPath: symbol_path,
-          newName: new_name,
-          allowNewErrors: allow_new_errors,
-        });
+        const operation = await prepareRename(
+          {
+            projectRoot: project_root,
+            filePath: file_path,
+            symbolPath: symbol_path,
+            newName: new_name,
+            allowNewErrors: allow_new_errors,
+          },
+          requestContext,
+        );
         return structuredResult(serializePreparedOperation(operation));
       } catch (error) {
         return errorResult(error);
