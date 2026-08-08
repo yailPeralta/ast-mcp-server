@@ -50,6 +50,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:mcp": "yarn build && node scripts/mcp-smoke.mjs",
+    "test:lifecycle": "yarn build && node scripts/mcp-lifecycle-smoke.mjs",
     "test:cli": "yarn build && node scripts/cli-smoke.mjs",
     "test:errors": "yarn build && node scripts/public-error-smoke.mjs",
     "test:package": "node scripts/package-smoke.mjs",

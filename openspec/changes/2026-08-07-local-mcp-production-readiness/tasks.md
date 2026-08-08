@@ -309,19 +309,28 @@ Evidence:
 
 ### Task 4.1: RED shutdown coordinator
 
-Status: pending.
+Status: complete.
 
 Files:
 
-- Create: `src/services/shutdown.ts`.
+- Create: `src/services/shutdown.ts`, `src/services/runtime-activity.ts`.
 - Refactor: `src/index.ts` into a testable stdio startup function.
+- Modify: `src/server.ts`, `src/services/project-operation-scheduler.ts`, `src/services/project.ts`.
 - Test: `test/shutdown.test.ts`.
 
 Test stop-admission ordering, shared promise, cancellation of queued/non-critical work, bounded graceful drain, non-critical timeout without close-under-use, completion-critical apply preservation, repeated triggers and cleanup-on-error.
 
+Evidence:
+
+- RED: `yarn test test/shutdown.test.ts` failed because `src/services/shutdown.ts` did not exist and also exposed that importing `src/index.ts` immediately started stdio instead of providing a side-effect-free startup seam.
+- The project registry closes global admission before resolution, every live scheduler atomically closes admission, rejects queued work and cooperatively aborts active non-critical work, while completion-critical apply work remains un-aborted until its terminal result.
+- One coordinator promise owns all triggers, applies the bounded grace only to non-critical work, emits one fixed-field incomplete event on forced shutdown, avoids closing in-use resources and attempts both MCP and project cleanup after a safe drain even when MCP close fails.
+- Runtime callback plus transport-send tracking closes the scheduler-idle/protocol-response race. The idle transition is revalidated on the next event-loop turn, so `SERVER_SHUTTING_DOWN` envelopes are written before transport close rather than being lost after callback settlement.
+- `test/shutdown.test.ts` passes `10/10`, covering admission ordering, queued/active cancellation, completion-critical preservation, project-idle callback grace expiry, shared promise, repeated triggers, cleanup-on-error, post-callback send drain and side-effect-free startup.
+
 ### Task 4.2: Child-process lifecycle matrix
 
-Status: pending.
+Status: complete.
 
 Files:
 
@@ -330,11 +339,25 @@ Files:
 
 Exercise stdin EOF, `SIGINT`, `SIGTERM`, active read drain, queued rejection, non-critical grace expiry, finite injected completion-critical apply and canary close/reopen. Use disposable fixtures/cache. Assert bounded exit only for clean/non-critical cases, no close-under-use for completion-critical apply, no protocol stdout corruption and no orphan process after successful graceful cleanup.
 
+Evidence:
+
+- `yarn test:lifecycle` builds the compiled artifact and runs disposable child processes over real JSON-RPC stdio for EOF, `SIGINT`, `SIGTERM`, active compiler-backed read cancellation, queued rejection and non-critical forced exit.
+- The queued request receives the frozen `SERVER_SHUTTING_DOWN` MCP envelope before transport close; the forced non-critical child remains active before project-scheduler admission, exits `1`, emits exactly one `shutdown_incomplete` event and records no resource-close event.
+- A real `ast_apply_operation` is paused by an IPC-controlled test hook after the first source replacement. The parent waits for one child acknowledgement per handled `SIGTERM` before sending the next, releases the critical apply only after two acknowledgements, then repeats the handshake during MCP close; event order proves completion-critical entry, controlled release and only then resource close, while the apply response remains `applied` and the source postimage is verified.
+- A mixed child keeps unrelated non-critical callback activity stalled while an apply remains completion-critical past the initial grace. A coordinator acknowledgement gates critical release; the apply still returns `applied`, then the re-enabled finite grace produces one `shutdown_incomplete`, no resource close and exit `1` for the remaining non-critical work.
+- Canary mode creates SQLite state in a disposable cache, exits gracefully, then a fresh child reopens the same cache and serves compiler-backed symbol search with `backend: sqlite`. Every graceful child exits naturally with code `0`, protocol stdout contains only valid JSON-RPC and the harness reports `orphan_processes: 0`.
+
 ### Task 4.3: Verify and commit lifecycle
 
-Status: pending.
+Status: complete under the prospective-commit convention: this status applies only if the exact
+reviewed staged tree is committed unchanged with the subject below.
 
 Run `yarn test test/shutdown.test.ts test/project.test.ts test/operations.test.ts test/runtime-state.test.ts test/symbol-index-sqlite.test.ts`, then `yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && yarn test:mcp && yarn test:lifecycle && yarn test:cli && yarn test:package && git diff --check`. Commit `feat(runtime): close stdio resources gracefully`.
+
+Evidence:
+
+- The pre-review candidate passes `93/93` focused lifecycle/project/mutation/runtime/SQLite tests and `380/380` full tests.
+- `test:lifecycle` reports all nine lifecycle scenarios true, clean protocol stdout and zero orphan processes. Because this evidence block changes the tree, the same complete matrix is rerun afterward and bound externally to the staged tree; its exact-tree review verdict and resulting commit SHA are intentionally not backfilled into this candidate.
 
 ## 5. Canary, scale and support evidence
 

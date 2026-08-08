@@ -73,11 +73,17 @@ export interface ProjectOperationSchedulerSnapshot {
   readonly max_execution_ms: number;
 }
 
+export interface ProjectOperationSchedulerShutdownSnapshot {
+  readonly active_operations: 0 | 1;
+  readonly queued_operations: number;
+  readonly completion_critical_operations: 0 | 1;
+}
+
 type OperationCallback = (context: ProjectOperationContext) => Promise<unknown> | unknown;
 type OperationResolver = (value: unknown) => void;
 type OperationRejecter = (reason: unknown) => void;
 type OperationTimer = ReturnType<typeof setTimeout>;
-type AbortKind = "client" | "deadline";
+type AbortKind = "client" | "deadline" | "shutdown";
 
 interface QueueNode {
   readonly sequence: number;
@@ -126,6 +132,8 @@ export class ProjectOperationScheduler {
   #tail: QueueNode | undefined;
   #running: QueueNode | undefined;
   #waiting = 0;
+  readonly #idleWaiters = new Set<() => void>();
+  readonly #completionCriticalWaiters = new Set<() => void>();
   #nextSequence = 0;
   #queueAbortListeners = 0;
   #queueTimers = 0;
@@ -195,6 +203,47 @@ export class ProjectOperationScheduler {
 
   closeAdmission(): void {
     this.#admission = "closed";
+  }
+
+  beginShutdown(): void {
+    this.#admission = "closed";
+
+    let queued = this.#head;
+    while (queued) {
+      const next = queued.next;
+      this.#rejectQueued(queued, "SERVER_SHUTTING_DOWN");
+      queued = next;
+    }
+
+    const running = this.#running;
+    if (running && running.phase !== "completion_critical" && running.phase !== "complete") {
+      running.abortKind ??= "shutdown";
+      this.#clearExecutionResources(running);
+      running.executionController?.abort();
+    }
+    this.#notifyIdleIfNeeded();
+  }
+
+  waitForIdle(): Promise<void> {
+    if (!this.#running && this.#waiting === 0) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      this.#idleWaiters.add(resolve);
+    });
+  }
+
+  waitForCompletionCriticalOperationsToDrain(): Promise<void> {
+    if (this.#running?.phase !== "completion_critical") return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      this.#completionCriticalWaiters.add(resolve);
+    });
+  }
+
+  shutdownSnapshot(): ProjectOperationSchedulerShutdownSnapshot {
+    return Object.freeze({
+      active_operations: this.#running ? 1 : 0,
+      queued_operations: this.#waiting,
+      completion_critical_operations: this.#running?.phase === "completion_critical" ? 1 : 0,
+    });
   }
 
   snapshot(): ProjectOperationSchedulerSnapshot {
@@ -284,7 +333,10 @@ export class ProjectOperationScheduler {
     }
   }
 
-  #rejectQueued(node: QueueNode, code: "REQUEST_CANCELLED" | "QUEUE_WAIT_TIMEOUT"): void {
+  #rejectQueued(
+    node: QueueNode,
+    code: "REQUEST_CANCELLED" | "QUEUE_WAIT_TIMEOUT" | "SERVER_SHUTTING_DOWN",
+  ): void {
     if (node.phase !== "queued") return;
     const reject = node.reject;
     this.#recordQueueWait(node);
@@ -295,7 +347,7 @@ export class ProjectOperationScheduler {
     node.resolve = undefined;
     node.reject = undefined;
 
-    if (code === "REQUEST_CANCELLED") {
+    if (code === "REQUEST_CANCELLED" || code === "SERVER_SHUTTING_DOWN") {
       this.#cancelledOperations = addProjectOperationCount(this.#cancelledOperations);
       this.#lastOutcome = "cancelled";
     } else {
@@ -303,6 +355,7 @@ export class ProjectOperationScheduler {
       this.#lastOutcome = "queue_timeout";
     }
     reject?.(new ProjectOperationSchedulerError(code));
+    this.#notifyIdleIfNeeded();
   }
 
   #recordQueueWait(node: QueueNode): void {
@@ -394,6 +447,9 @@ export class ProjectOperationScheduler {
     if (node.abortKind === "deadline") {
       throw new ProjectOperationSchedulerError("OPERATION_DEADLINE_EXCEEDED");
     }
+    if (node.abortKind === "shutdown") {
+      throw new ProjectOperationSchedulerError("SERVER_SHUTTING_DOWN");
+    }
     if (node.abortKind === "client" || node.clientSignal.aborted) {
       throw new ProjectOperationSchedulerError("REQUEST_CANCELLED");
     }
@@ -474,6 +530,12 @@ export class ProjectOperationScheduler {
           outcome: "deadline_exceeded",
         };
       }
+      if (node.abortKind === "shutdown") {
+        return {
+          error: new ProjectOperationSchedulerError("SERVER_SHUTTING_DOWN"),
+          outcome: "cancelled",
+        };
+      }
       if (node.abortKind === "client" || node.clientSignal.aborted) {
         return {
           error: new ProjectOperationSchedulerError("REQUEST_CANCELLED"),
@@ -491,6 +553,7 @@ export class ProjectOperationScheduler {
   }
 
   #finishExecution(node: QueueNode, outcome: ProjectOperationOutcome): void {
+    const wasCompletionCritical = node.phase === "completion_critical";
     const startedAt = node.executionStartedAt ?? this.#readNow();
     const duration = boundedDuration(this.#readNow() - startedAt);
     this.#maxExecutionMs = Math.max(this.#maxExecutionMs, duration);
@@ -505,5 +568,26 @@ export class ProjectOperationScheduler {
     if (this.#running === node) this.#running = undefined;
     this.#lastOutcome = outcome;
     this.#startNext();
+    if (wasCompletionCritical) this.#notifyCompletionCriticalWaiters();
+    this.#notifyIdleIfNeeded();
+  }
+
+  #notifyCompletionCriticalWaiters(): void {
+    if (
+      this.#running?.phase === "completion_critical" ||
+      this.#completionCriticalWaiters.size === 0
+    ) {
+      return;
+    }
+    const waiters = [...this.#completionCriticalWaiters];
+    this.#completionCriticalWaiters.clear();
+    for (const resolve of waiters) resolve();
+  }
+
+  #notifyIdleIfNeeded(): void {
+    if (this.#running || this.#waiting !== 0 || this.#idleWaiters.size === 0) return;
+    const waiters = [...this.#idleWaiters];
+    this.#idleWaiters.clear();
+    for (const resolve of waiters) resolve();
   }
 }

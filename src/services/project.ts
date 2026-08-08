@@ -41,6 +41,7 @@ import {
 } from "./project-status.js";
 import {
   ProjectOperationScheduler,
+  ProjectOperationSchedulerError,
   type ProjectOperationContext,
 } from "./project-operation-scheduler.js";
 import {
@@ -100,6 +101,7 @@ const projectSessions = new Map<string, ProjectSession>();
 const projectRoots = new WeakMap<Project, string>();
 let projectSessionAccessSequence = 0n;
 let projectRuntimePolicy: RuntimePolicy | undefined;
+let projectRuntimeAdmission: "open" | "closed" = "open";
 
 function nextProjectSessionAccessSequence(): bigint {
   projectSessionAccessSequence += 1n;
@@ -348,10 +350,17 @@ function ensureProjectSessionCapacity(sessionCapacity: number): void {
   }
 }
 
+function assertProjectRuntimeAdmissionOpen(): void {
+  if (projectRuntimeAdmission === "closed") {
+    throw new ProjectOperationSchedulerError("SERVER_SHUTTING_DOWN");
+  }
+}
+
 function getOrCreateSession(
   projectRoot: string,
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): ProjectSession {
+  assertProjectRuntimeAdmissionOpen();
   requestContext.checkpoint();
   const tsConfigFilePath = resolveTsConfigPath(projectRoot);
   const existing = projectSessions.get(tsConfigFilePath);
@@ -875,6 +884,72 @@ export function clearProjectSessions(): void {
   for (const session of projectSessions.values()) {
     closeProjectSession(session);
   }
+  projectSessions.clear();
+  projectSessionAccessSequence = 0n;
+  projectRuntimePolicy = undefined;
+  projectRuntimeAdmission = "open";
+}
+
+export interface ProjectRuntimeShutdownSnapshot {
+  readonly admission: "open" | "closed";
+  readonly session_count: number;
+  readonly active_operations: number;
+  readonly queued_operations: number;
+  readonly completion_critical_operations: number;
+}
+
+export function prepareProjectRuntimeForStartup(): void {
+  if (projectSessions.size !== 0) {
+    throw new Error("Cannot start a project runtime while sessions remain open.");
+  }
+  projectRuntimeAdmission = "open";
+}
+
+export function getProjectRuntimeShutdownSnapshot(): ProjectRuntimeShutdownSnapshot {
+  let activeOperations = 0;
+  let queuedOperations = 0;
+  let completionCriticalOperations = 0;
+  for (const session of projectSessions.values()) {
+    const snapshot = session.scheduler.shutdownSnapshot();
+    activeOperations += snapshot.active_operations;
+    queuedOperations += snapshot.queued_operations;
+    completionCriticalOperations += snapshot.completion_critical_operations;
+  }
+  return Object.freeze({
+    admission: projectRuntimeAdmission,
+    session_count: projectSessions.size,
+    active_operations: activeOperations,
+    queued_operations: queuedOperations,
+    completion_critical_operations: completionCriticalOperations,
+  });
+}
+
+export function beginProjectShutdown(): ProjectRuntimeShutdownSnapshot {
+  projectRuntimeAdmission = "closed";
+  for (const session of projectSessions.values()) session.scheduler.beginShutdown();
+  return getProjectRuntimeShutdownSnapshot();
+}
+
+export async function waitForProjectOperationsToDrain(): Promise<void> {
+  await Promise.all(
+    [...projectSessions.values()].map((session) => session.scheduler.waitForIdle()),
+  );
+}
+
+export async function waitForProjectCompletionCriticalOperationsToDrain(): Promise<void> {
+  await Promise.all(
+    [...projectSessions.values()].map((session) =>
+      session.scheduler.waitForCompletionCriticalOperationsToDrain(),
+    ),
+  );
+}
+
+export function closeDrainedProjectSessions(): void {
+  const snapshot = getProjectRuntimeShutdownSnapshot();
+  if (snapshot.active_operations !== 0 || snapshot.queued_operations !== 0) {
+    throw new Error("Cannot close project sessions while operations are active.");
+  }
+  for (const session of projectSessions.values()) closeProjectSession(session);
   projectSessions.clear();
   projectSessionAccessSequence = 0n;
   projectRuntimePolicy = undefined;
