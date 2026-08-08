@@ -368,17 +368,16 @@ Status: pending.
 Files:
 
 - Create: `scripts/canary-local-mcp.mjs`.
+- Create: `scripts/canary-local-mcp.d.mts`.
 - Create: `test/canary-local-mcp.test.ts`.
 - Create: `benchmark/canary-workloads/ast-mcp-server.json`.
 - Create: `benchmark/canary-workloads/x-scraper.json`.
-- Create: `benchmark/results/production-readiness/ast-mcp-server-node22.5.json`.
-- Create: `benchmark/results/production-readiness/ast-mcp-server-node24.json`.
-- Create: `benchmark/results/production-readiness/x-scraper-node22.5.json`.
-- Create: `benchmark/results/production-readiness/x-scraper-node24.json`.
 - Modify: `package.json`.
 - Test: `test/canary-local-mcp.test.ts`.
 
-Implement immutable real-repository disabled/canary subprocess runs plus a separate disposable invalidation/failure fixture. Add exact compiler parity, restart, fallback, rollback, queue/cancellation gates, byte-exact pre/post git status comparison and bounded sanitized report. Require `--node-bin` and `--expected-node 22.5.0|24`; execute/validate the selected binary and use it for every child. For cache accounting, recursively `lstat` without following symlinks after graceful flush/close, fail on unreadable/symlink/non-regular entries, and report sorted relative file names plus bytes for main/WAL/SHM/quarantine/temp files. Register `benchmark:production-readiness` in `package.json`.
+Implement immutable real-repository absent-policy/canary/policy-rollback subprocess runs plus separate disposable corruption, non-corruption write-failure and mutation-failure fixtures. Add complete ordered compiler-result hash equality conjoined with SQLite ready/accepted/loaded/reused and zero unexpected fallback/corruption/write-failure evidence, restart, persistence fallback against independent disabled-policy compiler baselines and explicit recovery, byte-exact mutation rollback, queue/cancellation gates, complete unfiltered source-file counts, byte-exact pre/post Git status plus exact worktree-tree comparison and bounded raw/frozen schemas. Require `--node-bin` to physically equal the matching `AST_NODE_22_BIN`/`AST_NODE_24_BIN`, execute/validate it and use it for every child. For cache accounting, recursively `lstat` without following symlinks after graceful flush/close, fail on unreadable/symlink/non-regular entries, and report sorted relative file names plus bytes for main/WAL/SHM/quarantine/temp files. Raw evidence uses a new direct child of literal `/tmp`; raw/frozen I/O pins file/directory descriptors before physical-containment checks and exclusive writes. `freeze-report` rejects duplicate options and credentials in exact argv, revalidates live OS/runtime/workload/harness/tree identity, accepts only the four identity-bound checked destinations and records the exact raw SHA-256. Register `benchmark:production-readiness` in `package.json`.
+
+After focused GREEN and the complete repository gate, commit only the harness, declarations, tests, workloads, SDD clarification and `package.json` as `test(canary): add deterministic production readiness harness`. Task 5.2 evidence MUST run from that clean commit; any later harness/workload edit invalidates all four reports.
 
 ### Task 5.2: Measure current repository
 
@@ -418,11 +417,11 @@ Files:
 
 Require zero semantic mismatches/mutation effects, successful rollback/fallback, bounded queue/session behavior and the preregistered fixture RSS/cache criteria from `MCP-PROD-404`. Record real-repository RSS/latency as observations only. Declare Linux supported; mark other platforms unverified unless equivalent gates are added.
 
-### Task 5.5: Adversarial canary review and commit
+### Task 5.5: Adversarial canary review and evidence commit
 
 Status: pending.
 
-Freeze script/workloads/reports/docs. Run `yarn test test/canary-local-mcp.test.ts && yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build`, then the two exact Task 5.2 commands and two exact Task 5.3 commands. Run `sha256sum benchmark/results/production-readiness/*.json`, `rg -n '/home/|mongodb(\\+srv)?://|redis://|Bearer[[:space:]]+|api[_-]?key|password|secret|token' benchmark/README.md benchmark/canary-workloads benchmark/results/production-readiness openspec/changes/2026-08-07-local-mcp-production-readiness` and `git diff --check`. Request read-only review of measurement honesty, path/secret hygiene and parity. Commit `test(canary): add local production readiness matrix` after PASS.
+Freeze reports/docs against the committed Task 5.1 harness. Run `yarn test test/canary-local-mcp.test.ts && yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build`, then the two exact Task 5.2 commands and two exact Task 5.3 commands. Run `sha256sum benchmark/results/production-readiness/*.json`, `rg -n '/home/|mongodb(\\+srv)?://|redis://|Bearer[[:space:]]+|api[_-]?key|password|secret|token' benchmark/README.md benchmark/canary-workloads benchmark/results/production-readiness openspec/changes/2026-08-07-local-mcp-production-readiness` and `git diff --check`. Request read-only review of measurement honesty, path/secret hygiene and parity. Commit only reports/docs/evidence as `test(canary): add local production readiness matrix` after PASS.
 
 ## 6. Supply chain and release candidate
 

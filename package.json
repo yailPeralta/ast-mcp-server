@@ -62,6 +62,7 @@
     "benchmark:agent-workflows": "yarn build && node scripts/benchmark-agent-workflows.mjs",
     "benchmark:index-storage": "yarn build && node scripts/benchmark-index-storage.mjs",
     "benchmark:index-integration": "yarn build && node scripts/benchmark-symbol-index-integration.mjs",
+    "benchmark:production-readiness": "yarn build && node scripts/canary-local-mcp.mjs run",
     "lint": "eslint src test scripts vitest.config.ts eslint.config.js",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

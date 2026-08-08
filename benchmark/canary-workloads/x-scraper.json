@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "project_alias": "[x-scraper]",
+  "description": "Immutable compiler/index parity workload for the OnChainSentient repository.",
+  "measurement_call_id": "search-market-resolver",
+  "calls": [
+    {
+      "id": "list-sniper",
+      "tool": "ast_list_files",
+      "arguments": {
+        "glob_filter": "src/modules/sniper",
+        "offset": 0,
+        "limit": 100
+      }
+    },
+    {
+      "id": "search-market-resolver",
+      "tool": "ast_search_symbols",
+      "arguments": {
+        "query": "MarketSnapshotResolverService",
+        "file_filter": "src/modules/sniper",
+        "detail": "summary",
+        "output_format": "json",
+        "offset": 0,
+        "limit": 20
+      }
+    },
+    {
+      "id": "search-service-broad",
+      "tool": "ast_search_symbols",
+      "arguments": {
+        "query": "Service",
+        "file_filter": "src/modules/sniper",
+        "detail": "summary",
+        "output_format": "json",
+        "offset": 0,
+        "limit": 100
+      }
+    },
+    {
+      "id": "explore-market-resolver",
+      "tool": "ast_explore",
+      "arguments": {
+        "query": "MarketSnapshotResolverService",
+        "file_filter": "src/modules/sniper/market-data",
+        "detail": "summary",
+        "include_source": false,
+        "include_references": false,
+        "offset": 0,
+        "limit": 10,
+        "max_bytes": 65536
+      }
+    },
+    {
+      "id": "impact-market-resolver",
+      "tool": "ast_get_impact",
+      "arguments": {
+        "file_path": "src/modules/sniper/market-data/market-snapshot-resolver.service.ts",
+        "symbol_path": "MarketSnapshotResolverService",
+        "direction": "both",
+        "max_depth": 1,
+        "max_nodes": 100,
+        "max_edges": 200,
+        "output_format": "json"
+      }
+    }
+  ]
+}

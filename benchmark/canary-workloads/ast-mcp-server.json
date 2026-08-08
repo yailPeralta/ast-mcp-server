@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "project_alias": "[ast-mcp-server]",
+  "description": "Immutable compiler/index parity workload for the canonical MCP repository.",
+  "measurement_call_id": "search-create-server",
+  "calls": [
+    {
+      "id": "list-src",
+      "tool": "ast_list_files",
+      "arguments": {
+        "glob_filter": "src",
+        "offset": 0,
+        "limit": 100
+      }
+    },
+    {
+      "id": "search-create-server",
+      "tool": "ast_search_symbols",
+      "arguments": {
+        "query": "createServer",
+        "file_filter": "src",
+        "detail": "summary",
+        "output_format": "json",
+        "offset": 0,
+        "limit": 20
+      }
+    },
+    {
+      "id": "search-project-broad",
+      "tool": "ast_search_symbols",
+      "arguments": {
+        "query": "project",
+        "file_filter": "src",
+        "detail": "summary",
+        "output_format": "json",
+        "offset": 0,
+        "limit": 100
+      }
+    },
+    {
+      "id": "explore-create-server",
+      "tool": "ast_explore",
+      "arguments": {
+        "query": "createServer",
+        "file_filter": "src/server.ts",
+        "detail": "summary",
+        "include_source": false,
+        "include_references": false,
+        "offset": 0,
+        "limit": 10,
+        "max_bytes": 65536
+      }
+    },
+    {
+      "id": "impact-create-server",
+      "tool": "ast_get_impact",
+      "arguments": {
+        "file_path": "src/server.ts",
+        "symbol_path": "createServer",
+        "direction": "both",
+        "max_depth": 1,
+        "max_nodes": 50,
+        "max_edges": 100,
+        "output_format": "json"
+      }
+    }
+  ]
+}

@@ -119,7 +119,7 @@ The error representation MUST be exercised through in-memory MCP, stdio and pack
 
 ### MCP-PROD-302 Measurement integrity
 
-Canary/benchmark reports MUST record exact command, commit, package version, OS, Node runtime, project identity alias, workload, iterations, raw latencies, RSS, cache size, hit/miss/rebuild/fallback/cancellation counts and pass/fail gates. They MUST distinguish local process measurements from provider latency, universal SLA or model-quality claims.
+The ephemeral raw canary report MUST record the exact command with each option at most once. The checked report MUST replace path-bearing arguments with canonical aliases, include the SHA-256 of the exact raw bytes and retain every non-path argument. Both reports MUST record commit, exact worktree tree, harness/workload byte digests, package version, OS, selected Node runtime, project identity alias, iterations, the complete unfiltered source-file inventory count, preregistered call count/ordered IDs, raw latencies, RSS, cache size, hit/miss/rebuild/fallback/cancellation counts and the complete preregistered gate set. They MUST distinguish local process measurements from provider latency, universal SLA or model-quality claims.
 
 ## Canary and rollback
 
@@ -135,10 +135,10 @@ The real-project canary MUST require both `AST_SYMBOL_INDEX_PERSISTENCE=canary` 
 
 Canary workloads have two disjoint classes:
 
-1. immutable real-repository workloads run against `ast-mcp-server` and `x-scraper`, compare indexed search/explore evidence with canonical compiler evidence, exercise disabled/canary cold/warm/restart reads, and require byte-identical pre/post `git status --porcelain=v1 -z`; they MUST NOT change source or config;
-2. disposable generated/copied fixture workloads exercise one-file change, config invalidation, corruption/failure fallback, queue saturation, cancellation and rollback, then delete the fixture.
+1. immutable real-repository workloads run against `ast-mcp-server` and `x-scraper`, compare indexed search/explore evidence with canonical compiler evidence, exercise absent-policy/canary cold/warm/restart reads plus read-only policy rollback, and require both byte-identical pre/post `git status --porcelain=v1 -z` and an identical exact worktree tree; they MUST NOT change source or config;
+2. disposable generated/copied fixture workloads exercise one-file change, config invalidation, corruption fallback, a separately injected non-corruption SQLite write failure with compiler fallback, queue saturation, cancellation and mutation rollback to byte-exact originals, then delete the fixture.
 
-No digest or cache hit is a completeness proof.
+No digest or cache hit is a completeness proof. A real-repository canary PASS requires the exact preregistered ordered call sequence and canonical compiler-result hash equality for every cold/restart call and the selected warm measurement call, together with `backend=sqlite`, ready state, accepted/loaded/reused evidence and zero unexpected fallback, corruption and write-failure increments. Every unchanged restart MUST satisfy the same conjunction. The corruption fixture MUST return a complete canonical result byte-equal to an independently executed disabled-policy compiler baseline for the same fixture state, record equal baseline/result hashes, increment fallback/corruption counters and recover explicitly. A separate non-corruption write-failure fixture MUST prove the same complete-result equality against its own disabled-policy compiler baseline, record equal hashes, increment fallback/write-failure counters and recover explicitly.
 
 ### MCP-PROD-404 Promotion gate
 
@@ -150,16 +150,16 @@ The deterministic fixture resource gate MUST launch Node with `--expose-gc` and 
 
 ### MCP-PROD-405 Runtime identity and durable reports
 
-`AST_NODE_22_BIN` and `AST_NODE_24_BIN` are the only runtime-binary variables for release/canary evidence. The canary runner MUST receive one via `--node-bin`, execute `<binary> --version`, require exactly `v22.5.0` for the floor run or `^v24\.` for the Node 24 run, use that binary for every server/fixture child, and record the full observed version. Node 22.5 subprocesses MUST receive `--experimental-sqlite`; filenames/labels cannot establish runtime identity.
+`AST_NODE_22_BIN` and `AST_NODE_24_BIN` are the only runtime-binary variables for release/canary evidence. The canary runner MUST receive one via `--node-bin`, resolve both paths physically and require equality, execute that exact resolved binary, require exactly `v22.5.0` for the floor run or `^v24\.` for the Node 24 run, use it for every server/fixture/resource child, and record the full observed version and binary digest. Node 22.5 subprocesses MUST receive `--experimental-sqlite`; filenames/labels cannot establish runtime identity. When `--candidate-tree` is supplied, the runner MUST compare it with the exact current package worktree tree before and after the run.
 
-Every measurement MUST first write its raw sanitized report outside both source repositories under `/tmp`, complete the byte-exact pre/post repository-status comparison, and only then run the report-freeze validator. That validator requires overall PASS, canonicalizes the bounded report, rechecks path/secret absence and writes the four checked reports to:
+Every measurement MUST first write its bounded ephemeral raw report as a new direct child of the literal physical `/tmp` tree independent of `TMPDIR`, complete the byte-exact pre/post repository-status and exact-worktree-tree comparison, and only then run the report-freeze validator. Raw and checked report reads/writes MUST pin the opened regular file or destination directory through a file descriptor before the final containment check and exclusive write so path/symlink replacement cannot redirect evidence. The freezer is a closed-schema security boundary: it rejects duplicate options, unknown/missing gates or fields, path/symlink escapes, noncanonical counts/call sequences, incomplete parity hashes, live OS/runtime/workload/harness/tree identity mismatch and canonical output above the fixed byte cap. It requires overall PASS, removes the raw path-bearing argv, rejects credentials even when confined to the exact path-bearing argv, records the raw SHA-256, rechecks path/secret absence and writes only the four checked reports to:
 
 - `benchmark/results/production-readiness/ast-mcp-server-node22.5.json`;
 - `benchmark/results/production-readiness/ast-mcp-server-node24.json`;
 - `benchmark/results/production-readiness/x-scraper-node22.5.json`;
 - `benchmark/results/production-readiness/x-scraper-node24.json`.
 
-Reports MUST use repository aliases, contain no absolute runtime/project/cache paths, and include SHA-256 digests in final verification. The freeze step occurs after repository immutability has been proven, so its intentional checked-report write is not part of the measured repository status interval. Later reruns write to `/tmp` and validate gates without replacing frozen checked evidence unless the reports are intentionally regenerated, recommitted and all downstream gates rerun.
+Checked reports MUST use repository aliases, contain no absolute runtime/project/cache paths, and include SHA-256 digests in final verification. Raw reports are ephemeral and MAY contain the exact path-bearing argv only; they MUST NOT contain credentials. The freeze step occurs after repository immutability has been proven, so its intentional checked-report write is not part of the measured repository status interval. Later reruns write to `/tmp` and validate gates without replacing frozen checked evidence unless the reports are intentionally regenerated, recommitted and all downstream gates rerun.
 
 ## Platform and security policy
 

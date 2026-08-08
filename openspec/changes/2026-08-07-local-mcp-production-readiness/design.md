@@ -147,16 +147,16 @@ Add a read-only script and package command. Inputs:
 - output report path;
 - optional explicit canary cache root.
 
-The runner starts fresh stdio server subprocesses in disabled and canary modes. Immutable real-repository workloads capture byte-exact `git status --porcelain=v1 -z` before and after and fail if changed. They exercise status, file list, exact/broad symbol search, exploration and selected exact impact paths supplied by the manifest, but never source/config mutation.
+The runner starts fresh stdio server subprocesses with the persistence policy absent, explicitly set to canary, and explicitly rolled back to disabled. Immutable real-repository workloads capture byte-exact `git status --porcelain=v1 -z` and an exact temporary-index worktree tree before and after and fail if either changes. They exercise status, file list, exact/broad symbol search, exploration and selected exact impact paths supplied by the manifest, but never source/config mutation.
 
-A separate disposable fixture workload exercises one-file changes, config invalidation, corruption/failure fallback, rollback, queue saturation and cancellation, then removes the fixture. No invalidation scenario runs against the real checkout.
+A separate disposable fixture workload exercises one-file changes, config invalidation, corruption fallback, an independently injected non-corruption SQLite write failure, byte-exact mutation rollback, queue saturation and cancellation, then removes the fixture. Its private fixture-only MCP registrations provide deterministic hold/snapshot/failure controls without changing the production tool inventory. No invalidation or injected-failure scenario runs against the real checkout.
 
-Canonical parity is checked from results generated through compiler-authoritative paths; cache evidence alone cannot satisfy parity. Mutation workflows run only in generated disposable fixtures.
+Canonical parity is checked from results generated through compiler-authoritative paths and a preregistered ordered per-call logical projection. Disabled-policy results establish the complete per-call hash baseline; cold, warm measurement and every restart must reproduce the applicable baseline hashes. Corruption and non-corruption write-failure fixtures independently compute a disabled-policy compiler baseline for the same source state and require byte-equal complete canonical results plus equal recorded hashes from the failing operations. Cache evidence alone cannot satisfy parity: every real canary/restart gate also requires ready SQLite state, accepted/loaded/reused evidence and zero unexpected fallback/corruption/write-failure increments. Mutation workflows run only in generated disposable fixtures.
 
 Report raw:
 
 - commit/package/runtime/OS;
-- source-file/workload counts;
+- complete unfiltered source-file count plus preregistered workload call count and ordered IDs;
 - cold/warm/restart latency samples (observational for real repositories);
 - child peak RSS where measurable;
 - recursive quiescent cache file manifest/bytes from `lstat` without symlink following, including main/WAL/SHM/quarantine/temp files;
@@ -167,7 +167,7 @@ Report raw:
 - deterministic fixture resource gates under `node --expose-gc`, with exactly one `global.gc()` immediately before each RSS sample, using 10 warm-up plus 50 measured identical reads: final-five median RSS no more than `max(32 MiB, 20%)` over first-five median, and final-restart immutable cache bytes no more than `max(1 MiB, 5%)` over first complete build;
 - each gate boolean and overall status.
 
-The first cache measurement occurs after complete build plus graceful store flush/close; the final occurs after the third unchanged restart plus graceful flush/close. Symlink, unreadable or non-regular entries fail the gate. The measurement writes a sanitized raw report under `/tmp`, checks byte-exact repository status, then exits. A separate `freeze-report` mode validates overall PASS, canonical bounded shape and path/secret hygiene before writing the four MCP-PROD-405 checked paths. That intentional write occurs outside the immutability interval. Checked reports use aliases `[ast-mcp-server]` and `[x-scraper]`; final verification records their SHA-256 digests. Post-freeze reruns target `/tmp` and do not overwrite checked reports.
+The first cache measurement occurs after complete build plus graceful store flush/close; the final occurs after the third unchanged restart plus graceful flush/close. Symlink, unreadable or non-regular entries fail the gate. `--iterations=20` controls only the real-repository warm observations; the fixture independently fixes 10 warm-ups and 50 measured reads, invokes `global.gc()` once per measured sample and treats the complete build as generation zero followed by restarts 1–3. The measurement writes a bounded ephemeral raw report as a new direct child of literal `/tmp`, independent of `TMPDIR`, checks byte-exact repository status and exact worktree-tree identity, then exits. Raw report and frozen output operations pin an opened file/directory descriptor, validate its physical containment, and perform the exclusive write through that descriptor to close path-replacement races. A separate closed-schema `freeze-report` mode rejects duplicate command options, binds live OS/runtime/workload/harness/tree identity to one allowlisted destination, records the raw SHA-256, canonicalizes and byte-bounds the exact checked bytes, and rejects path/secret/symlink leakage—including credentials confined to raw argv—before writing a MCP-PROD-405 path. That intentional write occurs outside the immutability interval. Checked reports use aliases `[ast-mcp-server]` and `[x-scraper]`; final verification records their SHA-256 digests. Post-freeze reruns target new `/tmp` names and do not overwrite checked reports.
 
 ## Platform/support policy
 

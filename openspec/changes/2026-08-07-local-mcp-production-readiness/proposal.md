@@ -16,7 +16,7 @@ For a local agent using the MCP over stdio:
 - process shutdown stops admission, cancels queued/cancellable work, and closes transport/watchers/SQLite exactly once only after no operation uses them; a completion-critical apply may extend graceful shutdown until rollback/postimage/receipt work reaches a terminal state;
 - tool errors return stable bounded codes/messages without host paths or secrets and can be correlated to sanitized stderr evidence;
 - project status exposes bounded queue/cancellation/rejection/latency evidence without turning telemetry into semantic authority;
-- disabled mode creates no cache, canary remains explicit, and rollback to memory is exercised on real projects;
+- absent-policy mode creates no cache, canary remains explicit, and a read-only policy rollback to memory is exercised on real projects; injected persistence failure and mutation rollback remain fixture-only;
 - the exact release SHA passes local and remote gates and the registry package is verified from a clean consumer.
 
 ## Product boundary
@@ -66,7 +66,7 @@ The supported v0.7.0 product is a trusted single-user local stdio MCP for TypeSc
 ### Phase 3: canary, scale and support evidence
 
 - Add immutable read-only real-repository workloads for disabled and explicit-canary subprocesses.
-- Exercise restart reuse and parity on real repositories; exercise changed-only rebuild, config invalidation, fallback, rollback, queue saturation and cancellation only in disposable fixtures.
+- Exercise restart reuse, parity and read-only policy rollback on real repositories; exercise changed-only rebuild, config invalidation, persistence-failure fallback, mutation byte rollback, queue saturation and cancellation only in disposable fixtures.
 - Run against this repository and `x-scraper`; report runtime identity, workload, raw latency, RSS, DB size and observability counters.
 - State Linux as the supported platform until other OS matrices pass.
 
