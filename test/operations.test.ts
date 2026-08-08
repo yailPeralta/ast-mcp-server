@@ -21,6 +21,7 @@ import {
   invalidateProject,
   withProjectOperation,
 } from "../src/services/project.js";
+import { classifyPublicError } from "../src/services/public-errors.js";
 import { createRequestContext } from "../src/services/request-context.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
@@ -40,6 +41,15 @@ async function renameFixture(): Promise<ProjectFixture> {
   });
   fixtures.push(fixture);
   return fixture;
+}
+
+async function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
+  return promise.then(
+    () => {
+      throw new Error("Expected promise to reject.");
+    },
+    (error: unknown) => error,
+  );
 }
 
 function scaffoldSpec() {
@@ -398,9 +408,13 @@ describe("prepared structural operations", () => {
       `export function formatValue(value: number): string { return \`external:\${value}\`; }\n`,
     );
 
-    await expect(applyOperation(prepared.operation_id, prepared.plan_hash)).rejects.toThrow(
-      /workspace changed/,
-    );
+    const failure = await rejectionOf(applyOperation(prepared.operation_id, prepared.plan_hash));
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toMatch(/workspace changed/);
+    expect(classifyPublicError(failure)).toEqual({
+      code: "CONFLICT",
+      message: "The operation conflicts with current state.",
+    });
     expect(await fixture.read("src/use.ts")).toBe(originalUse);
     expect(await fixture.read("src/value.ts")).toContain("external:");
   });
@@ -542,9 +556,13 @@ describe("prepared structural operations", () => {
     });
     now += 51;
 
-    await expect(applyOperation(prepared.operation_id, prepared.plan_hash)).rejects.toThrow(
-      /expired/,
-    );
+    const failure = await rejectionOf(applyOperation(prepared.operation_id, prepared.plan_hash));
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toMatch(/expired/);
+    expect(classifyPublicError(failure)).toEqual({
+      code: "NOT_FOUND",
+      message: "The requested target was not found.",
+    });
   });
 
   it("evicts the oldest plan when the bounded store reaches capacity", async () => {
@@ -585,9 +603,13 @@ describe("prepared structural operations", () => {
     expect(prepared.diagnostics.addedErrors).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: 2322 })]),
     );
-    await expect(applyOperation(prepared.operation_id, prepared.plan_hash)).rejects.toThrow(
-      /new TypeScript error/,
-    );
+    const failure = await rejectionOf(applyOperation(prepared.operation_id, prepared.plan_hash));
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toMatch(/new TypeScript error/);
+    expect(classifyPublicError(failure)).toEqual({
+      code: "MUTATION_BLOCKED",
+      message: "The mutation is blocked.",
+    });
     expect(await fixture.read("src/value.ts")).toContain("return 1");
   });
 

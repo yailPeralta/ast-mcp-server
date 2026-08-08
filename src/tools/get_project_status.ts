@@ -7,7 +7,7 @@ import {
 } from "../services/read-contracts.js";
 import { getProjectStatus } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
-import { errorResult, structuredResult } from "./result.js";
+import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
 const AstGetProjectStatusInputSchema = z.object({
   project_root: z
@@ -144,7 +144,7 @@ export function registerGetProjectStatus(server: McpServer): void {
         const output = await getProjectStatus(project_root, requestContext);
         return structuredResult({ ...output });
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_get_project_status", project_root));
       }
     },
   );

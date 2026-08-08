@@ -3,7 +3,7 @@ import { z } from "zod";
 import { nodeSourceWithLocation } from "../services/outline.js";
 import { findDeclarationByName, getSourceFileOrThrow, withProject } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
-import { errorResult, structuredResult } from "./result.js";
+import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
 const AstGetSymbolSourceInputSchema = z.object({
   project_root: z
@@ -50,7 +50,7 @@ export function registerGetSymbolSource(server: McpServer): void {
         );
         return structuredResult(structuredContent);
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_get_symbol_source", project_root));
       }
     },
   );

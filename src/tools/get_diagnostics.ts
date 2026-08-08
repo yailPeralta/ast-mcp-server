@@ -4,7 +4,12 @@ import { normalizeDiagnostic } from "../services/diagnostics.js";
 import { PaginationInputSchema, PaginationOutputSchema, paginate } from "../services/pagination.js";
 import { getSourceFileOrThrow, withProject } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
-import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
+import {
+  createToolErrorContext,
+  errorResult,
+  formattedResult,
+  ToolOutputFormatInputSchema,
+} from "./result.js";
 
 const DiagnosticSchema = z.object({
   code: z.number().int(),
@@ -83,7 +88,7 @@ export function registerGetDiagnostics(server: McpServer): void {
         );
         return formattedResult(AstGetDiagnosticsOutputSchema, structuredContent, output_format);
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_get_diagnostics", project_root));
       }
     },
   );

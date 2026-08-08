@@ -8,7 +8,12 @@ import {
 import { withProject, reportSymbolIndexFailure } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
 import { searchProjectSymbols, searchProjectSymbolsWithIndex } from "../services/symbols.js";
-import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
+import {
+  createToolErrorContext,
+  errorResult,
+  formattedResult,
+  ToolOutputFormatInputSchema,
+} from "./result.js";
 
 const SEARCH_DEFAULT_LIMIT = 20;
 const SearchDetailSchema = z.enum(["selectors", "summary", "full"]).default("summary");
@@ -152,7 +157,7 @@ export function registerSearchSymbols(server: McpServer): void {
         const outputSchema = SearchOutputSchemas[detail] as z.ZodType<Record<string, unknown>>;
         return formattedResult(outputSchema, structuredContent, output_format);
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_search_symbols", project_root));
       }
     },
   );

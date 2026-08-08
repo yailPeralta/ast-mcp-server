@@ -4,7 +4,7 @@ import { z } from "zod";
 import { PaginationInputSchema, PaginationOutputSchema, paginate } from "../services/pagination.js";
 import { withProject } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
-import { errorResult, structuredResult } from "./result.js";
+import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
 const AstListFilesInputSchema = z.object({
   project_root: z
@@ -62,7 +62,7 @@ export function registerListFiles(server: McpServer): void {
 
         return structuredResult(output);
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_list_files", project_root));
       }
     },
   );

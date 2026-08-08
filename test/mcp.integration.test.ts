@@ -1,10 +1,12 @@
 import { decode } from "@toon-format/toon";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import packageMetadata from "../package.json" with { type: "json" };
 import { createServer } from "../src/server.js";
+import { PublicOperationalError } from "../src/services/public-errors.js";
 import {
   clearOperationsForTests,
   prepareRename,
@@ -15,11 +17,16 @@ import {
   getProjectOperationQueueSnapshot,
   withProject,
 } from "../src/services/project.js";
+import { createProjectIdentity } from "../src/services/project-status.js";
 import {
   createSymbolIndexSymbol,
   SYMBOL_INDEX_SCHEMA_VERSION,
 } from "../src/services/symbol-index.js";
+import { createToolErrorContext, errorResult } from "../src/tools/result.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
+
+const PUBLIC_ERROR_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function structured(result: Awaited<ReturnType<Client["callTool"]>>): Record<string, unknown> {
   expect(result.isError).not.toBe(true);
@@ -38,12 +45,33 @@ function toon(result: Awaited<ReturnType<Client["callTool"]>>): Record<string, u
   return decode(envelope.data) as Record<string, unknown>;
 }
 
+function publicFailure(result: Awaited<ReturnType<Client["callTool"]>>): {
+  code: string;
+  message: string;
+  correlation_id: string;
+} {
+  expect(result.isError).toBe(true);
+  const content = result.content as Array<{ type: string; text?: string }>;
+  expect(content).toHaveLength(1);
+  expect(content[0]).toMatchObject({ type: "text", text: expect.any(String) });
+  expect(result).not.toHaveProperty("structuredContent");
+  const text = content[0]!.text!;
+  const parsed = JSON.parse(text) as {
+    error: { code: string; message: string; correlation_id: string };
+  };
+  expect(text).toBe(JSON.stringify(parsed));
+  expect(parsed.error.correlation_id).toMatch(PUBLIC_ERROR_UUID_PATTERN);
+  return parsed.error;
+}
+
 describe("MCP integration", () => {
   let client: Client;
   let server: McpServer;
   let fixture: ProjectFixture;
+  let stderr: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
+    stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     fixture = await createProjectFixture({
       "src/value.ts": `export function formatValueHelper(value: number): string { return String(value); }
 export function formatValue(value: number): string { return String(value); }
@@ -65,6 +93,87 @@ export function formatValue(value: number): string { return String(value); }
     clearOperationsForTests();
     clearProjectSessions();
     vi.unstubAllEnvs();
+    stderr.mockRestore();
+  });
+
+  it("preserves the frozen public error envelope for a production tool with outputSchema", async () => {
+    const failure = publicFailure(
+      await client.callTool({
+        name: "ast_get_file",
+        arguments: { project_root: fixture.root, file_path: "src/missing.ts" },
+      }),
+    );
+
+    expect(failure).toEqual({
+      code: "NOT_FOUND",
+      message: "The requested target was not found.",
+      correlation_id: expect.stringMatching(PUBLIC_ERROR_UUID_PATTERN),
+    });
+    expect(stderr).toHaveBeenCalledTimes(1);
+    const line = String(stderr.mock.calls[0]![0]);
+    expect(JSON.parse(line)).toEqual({
+      event: "tool_failure",
+      version: 1,
+      correlation_id: failure.correlation_id,
+      tool: "ast_get_file",
+      code: "NOT_FOUND",
+      message: "The requested target was not found.",
+      project_id: createProjectIdentity({ projectRoot: fixture.root }).project_id,
+    });
+    expect(line).not.toContain(fixture.root);
+  });
+
+  it("preserves the frozen public error envelope for a tool without outputSchema", async () => {
+    const fixtureServer = new McpServer({ name: "error-fixture", version: "1.0.0" });
+    fixtureServer.registerTool(
+      "failure_without_output_schema",
+      { inputSchema: z.object({}) },
+      async () =>
+        errorResult(
+          new PublicOperationalError("CONFLICT", "Safe conflict."),
+          createToolErrorContext("ast_failure_without_output_schema"),
+        ),
+    );
+    const fixtureClient = new Client({ name: "error-fixture-client", version: "1.0.0" });
+    const [fixtureClientTransport, fixtureServerTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([
+      fixtureServer.connect(fixtureServerTransport),
+      fixtureClient.connect(fixtureClientTransport),
+    ]);
+
+    try {
+      expect(
+        publicFailure(
+          await fixtureClient.callTool({ name: "failure_without_output_schema", arguments: {} }),
+        ),
+      ).toEqual({
+        code: "CONFLICT",
+        message: "Safe conflict.",
+        correlation_id: expect.stringMatching(PUBLIC_ERROR_UUID_PATTERN),
+      });
+    } finally {
+      await fixtureClient.close();
+      await fixtureServer.close();
+    }
+  });
+
+  it("does not echo hostile values when SDK input validation fails before the callback", async () => {
+    const hostilePath = "/home/yail/private/source.ts";
+    const hostileCredential = "Authorization: Bearer opaque-precallback-secret";
+    const result = await client.callTool({
+      name: "ast_get_file",
+      arguments: {
+        project_root: { hostilePath, hostileCredential },
+        file_path: hostilePath,
+        limit: hostileCredential,
+      },
+    });
+    const serialized = JSON.stringify(result);
+
+    expect(result.isError).toBe(true);
+    expect(serialized).not.toContain(hostilePath);
+    expect(serialized).not.toContain("opaque-precallback-secret");
+    expect(serialized).not.toContain(hostileCredential);
   });
 
   it("exposes the reserved enabled policy reason through MCP status", async () => {

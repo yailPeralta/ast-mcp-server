@@ -41,7 +41,8 @@
     "node": ">=22.5.0"
   },
   "resolutions": {
-    "hono": "4.12.34"
+    "hono": "4.12.34",
+    "nanoid": "3.3.17"
   },
   "scripts": {
     "build": "tsc",
@@ -50,6 +51,7 @@
     "test:watch": "vitest",
     "test:mcp": "yarn build && node scripts/mcp-smoke.mjs",
     "test:cli": "yarn build && node scripts/cli-smoke.mjs",
+    "test:errors": "yarn build && node scripts/public-error-smoke.mjs",
     "test:package": "node scripts/package-smoke.mjs",
     "benchmark": "yarn build && node scripts/benchmark.mjs",
     "benchmark:corpus": "yarn build && node scripts/benchmark-corpus.mjs",

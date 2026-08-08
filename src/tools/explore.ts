@@ -15,7 +15,7 @@ import {
   SNAPSHOT_STATES,
   TRUNCATION_REASONS,
 } from "../services/read-contracts.js";
-import { errorResult, structuredResult } from "./result.js";
+import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
 const ExploreDetailSchema = z.enum(["selectors", "summary", "context", "full"]).default("summary");
 const ReferenceDetailSchema = z.enum(["locations", "context"]).default("locations");
@@ -225,7 +225,7 @@ export function registerExplore(server: McpServer): void {
         );
         return structuredResult(ExploreOutputSchema.parse(output));
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_explore", project_root));
       }
     },
   );

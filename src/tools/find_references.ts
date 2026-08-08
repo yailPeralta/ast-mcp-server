@@ -4,7 +4,12 @@ import { PaginationInputSchema, PaginationOutputSchema } from "../services/pagin
 import { findDeclarationByName, getSourceFileOrThrow, withProject } from "../services/project.js";
 import { collectSymbolReferences } from "../services/references.js";
 import { createRequestContext } from "../services/request-context.js";
-import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
+import {
+  createToolErrorContext,
+  errorResult,
+  formattedResult,
+  ToolOutputFormatInputSchema,
+} from "./result.js";
 
 const ReferenceDetailSchema = z.enum(["locations", "context"]).default("locations");
 
@@ -113,7 +118,7 @@ export function registerFindReferences(server: McpServer): void {
         const outputSchema = ReferenceOutputSchemas[detail] as z.ZodType<Record<string, unknown>>;
         return formattedResult(outputSchema, structuredContent, output_format);
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_find_references", project_root));
       }
     },
   );

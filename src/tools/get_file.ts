@@ -9,7 +9,7 @@ import { buildFileOutline } from "../services/outline.js";
 import { getSourceFileOrThrow, withProject } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
 import { FRESHNESS_CAUSES, SNAPSHOT_STATES } from "../services/read-contracts.js";
-import { errorResult, structuredResult } from "./result.js";
+import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
 const AstGetFileInputSchema = z.object({
   project_root: z
@@ -127,7 +127,7 @@ export function registerGetFile(server: McpServer): void {
         );
         return structuredResult(structuredContent);
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_get_file", project_root));
       }
     },
   );

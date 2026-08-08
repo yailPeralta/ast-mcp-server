@@ -225,20 +225,27 @@ Evidence:
 
 ### Task 3.1: RED public error classification and redaction
 
-Status: pending.
+Status: complete.
 
 Files:
 
 - Create: `src/services/public-errors.ts`.
 - Modify: `src/tools/result.ts`.
 - Modify: `src/services/project-status.ts` to import the canonical sanitizer from `src/services/public-errors.ts` without coupling status and protocol DTOs.
-- Test: `test/public-errors.test.ts`, `test/result-format.test.ts`.
+- Test: `test/public-errors.test.ts`, `test/result-format.test.ts`, `test/project-status.test.ts`, `test/operations.test.ts`.
 
 Test every required code, unknown-error fallback, UUID correlation shape, UTF-8 bounds, idempotence, POSIX/Windows/UNC/traversal paths, quoted/multiline paths, authorization schemes, tokens, URIs, source-like content and hostile thrown values.
 
+Evidence:
+
+- `src/services/public-errors.ts` owns the closed 14-code vocabulary, privately branded operational errors, allowlisted legacy class/code mappings, bounded anchored recognition of reachable domain failures, early active-proxy rejection, UUIDv4 correlation and fail-closed `INTERNAL_ERROR` fallback.
+- The shared sanitizer bounds work before normalization, removes controls, redacts POSIX/Windows/UNC/traversal paths and credential-shaped values idempotently, and applies separate 2048-byte message and 4096-byte serialized-response budgets without splitting UTF-8 code points.
+- `src/services/project-status.ts` now imports the canonical sensitive-text sanitizer instead of maintaining a divergent redactor and bounds hostile diagnostic input before running the shared regex pipeline while preserving truncation metadata.
+- Classification, operation and status tests cover every public code, errors captured from actual conflict/block/expiry branches plus preview/path cases, typed/legacy/forged/unknown errors, revoked and active proxies without trap execution, accessors, Bearer/Basic/Digest/opaque authorization values, path and credential classes, pre-normalization status bounds, multibyte truncation, JSON-escape expansion and the frozen compact MCP envelope.
+
 ### Task 3.2: RED protocol compatibility spike
 
-Status: pending.
+Status: complete.
 
 Files:
 
@@ -247,9 +254,15 @@ Files:
 
 Exercise the frozen compact-JSON error envelope from tools with and without `outputSchema` through in-memory MCP. Keep success shapes unchanged. Send hostile pre-callback schema inputs containing paths/credentials; if the SDK echoes them, add a lower-level sanitized call-tool boundary and keep the task RED until fixed.
 
+Evidence:
+
+- In-memory MCP exercises a production tool with `outputSchema` and a fixture tool without one; both preserve exactly one compact JSON text item, `isError: true`, no `structuredContent` and the same `{ error: { code, message, correlation_id } }` shape.
+- Existing JSON and TOON success assertions remain unchanged and green.
+- The installed SDK rejected hostile schema-invalid arguments before callback without echoing their path or credential values. The compatibility spike therefore passed without a lower-level `tools/call` interception; no artificial protocol layer was added merely to manufacture a RED state.
+
 ### Task 3.3: Correlated structured stderr
 
-Status: pending.
+Status: complete.
 
 Files:
 
@@ -259,11 +272,24 @@ Files:
 
 Emit exactly one <=8192-byte compact JSON stderr event per tool failure. Assert stdout remains valid MCP only. Do not log raw args, source, environment or stack.
 
+Evidence:
+
+- `src/services/runtime-logger.ts` accepts only already-public fields, validates UUID/tool/digest shapes and emits one compact newline-terminated `tool_failure` event bounded to 8192 UTF-8 bytes.
+- `src/tools/result.ts` reuses the response correlation ID, derives optional project identity through the canonical opaque digest helper and protects the MCP response from stderr sink failure. All 15 production adapters pass an explicit canonical tool identity.
+- Unit and MCP integration assertions prove one event, matching correlation/code/message, valid opaque project identity, invalid-identity fail-closed behavior, no raw path/token and response survival when the stderr sink throws.
+- Real stdio smoke captures piped stderr event-first with a timeout, sends hostile content through accepted `file_path`, correlates it with the MCP envelope and verifies protocol stdout remains valid. Embedded CLI smoke treats the tool event plus command failure as two intentional NDJSON stderr records.
+
 ### Task 3.4: Compile hostile probes and commit
 
-Status: pending.
+Status: complete under the prospective-commit convention: this status applies only if the exact
+reviewed staged tree is committed unchanged with the subject below.
 
-Create `scripts/public-error-smoke.mjs` and register `test:errors` in `package.json`. Run:
+Files:
+
+- Create: `scripts/public-error-smoke.mjs`.
+- Modify: `scripts/mcp-smoke.mjs`, `scripts/cli-smoke.mjs`, `scripts/package-smoke.mjs`, `package.json`, `yarn.lock`.
+
+Register `test:errors` in `package.json`. Run:
 
 - `yarn test test/public-errors.test.ts test/result-format.test.ts test/mcp.integration.test.ts`;
 - `yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build`;
@@ -271,6 +297,13 @@ Create `scripts/public-error-smoke.mjs` and register `test:errors` in `package.j
 - `yarn audit && git diff --check`.
 
 Commit `feat(protocol): sanitize and classify tool errors`.
+
+Evidence:
+
+- The compiled-artifact hostile smoke intercepts stderr and proves the 4096/8192-byte boundaries, generic unknown-error fallback, exact correlation and absence of path, stack, source, URI and credential sentinels.
+- The stdio smoke reports 15 tools, successful TOON output, hostile-error containment and stderr correlation. The packed-tarball smoke invokes the installed MCP artifact and proves the same bounded error envelope and stderr correlation while preserving package/handshake, installation and setup contracts. CLI smoke preserves read, mutation, replay and NDJSON failure behavior.
+- The audit-discovered `nanoid` advisory was remediated with the minimum compatible `3.3.17` resolution; immutable install succeeds and `yarn audit` reports no suggestions.
+- The pre-documentation candidate reproduced `47/47` focused tests and `357/357` full tests plus format, lint, typecheck, build, hostile-error, MCP, CLI, package, immutable-install, audit and whitespace gates. Because this evidence block changes the tree, the same complete matrix is rerun afterward and bound externally to the staged tree; its exact-tree review verdict and resulting commit SHA are intentionally not backfilled into this candidate.
 
 ## 4. Idempotent process shutdown
 

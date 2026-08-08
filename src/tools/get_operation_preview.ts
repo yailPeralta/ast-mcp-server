@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getOperationPreview } from "../services/operations.js";
 import { createRequestContext } from "../services/request-context.js";
-import { errorResult, structuredResult } from "./result.js";
+import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
 const AstGetOperationPreviewInputSchema = z.object({
   operation_id: z.string().uuid(),
@@ -37,7 +37,7 @@ export function registerGetOperationPreview(server: McpServer): void {
         const output = await getOperationPreview(operation_id, file, requestContext);
         return structuredResult(output);
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_get_operation_preview"));
       }
     },
   );

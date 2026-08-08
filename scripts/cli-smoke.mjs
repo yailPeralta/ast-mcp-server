@@ -243,10 +243,19 @@ try {
     }),
   );
   const failedRead = await invokeFailure(["run", failingPipelineFile, "--output-format", "toon"]);
+  const failedReadEvents = failedRead.stderr
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  const toolFailure = failedReadEvents.find((event) => event.event === "tool_failure");
+  const commandFailure = failedReadEvents.find((event) => event.status === "error");
   if (
     failedRead.code !== 1 ||
     failedRead.stdout !== "" ||
-    JSON.parse(failedRead.stderr).status !== "error"
+    failedReadEvents.length !== 2 ||
+    toolFailure?.tool !== "ast_get_symbol_source" ||
+    toolFailure?.code !== "NOT_FOUND" ||
+    commandFailure?.code !== "TOOL_ERROR"
   ) {
     throw new Error(`Unexpected TOON tool failure: ${JSON.stringify(failedRead)}`);
   }

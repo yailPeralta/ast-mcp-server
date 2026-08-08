@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prepareRename } from "../services/operations.js";
 import { createRequestContext } from "../services/request-context.js";
 import { PreparedOperationOutputSchema, serializePreparedOperation } from "./operation-schema.js";
-import { errorResult, structuredResult } from "./result.js";
+import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
 const AstRenameSymbolInputSchema = z.object({
   project_root: z.string(),
@@ -59,7 +59,7 @@ export function registerRenameSymbol(server: McpServer): void {
         );
         return structuredResult(serializePreparedOperation(operation));
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_rename_symbol", project_root));
       }
     },
   );

@@ -2,12 +2,14 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
 import console from "node:console";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { clearTimeout, setTimeout } from "node:timers";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -29,6 +31,7 @@ const fakeHermesState = path.join(temporaryRoot, "fake-hermes-state.json");
 const globalPrefix = path.join(temporaryRoot, "global");
 const globalClaudeRoot = path.join(temporaryRoot, "global-claude");
 const globalHermesRoot = path.join(temporaryRoot, "global-hermes");
+const mcpFixtureRoot = path.join(temporaryRoot, "mcp-fixture");
 
 async function executeFile(file, args, options = {}) {
   return execFileAsync(file, args, {
@@ -46,6 +49,40 @@ function parseJsonOutput(stdout) {
     .map((line) => line.trim())
     .filter(Boolean);
   return JSON.parse(lines.at(-1));
+}
+
+function nextToolFailureEvent(stream, timeoutMs = 5000) {
+  let buffer = "";
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timeout);
+      stream.off("data", onData);
+    };
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("timed out waiting for packed MCP stderr correlation"));
+    }, timeoutMs);
+    const onData = (chunk) => {
+      buffer += chunk;
+      let newlineIndex = buffer.indexOf("\n");
+      while (newlineIndex >= 0) {
+        const line = buffer.slice(0, newlineIndex);
+        buffer = buffer.slice(newlineIndex + 1);
+        newlineIndex = buffer.indexOf("\n");
+        try {
+          const event = JSON.parse(line);
+          if (event?.event === "tool_failure") {
+            cleanup();
+            resolve({ event, line });
+            return;
+          }
+        } catch {
+          // Ignore non-JSON startup diagnostics on stderr.
+        }
+      }
+    };
+    stream.on("data", onData);
+  });
 }
 
 async function installFakeAgents() {
@@ -126,6 +163,13 @@ try {
     throw new Error("installed tarball release metadata is incomplete");
   }
 
+  await mkdir(path.join(mcpFixtureRoot, "src"), { recursive: true });
+  await writeFile(
+    path.join(mcpFixtureRoot, "tsconfig.json"),
+    JSON.stringify({ compilerOptions: { strict: true }, include: ["src/**/*"] }),
+  );
+  await writeFile(path.join(mcpFixtureRoot, "src/value.ts"), "export const value = 1;\n");
+
   const mcpClient = new Client({ name: "ast-package-smoke", version: "1.0.0" });
   const mcpTransport = new StdioClientTransport({
     command: process.execPath,
@@ -139,6 +183,47 @@ try {
       throw new Error(
         `packed MCP handshake version mismatch: ${String(serverVersion)} != ${installedMetadata.version}`,
       );
+    }
+    const serverStderr = mcpTransport.stderr;
+    if (serverStderr === null) {
+      throw new Error("packed MCP transport did not expose piped stderr");
+    }
+    serverStderr.setEncoding("utf8");
+    const failureEventPromise = nextToolFailureEvent(serverStderr);
+    const [failureResult, { event: failureEvent, line: failureEventLine }] = await Promise.all([
+      mcpClient.callTool({
+        name: "ast_get_file",
+        arguments: { project_root: mcpFixtureRoot, file_path: "src/missing.ts" },
+      }),
+      failureEventPromise,
+    ]);
+    const errorText = failureResult.content?.[0]?.text;
+    if (
+      failureResult.isError !== true ||
+      failureResult.structuredContent !== undefined ||
+      failureResult.content?.length !== 1 ||
+      failureResult.content?.[0]?.type !== "text" ||
+      typeof errorText !== "string" ||
+      Buffer.byteLength(errorText, "utf8") > 4096
+    ) {
+      throw new Error(`packed MCP error envelope is invalid: ${JSON.stringify(failureResult)}`);
+    }
+    const publicError = JSON.parse(errorText).error;
+    if (
+      publicError?.code !== "NOT_FOUND" ||
+      publicError?.message !== "The requested target was not found." ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        publicError?.correlation_id,
+      ) ||
+      Buffer.byteLength(`${failureEventLine}\n`, "utf8") > 8192 ||
+      failureEvent.correlation_id !== publicError.correlation_id ||
+      failureEvent.tool !== "ast_get_file" ||
+      failureEvent.code !== publicError.code ||
+      failureEvent.message !== publicError.message ||
+      !/^project_[0-9a-f]{20}$/.test(failureEvent.project_id) ||
+      `${errorText}\n${failureEventLine}`.includes(mcpFixtureRoot)
+    ) {
+      throw new Error("packed MCP error boundary or stderr correlation is invalid");
     }
   } finally {
     await mcpClient.close();
@@ -240,6 +325,8 @@ try {
       package_version: installedMetadata.version,
       node_engine: installedMetadata.engines?.node,
       handshake_version: installedMetadata.version,
+      packed_error: true,
+      stderr_correlation: true,
       global_install: true,
       agent_setup: setupSupported,
       installed_targets: firstItems.length,

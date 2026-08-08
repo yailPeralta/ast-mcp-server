@@ -6,6 +6,7 @@ import {
   type ProjectOperationAdmission,
   type ProjectOperationOutcome,
 } from "./project-operation-scheduler.js";
+import { sanitizeSensitiveText } from "./public-errors.js";
 import {
   createTruncationMetadata,
   isFreshnessCause,
@@ -274,59 +275,13 @@ function boundedCount(value: number | undefined): number {
   return value;
 }
 
-function redactAbsolutePaths(value: string): string {
-  const traversalMarker = "__TRAVERSAL_PATH_REDACTED__";
-  const quotedTraversalPath = /(?<=["'`])(?:[^"'`\n\r]*[\\/])?\.\.[\\/][^"'`\n\r]*?(?=["'`])/g;
-  const labelledTraversalPath =
-    /([=:]\s+)([^"'`:\n\r;,]*[ \t]+[^"'`:\n\r;,/\\]+[\\/]\.\.[\\/][^"'`:\n\r]*?)(?=\s*[:;,\n\r"'`)\]}]|(?:\.(?=\s|$))|$)/g;
-  const diagnosticTraversalPath =
-    /(\b(?:read|open|resolve|watch|parse)\s+)([^"'`:\n\r;,]*[\\/]\.\.[\\/][^"'`:\n\r]*?)(?=\s*[:;,\n\r"'`)\]}]|(?:\.(?=\s|$))|$)/gi;
-  const spacedTraversalPath =
-    /(?<=\s)([^"'`:\n\r;,]*[ \t]+[^"'`:\n\r;,/\\]+[\\/]\.\.[\\/][^"'`:\n\r]*?)(?=\s*[:;,\n\r"'`)\]}]|(?:\.(?=\s|$))|$)/g;
-  const relativeTraversalPath =
-    /(?:[^\s"'`:/${}\\]+[\\/])+\.\.[\\/][^"'`:\n\r]*?(?=\s*[:;,\n\r"'`)\]}]|(?:\.(?=\s|$))|$)/g;
-  const directTraversalPath =
-    /(?:^|(?<=[\s(]))\.\.[\\/][^"'`:\n\r]*?(?=\s*[:;,\n\r"'`)\]}]|(?:\.(?=\s|$))|$)/g;
-  const uncPath =
-    /(?:\\\\|\/{2})[^"'`\n\r]*?(?=\s*(?::(?=\s|$)|[;,\n\r"'`)\]}])|(?:\.(?=\s|$))|$)/g;
-  const drivePath = /\b[A-Za-z]:[^"'`\n\r]*?(?=\s*(?::(?=\s|$)|[;,\n\r"'`)\]}])|(?:\.(?=\s|$))|$)/g;
-  const posixPath =
-    /(?<![A-Za-z0-9_./-])\/(?!\/)[^"'`\n\r]*?(?=\s*(?::(?=\s|$)|[;,\n\r"'`)\]}])|(?:\.(?=\s|$))|$)/g;
-
-  const redacted = value
-    .replace(quotedTraversalPath, traversalMarker)
-    .replace(labelledTraversalPath, `$1${traversalMarker}`)
-    .replace(diagnosticTraversalPath, `$1${traversalMarker}`)
-    .replace(spacedTraversalPath, traversalMarker)
-    .replace(relativeTraversalPath, traversalMarker)
-    .replace(directTraversalPath, traversalMarker);
-
-  return redacted
-    .replace(drivePath, "[path-redacted]")
-    .replace(uncPath, "[path-redacted]")
-    .replace(posixPath, "[path-redacted]")
-    .replaceAll(traversalMarker, "[path-redacted]");
-}
-
-function redactSensitiveText(value: string): string {
-  return value
-    .replace(
-      /(?!(?:\bauthorization[ \t]*[:=])[ \t]*\[REDACTED\])(\bauthorization[ \t]*[:=])([ \t]*)[^\r\n;]+/gi,
-      "$1$2[REDACTED]",
-    )
-    .replace(/(?!(?:\bbearer)[ \t]+\[REDACTED\])\bbearer[ \t]+[^\r\n;]+/gi, "Bearer [REDACTED]")
-    .replace(
-      /\b(api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|password|secret|credential|connection[-_ ]?string)\b\s*[:=]\s*(?!\[REDACTED\])(?:"[^"]*"|'[^']*'|[^\s,;}\]]+)/gi,
-      "$1=[REDACTED]",
-    )
-    .replace(/\b([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^\s"'`]+@/g, "$1[REDACTED]@")
-    .replace(/\b(?:sk|ghp|github_pat|xox[baprs]-|AIza)[A-Za-z0-9_-]{8,}\b/g, "[REDACTED]");
-}
+const MAX_STATUS_TEXT_INPUT_CHARS = 8192;
 
 function boundedText(value: unknown): { value: string; truncated: boolean } {
   const text = typeof value === "string" ? value : "[invalid-error]";
-  const redacted = redactSensitiveText(redactAbsolutePaths(text));
-  return redacted.length <= MAX_STATUS_TEXT_LENGTH
+  const inputTruncated = text.length > MAX_STATUS_TEXT_INPUT_CHARS;
+  const redacted = sanitizeSensitiveText(text.slice(0, MAX_STATUS_TEXT_INPUT_CHARS));
+  return !inputTruncated && redacted.length <= MAX_STATUS_TEXT_LENGTH
     ? { value: redacted, truncated: false }
     : {
         value: `${redacted.slice(0, MAX_STATUS_TEXT_LENGTH - TRUNCATION_SUFFIX.length)}${TRUNCATION_SUFFIX}`,

@@ -649,6 +649,21 @@ describe("project status", () => {
       truncated: true,
       reason: "serialization_limit",
     });
+
+    const boundedBeforeNormalization = projectStatusToProjection(
+      transitionProjectStatus(freshStatus(), {
+        type: "index_failed",
+        error: `failed to resolve /My Project/${"nested dir/".repeat(100_000)}../outside/target.ts: opaque-tail`,
+      }),
+    );
+    expect(boundedBeforeNormalization.degraded_errors).toEqual([
+      "failed to resolve [path-redacted]... [truncated]",
+    ]);
+    expect(boundedBeforeNormalization.degraded_errors[0]).not.toContain("opaque-tail");
+    expect(boundedBeforeNormalization.degraded_errors_text_truncation).toEqual({
+      truncated: true,
+      reason: "serialization_limit",
+    });
   });
 
   it("bounds each normalized pending filename with separate serialization metadata", () => {

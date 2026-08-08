@@ -4,7 +4,7 @@ import { z } from "zod";
 import { buildFileOutline } from "../services/outline.js";
 import { getSourceFileOrThrow, withProject } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
-import { errorResult, structuredResult } from "./result.js";
+import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
 const AstGetOutlineInputSchema = z.object({
   project_root: z
@@ -66,7 +66,7 @@ export function registerGetOutline(server: McpServer): void {
         );
         return structuredResult(structuredContent);
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_get_outline", project_root));
       }
     },
   );

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prepareScaffoldClass } from "../services/operations.js";
 import type { ClassScaffoldSpec } from "../services/scaffold.js";
 import { createRequestContext } from "../services/request-context.js";
-import { errorResult, structuredResult } from "./result.js";
+import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 import { PreparedOperationOutputSchema, serializePreparedOperation } from "./operation-schema.js";
 
 const IdentifierSchema = z.string().min(1).max(200);
@@ -177,7 +177,7 @@ export function registerScaffoldClass(server: McpServer): void {
         };
         return structuredResult(structuredContent);
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_scaffold_class", args.project_root));
       }
     },
   );

@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { applyOperation } from "../services/operations.js";
 import { createRequestContext } from "../services/request-context.js";
-import { errorResult, structuredResult } from "./result.js";
+import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
 const AstApplyOperationInputSchema = z.object({
   operation_id: z.string().uuid().describe("Identifier returned by a prepare operation."),
@@ -41,7 +41,7 @@ export function registerApplyOperation(server: McpServer): void {
           ...(await applyOperation(operation_id, plan_hash, requestContext)),
         });
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_apply_operation"));
       }
     },
   );

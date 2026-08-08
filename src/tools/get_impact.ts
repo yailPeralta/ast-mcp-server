@@ -24,7 +24,12 @@ import {
   RELATIONSHIP_PROVENANCES,
   RELATIONSHIP_RESOLUTIONS,
 } from "../services/relationships.js";
-import { errorResult, formattedResult, ToolOutputFormatInputSchema } from "./result.js";
+import {
+  createToolErrorContext,
+  errorResult,
+  formattedResult,
+  ToolOutputFormatInputSchema,
+} from "./result.js";
 
 const AstGetImpactInputSchema = z.object({
   project_root: z
@@ -188,7 +193,7 @@ export function registerGetImpact(server: McpServer): void {
         );
         return formattedResult(ImpactOutputSchema, structuredContent, output_format);
       } catch (error) {
-        return errorResult(error);
+        return errorResult(error, createToolErrorContext("ast_get_impact", project_root));
       }
     },
   );
