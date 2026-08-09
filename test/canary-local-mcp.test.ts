@@ -1,24 +1,175 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import {
+  chmod,
+  link,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import * as canaryModule from "../scripts/canary-local-mcp.mjs";
 import {
   assertExpectedNodeVersion,
   assertRepositoryStatusUnchanged,
-  canonicalizeCanaryReport,
   canonicalizeToolResult,
-  freezeCanaryReport,
+  freezeCanaryReportSet,
   inspectCacheTree,
   parseCanaryArguments,
   validateWorkloadManifest,
 } from "../scripts/canary-local-mcp.mjs";
 
 const temporaryDirectories: string[] = [];
+const temporaryFiles: string[] = [];
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+const reportSetMembers = [
+  {
+    inputKey: "astNode24",
+    option: "--ast-node24",
+    fileName: "ast-mcp-server-node24.json",
+    relativePath: "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+    alias: "[ast-mcp-server]",
+    runtime: "24",
+  },
+  {
+    inputKey: "astNode22_5",
+    option: "--ast-node22.5",
+    fileName: "ast-mcp-server-node22.5.json",
+    relativePath: "benchmark/results/production-readiness/ast-mcp-server-node22.5.json",
+    alias: "[ast-mcp-server]",
+    runtime: "22.5.0",
+  },
+  {
+    inputKey: "xScraperNode24",
+    option: "--x-scraper-node24",
+    fileName: "x-scraper-node24.json",
+    relativePath: "benchmark/results/production-readiness/x-scraper-node24.json",
+    alias: "[x-scraper]",
+    runtime: "24",
+  },
+  {
+    inputKey: "xScraperNode22_5",
+    option: "--x-scraper-node22.5",
+    fileName: "x-scraper-node22.5.json",
+    relativePath: "benchmark/results/production-readiness/x-scraper-node22.5.json",
+    alias: "[x-scraper]",
+    runtime: "22.5.0",
+  },
+] as const;
+
+const reportSetInputs = {
+  astNode24: "/tmp/ast-mcp-server-node24.raw.json",
+  astNode22_5: "/tmp/ast-mcp-server-node22.5.raw.json",
+  xScraperNode24: "/tmp/x-scraper-node24.raw.json",
+  xScraperNode22_5: "/tmp/x-scraper-node22.5.raw.json",
+} as const;
+const xScraperAuthorityRoot = path.join(os.tmpdir(), "ast-canary-x-scraper-root");
 
 async function temporaryDirectory(prefix: string): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), prefix));
   temporaryDirectories.push(directory);
   return directory;
+}
+
+function directTemporaryPath(label: string): string {
+  const filePath = `/tmp/${label}-${randomUUID()}.json`;
+  temporaryFiles.push(filePath);
+  return filePath;
+}
+
+function canonicalText(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+type PrivateAtomicPublisher = (options: {
+  anchorRoot: string;
+  resultsDirectory: string;
+  finalDirectoryName: string;
+  files: readonly { name: string; bytes: string }[];
+  beforeVisibility?: (context: {
+    stageDirectory: string;
+    fileNames: readonly string[];
+  }) => void | Promise<void>;
+}) => Promise<void>;
+
+type PrivateCanaryInternals = {
+  readonly publishAtomicDirectorySet: PrivateAtomicPublisher;
+  readonly canonicalizeCanaryReport: (
+    report: Record<string, any>,
+    checkedRelativePath: string,
+    rawSha256: string,
+  ) => Record<string, any>;
+  readonly assertPreparedCanaryReportSet: (preparedReports: readonly PreparedReport[]) => unknown;
+};
+
+let privateCanaryInternalsPromise: Promise<PrivateCanaryInternals> | undefined;
+
+function loadPrivateCanaryInternals(): Promise<PrivateCanaryInternals> {
+  privateCanaryInternalsPromise ??= (async () => {
+    const moduleRoot = await temporaryDirectory("ast-canary-private-module-");
+    const scriptsDirectory = path.join(moduleRoot, "scripts");
+    await mkdir(scriptsDirectory);
+    await symlink(
+      path.join(repositoryRoot, "node_modules"),
+      path.join(moduleRoot, "node_modules"),
+      "dir",
+    );
+    const [packageMetadata, productionSource] = await Promise.all([
+      readFile(path.join(repositoryRoot, "package.json"), "utf8"),
+      readFile(path.join(repositoryRoot, "scripts", "canary-local-mcp.mjs"), "utf8"),
+    ]);
+    await writeFile(path.join(moduleRoot, "package.json"), packageMetadata, "utf8");
+    expect(productionSource).not.toMatch(
+      /^export\s+(?:(?:async\s+)?function|const)\s+(?:publishAtomicDirectorySet|canonicalizeCanaryReport|assertPreparedCanaryReportSet)\b/m,
+    );
+    const testModulePath = path.join(scriptsDirectory, "canary-local-mcp.private-test.mjs");
+    await writeFile(
+      testModulePath,
+      `${productionSource}\nexport {\n  publishAtomicDirectorySet as __testOnlyPublishAtomicDirectorySet,\n  canonicalizeCanaryReport as __testOnlyCanonicalizeCanaryReport,\n  assertPreparedCanaryReportSet as __testOnlyAssertPreparedCanaryReportSet,\n};\n`,
+      "utf8",
+    );
+    const testModule = await import(`${pathToFileURL(testModulePath).href}?id=${randomUUID()}`);
+    for (const name of [
+      "__testOnlyPublishAtomicDirectorySet",
+      "__testOnlyCanonicalizeCanaryReport",
+      "__testOnlyAssertPreparedCanaryReportSet",
+    ]) {
+      if (typeof testModule[name] !== "function") {
+        throw new Error(`Private canary test projection ${name} is unavailable.`);
+      }
+    }
+    return {
+      publishAtomicDirectorySet:
+        testModule.__testOnlyPublishAtomicDirectorySet as PrivateAtomicPublisher,
+      canonicalizeCanaryReport:
+        testModule.__testOnlyCanonicalizeCanaryReport as PrivateCanaryInternals["canonicalizeCanaryReport"],
+      assertPreparedCanaryReportSet:
+        testModule.__testOnlyAssertPreparedCanaryReportSet as PrivateCanaryInternals["assertPreparedCanaryReportSet"],
+    };
+  })();
+  return privateCanaryInternalsPromise;
+}
+
+async function loadPrivateAtomicPublisher(): Promise<PrivateAtomicPublisher> {
+  return (await loadPrivateCanaryInternals()).publishAtomicDirectorySet;
+}
+
+const privateCanaryInternals = await loadPrivateCanaryInternals();
+
+function canonicalizeCanaryReport(
+  report: Record<string, any>,
+  checkedRelativePath: string,
+  rawSha256: string,
+): Record<string, any> {
+  return privateCanaryInternals.canonicalizeCanaryReport(report, checkedRelativePath, rawSha256);
 }
 
 function passingReport() {
@@ -308,6 +459,7 @@ function passingReport() {
         originals_restored: true,
       },
       runtime: {
+        cache_created: false,
         gates: runtimeGates,
         outcomes: {
           overflow: "PROJECT_QUEUE_FULL",
@@ -347,12 +499,76 @@ function passingReport() {
   };
 }
 
+type ReportSetMember = {
+  readonly inputKey: keyof typeof reportSetInputs;
+  readonly option: string;
+  readonly fileName: string;
+  readonly relativePath: string;
+  readonly alias: string;
+  readonly runtime: "22.5.0" | "24";
+};
+
+type PreparedReport = {
+  member: ReportSetMember;
+  canonical: Record<string, any>;
+  output: string;
+  verification: { report: Record<string, any> };
+};
+
+function passingReportForMember(member: (typeof reportSetMembers)[number]) {
+  const report = passingReport();
+  report.identity.project.alias = member.alias;
+  report.identity.runtime.expected = member.runtime;
+  report.identity.runtime.observed = member.runtime === "24" ? "v24.16.0" : "v22.5.0";
+  const expectedNodeIndex = report.command.argv.indexOf("--expected-node");
+  report.command.argv[expectedNodeIndex + 1] = member.runtime;
+  report.command.exact_argv[expectedNodeIndex + 1] = member.runtime;
+  const outputIndex = report.command.exact_argv.indexOf("--output");
+  report.command.exact_argv[outputIndex + 1] = reportSetInputs[member.inputKey];
+  return report;
+}
+
+function preparedReportSet(): PreparedReport[] {
+  return reportSetMembers.map((member, index) => {
+    const report = passingReportForMember(member);
+    const canonical = canonicalizeCanaryReport(
+      report,
+      member.relativePath,
+      String(index + 1).repeat(64),
+    );
+    return { member, canonical, output: canonicalText(canonical), verification: { report } };
+  });
+}
+
+function refreshPreparedOutput(prepared: PreparedReport): void {
+  prepared.output = canonicalText(prepared.canonical);
+}
+
+async function publishTemporaryPreparedSet(
+  prepared: PreparedReport[],
+  resultsDirectory: string,
+  beforeVisibility?: (context: {
+    stageDirectory: string;
+    fileNames: readonly string[];
+  }) => Promise<void>,
+): Promise<void> {
+  const publishAtomicDirectorySet = await loadPrivateAtomicPublisher();
+  return publishAtomicDirectorySet({
+    anchorRoot: resultsDirectory,
+    resultsDirectory,
+    finalDirectoryName: "production-readiness",
+    files: prepared.map(({ member, output }) => ({ name: member.fileName, bytes: output })),
+    beforeVisibility,
+  });
+}
+
 afterEach(async () => {
-  await Promise.all(
-    temporaryDirectories
+  await Promise.all([
+    ...temporaryDirectories
       .splice(0)
       .map((directory) => rm(directory, { recursive: true, force: true })),
-  );
+    ...temporaryFiles.splice(0).map((filePath) => rm(filePath, { force: true })),
+  ]);
 });
 
 describe("production-readiness canary contract", () => {
@@ -378,6 +594,8 @@ describe("production-readiness canary contract", () => {
     ];
     const parsed = parseCanaryArguments(validArguments);
 
+    expect(parsed.mode).toBe("run");
+    if (parsed.mode !== "run") throw new Error("Expected parsed run arguments.");
     expect(parsed).toMatchObject({
       mode: "run",
       expectedNode: "22.5.0",
@@ -416,6 +634,95 @@ describe("production-readiness canary contract", () => {
     expect(() =>
       parseCanaryArguments([...validArguments, "--output", "/tmp/duplicate.raw.json"]),
     ).toThrow(/duplicate.*--output/i);
+  });
+
+  it("requires one closed four-report freeze-set command", () => {
+    const validArguments = [
+      "freeze-report-set",
+      "--x-scraper-root",
+      xScraperAuthorityRoot,
+      "--ast-node24",
+      reportSetInputs.astNode24,
+      "--ast-node22.5",
+      reportSetInputs.astNode22_5,
+      "--x-scraper-node24",
+      reportSetInputs.xScraperNode24,
+      "--x-scraper-node22.5",
+      reportSetInputs.xScraperNode22_5,
+    ];
+    const parsed = parseCanaryArguments(validArguments);
+
+    expect(parsed).toEqual({
+      mode: "freeze-report-set",
+      xScraperRoot: xScraperAuthorityRoot,
+      inputs: reportSetInputs,
+    });
+    expect(() => parseCanaryArguments(validArguments.slice(0, -2))).toThrow(
+      /requires exactly one/i,
+    );
+    expect(() =>
+      parseCanaryArguments(
+        validArguments.filter(
+          (argument, index) =>
+            argument !== "--x-scraper-root" && validArguments[index - 1] !== "--x-scraper-root",
+        ),
+      ),
+    ).toThrow(/x-scraper-root.*required/i);
+    const nonCanonicalRoot = [...validArguments];
+    nonCanonicalRoot[nonCanonicalRoot.indexOf("--x-scraper-root") + 1] =
+      `${xScraperAuthorityRoot}/../root`;
+    expect(() => parseCanaryArguments(nonCanonicalRoot)).toThrow(/x-scraper-root.*canonical/i);
+    expect(() =>
+      parseCanaryArguments([...validArguments, "--ast-node24", "/tmp/duplicate-option.raw.json"]),
+    ).toThrow(/duplicate.*--ast-node24/i);
+    expect(() =>
+      parseCanaryArguments(["freeze-report-set", "--unknown", "/tmp/unknown.raw.json"]),
+    ).toThrow(/unknown freeze-report-set argument/i);
+    const nestedInput = [...validArguments];
+    nestedInput[nestedInput.indexOf("--ast-node24") + 1] =
+      "/tmp/nested/not-a-direct-child.raw.json";
+    expect(() => parseCanaryArguments(nestedInput)).toThrow(/direct child.*\/tmp/i);
+    expect(() =>
+      parseCanaryArguments([...validArguments.slice(0, -1), reportSetInputs.astNode24]),
+    ).toThrow(/input paths must be unique/i);
+    expect(() => parseCanaryArguments(["freeze-report", "--input", "/tmp/raw.json"])).toThrow(
+      /expected subcommand/i,
+    );
+    expect(canaryModule).not.toHaveProperty("freezeCanaryReport");
+    expect(canaryModule).not.toHaveProperty("canonicalizeCanaryReport");
+    expect(canaryModule).not.toHaveProperty("canaryReportSetTestSeams");
+    expect(canaryModule).not.toHaveProperty("canaryReportValidationTestSeams");
+    expect(canaryModule).not.toHaveProperty("publishAtomicDirectorySet");
+  });
+
+  it("keeps the complete production publication surface closed", async () => {
+    const scriptsDirectory = path.join(repositoryRoot, "scripts");
+    const publicationFiles = (await readdir(scriptsDirectory))
+      .filter((name) => /^(?:canary-local-mcp|atomic-directory-set)(?:\.mjs|\.d\.mts)$/.test(name))
+      .sort();
+    expect(publicationFiles).toEqual(["canary-local-mcp.d.mts", "canary-local-mcp.mjs"]);
+    expect(Object.keys(canaryModule).sort()).toEqual(
+      [
+        "assertExpectedNodeVersion",
+        "assertRepositoryStatusUnchanged",
+        "canonicalizeToolResult",
+        "freezeCanaryReportSet",
+        "inspectCacheTree",
+        "parseCanaryArguments",
+        "runCanary",
+        "runDeterministicFixture",
+        "validateWorkloadManifest",
+      ].sort(),
+    );
+    const [declarationSource, runtimeSource] = await Promise.all(
+      publicationFiles.map((name) => readFile(path.join(scriptsDirectory, name), "utf8")),
+    );
+    expect(runtimeSource).not.toMatch(
+      /^export\s+(?:async\s+)?function\s+(?:publishAtomicDirectorySet|orchestrateCanaryReportSet)\b/m,
+    );
+    expect(declarationSource).not.toMatch(
+      /publishAtomicDirectorySet|AtomicDirectoryBeforeVisibilityContext|beforeVisibility|canaryReportValidationTestSeams|PreparedCanaryReport/,
+    );
   });
 
   it("validates runtime identity instead of trusting a label or filename", () => {
@@ -671,18 +978,307 @@ describe("production-readiness canary contract", () => {
     ).toThrow(/source-file count/i);
   });
 
-  it("rejects non-allowlisted freeze destinations and symbolic raw inputs", async () => {
-    const root = await temporaryDirectory("ast-canary-report-");
-    const input = path.join(root, "raw.json");
-    const output = path.join(root, "frozen.json");
-    await writeFile(input, `${JSON.stringify(passingReport())}\n`, "utf8");
-    await expect(freezeCanaryReport(input, output)).rejects.toThrow(/allowlisted/i);
+  it("recomputes runtime gates from closed queue and outcome evidence", () => {
+    const corruptions: Array<(report: ReturnType<typeof passingReport>) => void> = [
+      (report) => {
+        report.deterministic_fixture.runtime.operation_queue.state = "unknown";
+      },
+      (report) => {
+        report.deterministic_fixture.runtime.operation_queue.admission = "unknown";
+      },
+      (report) => {
+        report.deterministic_fixture.runtime.operation_queue.queue_capacity = 0;
+      },
+      (report) => {
+        report.deterministic_fixture.runtime.operation_queue.active_operations = 2;
+      },
+      (report) => {
+        report.deterministic_fixture.runtime.operation_queue.queued_operations = 2;
+      },
+      (report) => {
+        report.deterministic_fixture.runtime.operation_queue.last_outcome = "unknown";
+      },
+      (report) => {
+        report.deterministic_fixture.runtime.operation_queue.max_execution_ms = 86_400_001;
+      },
+      (report) => {
+        report.deterministic_fixture.runtime.outcomes.overflow = "arbitrary";
+      },
+      (report) => {
+        report.deterministic_fixture.runtime.cache_created = true;
+      },
+      (report) => {
+        report.deterministic_fixture.runtime.operation_queue.state = "running";
+      },
+    ];
 
-    const linkedInput = path.join(root, "linked.json");
-    await symlink(input, linkedInput);
-    const allowedOutput = path.resolve(
-      "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+    for (const corrupt of corruptions) {
+      const report = passingReport();
+      corrupt(report);
+      expect(() =>
+        canonicalizeCanaryReport(
+          report,
+          "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+          "8".repeat(64),
+        ),
+      ).toThrow(/queue|runtime|integer|operation count/i);
+    }
+  });
+
+  it("keeps report validation private to the test-only source projection", () => {
+    expect(
+      privateCanaryInternals.canonicalizeCanaryReport(
+        passingReport(),
+        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        "8".repeat(64),
+      ),
+    ).toEqual(
+      canonicalizeCanaryReport(
+        passingReport(),
+        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        "8".repeat(64),
+      ),
     );
-    await expect(freezeCanaryReport(linkedInput, allowedOutput)).rejects.toThrow(/non-regular/i);
+    expect(() =>
+      privateCanaryInternals.assertPreparedCanaryReportSet(preparedReportSet()),
+    ).not.toThrow();
+  });
+
+  it("requires the complete four-member prepared set", () => {
+    expect(() =>
+      privateCanaryInternals.assertPreparedCanaryReportSet(preparedReportSet().slice(0, 3)),
+    ).toThrow(/exactly four prepared members/i);
+  });
+
+  it("rejects shared identity and member binding mismatches in the complete set", () => {
+    const corruptions: Array<(prepared: PreparedReport[]) => void> = [
+      (prepared) => {
+        prepared[3].canonical.identity.package.commit = "f".repeat(40);
+        refreshPreparedOutput(prepared[3]);
+      },
+      (prepared) => {
+        prepared[2].canonical.identity.harness.sha256 = "e".repeat(64);
+        refreshPreparedOutput(prepared[2]);
+      },
+      (prepared) => {
+        prepared[1].member = {
+          ...prepared[1].member,
+          relativePath: "benchmark/results/wrong.json",
+        };
+      },
+      (prepared) => {
+        prepared[2].canonical.identity.project.alias = "[ast-mcp-server]";
+        refreshPreparedOutput(prepared[2]);
+      },
+      (prepared) => {
+        prepared[3].canonical.identity.runtime.expected = "24";
+        refreshPreparedOutput(prepared[3]);
+      },
+      (prepared) => {
+        prepared[3].canonical.identity.project.commit = "7".repeat(40);
+        refreshPreparedOutput(prepared[3]);
+      },
+      (prepared) => {
+        prepared[1].canonical.identity.workload.sha256 = "8".repeat(64);
+        refreshPreparedOutput(prepared[1]);
+      },
+      (prepared) => {
+        prepared[0].verification.report.deterministic_fixture.runtime.outcomes.overflow =
+          "arbitrary";
+      },
+    ];
+
+    for (const corrupt of corruptions) {
+      const prepared = preparedReportSet();
+      corrupt(prepared);
+      expect(() => privateCanaryInternals.assertPreparedCanaryReportSet(prepared)).toThrow(
+        /canonical|identity|destination|package|harness|preregistered|cohort|runtime/i,
+      );
+    }
+  });
+
+  it("publishes exactly four fixed canonical files as one final directory", async () => {
+    const resultsRoot = await temporaryDirectory("ast-canary-results-");
+    const prepared = preparedReportSet();
+    let observedBeforeVisibility = false;
+
+    await publishTemporaryPreparedSet(
+      prepared,
+      resultsRoot,
+      async ({ stageDirectory }: { stageDirectory: string }) => {
+        observedBeforeVisibility = true;
+        expect(await readdir(stageDirectory)).toEqual(
+          reportSetMembers.map((member) => member.fileName).sort(),
+        );
+        expect(await readdir(resultsRoot)).not.toContain("production-readiness");
+      },
+    );
+
+    expect(observedBeforeVisibility).toBe(true);
+    expect(await readdir(resultsRoot)).toEqual(["production-readiness"]);
+    const finalDirectory = path.join(resultsRoot, "production-readiness");
+    expect((await readdir(finalDirectory)).sort()).toEqual(
+      reportSetMembers.map((member) => member.fileName).sort(),
+    );
+    for (const candidate of prepared) {
+      await expect(
+        readFile(path.join(finalDirectory, candidate.member.fileName), "utf8"),
+      ).resolves.toBe(candidate.output);
+    }
+  });
+
+  it("never overwrites final evidence and cleans owned staging and lock on failure", async () => {
+    const existingRoot = await temporaryDirectory("ast-canary-existing-results-");
+    const finalDirectory = path.join(existingRoot, "production-readiness");
+    const sentinel = path.join(finalDirectory, "sentinel.txt");
+    await mkdir(finalDirectory);
+    await writeFile(sentinel, "keep", "utf8");
+
+    await expect(publishTemporaryPreparedSet(preparedReportSet(), existingRoot)).rejects.toThrow(
+      /already exists|refusing to overwrite/i,
+    );
+    await expect(readFile(sentinel, "utf8")).resolves.toBe("keep");
+    expect(await readdir(existingRoot)).toEqual(["production-readiness"]);
+
+    const racingRoot = await temporaryDirectory("ast-canary-racing-results-");
+    const racingFinalDirectory = path.join(racingRoot, "production-readiness");
+    await expect(
+      publishTemporaryPreparedSet(preparedReportSet(), racingRoot, async () => {
+        await mkdir(racingFinalDirectory);
+      }),
+    ).rejects.toThrow(/atomic no-replace publication failed/i);
+    expect(await readdir(racingRoot)).toEqual(["production-readiness"]);
+    expect(await readdir(racingFinalDirectory)).toEqual([]);
+
+    const failingRoot = await temporaryDirectory("ast-canary-failing-results-");
+    await expect(
+      publishTemporaryPreparedSet(preparedReportSet(), failingRoot, async () => {
+        throw new Error("injected before visibility");
+      }),
+    ).rejects.toThrow(/injected before visibility/);
+    expect(await readdir(failingRoot)).toEqual([]);
+  });
+
+  it("revalidates staged bytes and pinned directory identity after the visibility callback", async () => {
+    const mutatedRoot = await temporaryDirectory("ast-canary-mutated-stage-");
+    await expect(
+      publishTemporaryPreparedSet(
+        preparedReportSet(),
+        mutatedRoot,
+        async ({ stageDirectory, fileNames }) => {
+          await writeFile(path.join(stageDirectory, fileNames[0]), "mutated", "utf8");
+        },
+      ),
+    ).rejects.toThrow(/does not match its prepared bytes/i);
+    expect(await readdir(mutatedRoot)).toEqual([]);
+
+    const replacedRoot = await temporaryDirectory("ast-canary-replaced-stage-");
+    let replacementStageDirectory = "";
+    await expect(
+      publishTemporaryPreparedSet(preparedReportSet(), replacedRoot, async ({ stageDirectory }) => {
+        await rename(stageDirectory, `${stageDirectory}.displaced`);
+        await mkdir(stageDirectory);
+        await writeFile(path.join(stageDirectory, "replacement-sentinel.txt"), "keep", "utf8");
+        replacementStageDirectory = stageDirectory;
+      }),
+    ).rejects.toThrow(/staging directory identity changed/i);
+    await expect(
+      readFile(path.join(replacementStageDirectory, "replacement-sentinel.txt"), "utf8"),
+    ).resolves.toBe("keep");
+    expect(await readdir(replacedRoot)).toEqual([path.basename(replacementStageDirectory)]);
+
+    const replacedLockRoot = await temporaryDirectory("ast-canary-replaced-lock-");
+    const lockDirectory = path.join(replacedLockRoot, ".production-readiness.lock");
+    const displacedLockDirectory = `${lockDirectory}.displaced`;
+    await expect(
+      publishTemporaryPreparedSet(preparedReportSet(), replacedLockRoot, async () => {
+        await rename(lockDirectory, displacedLockDirectory);
+        await mkdir(lockDirectory);
+        await writeFile(path.join(lockDirectory, "replacement-sentinel.txt"), "keep", "utf8");
+        throw new Error("injected after lock replacement");
+      }),
+    ).rejects.toThrow(/injected after lock replacement/i);
+    await expect(
+      readFile(path.join(lockDirectory, "replacement-sentinel.txt"), "utf8"),
+    ).resolves.toBe("keep");
+    await expect(readdir(displacedLockDirectory)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(replacedLockRoot)).toEqual([".production-readiness.lock"]);
+  });
+
+  it("does not reverse committed publication when owned post-commit cleanup fails", async () => {
+    const resultsRoot = await temporaryDirectory("ast-canary-committed-results-");
+    const lockDirectory = path.join(resultsRoot, ".production-readiness.lock");
+
+    await expect(
+      publishTemporaryPreparedSet(preparedReportSet(), resultsRoot, async () => {
+        await writeFile(path.join(lockDirectory, "blocked"), "owned", "utf8");
+        await chmod(lockDirectory, 0o000);
+      }),
+    ).resolves.toBeUndefined();
+    await expect(readdir(path.join(resultsRoot, "production-readiness"))).resolves.toHaveLength(4);
+    expect(await readdir(resultsRoot)).toContain(".production-readiness.lock");
+
+    if ((await readdir(resultsRoot)).includes(".production-readiness.lock")) {
+      await chmod(lockDirectory, 0o700);
+      await rm(lockDirectory, { recursive: true });
+    }
+  });
+
+  it("rejects duplicate, symbolic, and hard-linked direct-/tmp raw inputs before publication", async () => {
+    const duplicatePath = directTemporaryPath("ast-canary-duplicate");
+    await expect(
+      freezeCanaryReportSet(
+        {
+          astNode24: duplicatePath,
+          astNode22_5: duplicatePath,
+          xScraperNode24: directTemporaryPath("x-canary-node24"),
+          xScraperNode22_5: directTemporaryPath("x-canary-node22"),
+        },
+        xScraperAuthorityRoot,
+      ),
+    ).rejects.toThrow(/input paths must be unique/i);
+
+    const hardLinkedInputs = {
+      astNode24: directTemporaryPath("ast-canary-hardlink-source"),
+      astNode22_5: directTemporaryPath("ast-canary-hardlink-alias"),
+      xScraperNode24: directTemporaryPath("x-canary-hardlink-node24"),
+      xScraperNode22_5: directTemporaryPath("x-canary-hardlink-node22"),
+    };
+    await writeFile(hardLinkedInputs.astNode24, "{}", "utf8");
+    await link(hardLinkedInputs.astNode24, hardLinkedInputs.astNode22_5);
+    await writeFile(hardLinkedInputs.xScraperNode24, "{}", "utf8");
+    await writeFile(hardLinkedInputs.xScraperNode22_5, "{}", "utf8");
+    await expect(freezeCanaryReportSet(hardLinkedInputs, xScraperAuthorityRoot)).rejects.toThrow(
+      /hard-linked|aliased/i,
+    );
+
+    const hiddenHardLinkInputs = {
+      astNode24: directTemporaryPath("ast-canary-hidden-hardlink-source"),
+      astNode22_5: directTemporaryPath("ast-canary-hidden-hardlink-node22"),
+      xScraperNode24: directTemporaryPath("x-canary-hidden-hardlink-node24"),
+      xScraperNode22_5: directTemporaryPath("x-canary-hidden-hardlink-node22"),
+    };
+    const hiddenAlias = directTemporaryPath("ast-canary-hidden-hardlink-alias");
+    await Promise.all(
+      Object.values(hiddenHardLinkInputs).map((inputPath) => writeFile(inputPath, "{}", "utf8")),
+    );
+    await link(hiddenHardLinkInputs.astNode24, hiddenAlias);
+    await expect(
+      freezeCanaryReportSet(hiddenHardLinkInputs, xScraperAuthorityRoot),
+    ).rejects.toThrow(/non-aliased|hard-linked|aliased/i);
+
+    const symbolicInputs = {
+      astNode24: directTemporaryPath("ast-canary-symbolic"),
+      astNode22_5: directTemporaryPath("ast-canary-symbol-target"),
+      xScraperNode24: directTemporaryPath("x-canary-symbol-node24"),
+      xScraperNode22_5: directTemporaryPath("x-canary-symbol-node22"),
+    };
+    await writeFile(symbolicInputs.astNode22_5, "{}", "utf8");
+    await symlink(symbolicInputs.astNode22_5, symbolicInputs.astNode24);
+    await writeFile(symbolicInputs.xScraperNode24, "{}", "utf8");
+    await writeFile(symbolicInputs.xScraperNode22_5, "{}", "utf8");
+    await expect(freezeCanaryReportSet(symbolicInputs, xScraperAuthorityRoot)).rejects.toThrow(
+      /symbolic|non-regular/i,
+    );
   });
 });

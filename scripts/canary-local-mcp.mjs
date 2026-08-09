@@ -42,27 +42,58 @@ const MAX_REPORT_BYTES = 2 * 1024 * 1024;
 const MCP_REQUEST_TIMEOUT_MS = 180_000;
 const PROCESS_EXIT_TIMEOUT_MS = 30_000;
 const MAX_WORKLOAD_CALLS = 16;
+const MAX_QUEUE_COUNTER = 2_147_483_647;
+const MAX_QUEUE_DURATION_MS = 86_400_000;
 const PHYSICAL_TMP_ROOT = "/tmp";
 const EMPTY_GIT_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const activeMcpProcesses = new Set();
-const FROZEN_REPORT_DESTINATIONS = Object.freeze({
-  "benchmark/results/production-readiness/ast-mcp-server-node22.5.json": {
-    alias: "[ast-mcp-server]",
-    runtime: "22.5.0",
-  },
-  "benchmark/results/production-readiness/ast-mcp-server-node24.json": {
+const FROZEN_REPORT_RESULTS_DIRECTORY = "benchmark/results";
+const FROZEN_REPORT_DIRECTORY_NAME = "production-readiness";
+const FROZEN_REPORT_SET_MEMBERS = Object.freeze([
+  Object.freeze({
+    inputKey: "astNode24",
+    option: "--ast-node24",
+    fileName: "ast-mcp-server-node24.json",
+    relativePath: "benchmark/results/production-readiness/ast-mcp-server-node24.json",
     alias: "[ast-mcp-server]",
     runtime: "24",
-  },
-  "benchmark/results/production-readiness/x-scraper-node22.5.json": {
-    alias: "[x-scraper]",
+  }),
+  Object.freeze({
+    inputKey: "astNode22_5",
+    option: "--ast-node22.5",
+    fileName: "ast-mcp-server-node22.5.json",
+    relativePath: "benchmark/results/production-readiness/ast-mcp-server-node22.5.json",
+    alias: "[ast-mcp-server]",
     runtime: "22.5.0",
-  },
-  "benchmark/results/production-readiness/x-scraper-node24.json": {
+  }),
+  Object.freeze({
+    inputKey: "xScraperNode24",
+    option: "--x-scraper-node24",
+    fileName: "x-scraper-node24.json",
+    relativePath: "benchmark/results/production-readiness/x-scraper-node24.json",
     alias: "[x-scraper]",
     runtime: "24",
-  },
-});
+  }),
+  Object.freeze({
+    inputKey: "xScraperNode22_5",
+    option: "--x-scraper-node22.5",
+    fileName: "x-scraper-node22.5.json",
+    relativePath: "benchmark/results/production-readiness/x-scraper-node22.5.json",
+    alias: "[x-scraper]",
+    runtime: "22.5.0",
+  }),
+]);
+const FROZEN_REPORT_MEMBERS_BY_OPTION = Object.freeze(
+  Object.fromEntries(FROZEN_REPORT_SET_MEMBERS.map((member) => [member.option, member])),
+);
+const FROZEN_REPORT_DESTINATIONS = Object.freeze(
+  Object.fromEntries(
+    FROZEN_REPORT_SET_MEMBERS.map((member) => [
+      member.relativePath,
+      Object.freeze({ alias: member.alias, runtime: member.runtime }),
+    ]),
+  ),
+);
 const READ_ONLY_TOOLS = new Set([
   "ast_list_files",
   "ast_search_symbols",
@@ -284,6 +315,285 @@ async function writeExclusiveAt(directoryHandle, fileName, content, mode) {
   });
 }
 
+async function writeExclusiveSyncedAt(directoryHandle, fileName, bytes, mode) {
+  const handle = await open(
+    `/proc/self/fd/${directoryHandle.fd}/${fileName}`,
+    fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
+    mode,
+  );
+  try {
+    await handle.writeFile(bytes, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+function validatePublicationFiles(files) {
+  if (!Array.isArray(files) || files.length === 0) {
+    fail("Atomic directory publication requires at least one file.");
+  }
+  const names = new Set();
+  return files.map((file) => {
+    if (
+      file === null ||
+      typeof file !== "object" ||
+      typeof file.name !== "string" ||
+      file.name.length === 0 ||
+      path.basename(file.name) !== file.name ||
+      typeof file.bytes !== "string"
+    ) {
+      fail("Atomic directory publication files require a simple name and string bytes.");
+    }
+    if (names.has(file.name)) fail("Atomic directory publication file names must be unique.");
+    names.add(file.name);
+    return Object.freeze({ name: file.name, bytes: file.bytes });
+  });
+}
+
+async function verifyStagedFiles(directoryHandle, files) {
+  const directoryPath = `/proc/self/fd/${directoryHandle.fd}`;
+  const entries = await readdir(directoryPath, { withFileTypes: true });
+  const expectedNames = files.map(({ name }) => name).sort();
+  if (
+    entries.some((entry) => !entry.isFile() || entry.isSymbolicLink()) ||
+    JSON.stringify(entries.map((entry) => entry.name).sort()) !== JSON.stringify(expectedNames)
+  ) {
+    fail("Atomic directory staging must contain exactly the prepared regular files.");
+  }
+  for (const file of files) {
+    const handle = await open(
+      `${directoryPath}/${file.name}`,
+      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
+    );
+    try {
+      const [fileStat, bytes] = await Promise.all([handle.stat(), handle.readFile()]);
+      if (
+        !fileStat.isFile() ||
+        fileStat.nlink !== 1 ||
+        !bytes.equals(Buffer.from(file.bytes, "utf8"))
+      ) {
+        fail(`Staged file ${file.name} does not match its prepared bytes.`);
+      }
+    } finally {
+      await handle.close();
+    }
+  }
+}
+
+async function moveDirectoryNoReplace(parentHandle, stageName, finalName) {
+  const childParentDescriptor = 3;
+  const childParentPath = `/proc/self/fd/${childParentDescriptor}`;
+  const child = spawn(
+    "/usr/bin/mv",
+    [
+      "--update=none-fail",
+      "--no-copy",
+      "--no-target-directory",
+      "--",
+      `${childParentPath}/${stageName}`,
+      `${childParentPath}/${finalName}`,
+    ],
+    {
+      stdio: ["ignore", "pipe", "pipe", parentHandle.fd],
+    },
+  );
+  const stderr = [];
+  child.stdout.resume();
+  child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+  const closed = new Promise((resolve) => {
+    child.once("close", (code, signal) => resolve({ code, signal }));
+  });
+  const failedToSpawn = new Promise((_resolve, reject) => child.once("error", reject));
+  const result = await Promise.race([closed, failedToSpawn]);
+  if (result.code !== 0 || result.signal !== null) {
+    const diagnostic = Buffer.concat(stderr)
+      .toString("utf8")
+      .replace(/\p{Cc}+/gu, " ")
+      .trim()
+      .slice(0, 256);
+    fail(
+      `Atomic no-replace publication failed (code=${String(result.code)}, signal=${String(result.signal)}).${diagnostic ? ` diagnostic=${JSON.stringify(diagnostic)}` : ""}`,
+    );
+  }
+}
+
+async function assertPinnedStageName(parentHandle, stageHandle, stageName) {
+  let namedHandle;
+  try {
+    namedHandle = await open(
+      `/proc/self/fd/${parentHandle.fd}/${stageName}`,
+      fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+    );
+    const [pinnedIdentity, namedIdentity] = await Promise.all([
+      stageHandle.stat({ bigint: true }),
+      namedHandle.stat({ bigint: true }),
+    ]);
+    if (pinnedIdentity.dev !== namedIdentity.dev || pinnedIdentity.ino !== namedIdentity.ino) {
+      fail("Atomic staging directory identity changed before publication.");
+    }
+  } finally {
+    await namedHandle?.close().catch(() => undefined);
+  }
+}
+
+async function pinnedDirectoryWasCommitted(parentHandle, stageHandle, stageName, finalName) {
+  const parentPath = `/proc/self/fd/${parentHandle.fd}`;
+  if (await pathExists(`${parentPath}/${stageName}`)) return false;
+  let finalHandle;
+  try {
+    finalHandle = await open(
+      `${parentPath}/${finalName}`,
+      fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+    );
+    const [stagedIdentity, finalIdentity] = await Promise.all([
+      stageHandle.stat({ bigint: true }),
+      finalHandle.stat({ bigint: true }),
+    ]);
+    return stagedIdentity.dev === finalIdentity.dev && stagedIdentity.ino === finalIdentity.ino;
+  } catch {
+    return false;
+  } finally {
+    await finalHandle?.close().catch(() => undefined);
+  }
+}
+
+async function findPinnedDirectoryName(parentHandle, pinnedHandle) {
+  const parentPath = `/proc/self/fd/${parentHandle.fd}`;
+  const pinnedIdentity = await pinnedHandle.stat({ bigint: true });
+  const names = (await readdir(parentPath)).sort();
+  for (const name of names) {
+    let candidateHandle;
+    try {
+      candidateHandle = await open(
+        `${parentPath}/${name}`,
+        fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+      );
+      const candidateIdentity = await candidateHandle.stat({ bigint: true });
+      if (
+        candidateIdentity.dev === pinnedIdentity.dev &&
+        candidateIdentity.ino === pinnedIdentity.ino
+      ) {
+        return name;
+      }
+    } catch (error) {
+      if (!["ENOENT", "ENOTDIR", "ELOOP"].includes(error?.code)) throw error;
+    } finally {
+      await candidateHandle?.close().catch(() => undefined);
+    }
+  }
+  return undefined;
+}
+
+async function removePinnedDirectory(parentHandle, pinnedHandle) {
+  const ownedName = await findPinnedDirectoryName(parentHandle, pinnedHandle);
+  if (ownedName === undefined) return;
+  await assertPinnedStageName(parentHandle, pinnedHandle, ownedName);
+  await removeTree(`/proc/self/fd/${parentHandle.fd}/${ownedName}`);
+}
+
+// Keep the primitive private so freezeCanaryReportSet is the only module publication surface.
+async function publishAtomicDirectorySet({
+  anchorRoot,
+  resultsDirectory,
+  finalDirectoryName,
+  files,
+  beforeVisibility,
+}) {
+  if (
+    typeof finalDirectoryName !== "string" ||
+    finalDirectoryName.length === 0 ||
+    path.basename(finalDirectoryName) !== finalDirectoryName
+  ) {
+    fail("Atomic directory publication requires a simple final directory name.");
+  }
+  const preparedFiles = validatePublicationFiles(files);
+  const resultsHandle = await openAnchoredDirectory(
+    anchorRoot,
+    resultsDirectory,
+    "Atomic directory results directory",
+  );
+  const anchoredResultsPath = `/proc/self/fd/${resultsHandle.fd}`;
+  const lockPath = `${anchoredResultsPath}/.${finalDirectoryName}.lock`;
+  const finalPath = `${anchoredResultsPath}/${finalDirectoryName}`;
+  let lockHandle;
+  let stageHandle;
+  let published = false;
+  try {
+    try {
+      await mkdir(lockPath, { mode: 0o700 });
+      try {
+        lockHandle = await open(
+          lockPath,
+          fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+        );
+      } catch (error) {
+        await removeTree(lockPath);
+        throw error;
+      }
+    } catch (error) {
+      if (error?.code === "EEXIST") {
+        fail("Another atomic directory publisher holds the exclusive sibling lock.");
+      }
+      throw error;
+    }
+    if (await pathExists(finalPath)) {
+      fail("Final directory already exists; refusing to overwrite it.");
+    }
+    const stagePath = await mkdtemp(`${anchoredResultsPath}/.${finalDirectoryName}.stage-`);
+    const stageDirectory = await realpath(stagePath);
+    const stageName = path.basename(stageDirectory);
+    stageHandle = await open(
+      stagePath,
+      fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+    );
+    const [pinnedStageDirectory, pinnedResultsDirectory] = await Promise.all([
+      realpath(`/proc/self/fd/${stageHandle.fd}`),
+      realpath(`/proc/self/fd/${resultsHandle.fd}`),
+    ]);
+    if (
+      pinnedStageDirectory !== stageDirectory ||
+      path.dirname(pinnedStageDirectory) !== pinnedResultsDirectory
+    ) {
+      fail("Atomic directory staging escaped its pinned results parent.");
+    }
+    for (const file of preparedFiles) {
+      await writeExclusiveSyncedAt(stageHandle, file.name, file.bytes, 0o644);
+    }
+    await beforeVisibility?.({
+      stageDirectory,
+      fileNames: preparedFiles.map(({ name }) => name),
+    });
+    await verifyStagedFiles(stageHandle, preparedFiles);
+    await assertPinnedStageName(resultsHandle, stageHandle, stageName);
+    try {
+      await moveDirectoryNoReplace(resultsHandle, stageName, finalDirectoryName);
+    } catch (error) {
+      if (
+        !(await pinnedDirectoryWasCommitted(
+          resultsHandle,
+          stageHandle,
+          stageName,
+          finalDirectoryName,
+        ))
+      ) {
+        throw error;
+      }
+    }
+    published = true;
+  } finally {
+    if (stageHandle && !published) await removePinnedDirectory(resultsHandle, stageHandle);
+    if (lockHandle) {
+      if (published) await removePinnedDirectory(resultsHandle, lockHandle).catch(() => undefined);
+      else await removePinnedDirectory(resultsHandle, lockHandle);
+    }
+    await stageHandle?.close().catch(() => undefined);
+    await lockHandle?.close().catch(() => undefined);
+    if (published) await resultsHandle.close().catch(() => undefined);
+    else await resultsHandle.close();
+  }
+}
+
 function reportArgumentVector(options) {
   const argv = [
     "benchmark:production-readiness",
@@ -336,25 +646,72 @@ function exactArgumentVector(options) {
   return argv;
 }
 
+function validateFreezeReportSetInputs(value) {
+  const inputs = assertExactKeys(
+    value,
+    FROZEN_REPORT_SET_MEMBERS.map((member) => member.inputKey),
+    "freeze-report-set inputs",
+  );
+  const normalized = {};
+  const uniquePaths = new Set();
+  for (const member of FROZEN_REPORT_SET_MEMBERS) {
+    const inputPath = inputs[member.inputKey];
+    if (
+      typeof inputPath !== "string" ||
+      !path.isAbsolute(inputPath) ||
+      path.resolve(inputPath) !== inputPath ||
+      path.dirname(inputPath) !== PHYSICAL_TMP_ROOT
+    ) {
+      fail(`${member.option} must be a canonical absolute direct child of physical /tmp.`);
+    }
+    if (uniquePaths.has(inputPath)) fail("freeze-report-set input paths must be unique.");
+    uniquePaths.add(inputPath);
+    normalized[member.inputKey] = inputPath;
+  }
+  return deepFreeze(normalized);
+}
+
+function validateXScraperRoot(value) {
+  if (typeof value !== "string" || !path.isAbsolute(value) || path.resolve(value) !== value) {
+    fail("--x-scraper-root is required and must be a canonical absolute path.");
+  }
+  return value;
+}
+
 export function parseCanaryArguments(argv) {
   const mode = argv[0];
-  if (mode !== "run" && mode !== "freeze-report") {
-    fail("Expected subcommand run or freeze-report.");
+  if (mode !== "run" && mode !== "freeze-report-set") {
+    fail("Expected subcommand run or freeze-report-set.");
   }
-  if (mode === "freeze-report") {
-    let input;
-    let output;
+  if (mode === "freeze-report-set") {
+    const inputs = {};
+    let xScraperRoot;
     const seen = new Set();
     for (let index = 1; index < argv.length; index += 1) {
       const argument = argv[index];
-      if (seen.has(argument)) fail(`Duplicate freeze-report argument: ${argument}`);
+      if (argument === "--x-scraper-root") {
+        if (seen.has(argument)) fail(`Duplicate freeze-report-set argument: ${argument}`);
+        seen.add(argument);
+        xScraperRoot = argv[++index];
+        continue;
+      }
+      const member = FROZEN_REPORT_MEMBERS_BY_OPTION[argument];
+      if (!member) fail(`Unknown freeze-report-set argument: ${String(argument)}`);
+      if (seen.has(argument)) fail(`Duplicate freeze-report-set argument: ${argument}`);
       seen.add(argument);
-      if (argument === "--input") input = argv[++index];
-      else if (argument === "--output") output = argv[++index];
-      else fail(`Unknown freeze-report argument: ${argument}`);
+      inputs[member.inputKey] = argv[++index];
     }
-    if (!input || !output) fail("freeze-report requires --input and --output.");
-    return deepFreeze({ mode, input: path.resolve(input), output: path.resolve(output) });
+    const missing = FROZEN_REPORT_SET_MEMBERS.filter((member) => !seen.has(member.option)).map(
+      (member) => member.option,
+    );
+    if (missing.length > 0) {
+      fail(`freeze-report-set requires exactly one of each input: ${missing.join(", ")}.`);
+    }
+    return deepFreeze({
+      mode,
+      xScraperRoot: validateXScraperRoot(xScraperRoot),
+      inputs: validateFreezeReportSetInputs(inputs),
+    });
   }
 
   const options = {
@@ -940,17 +1297,43 @@ function assertQueueEvidence(value, label) {
     label,
   );
   for (const field of [
-    "active_operations",
     "cancelled_operations",
     "deadline_exceeded_operations",
-    "max_execution_ms",
-    "max_queue_wait_ms",
-    "queue_capacity",
     "queue_timeout_operations",
-    "queued_operations",
     "rejected_operations",
   ]) {
-    assertInteger(queue[field], `${label}.${field}`, 0, 2_147_483_647);
+    assertInteger(queue[field], `${label}.${field}`, 0, MAX_QUEUE_COUNTER);
+  }
+  for (const field of ["max_execution_ms", "max_queue_wait_ms"]) {
+    assertInteger(queue[field], `${label}.${field}`, 0, MAX_QUEUE_DURATION_MS);
+  }
+  assertInteger(queue.queue_capacity, `${label}.queue_capacity`, 1, 256);
+  assertInteger(queue.active_operations, `${label}.active_operations`, 0, 1);
+  assertInteger(queue.queued_operations, `${label}.queued_operations`, 0, queue.queue_capacity);
+  if (!new Set(["open", "closed"]).has(queue.admission)) {
+    fail(`${label}.admission is invalid.`);
+  }
+  if (!new Set(["idle", "queued", "running"]).has(queue.state)) {
+    fail(`${label}.state is invalid.`);
+  }
+  if (
+    !new Set([
+      "none",
+      "succeeded",
+      "failed",
+      "rejected",
+      "cancelled",
+      "queue_timeout",
+      "deadline_exceeded",
+      "internal_error",
+    ]).has(queue.last_outcome)
+  ) {
+    fail(`${label}.last_outcome is invalid.`);
+  }
+  const expectedState =
+    queue.active_operations > 0 ? "running" : queue.queued_operations > 0 ? "queued" : "idle";
+  if (queue.state !== expectedState) {
+    fail(`${label}.state does not match its active and queued operation counts.`);
   }
   return queue;
 }
@@ -974,7 +1357,7 @@ function validateFreezeReport(report, destination, rawSha256) {
   );
   if (value.schema_version !== REPORT_SCHEMA_VERSION) fail("Unsupported canary report schema.");
   if (value.status !== "pass" || value.overall_pass !== true) {
-    fail("freeze-report requires an overall PASS report.");
+    fail("freeze-report-set requires every member to be an overall PASS report.");
   }
   if (
     typeof value.generated_at !== "string" ||
@@ -1248,7 +1631,7 @@ function validateFreezeReport(report, destination, rawSha256) {
   );
   const scheduler = assertExactKeys(
     fixture.runtime,
-    ["gates", "operation_queue", "outcomes"],
+    ["cache_created", "gates", "operation_queue", "outcomes"],
     "Canary runtime fixture",
   );
   const resources = assertExactKeys(
@@ -1394,10 +1777,27 @@ function validateFreezeReport(report, destination, rawSha256) {
     ],
     "Canary runtime outcomes",
   );
-  for (const outcome of Object.values(outcomes))
-    assertString(outcome, "Canary runtime outcome", 64);
   const queue = assertQueueEvidence(scheduler.operation_queue, "Canary operation queue evidence");
-  if (queue.cancelled_operations < 2 || queue.rejected_operations < 1) {
+  const expectedRuntimeGates = {
+    queue_saturation: outcomes.overflow === "PROJECT_QUEUE_FULL",
+    queued_cancellation: outcomes.queued_cancellation === "protocol_cancelled",
+    active_cancellation: outcomes.active_cancellation === "protocol_cancelled",
+    public_cancellation: outcomes.public_cancellation === "REQUEST_CANCELLED",
+    session_capacity: outcomes.session_capacity === "PROJECT_CAPACITY_EXCEEDED",
+    queue_drained:
+      queue.state === "idle" &&
+      queue.active_operations === 0 &&
+      queue.queued_operations === 0 &&
+      queue.cancelled_operations >= 2 &&
+      queue.rejected_operations >= 1,
+    disabled_no_cache: scheduler.cache_created === false,
+  };
+  if (
+    Object.entries(expectedRuntimeGates).some(([gate, expected]) => runtimeGates[gate] !== expected)
+  ) {
+    fail("Canary runtime gates do not match their retained outcome and queue evidence.");
+  }
+  if (Object.values(expectedRuntimeGates).some((passed) => !passed)) {
     fail("Canary cancellation/queue counters are incomplete.");
   }
   for (const field of ["latency_samples_ms", "rss_samples_bytes"]) {
@@ -1520,19 +1920,17 @@ function validateFreezeReport(report, destination, rawSha256) {
   return sortedJsonValue(frozen);
 }
 
-export function canonicalizeCanaryReport(report, checkedRelativePath, rawSha256) {
+function canonicalizeCanaryReport(report, checkedRelativePath, rawSha256) {
   const destination = FROZEN_REPORT_DESTINATIONS[normalizeSeparators(checkedRelativePath)];
   if (!destination) fail("Checked report path is not allowlisted.");
   return validateFreezeReport(report, destination, rawSha256);
 }
 
-async function verifyLiveFreezeIdentity(report, destination, exactArgv) {
+async function verifyLiveFreezeIdentity(report, destination, exactArgv, xScraperRoot) {
   const options = parseCanaryArguments(["run", ...exactArgv.slice(1)]);
   if (options.mode !== "run") fail("Raw report exact command is not a canary run.");
   const expectedProjectRoot =
-    destination.alias === "[ast-mcp-server]"
-      ? repositoryRoot
-      : path.resolve(repositoryRoot, "..", "x-scraper");
+    destination.alias === "[ast-mcp-server]" ? repositoryRoot : validateXScraperRoot(xScraperRoot);
   const expectedWorkloadPath = path.join(
     repositoryRoot,
     "benchmark",
@@ -1550,7 +1948,8 @@ async function verifyLiveFreezeIdentity(report, destination, exactArgv) {
     realpath(options.workloadPath),
     realpath(expectedWorkloadPath),
   ]);
-  const sameRepository = physicalProjectRoot === (await realpath(repositoryRoot));
+  const physicalRepositoryRoot = await realpath(repositoryRoot);
+  const sameRepository = physicalProjectRoot === physicalRepositoryRoot;
   const packageRepositoryPromise = repositoryIdentity(repositoryRoot);
   const projectRepositoryPromise = sameRepository
     ? packageRepositoryPromise
@@ -1586,6 +1985,8 @@ async function verifyLiveFreezeIdentity(report, destination, exactArgv) {
   ]);
   if (
     physicalProjectRoot !== physicalExpectedProjectRoot ||
+    (destination.alias === "[x-scraper]" &&
+      (physicalExpectedProjectRoot !== expectedProjectRoot || sameRepository)) ||
     physicalWorkloadPath !== physicalExpectedWorkloadPath ||
     workloadSelection.manifest.project_alias !== destination.alias
   ) {
@@ -1622,75 +2023,390 @@ async function verifyLiveFreezeIdentity(report, destination, exactArgv) {
   if (options.candidateTree && options.candidateTree !== packageTree) {
     fail("Raw report candidate tree does not match the live package tree.");
   }
-  return options;
+  return Object.freeze({ options, physicalProjectRoot, sameRepository });
 }
 
-export async function freezeCanaryReport(inputPath, outputPath) {
-  const relativeOutput = normalizeSeparators(
-    path.relative(repositoryRoot, path.resolve(outputPath)),
-  );
-  const destination = FROZEN_REPORT_DESTINATIONS[relativeOutput];
-  if (!destination || path.resolve(outputPath) !== path.join(repositoryRoot, relativeOutput)) {
-    fail("Frozen report output is not an allowlisted MCP-PROD-405 destination.");
-  }
-  let inputHandle;
+async function readRawCanaryReportSet(inputPaths) {
+  const inputs = validateFreezeReportSetInputs(inputPaths);
+  const physicalTemporaryRoot = await realpath(PHYSICAL_TMP_ROOT);
+  const opened = [];
+  const physicalPaths = new Set();
+  const fileIdentities = new Set();
   try {
-    inputHandle = await open(inputPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
-  } catch (error) {
-    if (error?.code === "ELOOP" || error?.code === "ENOENT") {
-      fail("Raw canary report is missing or non-regular.");
+    for (const member of FROZEN_REPORT_SET_MEMBERS) {
+      const inputPath = inputs[member.inputKey];
+      let handle;
+      try {
+        handle = await open(inputPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+      } catch (error) {
+        if (error?.code === "ELOOP" || error?.code === "ENOENT") {
+          fail(`Raw canary report ${member.option} is missing, symbolic, or non-regular.`);
+        }
+        throw error;
+      }
+      opened.push({ member, inputPath, handle });
+      const [inputStat, physicalInput] = await Promise.all([
+        handle.stat({ bigint: true }),
+        realpath(`/proc/self/fd/${handle.fd}`),
+      ]);
+      if (
+        !inputStat.isFile() ||
+        inputStat.nlink !== 1n ||
+        inputStat.size > BigInt(MAX_REPORT_BYTES) ||
+        path.dirname(physicalInput) !== physicalTemporaryRoot
+      ) {
+        fail(
+          `Raw canary report ${member.option} must be a bounded, non-aliased physical regular direct child of /tmp.`,
+        );
+      }
+      const fileIdentity = `${String(inputStat.dev)}:${String(inputStat.ino)}`;
+      if (physicalPaths.has(physicalInput) || fileIdentities.has(fileIdentity)) {
+        fail("Raw canary report inputs must not be duplicated, hard-linked, or otherwise aliased.");
+      }
+      physicalPaths.add(physicalInput);
+      fileIdentities.add(fileIdentity);
+      opened.at(-1).inputStat = inputStat;
+      opened.at(-1).physicalInput = physicalInput;
     }
-    throw error;
-  }
-  let rawBytes;
-  try {
-    const [inputStat, physicalInput, physicalTemporaryRoot] = await Promise.all([
-      inputHandle.stat(),
-      realpath(`/proc/self/fd/${inputHandle.fd}`),
-      realpath(PHYSICAL_TMP_ROOT),
-    ]);
-    if (
-      !inputStat.isFile() ||
-      inputStat.size > MAX_REPORT_BYTES ||
-      !isPathInside(physicalTemporaryRoot, physicalInput)
-    ) {
-      fail("Raw canary report must be a bounded physical regular file under /tmp.");
+
+    for (const item of opened) {
+      item.rawBytes = await item.handle.readFile();
+      const after = await item.handle.stat({ bigint: true });
+      if (
+        after.dev !== item.inputStat.dev ||
+        after.ino !== item.inputStat.ino ||
+        after.size !== item.inputStat.size ||
+        after.mtimeNs !== item.inputStat.mtimeNs ||
+        after.ctimeNs !== item.inputStat.ctimeNs ||
+        item.rawBytes.length > MAX_REPORT_BYTES
+      ) {
+        fail(`Raw canary report ${item.member.option} changed while it was pinned and read.`);
+      }
     }
-    rawBytes = await inputHandle.readFile();
+    return opened.map(({ member, inputPath, physicalInput, rawBytes }) => ({
+      member,
+      inputPath,
+      physicalInput,
+      rawBytes,
+    }));
   } finally {
-    await inputHandle.close();
+    await Promise.all(opened.map(({ handle }) => handle.close()));
   }
-  await assertNewPathWithin(repositoryRoot, outputPath, "Frozen canary report");
-  const parsed = JSON.parse(rawBytes.toString("utf8"));
-  const exactArgv = parsed?.command?.exact_argv;
+}
+
+function exactOutputPath(exactArgv, inputPath) {
   assertExactArgumentCredentials(exactArgv, "Raw report exact command");
-  const outputIndex = Array.isArray(exactArgv) ? exactArgv.indexOf("--output") : -1;
+  if (!Array.isArray(exactArgv)) fail("Raw report exact command must be an argument array.");
+  const outputIndexes = exactArgv.flatMap((argument, index) =>
+    argument === "--output" ? [index] : [],
+  );
   if (
-    outputIndex < 0 ||
-    typeof exactArgv[outputIndex + 1] !== "string" ||
-    path.resolve(exactArgv[outputIndex + 1]) !== path.resolve(inputPath)
+    outputIndexes.length !== 1 ||
+    typeof exactArgv[outputIndexes[0] + 1] !== "string" ||
+    path.resolve(exactArgv[outputIndexes[0] + 1]) !== inputPath
   ) {
-    fail("Raw report path does not match its exact command evidence.");
+    fail("Raw report path does not match its unique exact command evidence.");
   }
-  await verifyLiveFreezeIdentity(parsed, destination, exactArgv);
-  const canonical = canonicalizeCanaryReport(parsed, relativeOutput, sha256(rawBytes));
+  return exactArgv;
+}
+
+async function prepareCanaryReportMember(rawInput, xScraperRoot) {
+  let parsed;
+  try {
+    parsed = JSON.parse(rawInput.rawBytes.toString("utf8"));
+  } catch {
+    fail(`Raw canary report ${rawInput.member.option} is not valid JSON.`);
+  }
+  const exactArgv = exactOutputPath(parsed?.command?.exact_argv, rawInput.inputPath);
+  const canonical = canonicalizeCanaryReport(
+    parsed,
+    rawInput.member.relativePath,
+    sha256(rawInput.rawBytes),
+  );
+  const destination = FROZEN_REPORT_DESTINATIONS[rawInput.member.relativePath];
+  const liveIdentity = await verifyLiveFreezeIdentity(parsed, destination, exactArgv, xScraperRoot);
   const output = canonicalJson(canonical);
   if (Buffer.byteLength(output, "utf8") > MAX_REPORT_BYTES) {
-    fail("Frozen canary report exceeds its byte bound.");
+    fail(`Frozen canary report ${rawInput.member.fileName} exceeds its byte bound.`);
   }
-  assertNoSensitiveText(output, "Frozen canary report");
-  const outputDirectory = await openAnchoredDirectory(
-    repositoryRoot,
-    path.dirname(outputPath),
-    "Frozen canary report",
-    true,
+  assertNoSensitiveText(output, `Frozen canary report ${rawInput.member.fileName}`);
+  return Object.freeze({
+    member: rawInput.member,
+    canonical,
+    output,
+    verification: Object.freeze({
+      report: parsed,
+      destination,
+      exactArgv,
+      xScraperRoot,
+      liveIdentity,
+    }),
+  });
+}
+
+function assertPreparedCanaryReportSet(preparedReports) {
+  if (
+    !Array.isArray(preparedReports) ||
+    preparedReports.length !== FROZEN_REPORT_SET_MEMBERS.length
+  ) {
+    fail("The frozen canary report set must contain exactly four prepared members.");
+  }
+  const seenDestinations = new Set();
+  const cohortIdentityByAlias = new Map();
+  let sharedPackageIdentity;
+  let sharedHarnessSha256;
+  for (const [index, prepared] of preparedReports.entries()) {
+    const expected = FROZEN_REPORT_SET_MEMBERS[index];
+    const preparedRawSha256 = prepared?.canonical?.command?.raw_report_sha256;
+    const revalidatedCanonical = canonicalizeCanaryReport(
+      prepared?.verification?.report,
+      expected.relativePath,
+      preparedRawSha256,
+    );
+    if (canonicalJson(revalidatedCanonical) !== prepared?.output) {
+      fail("Prepared canonical bytes do not match the revalidated raw report.");
+    }
+    if (
+      prepared?.member?.inputKey !== expected.inputKey ||
+      prepared.member.option !== expected.option ||
+      prepared.member.relativePath !== expected.relativePath ||
+      prepared.member.fileName !== expected.fileName ||
+      prepared.member.alias !== expected.alias ||
+      prepared.member.runtime !== expected.runtime ||
+      prepared?.canonical?.identity?.project?.alias !== expected.alias ||
+      prepared?.canonical?.identity?.runtime?.expected !== expected.runtime
+    ) {
+      fail(
+        "Prepared canary report members do not form the preregistered identity/destination set.",
+      );
+    }
+    if (seenDestinations.has(expected.relativePath)) {
+      fail("Prepared canary report destinations must be unique.");
+    }
+    seenDestinations.add(expected.relativePath);
+    const cohortIdentity = canonicalJson({
+      project: prepared.canonical.identity.project,
+      workload: prepared.canonical.identity.workload,
+    });
+    const existingCohortIdentity = cohortIdentityByAlias.get(expected.alias);
+    if (existingCohortIdentity === undefined) {
+      cohortIdentityByAlias.set(expected.alias, cohortIdentity);
+    } else if (existingCohortIdentity !== cohortIdentity) {
+      fail(
+        "Both runtime reports for each project alias must share one project/workload cohort identity.",
+      );
+    }
+    const packageIdentity = canonicalJson(prepared.canonical.identity.package);
+    const harnessSha256 = prepared.canonical.identity.harness?.sha256;
+    assertHash(harnessSha256, 64, "Prepared canary harness SHA-256");
+    if (sharedPackageIdentity === undefined) {
+      sharedPackageIdentity = packageIdentity;
+      sharedHarnessSha256 = harnessSha256;
+    } else if (packageIdentity !== sharedPackageIdentity || harnessSha256 !== sharedHarnessSha256) {
+      fail("All four canary reports must share one clean package identity and harness hash.");
+    }
+    if (
+      typeof prepared.output !== "string" ||
+      Buffer.byteLength(prepared.output, "utf8") > MAX_REPORT_BYTES ||
+      prepared.output !== canonicalJson(prepared.canonical)
+    ) {
+      fail("A prepared canary report has invalid or mismatched canonical output bytes.");
+    }
+    assertNoSensitiveText(prepared.output, `Prepared canary report ${expected.fileName}`);
+  }
+  return {
+    packageIdentity: preparedReports[0].canonical.identity.package,
+    harnessSha256: sharedHarnessSha256,
+  };
+}
+
+async function assertCleanLivePackageIdentity(expectedPackageIdentity, expectedHarnessSha256) {
+  const [repository, status, tree, harnessSha256] = await Promise.all([
+    repositoryIdentity(repositoryRoot),
+    repositoryStatus(repositoryRoot),
+    currentWorktreeTree(repositoryRoot),
+    sha256File(scriptPath),
+  ]);
+  const digest = statusDigest(status);
+  if (
+    repository.commit !== expectedPackageIdentity.commit ||
+    repository.tree !== expectedPackageIdentity.head_tree ||
+    tree !== expectedPackageIdentity.tree ||
+    tree !== repository.tree ||
+    status.length !== 0 ||
+    digest.sha256 !== expectedPackageIdentity.status.sha256 ||
+    digest.bytes !== expectedPackageIdentity.status.bytes ||
+    digest.dirty !== expectedPackageIdentity.status.dirty ||
+    harnessSha256 !== expectedHarnessSha256
+  ) {
+    fail("The live package identity changed before the four-report publication transaction.");
+  }
+}
+
+function exactOwnedStagingStatus(status, stageDirectory, fileNames) {
+  const stageRelative = normalizeSeparators(path.relative(repositoryRoot, stageDirectory));
+  const expected = fileNames.map((fileName) => `?? ${stageRelative}/${fileName}`).sort();
+  const observed = status
+    .toString("utf8")
+    .split("\0")
+    .filter((entry) => entry.length > 0)
+    .sort();
+  if (JSON.stringify(observed) !== JSON.stringify(expected)) {
+    fail("The live package status contains changes beyond the process-owned report staging set.");
+  }
+}
+
+async function assertLivePackageIdentityBeforeVisibility(
+  expectedPackageIdentity,
+  expectedHarnessSha256,
+  stageDirectory,
+  fileNames,
+) {
+  const [repository, status, harnessSha256] = await Promise.all([
+    repositoryIdentity(repositoryRoot),
+    repositoryStatus(repositoryRoot),
+    sha256File(scriptPath),
+  ]);
+  exactOwnedStagingStatus(status, stageDirectory, fileNames);
+  if (
+    repository.commit !== expectedPackageIdentity.commit ||
+    repository.tree !== expectedPackageIdentity.head_tree ||
+    expectedPackageIdentity.tree !== expectedPackageIdentity.head_tree ||
+    expectedPackageIdentity.status.dirty !== false ||
+    harnessSha256 !== expectedHarnessSha256
+  ) {
+    fail("The live package identity changed immediately before report-set publication.");
+  }
+}
+
+async function publishPreparedCanaryReportSet(
+  preparedReports,
+  { anchorRoot, resultsDirectory, beforeVisibility },
+) {
+  assertPreparedCanaryReportSet(preparedReports);
+  await publishAtomicDirectorySet({
+    anchorRoot,
+    resultsDirectory,
+    finalDirectoryName: FROZEN_REPORT_DIRECTORY_NAME,
+    files: preparedReports.map(({ member, output }) => ({ name: member.fileName, bytes: output })),
+    beforeVisibility,
+  });
+}
+
+async function revalidatePreparedCanaryReportSet(preparedReports) {
+  for (const prepared of preparedReports) {
+    const verification = prepared?.verification;
+    if (!verification) fail("A prepared canary report is missing its live verification authority.");
+    await verifyLiveFreezeIdentity(
+      verification.report,
+      verification.destination,
+      verification.exactArgv,
+      verification.xScraperRoot,
+    );
+  }
+}
+
+async function assertLiveExternalProjectsAndRuntimes(preparedReports) {
+  const externalProjects = new Map();
+  for (const prepared of preparedReports) {
+    const verification = prepared?.verification;
+    if (!verification) fail("A prepared canary report is missing its live verification authority.");
+    const runtimeSelection = await validateRuntimeBinary(verification.liveIdentity.options);
+    if (
+      prepared.canonical.identity.runtime.observed !== runtimeSelection.evidence.observed ||
+      prepared.canonical.identity.runtime.binary_sha256 !==
+        runtimeSelection.evidence.binary_sha256 ||
+      canonicalJson(prepared.canonical.identity.os) !== canonicalJson(runtimeSelection.os)
+    ) {
+      fail("A canary runtime identity changed before report-set publication.");
+    }
+    if (verification.liveIdentity.sameRepository) continue;
+    const physicalProjectRoot = await realpath(verification.liveIdentity.options.projectRoot);
+    if (physicalProjectRoot !== verification.liveIdentity.physicalProjectRoot) {
+      fail("A canary project root changed before report-set publication.");
+    }
+    const expectedProjectIdentity = canonicalJson(prepared.canonical.identity.project);
+    const existing = externalProjects.get(physicalProjectRoot);
+    if (existing && existing !== expectedProjectIdentity) {
+      fail("Runtime reports bound one external project root to different cohort identities.");
+    }
+    externalProjects.set(physicalProjectRoot, expectedProjectIdentity);
+  }
+
+  for (const [projectRoot, expectedText] of externalProjects) {
+    const expected = JSON.parse(expectedText);
+    const [repository, tree, status] = await Promise.all([
+      repositoryIdentity(projectRoot),
+      currentWorktreeTree(projectRoot),
+      repositoryStatus(projectRoot),
+    ]);
+    const digest = statusDigest(status);
+    if (
+      repository.commit !== expected.commit ||
+      repository.tree !== expected.head_tree ||
+      tree !== expected.tree ||
+      status.length !== 0 ||
+      digest.sha256 !== expected.status.sha256 ||
+      digest.bytes !== expected.status.bytes ||
+      digest.dirty !== expected.status.dirty
+    ) {
+      fail("A canary project identity changed before report-set publication.");
+    }
+  }
+}
+
+async function orchestrateCanaryReportSet(
+  inputPaths,
+  prepareMember,
+  publishSet,
+  revalidateSet = async () => undefined,
+) {
+  const inputs = validateFreezeReportSetInputs(inputPaths);
+  const preparedReports = [];
+  for (const member of FROZEN_REPORT_SET_MEMBERS) {
+    preparedReports.push(await prepareMember(member, inputs[member.inputKey]));
+  }
+  const sharedIdentity = assertPreparedCanaryReportSet(preparedReports);
+  const result = deepFreeze(
+    Object.fromEntries(
+      preparedReports.map(({ member, canonical }) => [member.inputKey, cloneJson(canonical)]),
+    ),
   );
-  try {
-    await writeExclusiveAt(outputDirectory, path.basename(outputPath), output, 0o644);
-  } finally {
-    await outputDirectory.close();
-  }
-  return canonical;
+  await revalidateSet(preparedReports, sharedIdentity);
+  await publishSet(preparedReports, sharedIdentity);
+  return result;
+}
+
+export async function freezeCanaryReportSet(inputPaths, xScraperRoot) {
+  const expectedXScraperRoot = validateXScraperRoot(xScraperRoot);
+  const rawInputs = await readRawCanaryReportSet(inputPaths);
+  const rawInputsByKey = new Map(rawInputs.map((input) => [input.member.inputKey, input]));
+  return orchestrateCanaryReportSet(
+    inputPaths,
+    async (member) =>
+      prepareCanaryReportMember(rawInputsByKey.get(member.inputKey), expectedXScraperRoot),
+    async (preparedReports, sharedIdentity) => {
+      await assertCleanLivePackageIdentity(
+        sharedIdentity.packageIdentity,
+        sharedIdentity.harnessSha256,
+      );
+      await publishPreparedCanaryReportSet(preparedReports, {
+        anchorRoot: repositoryRoot,
+        resultsDirectory: path.join(repositoryRoot, FROZEN_REPORT_RESULTS_DIRECTORY),
+        beforeVisibility: ({ stageDirectory, fileNames }) =>
+          Promise.all([
+            assertLivePackageIdentityBeforeVisibility(
+              sharedIdentity.packageIdentity,
+              sharedIdentity.harnessSha256,
+              stageDirectory,
+              fileNames,
+            ),
+            assertLiveExternalProjectsAndRuntimes(preparedReports),
+          ]),
+      });
+    },
+    revalidatePreparedCanaryReportSet,
+  );
 }
 
 function withTimeout(promise, milliseconds, message) {
@@ -2801,6 +3517,7 @@ async function exerciseRuntimeBounds(options, fixtureRoot) {
   });
   const publicCancellationCode = toolError(publicCancellationResult)?.code;
   await closeClient(client);
+  const cacheCreated = await pathExists(cacheRoot);
 
   const gates = {
     queue_saturation: overflowCode === "PROJECT_QUEUE_FULL",
@@ -2813,11 +3530,12 @@ async function exerciseRuntimeBounds(options, fixtureRoot) {
       finalSnapshot.queued_operations === 0 &&
       finalSnapshot.cancelled_operations >= 2 &&
       finalSnapshot.rejected_operations >= 1,
-    disabled_no_cache: !(await pathExists(cacheRoot)),
+    disabled_no_cache: !cacheCreated,
   };
   assertGatesPass(gates, "Runtime-bounds fixture");
   return {
     gates,
+    cache_created: cacheCreated,
     outcomes: {
       overflow: overflowCode,
       queued_cancellation: queuedProtocolCancelled ? "protocol_cancelled" : "failed",
@@ -3426,10 +4144,10 @@ async function main() {
     return;
   }
   const options = parseCanaryArguments(process.argv.slice(2));
-  if (options.mode === "freeze-report") {
-    const report = await freezeCanaryReport(options.input, options.output);
+  if (options.mode === "freeze-report-set") {
+    const reports = await freezeCanaryReportSet(options.inputs, options.xScraperRoot);
     process.stdout.write(
-      `${JSON.stringify({ status: "ok", mode: "freeze-report", schema_version: report.schema_version })}\n`,
+      `${JSON.stringify({ status: "ok", mode: "freeze-report-set", report_count: Object.keys(reports).length })}\n`,
     );
     return;
   }
