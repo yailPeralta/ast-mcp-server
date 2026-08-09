@@ -121,6 +121,8 @@ The error representation MUST be exercised through in-memory MCP, stdio and pack
 
 The ephemeral raw canary report MUST record the exact command with each option at most once. The checked report MUST replace path-bearing arguments with canonical aliases, include the SHA-256 of the exact raw bytes and retain every non-path argument. Both reports MUST record commit, exact worktree tree, harness/workload byte digests, package version, OS, selected Node runtime, project identity alias, iterations, the complete unfiltered source-file inventory count, preregistered call count/ordered IDs, raw latencies, RSS, cache size, hit/miss/rebuild/fallback/cancellation counts and the complete preregistered gate set. They MUST distinguish local process measurements from provider latency, universal SLA or model-quality claims.
 
+The harness MUST preregister `AST_OPERATION_DEADLINE_MS=300000` for every canary child and use a `330000 ms` MCP request timeout so a bounded server deadline remains authoritative and observable before the client transport timeout. These harness-owned values MUST NOT change the product runtime default of `120000 ms`.
+
 ## Canary and rollback
 
 ### MCP-PROD-401 Disabled-default control

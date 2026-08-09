@@ -102,6 +102,13 @@ type PrivateAtomicPublisher = (options: {
 
 type PrivateCanaryInternals = {
   readonly publishAtomicDirectorySet: PrivateAtomicPublisher;
+  readonly canaryOperationDeadlineMs: number;
+  readonly mcpRequestTimeoutMs: number;
+  readonly projectEnvironment: (
+    policy: string | undefined,
+    cacheRoot: string,
+    extra?: Readonly<Record<string, string>>,
+  ) => Record<string, string>;
   readonly canonicalizeCanaryReport: (
     report: Record<string, any>,
     checkedRelativePath: string,
@@ -128,12 +135,12 @@ function loadPrivateCanaryInternals(): Promise<PrivateCanaryInternals> {
     ]);
     await writeFile(path.join(moduleRoot, "package.json"), packageMetadata, "utf8");
     expect(productionSource).not.toMatch(
-      /^export\s+(?:(?:async\s+)?function|const)\s+(?:publishAtomicDirectorySet|canonicalizeCanaryReport|assertPreparedCanaryReportSet)\b/m,
+      /^export\s+(?:(?:async\s+)?function|const)\s+(?:publishAtomicDirectorySet|canonicalizeCanaryReport|assertPreparedCanaryReportSet|projectEnvironment|CANARY_OPERATION_DEADLINE_MS|MCP_REQUEST_TIMEOUT_MS)\b/m,
     );
     const testModulePath = path.join(scriptsDirectory, "canary-local-mcp.private-test.mjs");
     await writeFile(
       testModulePath,
-      `${productionSource}\nexport {\n  publishAtomicDirectorySet as __testOnlyPublishAtomicDirectorySet,\n  canonicalizeCanaryReport as __testOnlyCanonicalizeCanaryReport,\n  assertPreparedCanaryReportSet as __testOnlyAssertPreparedCanaryReportSet,\n};\n`,
+      `${productionSource}\nexport {\n  publishAtomicDirectorySet as __testOnlyPublishAtomicDirectorySet,\n  canonicalizeCanaryReport as __testOnlyCanonicalizeCanaryReport,\n  assertPreparedCanaryReportSet as __testOnlyAssertPreparedCanaryReportSet,\n  projectEnvironment as __testOnlyProjectEnvironment,\n  CANARY_OPERATION_DEADLINE_MS as __testOnlyCanaryOperationDeadlineMs,\n  MCP_REQUEST_TIMEOUT_MS as __testOnlyMcpRequestTimeoutMs,\n};\n`,
       "utf8",
     );
     const testModule = await import(`${pathToFileURL(testModulePath).href}?id=${randomUUID()}`);
@@ -141,6 +148,7 @@ function loadPrivateCanaryInternals(): Promise<PrivateCanaryInternals> {
       "__testOnlyPublishAtomicDirectorySet",
       "__testOnlyCanonicalizeCanaryReport",
       "__testOnlyAssertPreparedCanaryReportSet",
+      "__testOnlyProjectEnvironment",
     ]) {
       if (typeof testModule[name] !== "function") {
         throw new Error(`Private canary test projection ${name} is unavailable.`);
@@ -153,6 +161,10 @@ function loadPrivateCanaryInternals(): Promise<PrivateCanaryInternals> {
         testModule.__testOnlyCanonicalizeCanaryReport as PrivateCanaryInternals["canonicalizeCanaryReport"],
       assertPreparedCanaryReportSet:
         testModule.__testOnlyAssertPreparedCanaryReportSet as PrivateCanaryInternals["assertPreparedCanaryReportSet"],
+      projectEnvironment:
+        testModule.__testOnlyProjectEnvironment as PrivateCanaryInternals["projectEnvironment"],
+      canaryOperationDeadlineMs: testModule.__testOnlyCanaryOperationDeadlineMs as number,
+      mcpRequestTimeoutMs: testModule.__testOnlyMcpRequestTimeoutMs as number,
     };
   })();
   return privateCanaryInternalsPromise;
@@ -1042,6 +1054,25 @@ describe("production-readiness canary contract", () => {
     expect(() =>
       privateCanaryInternals.assertPreparedCanaryReportSet(preparedReportSet()),
     ).not.toThrow();
+  });
+
+  it("preregisters a bounded canary deadline below the MCP client timeout", () => {
+    expect(privateCanaryInternals.canaryOperationDeadlineMs).toBe(300_000);
+    expect(privateCanaryInternals.mcpRequestTimeoutMs).toBe(330_000);
+    expect(privateCanaryInternals.mcpRequestTimeoutMs).toBeGreaterThan(
+      privateCanaryInternals.canaryOperationDeadlineMs,
+    );
+    expect(
+      privateCanaryInternals.projectEnvironment("canary", "/tmp/canary-cache", {
+        AST_OPERATION_DEADLINE_MS: "1000",
+        AST_MAX_PROJECT_SESSIONS: "1",
+      }),
+    ).toEqual({
+      AST_SYMBOL_INDEX_PERSISTENCE: "canary",
+      AST_SYMBOL_INDEX_CACHE_ROOT: "/tmp/canary-cache",
+      AST_MAX_PROJECT_SESSIONS: "1",
+      AST_OPERATION_DEADLINE_MS: "300000",
+    });
   });
 
   it("requires the complete four-member prepared set", () => {

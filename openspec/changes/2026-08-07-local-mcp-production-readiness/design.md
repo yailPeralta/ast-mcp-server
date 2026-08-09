@@ -27,6 +27,8 @@ Invalid, non-integer, negative, zero, NaN or overflow values use conservative de
 
 These values bound retained work; they are not SLAs.
 
+The production-readiness harness runs representative repositories with a fixed `AST_OPERATION_DEADLINE_MS=300_000 ms` child environment and a `330_000 ms` MCP request timeout. This keeps the server-side cooperative deadline bounded and observable before the harness transport timeout while leaving the product default unchanged. Harness callers cannot override this preregistered value through ambient or per-fixture environment.
+
 ## Project operation scheduler
 
 Extract queue mechanics from `project.ts` into a session-owned class because the state has lifecycle invariants.
