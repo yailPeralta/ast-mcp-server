@@ -25,8 +25,11 @@ import {
   type SymbolIndexStorageError,
 } from "./symbol-index-sqlite.js";
 import { findDeclaration, sourceFileIndexSymbols } from "./symbols.js";
-import { collectCompilerRelationships, type RelationshipEdge } from "./relationships.js";
-import { createProjectWatcher, type ProjectWatcher } from "./project-watcher.js";
+import {
+  createProjectWatcher,
+  selectProjectWatchDirectories,
+  type ProjectWatcher,
+} from "./project-watcher.js";
 import { createConfigSnapshot, createWorkspaceSnapshot } from "./workspace.js";
 import {
   createInitialProjectStatus,
@@ -61,15 +64,15 @@ export interface ProjectContext {
   symbolIndexBackend: "memory" | "sqlite";
   symbolIndexFallbackReason: string | null;
   symbolIndexObservability: SymbolIndexRuntimeObservability;
-  relationshipEdges: readonly RelationshipEdge[];
-  relationshipEdgesReady: boolean;
 }
 
 interface ProjectSession {
   context: ProjectContext;
   watcher: ProjectWatcher;
+  watchDirectories: readonly string[];
   configDigest: string;
   fingerprints: ReadonlyMap<string, FileFingerprint>;
+  compilerStateUntrusted: boolean;
   scheduler: ProjectOperationScheduler;
   lastAccessSequence: bigint;
   symbolIndexPolicy: SymbolIndexPersistencePolicy;
@@ -313,8 +316,6 @@ function buildProjectContext(tsConfigFilePath: string): ProjectContext {
     symbolIndexBackend: "memory",
     symbolIndexFallbackReason: null,
     symbolIndexObservability: createInitialSymbolIndexRuntimeObservability(),
-    relationshipEdges: [],
-    relationshipEdgesReady: false,
   };
 }
 
@@ -325,6 +326,64 @@ export function createFreshProject(projectRoot: string): ProjectContext {
 function closeProjectSession(session: ProjectSession): void {
   session.watcher.close();
   closePersistentSymbolIndex(session);
+}
+
+function createSessionWatcher(
+  getSession: () => ProjectSession,
+  projectRoot: string,
+  directories: readonly string[],
+): ProjectWatcher {
+  return createProjectWatcher({
+    projectRoot,
+    directories,
+    onChange: (files) => {
+      const session = getSession();
+      session.context = {
+        ...session.context,
+        status: transitionProjectStatus(session.context.status, {
+          type: "source_changed",
+          files,
+        }),
+      };
+    },
+    onError: (error) => {
+      const session = getSession();
+      session.context = {
+        ...session.context,
+        status: transitionProjectStatus(session.context.status, {
+          type: "watcher_failed",
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      };
+    },
+  });
+}
+
+function sameDirectories(left: readonly string[], right: readonly string[]): boolean {
+  return (
+    left.length === right.length && left.every((directory, index) => directory === right[index])
+  );
+}
+
+function replaceSessionWatcher(session: ProjectSession, directories: readonly string[]): void {
+  if (
+    sameDirectories(session.watchDirectories, directories) &&
+    session.watcher.snapshot().state !== "failed"
+  ) {
+    return;
+  }
+  const previous = session.watcher;
+  const replacement = createSessionWatcher(() => session, session.context.projectRoot, directories);
+  session.watcher = replacement;
+  session.watchDirectories = directories;
+  replacement.start();
+  previous.close();
+  if (replacement.snapshot().state === "ready") {
+    session.context = {
+      ...session.context,
+      status: transitionProjectStatus(session.context.status, { type: "watcher_recovered" }),
+    };
+  }
 }
 
 function sessionHasAdmittedOperations(session: ProjectSession): boolean {
@@ -375,34 +434,21 @@ function getOrCreateSession(
     ...baseContext,
     symbolIndexObservability: createInitialSymbolIndexRuntimeObservability(symbolIndexPolicy),
   };
+  const watchDirectories = selectProjectWatchDirectories(
+    context.projectRoot,
+    context.project.getSourceFiles().map((sourceFile) => sourceFile.getFilePath()),
+  );
+  const watcher = createSessionWatcher(() => session, context.projectRoot, watchDirectories);
   const session: ProjectSession = {
     context,
-    watcher: createProjectWatcher({
-      projectRoot: context.projectRoot,
-      onChange: (files) => {
-        session.context = {
-          ...session.context,
-          status: transitionProjectStatus(session.context.status, {
-            type: "source_changed",
-            files,
-          }),
-        };
-      },
-      onError: (error) => {
-        session.context = {
-          ...session.context,
-          status: transitionProjectStatus(session.context.status, {
-            type: "watcher_failed",
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        };
-      },
-    }),
+    watcher,
+    watchDirectories,
     configDigest: (() => {
       requestContext.checkpoint();
       return createConfigSnapshot(tsConfigFilePath).digest;
     })(),
     fingerprints: new Map(),
+    compilerStateUntrusted: false,
     scheduler: new ProjectOperationScheduler({
       queueCapacity: runtimePolicy.maxQueuedOperationsPerProject,
       queueWaitTimeoutMs: runtimePolicy.queueWaitTimeoutMs,
@@ -453,39 +499,64 @@ async function synchronizeSession(
 ): Promise<void> {
   let syncFailureCause: SynchronizationCause = "compiler_rebuild";
   let currentConfigDigest: string;
+  let compilerStateMayHaveAdvanced = false;
   try {
     requestContext.checkpoint();
     currentConfigDigest = createConfigSnapshot(session.context.tsConfigFilePath).digest;
-    if (currentConfigDigest !== session.configDigest) {
-      let status = transitionProjectStatus(session.context.status, { type: "config_changed" });
+    const compilerConfigChanged = currentConfigDigest !== session.configDigest;
+    if (compilerConfigChanged || session.compilerStateUntrusted) {
+      let status = session.context.status;
+      if (compilerConfigChanged) {
+        status = transitionProjectStatus(status, { type: "config_changed" });
+      }
       status = transitionProjectStatus(status, { type: "compiler_rebuild_started" });
+      const symbolIndexObservability = session.context.symbolIndexObservability;
       closePersistentSymbolIndex(session);
       const rebuilt = buildProjectContext(session.context.tsConfigFilePath);
-      session.context = { ...rebuilt, status };
+      session.context = { ...rebuilt, status, symbolIndexObservability };
+      session.compilerStateUntrusted = false;
     }
 
     const { project, tsConfigFilePath } = session.context;
     syncFailureCause = "source_change";
-    const refreshSourceFiles = async (): Promise<void> => {
-      project.addSourceFilesFromTsConfig(tsConfigFilePath);
-      await Promise.all(
-        project.getSourceFiles().map((sourceFile) => sourceFile.refreshFromFileSystem()),
-      );
-    };
     requestContext.checkpoint();
-    await refreshSourceFiles();
+    compilerStateMayHaveAdvanced = true;
+    project.addSourceFilesFromTsConfig(tsConfigFilePath);
+    for (const sourceFile of project.getSourceFiles()) {
+      requestContext.checkpoint();
+      if (!fs.existsSync(sourceFile.getFilePath())) project.removeSourceFile(sourceFile);
+    }
+    requestContext.checkpoint();
+    replaceSessionWatcher(
+      session,
+      selectProjectWatchDirectories(
+        session.context.projectRoot,
+        project.getSourceFiles().map((sourceFile) => sourceFile.getFilePath()),
+      ),
+    );
     requestContext.checkpoint();
 
     const snapshot = createWorkspaceSnapshot(session.context, {
       previousFingerprints: session.fingerprints,
+      verifyContentHash: true,
     });
     if (snapshot.configDigest !== currentConfigDigest) {
       syncFailureCause = "config_change";
       throw new Error("Project configuration changed during synchronization. Retry the operation.");
     }
 
+    const changedPaths = new Set([
+      ...snapshot.fingerprintChanges.added,
+      ...snapshot.fingerprintChanges.changed,
+    ]);
     requestContext.checkpoint();
-    await refreshSourceFiles();
+    await Promise.all(
+      project.getSourceFiles().map(async (sourceFile) => {
+        requestContext.checkpoint();
+        const absoluteFilePath = fs.realpathSync(sourceFile.getFilePath());
+        if (changedPaths.has(absoluteFilePath)) await sourceFile.refreshFromFileSystem();
+      }),
+    );
     requestContext.checkpoint();
     const verificationSnapshot = createWorkspaceSnapshot(session.context, {
       previousFingerprints: snapshot.fingerprints,
@@ -699,27 +770,6 @@ async function synchronizeSession(
       }
     }
 
-    let relationshipEdges: readonly RelationshipEdge[] = [];
-    let relationshipEdgesReady = false;
-    try {
-      requestContext.checkpoint();
-      relationshipEdges = collectCompilerRelationships(
-        project,
-        session.context.projectRoot,
-        {
-          state: "fresh",
-          causes: [],
-          checked_at: new Date().toISOString(),
-        },
-        requestContext,
-      );
-      relationshipEdgesReady = true;
-    } catch (error) {
-      if (isCooperativeInterruption(error)) throw error;
-      relationshipEdges = [];
-    }
-    session.context = { ...session.context, relationshipEdges, relationshipEdgesReady };
-
     const status = transitionProjectStatus(session.context.status, {
       type: "sync_succeeded",
       sourceCount: verificationSnapshot.sourceFileCount,
@@ -732,13 +782,10 @@ async function synchronizeSession(
     session.context = { ...session.context, status };
     session.configDigest = verificationSnapshot.configDigest;
     session.fingerprints = verificationSnapshot.fingerprints;
+    session.compilerStateUntrusted = false;
   } catch (error) {
+    if (compilerStateMayHaveAdvanced) session.compilerStateUntrusted = true;
     if (isCooperativeInterruption(error)) throw error;
-    session.context = {
-      ...session.context,
-      relationshipEdges: [],
-      relationshipEdgesReady: false,
-    };
     const status = transitionProjectStatus(session.context.status, {
       type: "sync_failed",
       cause: syncFailureCause,

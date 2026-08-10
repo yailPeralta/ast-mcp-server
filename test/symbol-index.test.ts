@@ -130,6 +130,7 @@ describe("symbol index contracts", () => {
       load: async () => [],
       upsert: async () => undefined,
       remove: async () => undefined,
+      countSymbols: async () => 0,
       querySymbols: async () => [],
       queryAllSymbols: async () => [],
       clear: async () => undefined,
@@ -146,6 +147,7 @@ describe("symbol index contracts", () => {
         limit: 10,
       }),
     ).resolves.toEqual([]);
+    await expect(store.countSymbols({ project, query: "createServer" })).resolves.toBe(0);
   });
 
   it("bounds all-symbol candidate reads before consumer pagination", async () => {

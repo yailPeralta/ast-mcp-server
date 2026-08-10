@@ -65,8 +65,8 @@ function boundedInteger(value: number | undefined, fallback: number, minimum: nu
 }
 
 function normalizeDirectory(projectRoot: string, directory: string): string {
-  const normalizedRoot = path.resolve(projectRoot);
-  const normalizedDirectory = path.resolve(directory);
+  const normalizedRoot = fs.realpathSync(path.resolve(projectRoot));
+  const normalizedDirectory = fs.realpathSync(path.resolve(directory));
   if (
     normalizedDirectory !== normalizedRoot &&
     !normalizedDirectory.startsWith(`${normalizedRoot}${path.sep}`)
@@ -74,6 +74,40 @@ function normalizeDirectory(projectRoot: string, directory: string): string {
     throw new Error(`Watcher directory must stay inside the project root: ${directory}.`);
   }
   return normalizedDirectory;
+}
+
+export function selectProjectWatchDirectories(
+  projectRoot: string,
+  sourceFilePaths: readonly string[],
+): readonly string[] {
+  const normalizedRoot = fs.realpathSync(path.resolve(projectRoot));
+  const directories = new Set<string>([normalizedRoot]);
+  for (const sourceFilePath of sourceFilePaths) {
+    let directory = path.dirname(path.resolve(sourceFilePath));
+    while (directory === normalizedRoot || directory.startsWith(`${normalizedRoot}${path.sep}`)) {
+      const relativeParts = path.relative(normalizedRoot, directory).split(path.sep);
+      if (relativeParts.some((part) => IGNORED_DIRECTORY_NAMES.has(part))) break;
+      let physicalDirectory: string;
+      try {
+        physicalDirectory = fs.realpathSync(directory);
+      } catch {
+        break;
+      }
+      if (
+        physicalDirectory !== normalizedRoot &&
+        !physicalDirectory.startsWith(`${normalizedRoot}${path.sep}`)
+      ) {
+        break;
+      }
+      directories.add(physicalDirectory);
+      if (directory === normalizedRoot) break;
+      directory = path.dirname(directory);
+    }
+  }
+  return [...directories].sort(
+    (left, right) =>
+      left.split(path.sep).length - right.split(path.sep).length || left.localeCompare(right),
+  );
 }
 
 function discoverDirectories(projectRoot: string, maxDirectories: number): readonly string[] {
@@ -123,7 +157,7 @@ function createWatcher(options: ProjectWatcherOptions): ProjectWatcher {
   if (typeof options.onChange !== "function" || typeof options.onError !== "function") {
     throw new Error("Watcher callbacks must be functions.");
   }
-  const projectRoot = path.resolve(options.projectRoot);
+  const projectRoot = fs.realpathSync(path.resolve(options.projectRoot));
   const debounceMs = boundedInteger(options.debounceMs, DEFAULT_WATCHER_DEBOUNCE_MS, 0);
   const maxPendingPaths = boundedInteger(options.maxPendingPaths, DEFAULT_MAX_PENDING_PATHS, 1);
   const maxWatchedDirectories = boundedInteger(
@@ -230,6 +264,9 @@ function createWatcher(options: ProjectWatcherOptions): ProjectWatcher {
       try {
         const directories =
           configuredDirectories ?? discoverDirectories(projectRoot, maxWatchedDirectories);
+        if (directories.length > maxWatchedDirectories) {
+          throw new Error(`Watcher directory limit exceeded (${maxWatchedDirectories}).`);
+        }
         for (const directory of directories) {
           nextHandles.push(
             watchFactory(

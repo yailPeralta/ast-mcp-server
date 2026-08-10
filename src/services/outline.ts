@@ -130,6 +130,28 @@ function symbolOf(node: Node, symbolPath: string, name: string, signature: strin
   };
 }
 
+function classDeclarationSignature(statement: ClassDeclaration): string {
+  const name = statement.getName() ?? "<anonymous>";
+  const heritage = statement.getExtends()?.getText();
+  const implementations = statement.getImplements().map((item) => item.getText());
+  return joinPresent([
+    modifiersOf(statement),
+    `class ${name}${typeParametersOf(statement)}`,
+    heritage ? `extends ${heritage}` : undefined,
+    implementations.length > 0 ? `implements ${implementations.join(", ")}` : undefined,
+  ]);
+}
+
+function interfaceDeclarationSignature(statement: InterfaceDeclaration): string {
+  const name = statement.getName();
+  const extensions = statement.getExtends().map((item) => item.getText());
+  return joinPresent([
+    modifiersOf(statement),
+    `interface ${name}${typeParametersOf(statement)}`,
+    extensions.length > 0 ? `extends ${extensions.join(", ")}` : undefined,
+  ]);
+}
+
 function formatClass(
   statement: ClassDeclaration,
   prefix = "",
@@ -137,14 +159,7 @@ function formatClass(
 ): FormattedStatement {
   const name = statement.getName() ?? "<anonymous>";
   const symbolPath = prefix ? `${prefix}.${name}` : name;
-  const heritage = statement.getExtends()?.getText();
-  const implementations = statement.getImplements().map((item) => item.getText());
-  const declaration = joinPresent([
-    modifiersOf(statement),
-    `class ${name}${typeParametersOf(statement)}`,
-    heritage ? `extends ${heritage}` : undefined,
-    implementations.length > 0 ? `implements ${implementations.join(", ")}` : undefined,
-  ]);
+  const declaration = classDeclarationSignature(statement);
   const lines = [`${declaration} {`];
   const symbols = [symbolOf(statement, symbolPath, name, declaration)];
 
@@ -168,12 +183,7 @@ function formatInterface(
 ): FormattedStatement {
   const name = statement.getName();
   const symbolPath = prefix ? `${prefix}.${name}` : name;
-  const extensions = statement.getExtends().map((item) => item.getText());
-  const declaration = joinPresent([
-    modifiersOf(statement),
-    `interface ${name}${typeParametersOf(statement)}`,
-    extensions.length > 0 ? `extends ${extensions.join(", ")}` : undefined,
-  ]);
+  const declaration = interfaceDeclarationSignature(statement);
   const lines = [`${declaration} {`];
   const symbols = [symbolOf(statement, symbolPath, name, declaration)];
 
@@ -288,6 +298,63 @@ function formatStatement(
   }
 
   return undefined;
+}
+
+export function declarationSignature(
+  node: Node,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): string {
+  requestContext.checkpoint();
+  if (Node.isFunctionDeclaration(node)) return functionSignature(node);
+  if (Node.isMethodDeclaration(node)) return methodSignature(node);
+  if (
+    Node.isConstructorDeclaration(node) ||
+    Node.isGetAccessorDeclaration(node) ||
+    Node.isSetAccessorDeclaration(node) ||
+    Node.isPropertyDeclaration(node)
+  ) {
+    return memberSignature(node) ?? node.getText().trim();
+  }
+  if (Node.isMethodSignature(node) || Node.isPropertySignature(node)) {
+    return node.getText().trim();
+  }
+  if (Node.isClassDeclaration(node)) return classDeclarationSignature(node);
+  if (Node.isInterfaceDeclaration(node)) return interfaceDeclarationSignature(node);
+  if (Node.isTypeAliasDeclaration(node)) {
+    return joinPresent([
+      modifiersOf(node),
+      `type ${node.getName()}${typeParametersOf(node)} = ${node.getTypeNode()?.getText() ?? "unknown"};`,
+    ]);
+  }
+  if (Node.isEnumDeclaration(node)) {
+    const members = node.getMembers().map((member) => {
+      requestContext.checkpoint();
+      return member.getName();
+    });
+    return joinPresent([modifiersOf(node), `enum ${node.getName()} { ${members.join(", ")} }`]);
+  }
+  if (Node.isModuleDeclaration(node)) {
+    return joinPresent([modifiersOf(node), `namespace ${node.getName()}`]);
+  }
+  if (Node.isVariableDeclaration(node)) {
+    let statement: Node | undefined = node.getParent();
+    while (statement && !Node.isVariableStatement(statement)) statement = statement.getParent();
+    if (statement && Node.isVariableStatement(statement)) {
+      const explicitType = node.getTypeNode()?.getText();
+      const initializer = node.getInitializer();
+      const callableType =
+        initializer && (Node.isArrowFunction(initializer) || Node.isFunctionExpression(initializer))
+          ? callableExpressionSignature(initializer)
+          : undefined;
+      return joinPresent([
+        modifiersOf(statement),
+        `${statement.getDeclarationKind()} ${node.getName()}${
+          explicitType || callableType ? `: ${explicitType ?? callableType}` : ""
+        };`,
+      ]);
+    }
+  }
+  return node.getText().trim();
 }
 
 export function buildFileOutline(

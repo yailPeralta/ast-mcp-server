@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { paginate } from "../src/services/pagination.js";
+import { paginate, PaginationInputSchema } from "../src/services/pagination.js";
 
 describe("paginate", () => {
   it("returns deterministic continuation metadata", () => {
@@ -19,5 +19,9 @@ describe("paginate", () => {
       has_more: false,
       next_offset: null,
     });
+  });
+
+  it("rejects offsets that cannot be represented exactly", () => {
+    expect(PaginationInputSchema.offset.safeParse(Number.MAX_SAFE_INTEGER + 1).success).toBe(false);
   });
 });

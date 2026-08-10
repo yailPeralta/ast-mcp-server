@@ -1,13 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import {
-  createPaginationInputSchema,
-  PaginationOutputSchema,
-  paginate,
-} from "../services/pagination.js";
+import { createPaginationInputSchema, PaginationOutputSchema } from "../services/pagination.js";
 import { withProject, reportSymbolIndexFailure } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
-import { searchProjectSymbols, searchProjectSymbolsWithIndex } from "../services/symbols.js";
+import {
+  searchProjectSymbolsPage,
+  searchProjectSymbolsPageWithIndex,
+} from "../services/symbols.js";
 import {
   createToolErrorContext,
   errorResult,
@@ -125,26 +124,29 @@ export function registerSearchSymbols(server: McpServer): void {
           async (context, operationContext) => {
             const { project, projectRoot } = context;
             const startedAt = performance.now();
-            const matches =
-              (await searchProjectSymbolsWithIndex(
+            const page =
+              (await searchProjectSymbolsPageWithIndex(
                 project,
                 projectRoot,
                 context.status.project,
                 context.symbolIndex,
                 context.symbolIndexReady,
                 { query, kinds, fileFilter: file_filter },
+                offset,
+                limit,
                 async (reason) => {
                   await reportSymbolIndexFailure(projectRoot, reason);
                 },
                 operationContext,
               )) ??
-              searchProjectSymbols(
+              searchProjectSymbolsPage(
                 project,
                 projectRoot,
                 { query, kinds, fileFilter: file_filter },
+                offset,
+                limit,
                 operationContext,
               );
-            const page = paginate(matches, offset, limit);
             const { items, ...metadata } = page;
             return {
               symbols: projectSymbols(detail, items),

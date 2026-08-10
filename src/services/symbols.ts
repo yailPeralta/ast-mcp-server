@@ -1,20 +1,15 @@
 import path from "node:path";
-import {
-  Node,
-  type Project,
-  type ModuleBlock,
-  type ModuleDeclaration,
-  type SourceFile,
-  type Statement,
-} from "ts-morph";
-import { buildFileOutline } from "./outline.js";
+import { Node, ts, type Project, type ModuleDeclaration, type SourceFile } from "ts-morph";
+import { buildFileOutline, declarationSignature } from "./outline.js";
 import {
   isCooperativeInterruption,
   NO_REQUEST_CONTEXT,
   type RequestContext,
 } from "./request-context.js";
 import type { SourceRange } from "./read-contracts.js";
+import type { Page } from "./pagination.js";
 import { MAX_SYMBOL_INDEX_QUERY_CANDIDATES } from "./symbol-index-limits.js";
+import { compareSymbolIndexText } from "./symbol-index-order.js";
 import type {
   SymbolIndexStore,
   SymbolIndexSymbol,
@@ -149,55 +144,156 @@ export function searchProjectSymbols(
   options: ProjectSymbolSearchOptions,
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): ProjectSymbolRecord[] {
+  return searchProjectSymbolsPage(
+    project,
+    projectRoot,
+    options,
+    0,
+    MAX_SYMBOL_INDEX_QUERY_CANDIDATES,
+    requestContext,
+  ).items;
+}
+
+interface ProjectSymbolCandidate {
+  readonly file: string;
+  readonly selector: string;
+  readonly symbol: LocatedSymbol;
+  readonly rank: number;
+  readonly symbolPosition: number;
+}
+
+function candidateOrder(left: ProjectSymbolCandidate, right: ProjectSymbolCandidate): number {
+  return (
+    left.rank - right.rank ||
+    compareSymbolIndexText(left.file, right.file) ||
+    left.symbol.line - right.symbol.line ||
+    left.symbolPosition - right.symbolPosition
+  );
+}
+
+function assertSearchPage(offset: number, limit: number): void {
+  if (!Number.isSafeInteger(offset) || offset < 0) {
+    throw new Error("Symbol search offset must be a non-negative safe integer.");
+  }
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_SYMBOL_INDEX_QUERY_CANDIDATES) {
+    throw new Error(
+      `Symbol search limit must be an integer from 1 to ${MAX_SYMBOL_INDEX_QUERY_CANDIDATES}.`,
+    );
+  }
+}
+
+export function searchProjectSymbolsPage(
+  project: Project,
+  projectRoot: string,
+  options: ProjectSymbolSearchOptions,
+  offset: number,
+  limit: number,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): Page<ProjectSymbolRecord> {
+  assertSearchPage(offset, limit);
   const normalizedQuery = options.query.toLowerCase();
   const normalizedFileFilter = options.fileFilter?.toLowerCase();
   const kindSet = options.kinds ? new Set(options.kinds) : undefined;
-  const matches: ProjectSymbolRecord[] = [];
+  const sourceFiles = project
+    .getSourceFiles()
+    .map((sourceFile) => ({
+      sourceFile,
+      file: path.relative(projectRoot, sourceFile.getFilePath()).replaceAll("\\", "/"),
+    }))
+    .sort((left, right) => compareSymbolIndexText(left.file, right.file));
+  const rankCounts = [0, 0, 0, 0, 0];
 
-  for (const sourceFile of project.getSourceFiles()) {
+  for (const { sourceFile, file } of sourceFiles) {
     requestContext.checkpoint();
-    const file = path.relative(projectRoot, sourceFile.getFilePath());
     if (normalizedFileFilter && !file.toLowerCase().includes(normalizedFileFilter)) continue;
+    forEachLocatedSymbol(sourceFile, (symbol) => {
+      requestContext.checkpoint();
+      const selector = `${symbol.symbolPath}@${symbol.line}`;
+      if (
+        (!kindSet || kindSet.has(symbol.kind)) &&
+        (symbol.name.toLowerCase().includes(normalizedQuery) ||
+          symbol.symbolPath.toLowerCase().includes(normalizedQuery) ||
+          selector.toLowerCase().includes(normalizedQuery))
+      ) {
+        rankCounts[symbolMatchRank(options.query, symbol)] += 1;
+      }
+    });
+  }
 
-    const matchingSymbols = sourceFileSymbols(sourceFile, projectRoot, requestContext).filter(
-      (symbol) => {
-        return (
-          (!kindSet || kindSet.has(symbol.kind)) &&
-          (symbol.name.toLowerCase().includes(normalizedQuery) ||
-            symbol.symbol_path.toLowerCase().includes(normalizedQuery) ||
-            symbol.selector.toLowerCase().includes(normalizedQuery))
-        );
-      },
-    );
-    if (matchingSymbols.length === 0) continue;
-
-    for (const symbol of matchingSymbols) {
-      matches.push(symbol);
+  const total = rankCounts.reduce((sum, count) => sum + count, 0);
+  const rankSkips = [0, 0, 0, 0, 0];
+  const rankTakes = [0, 0, 0, 0, 0];
+  let rankOffset = 0;
+  for (let rank = 0; rank < rankCounts.length; rank += 1) {
+    const rankEnd = rankOffset + rankCounts[rank];
+    const pageStart = Math.max(offset, rankOffset);
+    const pageEnd = Math.min(offset + limit, rankEnd);
+    if (pageStart < pageEnd) {
+      rankSkips[rank] = pageStart - rankOffset;
+      rankTakes[rank] = pageEnd - pageStart;
     }
+    rankOffset = rankEnd;
+  }
+
+  const seenByRank = [0, 0, 0, 0, 0];
+  const selectedByRank: ProjectSymbolCandidate[][] = [[], [], [], [], []];
+  for (const { sourceFile, file } of sourceFiles) {
+    requestContext.checkpoint();
+    if (normalizedFileFilter && !file.toLowerCase().includes(normalizedFileFilter)) continue;
+    let symbolPosition = 0;
+    forEachLocatedSymbol(sourceFile, (symbol) => {
+      requestContext.checkpoint();
+      const selector = `${symbol.symbolPath}@${symbol.line}`;
+      const currentSymbolPosition = symbolPosition;
+      symbolPosition += 1;
+      if (
+        (kindSet && !kindSet.has(symbol.kind)) ||
+        (!symbol.name.toLowerCase().includes(normalizedQuery) &&
+          !symbol.symbolPath.toLowerCase().includes(normalizedQuery) &&
+          !selector.toLowerCase().includes(normalizedQuery))
+      ) {
+        return;
+      }
+      const rank = symbolMatchRank(options.query, symbol);
+      const position = seenByRank[rank];
+      seenByRank[rank] += 1;
+      if (position < rankSkips[rank] || selectedByRank[rank].length >= rankTakes[rank]) {
+        return;
+      }
+      selectedByRank[rank].push({
+        file,
+        selector,
+        symbol,
+        rank,
+        symbolPosition: currentSymbolPosition,
+      });
+    });
   }
 
   requestContext.checkpoint();
-  matches.sort((left, right) => {
-    const rank =
-      symbolMatchRank(options.query, {
-        symbolPath: left.symbol_path,
-        name: left.name,
-        line: left.line,
-      }) -
-      symbolMatchRank(options.query, {
-        symbolPath: right.symbol_path,
-        name: right.name,
-        line: right.line,
-      });
-    if (rank !== 0) return rank;
-    return (
-      left.file.localeCompare(right.file) ||
-      left.line - right.line ||
-      left.symbol_path.localeCompare(right.symbol_path) ||
-      left.kind.localeCompare(right.kind)
-    );
+  const pageCandidates = selectedByRank.flat().sort(candidateOrder);
+  const items = pageCandidates.map((match): ProjectSymbolRecord => {
+    requestContext.checkpoint();
+    return {
+      file: match.file,
+      symbol_path: match.symbol.symbolPath,
+      selector: match.selector,
+      name: match.symbol.name,
+      kind: match.symbol.kind,
+      line: match.symbol.line,
+      signature: declarationSignature(match.symbol.node, requestContext),
+    };
   });
-  return matches;
+  const nextOffset = offset + items.length;
+  const hasMore = nextOffset < total;
+  return {
+    items,
+    offset,
+    limit,
+    total,
+    has_more: hasMore,
+    next_offset: hasMore ? nextOffset : null,
+  };
 }
 
 export async function searchProjectSymbolsWithIndex(
@@ -210,40 +306,80 @@ export async function searchProjectSymbolsWithIndex(
   onIndexFailure?: SymbolIndexFailureHandler,
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): Promise<ProjectSymbolRecord[] | undefined> {
+  const page = await searchProjectSymbolsPageWithIndex(
+    project,
+    projectRoot,
+    projectIdentity,
+    symbolIndex,
+    symbolIndexReady,
+    options,
+    0,
+    MAX_SYMBOL_INDEX_QUERY_CANDIDATES,
+    onIndexFailure,
+    requestContext,
+  );
+  return page?.items;
+}
+
+function sameSymbolRecord(left: ProjectSymbolRecord, right: ProjectSymbolRecord): boolean {
+  return (
+    left.file === right.file &&
+    left.symbol_path === right.symbol_path &&
+    left.selector === right.selector &&
+    left.name === right.name &&
+    left.kind === right.kind &&
+    left.line === right.line &&
+    left.signature === right.signature
+  );
+}
+
+export async function searchProjectSymbolsPageWithIndex(
+  project: Project,
+  projectRoot: string,
+  projectIdentity: ProjectIdentity,
+  symbolIndex: SymbolIndexStore,
+  symbolIndexReady: boolean,
+  options: ProjectSymbolSearchOptions,
+  offset: number,
+  limit: number,
+  onIndexFailure?: SymbolIndexFailureHandler,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): Promise<Page<ProjectSymbolRecord> | undefined> {
   requestContext.checkpoint();
   if (!symbolIndexReady) return undefined;
-  const canonical = searchProjectSymbols(project, projectRoot, options, requestContext);
+  const canonical = searchProjectSymbolsPage(
+    project,
+    projectRoot,
+    options,
+    offset,
+    limit,
+    requestContext,
+  );
 
   try {
     requestContext.checkpoint();
-    const matches = await symbolIndex.queryAllSymbols({
+    const indexQuery = {
       project: projectIdentity,
       query: options.query,
       filters: {
         ...(options.kinds ? { kinds: options.kinds } : {}),
         ...(options.fileFilter ? { file_path: options.fileFilter } : {}),
       },
-    });
+    };
+    const indexedTotal = await symbolIndex.countSymbols(indexQuery);
     requestContext.checkpoint();
-    const indexed = matches.map((match) => {
+    let complete = indexedTotal === canonical.total;
+    if (complete) {
+      const matches = await symbolIndex.querySymbols({ ...indexQuery, offset, limit });
       requestContext.checkpoint();
-      return validateIndexedSymbol(project, projectRoot, match);
-    });
-    const expectedIndexedLength = Math.min(canonical.length, MAX_SYMBOL_INDEX_QUERY_CANDIDATES);
-    const complete =
-      indexed.length === expectedIndexedLength &&
-      indexed.every((record, index) => {
-        const expected = canonical[index];
-        return (
-          record.file === expected.file &&
-          record.symbol_path === expected.symbol_path &&
-          record.selector === expected.selector &&
-          record.name === expected.name &&
-          record.kind === expected.kind &&
-          record.line === expected.line &&
-          record.signature === expected.signature
-        );
+      const indexedPage = matches.map((match) => {
+        requestContext.checkpoint();
+        return validateIndexedSymbol(project, projectRoot, match, requestContext);
       });
+      complete =
+        indexedPage.length === canonical.items.length &&
+        indexedPage.every((record, index) => sameSymbolRecord(record, canonical.items[index]));
+    }
     if (!complete) {
       requestContext.checkpoint();
       try {
@@ -259,16 +395,17 @@ export async function searchProjectSymbolsWithIndex(
   } catch (error) {
     requestContext.checkpoint();
     if (isCooperativeInterruption(error)) throw error;
-    if ((error as { code?: unknown }).code === "scan_limit_exceeded") return canonical;
-    try {
-      await onIndexFailure?.(
-        typeof (error as { code?: unknown })?.code === "string"
-          ? (error as { code: string }).code
-          : "sqlite_read_failed",
-      );
-    } catch (reportError) {
-      if (isCooperativeInterruption(reportError)) throw reportError;
-      // Failure reporting cannot suppress the compiler-authoritative result.
+    if ((error as { code?: unknown }).code !== "scan_limit_exceeded") {
+      try {
+        await onIndexFailure?.(
+          typeof (error as { code?: unknown })?.code === "string"
+            ? (error as { code: string }).code
+            : "sqlite_read_failed",
+        );
+      } catch (reportError) {
+        if (isCooperativeInterruption(reportError)) throw reportError;
+        // Failure reporting cannot suppress the compiler-authoritative result.
+      }
     }
     requestContext.checkpoint();
     return canonical;
@@ -279,6 +416,7 @@ function validateIndexedSymbol(
   project: Project,
   projectRoot: string,
   match: SymbolIndexSymbolMatch,
+  requestContext: RequestContext,
 ): ProjectSymbolRecord {
   const sourceFile = project.getSourceFile(path.resolve(projectRoot, match.file_path));
   if (!sourceFile) {
@@ -292,41 +430,40 @@ function validateIndexedSymbol(
       `Indexed source file "${match.file_path}" resolved ambiguously.`,
     );
   }
-  let node: Node;
-  try {
-    node = findDeclaration(sourceFile, match.selector);
-  } catch {
+  const located = findLocatedSymbol(sourceFile, match.selector);
+  if (!located) {
     throw new IndexedProjectionMismatchError(
       `Indexed symbol "${match.selector}" does not exist in the compiler project.`,
     );
   }
+  const node = located.node;
   if (node.getStartLineNumber() !== match.line || node.getKindName() !== match.kind) {
     throw new IndexedProjectionMismatchError(
       `Indexed symbol "${match.selector}" does not match the compiler declaration.`,
     );
   }
-  const canonical = sourceFileIndexSymbols(sourceFile, projectRoot).find(
-    (symbol) => symbol.selector === match.selector,
-  );
+  const canonicalName = namedNode(node);
+  const canonicalSymbolPath = located.symbolPath;
+  const canonicalSignature = declarationSignature(node, requestContext);
   if (
-    !canonical ||
-    canonical.symbol_path !== match.symbol_path ||
-    canonical.name !== match.name ||
-    canonical.signature !== match.signature ||
-    canonical.range.start_line !== match.range.start_line
+    !canonicalName ||
+    canonicalSymbolPath !== match.symbol_path ||
+    canonicalName !== match.name ||
+    canonicalSignature !== match.signature ||
+    node.getStartLineNumber() !== match.range.start_line
   ) {
     throw new IndexedProjectionMismatchError(
       `Indexed symbol "${match.selector}" does not match canonical compiler metadata.`,
     );
   }
   return {
-    file: match.file_path,
-    symbol_path: match.symbol_path,
+    file: expectedFile,
+    symbol_path: canonicalSymbolPath,
     selector: match.selector,
-    name: match.name,
-    kind: match.kind,
-    line: match.line,
-    signature: match.signature,
+    name: canonicalName,
+    kind: node.getKindName(),
+    line: node.getStartLineNumber(),
+    signature: canonicalSignature,
   };
 }
 
@@ -352,61 +489,109 @@ function namedNode(node: Node): string | undefined {
   return undefined;
 }
 
-function addLocated(node: Node, symbolPath: string, output: LocatedSymbol[]): void {
+function locatedSymbol(node: Node, symbolPath: string): LocatedSymbol | undefined {
   const name = namedNode(node);
-  if (!name) return;
-  output.push({
+  if (!name) return undefined;
+  return {
     node,
     symbolPath,
     name,
     kind: node.getKindName(),
     line: node.getStartLineNumber(),
-  });
+  };
 }
 
-function collectClassLike(node: Node, prefix: string, output: LocatedSymbol[]): void {
-  if (!Node.isClassDeclaration(node) && !Node.isInterfaceDeclaration(node)) return;
-  for (const member of node.getMembers()) {
+function visitClassLike(
+  node: Node,
+  prefix: string,
+  visit: (symbol: LocatedSymbol) => boolean | void,
+): boolean {
+  if (!Node.isClassDeclaration(node) && !Node.isInterfaceDeclaration(node)) return true;
+  let complete = true;
+  node.forEachChild((member) => {
     const name = namedNode(member);
-    if (name) addLocated(member, `${prefix}.${name}`, output);
-  }
+    const located = name ? locatedSymbol(member, `${prefix}.${name}`) : undefined;
+    if (located && visit(located) === false) {
+      complete = false;
+      return true;
+    }
+    return undefined;
+  });
+  return complete;
 }
 
-function moduleStatements(module: ModuleDeclaration): Statement[] {
+function visitModuleStatements(
+  module: ModuleDeclaration,
+  prefix: string,
+  visit: (symbol: LocatedSymbol) => boolean | void,
+): boolean {
   let body = module.getBody();
   while (body && Node.isModuleDeclaration(body)) body = body.getBody();
-  return body && Node.isModuleBlock(body) ? (body as ModuleBlock).getStatements() : [];
+  return !body || !Node.isModuleBlock(body) || visitChildStatements(body, prefix, visit);
 }
 
-function collectStatements(
-  statements: readonly Statement[],
+function visitStatement(
+  statement: Node,
   prefix: string | undefined,
-  output: LocatedSymbol[],
-): void {
-  for (const statement of statements) {
-    if (Node.isVariableStatement(statement)) {
-      for (const declaration of statement.getDeclarations()) {
+  visit: (symbol: LocatedSymbol) => boolean | void,
+): boolean {
+  if (Node.isVariableStatement(statement)) {
+    let complete = true;
+    statement.getDeclarationList().forEachChild((declaration) => {
+      if (Node.isVariableDeclaration(declaration)) {
         const path = prefix ? `${prefix}.${declaration.getName()}` : declaration.getName();
-        addLocated(declaration, path, output);
+        const located = locatedSymbol(declaration, path);
+        if (located && visit(located) === false) {
+          complete = false;
+          return true;
+        }
       }
-      continue;
-    }
-
-    const name = namedNode(statement);
-    if (!name) continue;
-    const symbolPath = prefix ? `${prefix}.${name}` : name;
-    addLocated(statement, symbolPath, output);
-    collectClassLike(statement, symbolPath, output);
-
-    if (Node.isModuleDeclaration(statement)) {
-      collectStatements(moduleStatements(statement), symbolPath, output);
-    }
+      return undefined;
+    });
+    return complete;
   }
+
+  const name = namedNode(statement);
+  if (!name) return true;
+  const symbolPath = prefix ? `${prefix}.${name}` : name;
+  const located = locatedSymbol(statement, symbolPath);
+  if (located && visit(located) === false) return false;
+  if (!visitClassLike(statement, symbolPath, visit)) return false;
+
+  if (Node.isModuleDeclaration(statement)) {
+    return visitModuleStatements(statement, symbolPath, visit);
+  }
+  return true;
+}
+
+function visitChildStatements(
+  container: Node,
+  prefix: string | undefined,
+  visit: (symbol: LocatedSymbol) => boolean | void,
+): boolean {
+  let complete = true;
+  container.forEachChild((statement) => {
+    if (!visitStatement(statement, prefix, visit)) {
+      complete = false;
+      return true;
+    }
+    return undefined;
+  });
+  return complete;
+}
+
+export function forEachLocatedSymbol(
+  sourceFile: SourceFile,
+  visit: (symbol: LocatedSymbol) => boolean | void,
+): void {
+  visitChildStatements(sourceFile, undefined, visit);
 }
 
 export function collectSymbols(sourceFile: SourceFile): LocatedSymbol[] {
   const symbols: LocatedSymbol[] = [];
-  collectStatements(sourceFile.getStatements(), undefined, symbols);
+  forEachLocatedSymbol(sourceFile, (symbol) => {
+    symbols.push(symbol);
+  });
   return symbols;
 }
 
@@ -432,36 +617,91 @@ function parseSelector(symbolPath: string): { path: string; line?: number } {
   return match ? { path: match[1], line: Number(match[2]) } : { path: symbolPath };
 }
 
-export function findDeclaration(sourceFile: SourceFile, requestedPath: string): Node {
-  const selector = parseSelector(requestedPath);
-  let matches = collectSymbols(sourceFile).filter(
-    (symbol) =>
-      symbol.symbolPath === selector.path && (!selector.line || symbol.line === selector.line),
-  );
-
-  if (matches.length > 1) {
-    const implementations = matches.filter((symbol) => {
-      const node = symbol.node;
-      return (
-        (Node.isFunctionDeclaration(node) || Node.isMethodDeclaration(node)) &&
-        node.getBody() !== undefined
-      );
-    });
-    if (implementations.length === 1) matches = implementations;
+export function findLocatedSymbol(
+  sourceFile: SourceFile,
+  requestedSelector: string,
+  onVisit: (symbol: LocatedSymbol) => void = () => undefined,
+): LocatedSymbol | undefined {
+  const selector = parseSelector(requestedSelector);
+  if (selector.line === undefined) {
+    throw new Error("Located-symbol resolution requires an exact selector with a line number.");
   }
+  let match: LocatedSymbol | undefined;
+  forEachLocatedSymbol(sourceFile, (symbol) => {
+    onVisit(symbol);
+    if (symbol.symbolPath !== selector.path || symbol.line !== selector.line) return;
+    match = symbol;
+    return false;
+  });
+  return match;
+}
 
-  if (matches.length === 1) return matches[0].node;
-  if (matches.length === 0) {
+export function findLocatedDeclaration(
+  sourceFile: SourceFile,
+  requestedPath: string,
+  onVisit: (symbol: LocatedSymbol) => void = () => undefined,
+): LocatedSymbol {
+  const selector = parseSelector(requestedPath);
+  let match: LocatedSymbol | undefined;
+  forEachLocatedSymbol(sourceFile, (symbol) => {
+    onVisit(symbol);
+    if (symbol.symbolPath !== selector.path) return;
+    if (selector.line !== undefined && symbol.line !== selector.line) return;
+    match = symbol;
+    return false;
+  });
+
+  if (!match) {
     throw new Error(
       `Symbol "${requestedPath}" was not found in ${sourceFile.getFilePath()}. Use ast_get_outline or ast_search_symbols to obtain an exact symbol path.`,
     );
   }
+  if (selector.line !== undefined) return match;
+
+  const compilerDeclarations = match.node.getSymbol()?.compilerSymbol.declarations;
+  if (!compilerDeclarations) return match;
+  let declarationsInFile = 0;
+  let implementationNode: ts.Node | undefined;
+  let implementationCount = 0;
+  const selectors: string[] = [];
+  for (const declaration of compilerDeclarations) {
+    if (declaration.getSourceFile() !== sourceFile.compilerNode) continue;
+    declarationsInFile += 1;
+    if (selectors.length < 20) {
+      const line =
+        sourceFile.compilerNode.getLineAndCharacterOfPosition(declaration.getStart()).line + 1;
+      selectors.push(`${match.symbolPath}@${line}`);
+    }
+    if (
+      (ts.isFunctionDeclaration(declaration) || ts.isMethodDeclaration(declaration)) &&
+      declaration.body
+    ) {
+      implementationNode = declaration;
+      implementationCount += 1;
+    }
+  }
+  if (declarationsInFile <= 1) return match;
+
+  if (implementationCount === 1) {
+    let implementation: LocatedSymbol | undefined;
+    forEachLocatedSymbol(sourceFile, (symbol) => {
+      onVisit(symbol);
+      if (symbol.node.compilerNode !== implementationNode) return;
+      implementation = symbol;
+      return false;
+    });
+    if (implementation) return implementation;
+  }
 
   throw new Error(
-    `Symbol "${requestedPath}" is ambiguous. Select one by line: ${matches
-      .map((symbol) => `${symbol.symbolPath}@${symbol.line}`)
-      .join(", ")}.`,
+    `Symbol "${requestedPath}" is ambiguous. Select one by line: ${selectors.join(", ")}${
+      declarationsInFile > selectors.length ? ", ..." : ""
+    }.`,
   );
+}
+
+export function findDeclaration(sourceFile: SourceFile, requestedPath: string): Node {
+  return findLocatedDeclaration(sourceFile, requestedPath).node;
 }
 
 export function executableDeclaration(node: Node): Node {

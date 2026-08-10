@@ -12,6 +12,9 @@ type ExplorePayload = {
   completeness: { complete: boolean; symbols_complete: boolean };
   budget: { max_bytes: number; used_bytes: number };
   symbols: unknown[];
+  total: number;
+  has_more: boolean;
+  next_offset: number | null;
 };
 
 function structured(result: Awaited<ReturnType<Client["callTool"]>>): ExplorePayload {
@@ -52,6 +55,90 @@ describe("ast_explore", () => {
     vi.unstubAllEnvs();
   });
 
+  it("continues direct and composed query tools across the 10,000-result boundary", async () => {
+    await fixture.write(
+      "src/many.ts",
+      `export const ${Array.from(
+        { length: 10_001 },
+        (_, index) => `pageTarget${String(index).padStart(5, "0")} = ${index}`,
+      ).join(",")};\n`,
+    );
+
+    const directFirst = structured(
+      await client.callTool({
+        name: "ast_search_symbols",
+        arguments: {
+          project_root: fixture.root,
+          query: "pageTarget",
+          detail: "selectors",
+          offset: 9_999,
+          limit: 1,
+        },
+      }),
+    );
+    const directContinuation = structured(
+      await client.callTool({
+        name: "ast_search_symbols",
+        arguments: {
+          project_root: fixture.root,
+          query: "pageTarget",
+          detail: "selectors",
+          offset: directFirst.next_offset!,
+          limit: 1,
+        },
+      }),
+    );
+
+    expect(directFirst).toMatchObject({
+      total: 10_001,
+      has_more: true,
+      next_offset: 10_000,
+      symbols: [{ selector: "pageTarget09999@1" }],
+    });
+    expect(directContinuation).toMatchObject({
+      total: 10_001,
+      has_more: false,
+      next_offset: null,
+      symbols: [{ selector: "pageTarget10000@1" }],
+    });
+
+    const exploreFirst = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          query: "pageTarget",
+          offset: 9_999,
+          limit: 1,
+        },
+      }),
+    );
+    const exploreContinuation = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          query: "pageTarget",
+          offset: exploreFirst.next_offset!,
+          limit: 1,
+        },
+      }),
+    );
+
+    expect(exploreFirst).toMatchObject({
+      total: 10_001,
+      has_more: true,
+      next_offset: 10_000,
+      symbols: [{ selector: "pageTarget09999@1" }],
+    });
+    expect(exploreContinuation).toMatchObject({
+      total: 10_001,
+      has_more: false,
+      next_offset: null,
+      symbols: [{ selector: "pageTarget10000@1" }],
+    });
+  }, 240_000);
+
   it("does not degrade the index when cancellation wins during an ast_explore query", async () => {
     vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
     vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", path.join(fixture.root, ".symbol-index-cache"));
@@ -61,7 +148,7 @@ describe("ast_explore", () => {
     await withProject(fixture.root, (context) => {
       expect(context.symbolIndexBackend).toBe("sqlite");
       expect(context.symbolIndexReady).toBe(true);
-      vi.spyOn(context.symbolIndex, "queryAllSymbols").mockImplementationOnce(async () => {
+      vi.spyOn(context.symbolIndex, "countSymbols").mockImplementationOnce(async () => {
         queryStarted.resolve();
         await releaseQuery.promise;
         throw Object.assign(new Error("injected read failure after cancellation"), {

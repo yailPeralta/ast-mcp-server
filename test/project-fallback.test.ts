@@ -5,7 +5,8 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 const watcherFactory = vi.hoisted(() => vi.fn());
 
-vi.mock("../src/services/project-watcher.js", () => ({
+vi.mock("../src/services/project-watcher.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/services/project-watcher.js")>()),
   createProjectWatcher: watcherFactory,
 }));
 

@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import path from "node:path";
 import { Node, type SourceFile } from "ts-morph";
 import { buildFileOutline, nodeSourceWithLocation, type OutlineSymbol } from "./outline.js";
-import { paginate } from "./pagination.js";
+import { paginate, type Page } from "./pagination.js";
 import {
   isCooperativeInterruption,
   NO_REQUEST_CONTEXT,
@@ -16,8 +16,8 @@ import {
 } from "./project.js";
 import { collectSymbolReferences, type SymbolReferences } from "./references.js";
 import {
-  searchProjectSymbolsWithIndex,
-  searchProjectSymbols,
+  searchProjectSymbolsPage,
+  searchProjectSymbolsPageWithIndex,
   sourceFileSymbols,
   symbolMatchRank,
   type ProjectSymbolRecord,
@@ -181,6 +181,7 @@ async function projectRecords(
   file: string | null;
   symbol: string | null;
   records: ProjectSymbolRecord[];
+  page?: Page<ProjectSymbolRecord>;
 }> {
   const { project, projectRoot } = context;
   if (request.filePath) {
@@ -225,7 +226,7 @@ async function projectRecords(
     throw new Error("ast_explore requires query, file_path, or both file_path and symbol_path.");
   }
   let effectiveContext = context;
-  const indexedRecords = await searchProjectSymbolsWithIndex(
+  const indexedPage = await searchProjectSymbolsPageWithIndex(
     project,
     projectRoot,
     context.status.project,
@@ -236,6 +237,8 @@ async function projectRecords(
       kinds: request.kinds,
       fileFilter: request.fileFilter,
     },
+    request.offset,
+    request.limit,
     async (reason) => {
       effectiveContext = (await reportSymbolIndexFailure(projectRoot, reason)) ?? effectiveContext;
     },
@@ -246,9 +249,9 @@ async function projectRecords(
     route: "query",
     file: null,
     symbol: null,
-    records:
-      indexedRecords ??
-      searchProjectSymbols(
+    page:
+      indexedPage ??
+      searchProjectSymbolsPage(
         effectiveContext.project,
         effectiveContext.projectRoot,
         {
@@ -256,8 +259,11 @@ async function projectRecords(
           kinds: request.kinds,
           fileFilter: request.fileFilter,
         },
+        request.offset,
+        request.limit,
         requestContext,
       ),
+    records: [],
   };
 }
 
@@ -296,7 +302,7 @@ export async function buildExploreContext(
   const routed = await projectRecords(context, request, requestContext);
   requestContext.checkpoint();
   const effectiveContext = routed.context;
-  const page = paginate(routed.records, request.offset, request.limit);
+  const page = routed.page ?? paginate(routed.records, request.offset, request.limit);
   const expansion = effectiveExpansion(request);
   const unresolved: ExploreUnresolvedItem[] = [];
   const evidence: ExploreEvidence[] = [];

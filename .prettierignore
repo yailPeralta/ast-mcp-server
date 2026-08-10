@@ -3,3 +3,4 @@ coverage
 node_modules
 package-lock.json
 openspec/archive
+benchmark/results/production-readiness/*.json

@@ -3,13 +3,15 @@ import { type Node, type Project } from "ts-morph";
 import {
   createTruncationMetadata,
   createSourceLocation,
+  type FreshnessMetadata,
   type TruncationMetadata,
   type TruncationReason,
 } from "./read-contracts.js";
 import { getSourceFileOrThrow } from "./project.js";
-import { collectSymbols, findDeclaration } from "./symbols.js";
+import { findLocatedDeclaration } from "./symbols.js";
 import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
 import {
+  createCompilerRelationshipResolver,
   RELATIONSHIP_EDGE_KINDS,
   type RelationshipEdge,
   type RelationshipEdgeKind,
@@ -110,6 +112,9 @@ interface QueuedNode {
   readonly endpoint: RelationshipEndpoint;
   readonly depth: number;
 }
+
+const IMPACT_PROBE_WORK_ITEMS = 1_024;
+const IMPACT_RELATIONSHIP_WORK_ITEMS = 100_000;
 
 function assertIntegerInRange(
   value: unknown,
@@ -212,15 +217,10 @@ export function resolveImpactRoot(
     throw new Error("Impact root is invalid.");
   }
   const sourceFile = getSourceFileOrThrow(project, request.file_path);
-  const node = findDeclaration(sourceFile, request.symbol_path);
-  requestContext.checkpoint();
-  const located = collectSymbols(sourceFile).find((symbol) => {
-    requestContext.checkpoint();
-    return symbol.node === node;
-  });
-  if (!located) {
-    throw new Error(`Impact root "${request.symbol_path}" is not an indexed compiler declaration.`);
-  }
+  const located = findLocatedDeclaration(sourceFile, request.symbol_path, () =>
+    requestContext.checkpoint(),
+  );
+  const node = located.node;
   const location = createSourceLocation(
     projectRelativeFile(projectRoot, sourceFile.getFilePath()),
     nodeRange(node),
@@ -291,14 +291,30 @@ function collectNeighbors(
   return [...neighbors.values()].sort(neighborOrder);
 }
 
-export function traverseImpact(
+type NeighborProvider = (
+  current: RelationshipEndpoint,
+  options: NormalizedImpactOptions,
+  requestContext: RequestContext,
+  maxEdges: number,
+  stopAfterFirst: boolean,
+  allowedNeighborKeys?: ReadonlySet<string>,
+  excludedRelationshipIds?: ReadonlySet<string>,
+  maxWorkItems?: number,
+) => {
+  readonly neighbors: readonly Neighbor[];
+  readonly incomplete: boolean;
+  readonly excludedNeighbors: boolean;
+  readonly workLimitReached: boolean;
+};
+
+function traverseWithNeighborProvider(
   root: RelationshipEndpoint,
-  edges: readonly RelationshipEdge[],
+  neighborsFor: NeighborProvider,
   options: ImpactTraversalOptions = {},
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): ImpactResult {
   requestContext.checkpoint();
-  if (typeof root !== "object" || root === null || !Array.isArray(edges)) {
+  if (typeof root !== "object" || root === null) {
     throw new Error("Impact traversal input is invalid.");
   }
   const normalized = normalizeOptions(options);
@@ -309,12 +325,64 @@ export function traverseImpact(
   const queue: QueuedNode[] = [{ key: endpointKey(root), endpoint: root, depth: 0 }];
   const truncationReasons = new Set<TruncationReason>();
   let maxDepthReached = 0;
+  const classifyObservedNeighbor = (
+    current: QueuedNode,
+    neighbor: Neighbor,
+    edgeBlocked: boolean,
+  ): void => {
+    const nextKey = endpointKey(neighbor.endpoint);
+    const isKnownNode = nodes.has(nextKey);
+    if (edgeBlocked) truncationReasons.add("edge_limit");
+    if (!isKnownNode && current.depth + 1 > normalized.max_depth) {
+      truncationReasons.add("depth_limit");
+    }
+    if (!isKnownNode && nodes.size >= normalized.max_nodes) {
+      truncationReasons.add("record_limit");
+    }
+  };
 
   while (queue.length > 0) {
     requestContext.checkpoint();
     const current = queue.shift()!;
-    const neighbors = collectNeighbors(current.endpoint, edges, normalized, requestContext);
-    for (const neighbor of neighbors) {
+    const remainingEdges = normalized.max_edges - selectedEdges.size;
+    if (remainingEdges <= 0) {
+      const probe = neighborsFor(
+        current.endpoint,
+        normalized,
+        requestContext,
+        1,
+        true,
+        undefined,
+        new Set(selectedEdges.keys()),
+        IMPACT_PROBE_WORK_ITEMS,
+      );
+      for (const neighbor of probe.neighbors) {
+        classifyObservedNeighbor(current, neighbor, true);
+      }
+      if (probe.incomplete && !probe.workLimitReached) truncationReasons.add("edge_limit");
+      continue;
+    }
+
+    const restrictionReason: TruncationReason | undefined =
+      current.depth >= normalized.max_depth
+        ? "depth_limit"
+        : nodes.size >= normalized.max_nodes
+          ? "record_limit"
+          : undefined;
+    const allowedNeighborKeys = restrictionReason ? new Set(nodes.keys()) : undefined;
+    const batch = neighborsFor(
+      current.endpoint,
+      normalized,
+      requestContext,
+      remainingEdges,
+      false,
+      allowedNeighborKeys,
+      new Set(selectedEdges.keys()),
+    );
+    if (batch.excludedNeighbors && restrictionReason) truncationReasons.add(restrictionReason);
+    if (batch.workLimitReached) truncationReasons.add("record_limit");
+    let skippedNewNode = false;
+    for (const neighbor of batch.neighbors) {
       requestContext.checkpoint();
       const nextKey = endpointKey(neighbor.endpoint);
       const nextDepth = current.depth + 1;
@@ -325,6 +393,7 @@ export function traverseImpact(
       }
       if (!isKnownNode && nodes.size >= normalized.max_nodes) {
         truncationReasons.add("record_limit");
+        skippedNewNode = true;
         continue;
       }
       if (!selectedEdges.has(neighbor.edge.relationship_id)) {
@@ -342,6 +411,67 @@ export function traverseImpact(
       });
       queue.push({ key: nextKey, endpoint: neighbor.endpoint, depth: nextDepth });
       maxDepthReached = Math.max(maxDepthReached, nextDepth);
+    }
+
+    if (restrictionReason) {
+      if (batch.incomplete && !batch.workLimitReached) truncationReasons.add("edge_limit");
+      const probe = neighborsFor(
+        current.endpoint,
+        normalized,
+        requestContext,
+        1,
+        true,
+        undefined,
+        new Set(selectedEdges.keys()),
+        IMPACT_PROBE_WORK_ITEMS,
+      );
+      for (const neighbor of probe.neighbors) {
+        classifyObservedNeighbor(current, neighbor, selectedEdges.size >= normalized.max_edges);
+      }
+      continue;
+    }
+
+    if (
+      (skippedNewNode || nodes.size >= normalized.max_nodes) &&
+      selectedEdges.size < normalized.max_edges
+    ) {
+      const knownBatch = neighborsFor(
+        current.endpoint,
+        normalized,
+        requestContext,
+        normalized.max_edges - selectedEdges.size,
+        false,
+        new Set(nodes.keys()),
+        new Set(selectedEdges.keys()),
+      );
+      if (knownBatch.excludedNeighbors) truncationReasons.add("record_limit");
+      if (knownBatch.workLimitReached) truncationReasons.add("record_limit");
+      for (const neighbor of knownBatch.neighbors) {
+        requestContext.checkpoint();
+        if (selectedEdges.size >= normalized.max_edges) {
+          truncationReasons.add("edge_limit");
+          break;
+        }
+        selectedEdges.set(neighbor.edge.relationship_id, neighbor.edge);
+      }
+      if (knownBatch.incomplete && !knownBatch.workLimitReached) {
+        truncationReasons.add("edge_limit");
+      }
+    } else if (batch.incomplete && !batch.workLimitReached) {
+      truncationReasons.add("edge_limit");
+      const overflowProbe = neighborsFor(
+        current.endpoint,
+        normalized,
+        requestContext,
+        1,
+        true,
+        undefined,
+        new Set(selectedEdges.keys()),
+        IMPACT_PROBE_WORK_ITEMS,
+      );
+      for (const neighbor of overflowProbe.neighbors) {
+        classifyObservedNeighbor(current, neighbor, true);
+      }
     }
   }
 
@@ -372,4 +502,93 @@ export function traverseImpact(
     truncation: createTruncationMetadata(truncated, truncated ? orderedReasons[0] : null),
     truncation_reasons: orderedReasons,
   };
+}
+
+export function traverseImpact(
+  root: RelationshipEndpoint,
+  edges: readonly RelationshipEdge[],
+  options: ImpactTraversalOptions = {},
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): ImpactResult {
+  if (!Array.isArray(edges)) throw new Error("Impact traversal input is invalid.");
+  return traverseWithNeighborProvider(
+    root,
+    (
+      current,
+      normalized,
+      _context,
+      maxEdges,
+      _stopAfterFirst,
+      allowedNeighborKeys,
+      excludedRelationshipIds,
+    ) => {
+      const allNeighbors = collectNeighbors(current, edges, normalized, requestContext).filter(
+        (neighbor) => !excludedRelationshipIds?.has(neighbor.edge.relationship_id),
+      );
+      const neighbors = allowedNeighborKeys
+        ? allNeighbors.filter((neighbor) => allowedNeighborKeys.has(endpointKey(neighbor.endpoint)))
+        : allNeighbors;
+      return {
+        neighbors: neighbors.slice(0, maxEdges),
+        incomplete: neighbors.length > maxEdges,
+        excludedNeighbors: allowedNeighborKeys
+          ? allNeighbors.some(
+              (neighbor) => !allowedNeighborKeys.has(endpointKey(neighbor.endpoint)),
+            )
+          : false,
+        workLimitReached: false,
+      };
+    },
+    options,
+    requestContext,
+  );
+}
+
+export function traverseCompilerImpact(
+  project: Project,
+  projectRoot: string,
+  root: RelationshipEndpoint,
+  freshness: FreshnessMetadata,
+  options: ImpactTraversalOptions = {},
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): ImpactResult {
+  const resolver = createCompilerRelationshipResolver(
+    project,
+    projectRoot,
+    freshness,
+    requestContext,
+  );
+  return traverseWithNeighborProvider(
+    root,
+    (
+      current,
+      normalized,
+      _context,
+      maxEdges,
+      stopAfterFirst,
+      allowedNeighborKeys,
+      excludedRelationshipIds,
+      maxWorkItems,
+    ) => {
+      const resolution = resolver.edgesFor(current, {
+        direction: normalized.direction,
+        relationship_kinds: normalized.relationship_kinds,
+        max_edges: maxEdges,
+        max_work_items: maxWorkItems ?? IMPACT_RELATIONSHIP_WORK_ITEMS,
+        allowed_neighbor_keys: allowedNeighborKeys ? [...allowedNeighborKeys] : undefined,
+        excluded_relationship_ids: excludedRelationshipIds
+          ? [...excludedRelationshipIds]
+          : undefined,
+        stop_after_first: stopAfterFirst,
+      });
+      return {
+        neighbors: collectNeighbors(current, resolution.edges, normalized, requestContext),
+        incomplete: resolution.incomplete,
+        excludedNeighbors: resolution.excluded_neighbors,
+        workLimitReached: resolution.work_limit_reached,
+      };
+    },
+    options,
+    requestContext,
+  );
 }

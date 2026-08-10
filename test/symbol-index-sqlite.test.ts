@@ -274,7 +274,9 @@ describe("SQLite symbol index store", () => {
     const { DatabaseSync } = await import("node:sqlite");
     const database = new DatabaseSync(databasePath);
     database.exec("UPDATE metadata SET value = '0' WHERE key = 'schema_version'");
-    database.exec("UPDATE symbol_index SET schema_version = 3");
+    database
+      .prepare("UPDATE symbol_index SET schema_version = ?")
+      .run(SYMBOL_INDEX_SCHEMA_VERSION + 1);
     database.close();
     await expect(openSQLiteSymbolIndexStore(databasePath)).rejects.toMatchObject({
       code: "unsupported_schema",

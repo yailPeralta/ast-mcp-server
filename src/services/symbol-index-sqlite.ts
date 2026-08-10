@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { lstat, mkdir, open, realpath, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { symbolMatchRank } from "./symbols.js";
 import type { ProjectIdentity } from "./project-status.js";
 import {
   createSymbolIndexFileEntry,
@@ -15,7 +14,11 @@ import {
   MAX_SYMBOL_INDEX_TOTAL_PAYLOAD_BYTES,
   SYMBOL_INDEX_SCHEMA_VERSION,
   SymbolIndexScanLimitError,
+  symbolIndexMatchRank,
+  symbolIndexQueryOffset,
+  symbolIndexRankWindow,
   symbolProjectionJsonByteLength,
+  type SymbolIndexCountQuery,
   type SymbolIndexFileEntry,
   type SymbolIndexQuery,
   type SymbolIndexRefreshInput,
@@ -884,39 +887,34 @@ export class SQLiteSymbolIndexStore implements SymbolIndexStore {
     );
   }
 
-  async querySymbols(query: SymbolIndexQuery): Promise<readonly SymbolIndexSymbolMatch[]> {
-    if (
-      !Number.isInteger(query.limit) ||
-      query.limit < 1 ||
-      query.limit > MAX_SYMBOL_INDEX_QUERY_CANDIDATES
-    ) {
-      throw new Error(
-        `Symbol index query limit must be between 1 and ${MAX_SYMBOL_INDEX_QUERY_CANDIDATES}.`,
-      );
-    }
+  async countSymbols(query: SymbolIndexCountQuery): Promise<number> {
     try {
       const normalizedQuery = query.query.toLowerCase();
       const normalizedFileFilter = query.filters?.file_path?.toLowerCase();
+      const sqliteFileFilter =
+        normalizedFileFilter && /^[\x20-\x7e]*$/.test(normalizedFileFilter)
+          ? normalizedFileFilter
+          : undefined;
       const kindSet = query.filters?.kinds ? new Set(query.filters.kinds) : undefined;
-      const matches: SymbolIndexSymbolMatch[] = [];
       const queryArguments: Array<string | number> = [
         query.project.project_id,
         configKey(query.project.config_id),
         SYMBOL_INDEX_SCHEMA_VERSION,
       ];
-      if (normalizedFileFilter) queryArguments.push(normalizedFileFilter);
+      if (sqliteFileFilter) queryArguments.push(sqliteFileFilter);
       const rows = this.readSqlitePages(
         `SELECT project_id, config_id, file_path, content_hash, config_digest, symbols_json,
-                  symbols_digest, last_indexed_at, schema_version
-           FROM symbol_index
-           WHERE project_id = ? AND config_id = ? AND schema_version = ?
-             ${normalizedFileFilter ? "AND instr(lower(file_path), ?) > 0" : ""}
-           ORDER BY file_path`,
+              symbols_digest, last_indexed_at, schema_version
+       FROM symbol_index
+       WHERE project_id = ? AND config_id = ? AND schema_version = ?
+         ${sqliteFileFilter ? "AND (instr(lower(file_path), ?) > 0 OR file_path GLOB '*[^ -~]*')" : ""}
+       ORDER BY file_path`,
         queryArguments,
       );
       let scannedRows = 0;
       let scannedPayloadBytes = 0;
       let scannedSymbols = 0;
+      let count = 0;
       for (const row of rows) {
         scannedRows += 1;
         if (scannedRows > MAX_SYMBOL_INDEX_FILE_ENTRIES) {
@@ -937,6 +935,9 @@ export class SQLiteSymbolIndexStore implements SymbolIndexStore {
           MAX_SYMBOL_INDEX_SCANNED_SYMBOLS - scannedSymbols,
           () => new SymbolIndexScanLimitError(),
         );
+        if (normalizedFileFilter && !entry.file_path.toLowerCase().includes(normalizedFileFilter)) {
+          continue;
+        }
         for (const symbol of entry.symbols) {
           scannedSymbols += 1;
           if (scannedSymbols > MAX_SYMBOL_INDEX_SCANNED_SYMBOLS) {
@@ -944,55 +945,138 @@ export class SQLiteSymbolIndexStore implements SymbolIndexStore {
           }
           if (kindSet && !kindSet.has(symbol.kind)) continue;
           if (
-            !symbol.name.toLowerCase().includes(normalizedQuery) &&
-            !symbol.symbol_path.toLowerCase().includes(normalizedQuery) &&
-            !symbol.selector.toLowerCase().includes(normalizedQuery)
+            symbol.name.toLowerCase().includes(normalizedQuery) ||
+            symbol.symbol_path.toLowerCase().includes(normalizedQuery) ||
+            symbol.selector.toLowerCase().includes(normalizedQuery)
+          ) {
+            count += 1;
+          }
+        }
+      }
+      return count;
+    } catch (error) {
+      if (error instanceof SymbolIndexScanLimitError) throw error;
+      throw wrapStorageError(error, "read_failed", "SQLite cache count failed.");
+    }
+  }
+
+  async querySymbols(query: SymbolIndexQuery): Promise<readonly SymbolIndexSymbolMatch[]> {
+    if (
+      !Number.isInteger(query.limit) ||
+      query.limit < 1 ||
+      query.limit > MAX_SYMBOL_INDEX_QUERY_CANDIDATES
+    ) {
+      throw new Error(
+        `Symbol index query limit must be between 1 and ${MAX_SYMBOL_INDEX_QUERY_CANDIDATES}.`,
+      );
+    }
+    const offset = symbolIndexQueryOffset(query);
+    try {
+      const normalizedQuery = query.query.toLowerCase();
+      const normalizedFileFilter = query.filters?.file_path?.toLowerCase();
+      const sqliteFileFilter =
+        normalizedFileFilter && /^[\x20-\x7e]*$/.test(normalizedFileFilter)
+          ? normalizedFileFilter
+          : undefined;
+      const kindSet = query.filters?.kinds ? new Set(query.filters.kinds) : undefined;
+      const queryArguments: Array<string | number> = [
+        query.project.project_id,
+        configKey(query.project.config_id),
+        SYMBOL_INDEX_SCHEMA_VERSION,
+      ];
+      if (sqliteFileFilter) queryArguments.push(sqliteFileFilter);
+      const scanMatches = (visit: (match: SymbolIndexSymbolMatch) => void): void => {
+        const rows = this.readSqlitePages(
+          `SELECT project_id, config_id, file_path, content_hash, config_digest, symbols_json,
+                symbols_digest, last_indexed_at, schema_version
+         FROM symbol_index
+         WHERE project_id = ? AND config_id = ? AND schema_version = ?
+           ${sqliteFileFilter ? "AND (instr(lower(file_path), ?) > 0 OR file_path GLOB '*[^ -~]*')" : ""}
+         ORDER BY file_path`,
+          queryArguments,
+        );
+        let scannedRows = 0;
+        let scannedPayloadBytes = 0;
+        let scannedSymbols = 0;
+        for (const row of rows) {
+          scannedRows += 1;
+          if (scannedRows > MAX_SYMBOL_INDEX_FILE_ENTRIES) {
+            throw new SymbolIndexScanLimitError();
+          }
+          if (typeof row.symbols_json !== "string") {
+            throw new SymbolIndexStorageError(
+              "corrupt_storage",
+              "SQLite cache row shape is invalid.",
+            );
+          }
+          scannedPayloadBytes += Buffer.byteLength(row.symbols_json, "utf8");
+          if (scannedPayloadBytes > MAX_SYMBOL_INDEX_TOTAL_PAYLOAD_BYTES) {
+            throw new SymbolIndexScanLimitError();
+          }
+          const entry = toEntry(
+            row,
+            MAX_SYMBOL_INDEX_SCANNED_SYMBOLS - scannedSymbols,
+            () => new SymbolIndexScanLimitError(),
+          );
+          if (
+            normalizedFileFilter &&
+            !entry.file_path.toLowerCase().includes(normalizedFileFilter)
           ) {
             continue;
           }
-          matches.push({
-            ...createSymbolIndexSymbol(symbol),
-            project: {
-              project_id: entry.project.project_id,
-              config_id: entry.project.config_id,
-            },
-            file_path: entry.file_path,
-            content_hash: entry.content_hash,
-            config_digest: entry.config_digest,
-            index_schema_version: entry.index_schema_version,
-          });
+          for (const [symbolPosition, symbol] of entry.symbols.entries()) {
+            scannedSymbols += 1;
+            if (scannedSymbols > MAX_SYMBOL_INDEX_SCANNED_SYMBOLS) {
+              throw new SymbolIndexScanLimitError();
+            }
+            if (kindSet && !kindSet.has(symbol.kind)) continue;
+            if (
+              !symbol.name.toLowerCase().includes(normalizedQuery) &&
+              !symbol.symbol_path.toLowerCase().includes(normalizedQuery) &&
+              !symbol.selector.toLowerCase().includes(normalizedQuery)
+            ) {
+              continue;
+            }
+            visit({
+              ...createSymbolIndexSymbol(symbol),
+              project: {
+                project_id: entry.project.project_id,
+                config_id: entry.project.config_id,
+              },
+              file_path: entry.file_path,
+              content_hash: entry.content_hash,
+              config_digest: entry.config_digest,
+              index_schema_version: entry.index_schema_version,
+              symbol_position: symbolPosition,
+            });
+          }
         }
-      }
-      matches.sort((left, right) => {
-        const rank =
-          symbolMatchRank(query.query, {
-            symbolPath: left.symbol_path,
-            name: left.name,
-            line: left.line,
-          }) -
-          symbolMatchRank(query.query, {
-            symbolPath: right.symbol_path,
-            name: right.name,
-            line: right.line,
-          });
-        if (rank !== 0) return rank;
-        return (
-          left.file_path.localeCompare(right.file_path) ||
-          left.line - right.line ||
-          left.symbol_path.localeCompare(right.symbol_path) ||
-          left.kind.localeCompare(right.kind)
-        );
+      };
+
+      const rankCounts = [0, 0, 0, 0, 0];
+      scanMatches((match) => {
+        rankCounts[symbolIndexMatchRank(query.query, match)] += 1;
       });
-      return matches.slice(0, query.limit);
+      const window = symbolIndexRankWindow(rankCounts, offset, query.limit);
+      const seenByRank = [0, 0, 0, 0, 0];
+      const selectedByRank: SymbolIndexSymbolMatch[][] = [[], [], [], [], []];
+      scanMatches((match) => {
+        const rank = symbolIndexMatchRank(query.query, match);
+        const position = seenByRank[rank];
+        seenByRank[rank] += 1;
+        if (position < window.skips[rank] || selectedByRank[rank].length >= window.takes[rank]) {
+          return;
+        }
+        selectedByRank[rank].push(match);
+      });
+      return selectedByRank.flat();
     } catch (error) {
       if (error instanceof SymbolIndexScanLimitError) throw error;
       throw wrapStorageError(error, "read_failed", "SQLite cache query failed.");
     }
   }
 
-  async queryAllSymbols(
-    query: Omit<SymbolIndexQuery, "limit">,
-  ): Promise<readonly SymbolIndexSymbolMatch[]> {
+  async queryAllSymbols(query: SymbolIndexCountQuery): Promise<readonly SymbolIndexSymbolMatch[]> {
     return this.querySymbols({ ...query, limit: MAX_SYMBOL_INDEX_QUERY_CANDIDATES });
   }
 

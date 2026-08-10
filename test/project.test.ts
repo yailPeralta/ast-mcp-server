@@ -21,6 +21,7 @@ import {
 } from "../src/services/symbol-index-policy.js";
 import { SYMBOL_INDEX_SCHEMA_VERSION } from "../src/services/symbol-index.js";
 import { SQLiteSymbolIndexStore } from "../src/services/symbol-index-sqlite.js";
+import * as projectWatcherModule from "../src/services/project-watcher.js";
 import * as symbolsModule from "../src/services/symbols.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
@@ -222,6 +223,57 @@ describe("project sessions", () => {
     expect(status.watcher).toEqual({ state: "ready" });
   });
 
+  it("scopes session watchers to compiler source directories", async () => {
+    const files: Record<string, string> = {
+      "src/value.ts": "export const value = 1;\n",
+    };
+    for (let index = 0; index < 512; index += 1) {
+      files[`docs/generated-${index}/note.md`] = "not part of the compiler project\n";
+    }
+    const fixture = await createProjectFixture(files);
+    fixtures.push(fixture);
+
+    const status = await getProjectStatus(fixture.root);
+
+    expect(status.watcher).toEqual({ state: "ready" });
+    expect(status.state).toBe("fresh");
+  });
+
+  it("replaces session watcher coverage when the compiler source universe changes", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+      "packages/new/feature.ts": "export const feature = 1;\n",
+    });
+    fixtures.push(fixture);
+    await fixture.write(
+      "tsconfig.json",
+      JSON.stringify({ compilerOptions: { strict: true }, include: ["src/**/*.ts"] }),
+    );
+    const createWatcher = projectWatcherModule.createProjectWatcher;
+    const watcherSpy = vi
+      .spyOn(projectWatcherModule, "createProjectWatcher")
+      .mockImplementation((options) => createWatcher(options));
+
+    try {
+      await getProjectStatus(fixture.root);
+      await fixture.write(
+        "tsconfig.json",
+        JSON.stringify({
+          compilerOptions: { strict: true },
+          include: ["src/**/*.ts", "packages/new/**/*.ts"],
+        }),
+      );
+      await getProjectStatus(fixture.root);
+
+      expect(watcherSpy).toHaveBeenCalledTimes(2);
+      expect(watcherSpy.mock.calls[1][0].directories).toContain(
+        path.join(fixture.root, "packages/new"),
+      );
+    } finally {
+      watcherSpy.mockRestore();
+    }
+  });
+
   it("opens SQLite only for explicit canary opt-in and rolls back to memory", async () => {
     const fixture = await createProjectFixture({
       "src/value.ts": "export const value = 1;\n",
@@ -293,6 +345,49 @@ describe("project sessions", () => {
     });
   });
 
+  it("keeps SQLite ready when an ASCII file filter matches a Unicode case fold", async () => {
+    const fixture = await createProjectFixture({
+      "src/Key.ts": "export const kelvinValue = 1;\n",
+    });
+    fixtures.push(fixture);
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", path.join(fixture.root, ".symbol-index-cache"));
+    const onIndexFailure = vi.fn();
+
+    const result = await withProject(fixture.root, async (context, operationContext) => ({
+      backend: context.symbolIndexBackend,
+      page: await symbolsModule.searchProjectSymbolsPageWithIndex(
+        context.project,
+        context.projectRoot,
+        context.status.project,
+        context.symbolIndex,
+        context.symbolIndexReady,
+        { query: "kelvin", fileFilter: "k" },
+        0,
+        1,
+        onIndexFailure,
+        operationContext,
+      ),
+    }));
+
+    expect(result).toMatchObject({
+      backend: "sqlite",
+      page: {
+        total: 1,
+        items: [expect.objectContaining({ file: "src/Key.ts", name: "kelvinValue" })],
+      },
+    });
+    expect(onIndexFailure).not.toHaveBeenCalled();
+    await expect(getProjectStatus(fixture.root)).resolves.toMatchObject({
+      index: { state: "ready" },
+      index_observability: {
+        backend: "sqlite",
+        state: "ready",
+        corruption_count: 0,
+      },
+    });
+  });
+
   it("exposes the reserved enabled fail-closed reason through project status", async () => {
     const fixture = await createProjectFixture({
       "src/value.ts": "export const value = 1;\n",
@@ -324,7 +419,7 @@ describe("project sessions", () => {
     let fallbackContext: Awaited<ReturnType<typeof reportSymbolIndexFailure>>;
     const indexed = await withProject(fixture.root, async (context) => {
       const querySpy = vi
-        .spyOn(context.symbolIndex, "queryAllSymbols")
+        .spyOn(context.symbolIndex, "countSymbols")
         .mockRejectedValue(
           Object.assign(new Error("injected read failure"), { code: "read_failed" }),
         );
@@ -379,12 +474,12 @@ describe("project sessions", () => {
     const search = withProject(
       fixture.root,
       async (context, operationContext) => {
-        const valid = await context.symbolIndex.queryAllSymbols({
+        const valid = await context.symbolIndex.countSymbols({
           project: context.status.project,
           query: "value",
         });
         const querySpy = vi
-          .spyOn(context.symbolIndex, "queryAllSymbols")
+          .spyOn(context.symbolIndex, "countSymbols")
           .mockImplementationOnce(async () => {
             controller.abort();
             return valid;
@@ -415,6 +510,66 @@ describe("project sessions", () => {
     });
   });
 
+  it("validates indexed search candidates without formatting unrelated declarations", async () => {
+    const fixture = await createProjectFixture({
+      "src/target.ts": [
+        "export class TargetService {}",
+        "export type UnrelatedService = { value: string };",
+      ].join("\n"),
+    });
+    fixtures.push(fixture);
+
+    const result = await withProject(fixture.root, async (context, operationContext) => {
+      expect(context.symbolIndexReady).toBe(true);
+      const allCandidates = vi.spyOn(context.symbolIndex, "queryAllSymbols");
+      const countCandidates = vi.spyOn(context.symbolIndex, "countSymbols");
+      const pageCandidates = vi.spyOn(context.symbolIndex, "querySymbols");
+      const targetFile = context.project.getSourceFileOrThrow(
+        path.join(fixture.root, "src/target.ts"),
+      );
+      const unrelatedDeclaration = targetFile.getTypeAliasOrThrow("UnrelatedService");
+      const unrelatedType = unrelatedDeclaration.getTypeNodeOrThrow();
+      const unrelatedName = vi.spyOn(unrelatedDeclaration, "getName");
+      const unrelatedSpy = vi.spyOn(unrelatedType, "getText").mockImplementation(() => {
+        throw new Error("unrelated declaration was inspected");
+      });
+      try {
+        const page = await symbolsModule.searchProjectSymbolsPageWithIndex(
+          context.project,
+          context.projectRoot,
+          context.status.project,
+          context.symbolIndex,
+          context.symbolIndexReady,
+          { query: "Service", fileFilter: "src" },
+          0,
+          1,
+          undefined,
+          operationContext,
+        );
+        expect(allCandidates).not.toHaveBeenCalled();
+        expect(countCandidates).toHaveBeenCalledWith(expect.objectContaining({ query: "Service" }));
+        expect(pageCandidates).toHaveBeenCalledWith(
+          expect.objectContaining({ query: "Service", offset: 0, limit: 1 }),
+        );
+        // Counting and page selection each visit it twice; exact indexed validation stops earlier.
+        expect(unrelatedName).toHaveBeenCalledTimes(4);
+        return page;
+      } finally {
+        unrelatedName.mockRestore();
+        unrelatedSpy.mockRestore();
+        allCandidates.mockRestore();
+        countCandidates.mockRestore();
+        pageCandidates.mockRestore();
+      }
+    });
+
+    expect(result).toMatchObject({
+      total: 2,
+      has_more: true,
+      items: [expect.objectContaining({ selector: "TargetService@1", name: "TargetService" })],
+    });
+  });
+
   it("rejects persisted symbol metadata that disagrees with the compiler", async () => {
     const fixture = await createProjectFixture({
       "src/value.ts": "export const value = 1;\n",
@@ -425,12 +580,14 @@ describe("project sessions", () => {
 
     let fallbackContext: Awaited<ReturnType<typeof reportSymbolIndexFailure>>;
     const result = await withProject(fixture.root, async (context) => {
-      const valid = await context.symbolIndex.queryAllSymbols({
+      const valid = await context.symbolIndex.querySymbols({
         project: context.status.project,
         query: "value",
+        offset: 0,
+        limit: 1,
       });
       const querySpy = vi
-        .spyOn(context.symbolIndex, "queryAllSymbols")
+        .spyOn(context.symbolIndex, "querySymbols")
         .mockResolvedValue([{ ...valid[0], name: "forged" }]);
       try {
         return await symbolsModule.searchProjectSymbolsWithIndex(
@@ -469,12 +626,14 @@ describe("project sessions", () => {
     vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", path.join(fixture.root, ".symbol-index-cache"));
 
     const result = await withProject(fixture.root, async (context) => {
-      const valid = await context.symbolIndex.queryAllSymbols({
+      const valid = await context.symbolIndex.querySymbols({
         project: context.status.project,
         query: "value",
+        offset: 0,
+        limit: 1,
       });
       const querySpy = vi
-        .spyOn(context.symbolIndex, "queryAllSymbols")
+        .spyOn(context.symbolIndex, "querySymbols")
         .mockResolvedValue([{ ...valid[0], name: "forged" }]);
       try {
         return await symbolsModule.searchProjectSymbolsWithIndex(
@@ -743,6 +902,24 @@ describe("project sessions", () => {
     expect(second).not.toContain("before");
   });
 
+  it("does not refresh unchanged compiler source files between operations", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+
+    const sourceFile = await withProject(fixture.root, ({ project }) =>
+      getSourceFileOrThrow(project, "src/value.ts"),
+    );
+    const refreshSpy = vi.spyOn(sourceFile, "refreshFromFileSystem");
+    try {
+      await withProject(fixture.root, () => undefined);
+      expect(refreshSpy).not.toHaveBeenCalled();
+    } finally {
+      refreshSpy.mockRestore();
+    }
+  });
+
   it("extracts symbols only for files whose verified content changed", async () => {
     const fixture = await createProjectFixture({
       "src/first.ts": "export const first = 1;\n",
@@ -854,6 +1031,7 @@ describe("project sessions", () => {
         await fixture.write("src/value.ts", `export const after = ${refreshCount};\n`);
         return result;
       });
+    await fixture.write("src/value.ts", "export const changed = 2;\n");
 
     try {
       const stale = await getProjectStatus(fixture.root);
@@ -863,6 +1041,41 @@ describe("project sessions", () => {
     } finally {
       refreshSpy.mockRestore();
     }
+  });
+
+  it("rebuilds compiler state after an unstable synchronization before publishing fresh", async () => {
+    const original = "export const value = 'A';\n";
+    const fixture = await createProjectFixture({ "src/value.ts": original });
+    fixtures.push(fixture);
+
+    const sourceFile = await withProject(fixture.root, ({ project }) =>
+      getSourceFileOrThrow(project, "src/value.ts"),
+    );
+    const refresh = sourceFile.refreshFromFileSystem.bind(sourceFile);
+    const refreshSpy = vi
+      .spyOn(sourceFile, "refreshFromFileSystem")
+      .mockImplementation(async () => {
+        const result = await refresh();
+        await fixture.write("src/value.ts", "export const value = 'C';\n");
+        return result;
+      });
+    await fixture.write("src/value.ts", "export const value = 'B';\n");
+
+    try {
+      await expect(withProject(fixture.root, () => undefined)).rejects.toThrow(
+        /source changed during synchronization/i,
+      );
+    } finally {
+      refreshSpy.mockRestore();
+    }
+
+    await fixture.write("src/value.ts", original);
+    const retry = await withProject(fixture.root, ({ project, status }) => ({
+      text: getSourceFileOrThrow(project, "src/value.ts").getText(),
+      state: status.state,
+    }));
+
+    expect(retry).toEqual({ text: original, state: "fresh" });
   });
 
   it("discovers included files and forgets deleted files", async () => {

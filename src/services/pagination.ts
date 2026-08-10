@@ -4,11 +4,17 @@ export const DEFAULT_PAGE_LIMIT = 100;
 export const MAX_PAGE_LIMIT = 500;
 
 export function createPaginationInputSchema(defaultLimit = DEFAULT_PAGE_LIMIT) {
-  if (!Number.isInteger(defaultLimit) || defaultLimit < 1 || defaultLimit > MAX_PAGE_LIMIT) {
+  if (!Number.isSafeInteger(defaultLimit) || defaultLimit < 1 || defaultLimit > MAX_PAGE_LIMIT) {
     throw new Error(`Default page limit must be an integer from 1 to ${MAX_PAGE_LIMIT}.`);
   }
   return {
-    offset: z.number().int().min(0).default(0).describe("Zero-based result offset."),
+    offset: z
+      .number()
+      .int()
+      .min(0)
+      .max(Number.MAX_SAFE_INTEGER)
+      .default(0)
+      .describe("Zero-based result offset."),
     limit: z
       .number()
       .int()
@@ -22,11 +28,11 @@ export function createPaginationInputSchema(defaultLimit = DEFAULT_PAGE_LIMIT) {
 export const PaginationInputSchema = createPaginationInputSchema();
 
 export const PaginationOutputSchema = {
-  offset: z.number().int().min(0),
+  offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   limit: z.number().int().min(1),
   total: z.number().int().min(0),
   has_more: z.boolean(),
-  next_offset: z.number().int().min(0).nullable(),
+  next_offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
 };
 
 export interface Page<T> {

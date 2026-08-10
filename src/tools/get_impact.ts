@@ -9,7 +9,7 @@ import {
   MAX_IMPACT_EDGES,
   MAX_IMPACT_NODES,
   resolveImpactRoot,
-  traverseImpact,
+  traverseCompilerImpact,
 } from "../services/impact.js";
 import {
   FRESHNESS_CAUSES,
@@ -163,30 +163,31 @@ export function registerGetImpact(server: McpServer): void {
         const structuredContent = await withProject(
           project_root,
           (context, operationContext) => {
-            if (!context.relationshipEdgesReady || context.status.state !== "fresh") {
-              throw new Error(
-                "Compiler-backed impact relationships are not fresh. Retry the read.",
-              );
+            if (context.status.state !== "fresh") {
+              throw new Error("Compiler-backed impact evidence is not fresh. Retry the read.");
             }
+            const freshness = {
+              state: context.status.state,
+              causes: context.status.causes,
+              checked_at: context.status.lastSuccessfulSyncAt,
+            };
             const root = resolveImpactRoot(
               context.project,
               context.projectRoot,
               { file_path, symbol_path },
               operationContext,
             );
-            const impact = traverseImpact(
+            const impact = traverseCompilerImpact(
+              context.project,
+              context.projectRoot,
               root,
-              context.relationshipEdges,
+              freshness,
               { direction, max_depth, max_nodes, max_edges, relationship_kinds },
               operationContext,
             );
             return {
               ...impact,
-              freshness: {
-                state: context.status.state,
-                causes: context.status.causes,
-                checked_at: context.status.lastSuccessfulSyncAt,
-              },
+              freshness,
             };
           },
           requestContext,

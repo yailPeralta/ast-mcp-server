@@ -6,9 +6,10 @@ import {
   MAX_SYMBOL_INDEX_ROW_PAYLOAD_BYTES,
   MAX_SYMBOL_INDEX_SCANNED_SYMBOLS,
 } from "./symbol-index-limits.js";
+import { compareSymbolIndexText } from "./symbol-index-order.js";
 import { symbolMatchRank } from "./symbols.js";
 
-export const SYMBOL_INDEX_SCHEMA_VERSION = 2 as const;
+export const SYMBOL_INDEX_SCHEMA_VERSION = 3 as const;
 export {
   MAX_SYMBOL_INDEX_FILE_ENTRIES,
   MAX_SYMBOL_INDEX_QUERY_CANDIDATES,
@@ -66,10 +67,14 @@ export interface SymbolIndexQueryFilters {
   readonly kinds?: readonly string[];
 }
 
-export interface SymbolIndexQuery {
+export interface SymbolIndexCountQuery {
   readonly project: ProjectIdentity;
   readonly query: string;
   readonly filters?: SymbolIndexQueryFilters;
+}
+
+export interface SymbolIndexQuery extends SymbolIndexCountQuery {
+  readonly offset?: number;
   readonly limit: number;
 }
 
@@ -105,6 +110,7 @@ export interface SymbolIndexSymbolMatch extends SymbolIndexSymbol {
   readonly content_hash: string;
   readonly config_digest: string;
   readonly index_schema_version: SymbolIndexSchemaVersion;
+  readonly symbol_position: number;
 }
 
 export interface SymbolIndexStore {
@@ -114,10 +120,9 @@ export interface SymbolIndexStore {
   ): Promise<readonly SymbolIndexFileEntry[]>;
   upsert(entry: SymbolIndexFileEntry): Promise<void>;
   remove(project: ProjectIdentity, filePath: string): Promise<void>;
+  countSymbols(query: SymbolIndexCountQuery): Promise<number>;
   querySymbols(query: SymbolIndexQuery): Promise<readonly SymbolIndexSymbolMatch[]>;
-  queryAllSymbols(
-    query: Omit<SymbolIndexQuery, "limit">,
-  ): Promise<readonly SymbolIndexSymbolMatch[]>;
+  queryAllSymbols(query: SymbolIndexCountQuery): Promise<readonly SymbolIndexSymbolMatch[]>;
   clear(project: ProjectIdentity): Promise<void>;
   flush(): Promise<void>;
   refresh(input: SymbolIndexRefreshInput): Promise<SymbolIndexRefreshResult>;
@@ -253,13 +258,13 @@ export function createSymbolIndexRefreshPlan(
   const removedFiles = existing
     .filter((entry) => !currentPaths.has(entry.file_path))
     .map((entry) => entry.file_path)
-    .sort();
+    .sort(compareSymbolIndexText);
 
-  entriesToRebuild.sort((left, right) => left.file_path.localeCompare(right.file_path));
+  entriesToRebuild.sort((left, right) => compareSymbolIndexText(left.file_path, right.file_path));
   return {
     entries_to_rebuild: entriesToRebuild,
     rebuilt_files: entriesToRebuild.map((entry) => entry.file_path),
-    reused_files: reusedFiles.sort(),
+    reused_files: reusedFiles.sort(compareSymbolIndexText),
     removed_files: removedFiles,
   };
 }
@@ -270,6 +275,45 @@ function assertQueryLimit(value: number): void {
       `Symbol index query limit must be between 1 and ${MAX_SYMBOL_INDEX_QUERY_CANDIDATES}.`,
     );
   }
+}
+
+export function symbolIndexQueryOffset(query: SymbolIndexQuery): number {
+  const offset = query.offset ?? 0;
+  if (!Number.isSafeInteger(offset) || offset < 0) {
+    throw new Error("Symbol index query offset must be a non-negative safe integer.");
+  }
+  return offset;
+}
+
+const SYMBOL_INDEX_MATCH_RANKS = 5;
+
+export function symbolIndexMatchRank(query: string, match: SymbolIndexSymbolMatch): number {
+  return symbolMatchRank(query, {
+    symbolPath: match.symbol_path,
+    name: match.name,
+    line: match.line,
+  });
+}
+
+export function symbolIndexRankWindow(
+  rankCounts: readonly number[],
+  offset: number,
+  limit: number,
+): { readonly skips: readonly number[]; readonly takes: readonly number[] } {
+  const skips = Array<number>(SYMBOL_INDEX_MATCH_RANKS).fill(0);
+  const takes = Array<number>(SYMBOL_INDEX_MATCH_RANKS).fill(0);
+  let rankOffset = 0;
+  for (let rank = 0; rank < SYMBOL_INDEX_MATCH_RANKS; rank += 1) {
+    const rankEnd = rankOffset + (rankCounts[rank] ?? 0);
+    const pageStart = Math.max(offset, rankOffset);
+    const pageEnd = Math.min(offset + limit, rankEnd);
+    if (pageStart < pageEnd) {
+      skips[rank] = pageStart - rankOffset;
+      takes[rank] = pageEnd - pageStart;
+    }
+    rankOffset = rankEnd;
+  }
+  return { skips, takes };
 }
 
 function copyRange(range: SourceRange): SourceRange {
@@ -382,6 +426,7 @@ export function symbolProjectionJsonByteLength(symbols: readonly SymbolIndexSymb
 function createSymbolIndexMatch(
   entry: SymbolIndexFileEntry,
   symbol: SymbolIndexSymbol,
+  symbolPosition: number,
 ): SymbolIndexSymbolMatch {
   return {
     ...createSymbolIndexSymbol(symbol),
@@ -393,6 +438,7 @@ function createSymbolIndexMatch(
     content_hash: entry.content_hash,
     config_digest: entry.config_digest,
     index_schema_version: entry.index_schema_version,
+    symbol_position: symbolPosition,
   };
 }
 
@@ -424,7 +470,6 @@ export function createSymbolIndexFileEntry(
     }
     symbols.push(symbol);
   }
-
   return {
     index_schema_version: SYMBOL_INDEX_SCHEMA_VERSION,
     project: {
@@ -464,7 +509,7 @@ export class InMemorySymbolIndex implements SymbolIndexStore {
     schemaVersion: SymbolIndexSchemaVersion,
   ): Promise<readonly SymbolIndexFileEntry[]> {
     return this.projectEntries(project, schemaVersion)
-      .sort((left, right) => left.file_path.localeCompare(right.file_path))
+      .sort((left, right) => compareSymbolIndexText(left.file_path, right.file_path))
       .map((entry) => createSymbolIndexFileEntry(entry));
   }
 
@@ -495,17 +540,18 @@ export class InMemorySymbolIndex implements SymbolIndexStore {
     this.entries.delete(entryKey(project, normalizedFilePath(filePath)));
   }
 
-  async querySymbols(query: SymbolIndexQuery): Promise<readonly SymbolIndexSymbolMatch[]> {
-    assertQueryLimit(query.limit);
+  private *matchingSymbols(query: SymbolIndexCountQuery): Generator<{
+    readonly entry: SymbolIndexFileEntry;
+    readonly symbol: SymbolIndexSymbol;
+    readonly symbolPosition: number;
+  }> {
     const normalizedQuery = query.query.toLowerCase();
     const normalizedFileFilter = query.filters?.file_path?.toLowerCase();
     const kindSet = query.filters?.kinds ? new Set(query.filters.kinds) : undefined;
-    const matches: SymbolIndexSymbolMatch[] = [];
-
     let scannedEntries = 0;
     let scannedSymbols = 0;
     const entries = this.projectEntries(query.project, SYMBOL_INDEX_SCHEMA_VERSION).sort(
-      (left, right) => left.file_path.localeCompare(right.file_path),
+      (left, right) => compareSymbolIndexText(left.file_path, right.file_path),
     );
     for (const entry of entries) {
       if (normalizedFileFilter && !entry.file_path.toLowerCase().includes(normalizedFileFilter)) {
@@ -515,7 +561,7 @@ export class InMemorySymbolIndex implements SymbolIndexStore {
       if (scannedEntries > MAX_SYMBOL_INDEX_FILE_ENTRIES) {
         throw new SymbolIndexScanLimitError();
       }
-      for (const symbol of entry.symbols) {
+      for (const [symbolPosition, symbol] of entry.symbols.entries()) {
         scannedSymbols += 1;
         if (scannedSymbols > MAX_SYMBOL_INDEX_SCANNED_SYMBOLS) {
           throw new SymbolIndexScanLimitError();
@@ -528,36 +574,45 @@ export class InMemorySymbolIndex implements SymbolIndexStore {
         ) {
           continue;
         }
-        matches.push(createSymbolIndexMatch(entry, symbol));
+        yield { entry, symbol, symbolPosition };
       }
     }
-
-    matches.sort((left, right) => {
-      const rank =
-        symbolMatchRank(query.query, {
-          symbolPath: left.symbol_path,
-          name: left.name,
-          line: left.line,
-        }) -
-        symbolMatchRank(query.query, {
-          symbolPath: right.symbol_path,
-          name: right.name,
-          line: right.line,
-        });
-      if (rank !== 0) return rank;
-      return (
-        left.file_path.localeCompare(right.file_path) ||
-        left.line - right.line ||
-        left.symbol_path.localeCompare(right.symbol_path) ||
-        left.kind.localeCompare(right.kind)
-      );
-    });
-    return matches.slice(0, query.limit);
   }
 
-  async queryAllSymbols(
-    query: Omit<SymbolIndexQuery, "limit">,
-  ): Promise<readonly SymbolIndexSymbolMatch[]> {
+  async countSymbols(query: SymbolIndexCountQuery): Promise<number> {
+    let count = 0;
+    const matches = this.matchingSymbols(query);
+    while (!matches.next().done) count += 1;
+    return count;
+  }
+
+  async querySymbols(query: SymbolIndexQuery): Promise<readonly SymbolIndexSymbolMatch[]> {
+    assertQueryLimit(query.limit);
+    const offset = symbolIndexQueryOffset(query);
+    const rankCounts = [0, 0, 0, 0, 0];
+    for (const { entry, symbol, symbolPosition } of this.matchingSymbols(query)) {
+      rankCounts[
+        symbolIndexMatchRank(query.query, createSymbolIndexMatch(entry, symbol, symbolPosition))
+      ] += 1;
+    }
+
+    const window = symbolIndexRankWindow(rankCounts, offset, query.limit);
+    const seenByRank = [0, 0, 0, 0, 0];
+    const selectedByRank: SymbolIndexSymbolMatch[][] = [[], [], [], [], []];
+    for (const { entry, symbol, symbolPosition } of this.matchingSymbols(query)) {
+      const match = createSymbolIndexMatch(entry, symbol, symbolPosition);
+      const rank = symbolIndexMatchRank(query.query, match);
+      const position = seenByRank[rank];
+      seenByRank[rank] += 1;
+      if (position < window.skips[rank] || selectedByRank[rank].length >= window.takes[rank]) {
+        continue;
+      }
+      selectedByRank[rank].push(match);
+    }
+    return selectedByRank.flat();
+  }
+
+  async queryAllSymbols(query: SymbolIndexCountQuery): Promise<readonly SymbolIndexSymbolMatch[]> {
     return this.querySymbols({ ...query, limit: MAX_SYMBOL_INDEX_QUERY_CANDIDATES });
   }
 

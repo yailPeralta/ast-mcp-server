@@ -224,6 +224,10 @@ function canonicalJson(value) {
   return `${JSON.stringify(sortedJsonValue(value), null, 2)}\n`;
 }
 
+function jsonValuesEqual(left, right) {
+  return canonicalJson(left) === canonicalJson(right);
+}
+
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -2001,7 +2005,7 @@ async function verifyLiveFreezeIdentity(report, destination, exactArgv, xScraper
   if (
     runtime?.observed !== runtimeSelection.evidence.observed ||
     runtime?.binary_sha256 !== runtimeSelection.evidence.binary_sha256 ||
-    JSON.stringify(identity?.os) !== JSON.stringify(runtimeSelection.os) ||
+    !jsonValuesEqual(identity?.os, runtimeSelection.os) ||
     workload?.sha256 !== sha256(workloadSelection.bytes) ||
     workload?.call_count !== workloadSelection.manifest.calls.length ||
     JSON.stringify(workload?.call_ids) !==

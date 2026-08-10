@@ -114,6 +114,7 @@ type PrivateCanaryInternals = {
     checkedRelativePath: string,
     rawSha256: string,
   ) => Record<string, any>;
+  readonly jsonValuesEqual: (left: unknown, right: unknown) => boolean;
   readonly assertPreparedCanaryReportSet: (preparedReports: readonly PreparedReport[]) => unknown;
 };
 
@@ -140,13 +141,14 @@ function loadPrivateCanaryInternals(): Promise<PrivateCanaryInternals> {
     const testModulePath = path.join(scriptsDirectory, "canary-local-mcp.private-test.mjs");
     await writeFile(
       testModulePath,
-      `${productionSource}\nexport {\n  publishAtomicDirectorySet as __testOnlyPublishAtomicDirectorySet,\n  canonicalizeCanaryReport as __testOnlyCanonicalizeCanaryReport,\n  assertPreparedCanaryReportSet as __testOnlyAssertPreparedCanaryReportSet,\n  projectEnvironment as __testOnlyProjectEnvironment,\n  CANARY_OPERATION_DEADLINE_MS as __testOnlyCanaryOperationDeadlineMs,\n  MCP_REQUEST_TIMEOUT_MS as __testOnlyMcpRequestTimeoutMs,\n};\n`,
+      `${productionSource}\nexport {\n  publishAtomicDirectorySet as __testOnlyPublishAtomicDirectorySet,\n  canonicalizeCanaryReport as __testOnlyCanonicalizeCanaryReport,\n  jsonValuesEqual as __testOnlyJsonValuesEqual,\n  assertPreparedCanaryReportSet as __testOnlyAssertPreparedCanaryReportSet,\n  projectEnvironment as __testOnlyProjectEnvironment,\n  CANARY_OPERATION_DEADLINE_MS as __testOnlyCanaryOperationDeadlineMs,\n  MCP_REQUEST_TIMEOUT_MS as __testOnlyMcpRequestTimeoutMs,\n};\n`,
       "utf8",
     );
     const testModule = await import(`${pathToFileURL(testModulePath).href}?id=${randomUUID()}`);
     for (const name of [
       "__testOnlyPublishAtomicDirectorySet",
       "__testOnlyCanonicalizeCanaryReport",
+      "__testOnlyJsonValuesEqual",
       "__testOnlyAssertPreparedCanaryReportSet",
       "__testOnlyProjectEnvironment",
     ]) {
@@ -159,6 +161,8 @@ function loadPrivateCanaryInternals(): Promise<PrivateCanaryInternals> {
         testModule.__testOnlyPublishAtomicDirectorySet as PrivateAtomicPublisher,
       canonicalizeCanaryReport:
         testModule.__testOnlyCanonicalizeCanaryReport as PrivateCanaryInternals["canonicalizeCanaryReport"],
+      jsonValuesEqual:
+        testModule.__testOnlyJsonValuesEqual as PrivateCanaryInternals["jsonValuesEqual"],
       assertPreparedCanaryReportSet:
         testModule.__testOnlyAssertPreparedCanaryReportSet as PrivateCanaryInternals["assertPreparedCanaryReportSet"],
       projectEnvironment:
@@ -877,6 +881,15 @@ describe("production-readiness canary contract", () => {
 
     await symlink(path.join(root, "index.sqlite"), path.join(root, "linked.sqlite"));
     await expect(inspectCacheTree(root)).rejects.toThrow(/symbolic link/i);
+  });
+
+  it("compares canonicalized identity objects independently of key insertion order", () => {
+    expect(
+      privateCanaryInternals.jsonValuesEqual(
+        { arch: "x64", platform: "linux", release: "test" },
+        { platform: "linux", release: "test", arch: "x64" },
+      ),
+    ).toBe(true);
   });
 
   it("canonicalizes only closed, bounded, identity-bound passing reports", () => {
