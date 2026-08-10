@@ -426,7 +426,8 @@ Freeze reports/docs against the committed Task 5.1 harness. Run `yarn test test/
 
 ### Task 6.1: Security and CI RED review
 
-Status: pending.
+Status: complete under the prospective-commit convention: this status applies only if the exact
+reviewed staged tree is committed unchanged.
 
 Files:
 
@@ -435,9 +436,17 @@ Files:
 - Create: `.github/workflows/security.yml`.
 - Modify: `.github/workflows/ci.yml`.
 - Create: `scripts/workflow-policy-check.mjs`.
+- Create: `scripts/workflow-policy-check.d.mts`.
 - Create: `test/workflow-policy-check.test.ts`.
 
 Add least permissions, job timeouts/concurrency and immutable reviewed action revisions. Verify Node 22.5/24 Linux matrix remains complete. Do not add secrets or broad write permissions. Run `yarn test test/workflow-policy-check.test.ts && node scripts/workflow-policy-check.mjs && yarn format:check && git diff --check`.
+
+Evidence:
+
+- Eight focused policy tests cover the exact workflow inventory plus floating/unreviewed actions, broad permissions, missing bounds, Node-matrix/gate drift, privileged triggers, secret references, checkout credential persistence, unsupported YAML indirection and bounded support/dependency policies.
+- The executable checker reports two workflows, four bounded Ubuntu 24.04 jobs and nine reviewed immutable action invocations. Checkout/setup-node, dependency review and CodeQL revisions were resolved to signed upstream release commits before pinning.
+- CI retains the exact Node `22.5.0`/`24` matrix, enables experimental SQLite only in the floor cell and runs the complete ordered release gate including public errors, lifecycle, audit, pack, policy and diff checks.
+- The post-edit repository gate passes `464/464` tests, lint, typecheck, build, format, workflow policy, dependency audit with no suggestions and `git diff --check`. This evidence is rerun against the final prospective commit tree before closure.
 
 ### Task 6.2: Exact-SHA staging release workflow
 
