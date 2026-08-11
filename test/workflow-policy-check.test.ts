@@ -30,15 +30,15 @@ function replaceRequired(source: string, oldValue: string, newValue: string): st
 }
 
 describe("workflow policy check", () => {
-  it("accepts the complete pinned Linux CI and security policy", async () => {
+  it("accepts the complete pinned Linux CI, security, and release policy", async () => {
     const documents = await loadWorkflowDocuments();
 
     expect(validateWorkflowPolicyDocuments(documents)).toEqual({
       status: "pass",
-      workflow_count: 2,
-      job_count: 4,
-      action_count: 9,
-      workflows: ["ci.yml", "security.yml"],
+      workflow_count: 3,
+      job_count: 9,
+      action_count: 23,
+      workflows: ["ci.yml", "release.yml", "security.yml"],
     });
     await expect(checkWorkflowPolicy(repositoryRoot)).resolves.toEqual(
       validateWorkflowPolicyDocuments(documents),
@@ -51,6 +51,306 @@ describe("workflow policy check", () => {
     );
     expect(stderr).toBe("");
     expect(JSON.parse(stdout)).toEqual(validateWorkflowPolicyDocuments(documents));
+  });
+
+  it("closes release dispatch, concurrency, jobs, permissions, and mode conditions", async () => {
+    const documents = await loadWorkflowDocuments();
+    const release = documents["release.yml"];
+    expect(release).toBeTypeOf("string");
+    if (typeof release !== "string") return;
+
+    expect(release).toContain("  group: ${{ github.workflow }}\n");
+    const versionSplitConcurrency = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "  group: ${{ github.workflow }}",
+        "  group: ${{ github.workflow }}-${{ inputs.version }}",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(versionSplitConcurrency)).toThrow(
+      /release concurrency/u,
+    );
+
+    const triggerDrift = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "on:\n  workflow_dispatch:\n",
+        "on:\n  push:\n    branches: [main]\n  workflow_dispatch:\n",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(triggerDrift)).toThrow(/release trigger block/u);
+
+    const cancelPublish = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "  cancel-in-progress: false",
+        "  cancel-in-progress: true",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(cancelPublish)).toThrow(/release concurrency/u);
+
+    const invalidModeCanSkip = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "  validate-dispatch:\n",
+        "  validate-dispatch-disabled:\n",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(invalidModeCanSkip)).toThrow(
+      /release job inventory/u,
+    );
+
+    const conditionDrift = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "    if: inputs.mode == 'verify-next'",
+        "    if: inputs.mode != 'publish-next'",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(conditionDrift)).toThrow(/verify-next condition/u);
+
+    const oidcOnVerifier = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "  verify-next:\n    needs: validate-dispatch\n",
+        "  verify-next:\n    needs: validate-dispatch\n    permissions:\n      contents: read\n      id-token: write\n",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(oidcOnVerifier)).toThrow(/verify-next.*keys/u);
+
+    const missingEnvironment = {
+      ...documents,
+      "release.yml": replaceRequired(release, "    environment: production\n", ""),
+    };
+    expect(() => validateWorkflowPolicyDocuments(missingEnvironment)).toThrow(
+      /protected Environments/u,
+    );
+
+    const inputControlledCheckout = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "          ref: ${{ github.sha }}",
+        "          ref: ${{ inputs.sha }}",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(inputControlledCheckout)).toThrow(
+      /checkout inputs/u,
+    );
+
+    const checkoutBeforeIdentity = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        '      - run: test "$GITHUB_REF" = refs/heads/main && test "$RELEASE_SHA" = "$GITHUB_SHA"\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          ref: ${{ github.sha }}\n          persist-credentials: false',
+        '      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          ref: ${{ github.sha }}\n          persist-credentials: false\n      - run: test "$GITHUB_REF" = refs/heads/main && test "$RELEASE_SHA" = "$GITHUB_SHA"',
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(checkoutBeforeIdentity)).toThrow(/step chain/u);
+
+    const missingPreinstallEnvironmentBoundary = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "      - run: node scripts/release-preflight.mjs validate-environment\n      - run: node scripts/release-preflight.mjs authorize-publish",
+        "      - run: node scripts/release-preflight.mjs authorize-publish",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(missingPreinstallEnvironmentBoundary)).toThrow(
+      /token references|command chain|step chain/u,
+    );
+
+    const environmentBoundaryAfterInstall = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        '      - run: node scripts/release-preflight.mjs validate-environment\n      - run: node scripts/release-preflight.mjs authorize-publish\n        env:\n          GITHUB_TOKEN: ${{ github.token }}\n      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" corepack enable\n      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build',
+        '      - run: node scripts/release-preflight.mjs authorize-publish\n        env:\n          GITHUB_TOKEN: ${{ github.token }}\n      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" corepack enable\n      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build\n      - run: node scripts/release-preflight.mjs validate-environment',
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(environmentBoundaryAfterInstall)).toThrow(
+      /command chain|step chain/u,
+    );
+
+    const oidcOnPreparationJob = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "    permissions:\n      contents: read\n      actions: read\n    runs-on: ubuntu-24.04\n    timeout-minutes: 30",
+        "    permissions:\n      contents: read\n      actions: read\n      id-token: write\n    runs-on: ubuntu-24.04\n    timeout-minutes: 30",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(oidcOnPreparationJob)).toThrow(
+      /prepare-publish permissions|nested keys/u,
+    );
+
+    const oidcOnPublishValidator = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL node scripts/release-preflight.mjs validate-environment",
+        "node scripts/release-preflight.mjs validate-environment",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(oidcOnPublishValidator)).toThrow(
+      /command chain|step chain/u,
+    );
+
+    const extraJob = {
+      ...documents,
+      "release.yml": `${release}\n  bypass:\n    runs-on: ubuntu-24.04\n`,
+    };
+    expect(() => validateWorkflowPolicyDocuments(extraJob)).toThrow(/release job inventory/u);
+  });
+
+  it("closes release action, input, command, environment, and token topology", async () => {
+    const documents = await loadWorkflowDocuments();
+    const release = documents["release.yml"];
+    expect(release).toBeTypeOf("string");
+    if (typeof release !== "string") return;
+
+    expect(release).toContain(
+      "      - run: node scripts/release-preflight.mjs validate-promotion\n        env:\n          GITHUB_TOKEN: ${{ github.token }}",
+    );
+    expect(release).toContain(
+      "      - run: node scripts/release-preflight.mjs promote-latest\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}",
+    );
+    expect(release).not.toMatch(/^ {6}(?:GITHUB_TOKEN|NODE_AUTH_TOKEN):/mu);
+    expect(release).toContain(
+      '      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build',
+    );
+
+    const ambientEnvironmentExposedToInstall = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        '      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build',
+        "      - run: yarn install --immutable --mode=skip-build",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(ambientEnvironmentExposedToInstall)).toThrow(
+      /command chain|step chain/u,
+    );
+
+    const ambientEnvironmentExposedToCorepack = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        '      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" corepack enable',
+        "      - run: corepack enable",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(ambientEnvironmentExposedToCorepack)).toThrow(
+      /command chain|step chain/u,
+    );
+
+    const lifecycleEnabledInstall = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        '      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build',
+        '      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable',
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(lifecycleEnabledInstall)).toThrow(
+      /command chain|step chain/u,
+    );
+
+    const credentialIsolationDrift = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "      - run: node scripts/release-preflight.mjs promote-latest\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}",
+        "      - run: node scripts/release-preflight.mjs promote-latest\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\n          GITHUB_TOKEN: ${{ github.token }}",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(credentialIsolationDrift)).toThrow(
+      /token references|credential references|step credential isolation|environment must match/u,
+    );
+
+    const unreviewedArtifactAction = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+        `actions/upload-artifact@${"c".repeat(40)}`,
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(unreviewedArtifactAction)).toThrow(
+      /reviewed revision/u,
+    );
+
+    const missingArtifactRunId = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "          run-id: ${{ inputs.verification_run_id }}\n",
+        "",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(missingArtifactRunId)).toThrow(
+      /download-artifact inputs/u,
+    );
+
+    const artifactPathDrift = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "          path: ${{ env.RELEASE_EVIDENCE_ROOT }}",
+        "          path: /tmp/release-evidence",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(artifactPathDrift)).toThrow(/artifact inputs/u);
+
+    const commandInjection = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "      - run: node scripts/release-preflight.mjs validate-dispatch",
+        "      - run: node scripts/release-preflight.mjs validate-dispatch && npm publish",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(commandInjection)).toThrow(
+      /validate-dispatch command chain/u,
+    );
+
+    const publishSecret = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "      - run: node scripts/release-preflight.mjs authorize-publish\n        env:\n          GITHUB_TOKEN: ${{ github.token }}",
+        "      - run: node scripts/release-preflight.mjs authorize-publish\n        env:\n          GITHUB_TOKEN: ${{ github.token }}\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(publishSecret)).toThrow(
+      /token references|credential references|step credential isolation|environment must match/u,
+    );
+
+    const bracketToken = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "${{ secrets.NPM_TOKEN }}",
+        "${{ secrets['NPM_TOKEN'] }}",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(bracketToken)).toThrow(/token reference/u);
+
+    const tokenInArgument = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "      - run: node scripts/release-preflight.mjs promote-latest",
+        "      - run: node scripts/release-preflight.mjs promote-latest --token ${{ secrets.NPM_TOKEN }}",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(tokenInArgument)).toThrow(/token reference/u);
   });
 
   it("rejects floating or untrusted third-party action references", async () => {
@@ -106,6 +406,51 @@ describe("workflow policy check", () => {
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(extraReviewedAction)).toThrow(/action chain/u);
+  });
+
+  it.each([
+    [
+      "release checkout",
+      "release.yml",
+      "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+    ],
+    [
+      "release upload",
+      "release.yml",
+      "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
+    ],
+    [
+      "release download",
+      "release.yml",
+      "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1",
+    ],
+    [
+      "dependency review",
+      "security.yml",
+      "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0",
+    ],
+    [
+      "CodeQL init",
+      "security.yml",
+      "github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6",
+    ],
+    [
+      "CodeQL analyze",
+      "security.yml",
+      "github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6",
+    ],
+  ])("rejects a conditional skip on the %s action", async (_label, workflowName, marker) => {
+    const documents = await loadWorkflowDocuments();
+    const source = documents[workflowName];
+    expect(source).toBeTypeOf("string");
+    if (typeof source !== "string") return;
+    const conditional = {
+      ...documents,
+      [workflowName]: replaceRequired(source, marker, `${marker}\n        if: false`),
+    };
+    expect(() => validateWorkflowPolicyDocuments(conditional)).toThrow(
+      /action step keys|condition only dependency review/u,
+    );
   });
 
   it("rejects broad permissions and missing job/runtime bounds", async () => {
@@ -473,7 +818,7 @@ describe("workflow policy check", () => {
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(unreviewedActionInput)).toThrow(
-      /unreviewed inputs/u,
+      /action step keys|unreviewed inputs/u,
     );
 
     const commentedCodeqlDecoy = {

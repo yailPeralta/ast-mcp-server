@@ -6,7 +6,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-const REQUIRED_WORKFLOWS = Object.freeze(["ci.yml", "security.yml"]);
+const REQUIRED_WORKFLOWS = Object.freeze(["ci.yml", "release.yml", "security.yml"]);
 const ALLOWED_ACTION_OWNERS = new Set(["actions", "github"]);
 const REVIEWED_ACTION_REVISIONS = new Map([
   ["actions/checkout", { revision: "3d3c42e5aac5ba805825da76410c181273ba90b1", version: "v7.0.1" }],
@@ -25,6 +25,14 @@ const REVIEWED_ACTION_REVISIONS = new Map([
   [
     "github/codeql-action/analyze",
     { revision: "5595ccaf912efad79be6eef63a5619ff05969be3", version: "v4.37.6" },
+  ],
+  [
+    "actions/upload-artifact",
+    { revision: "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", version: "v7.0.1" },
+  ],
+  [
+    "actions/download-artifact",
+    { revision: "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c", version: "v8.0.1" },
   ],
 ]);
 const MAX_WORKFLOW_BYTES = 256 * 1024;
@@ -50,6 +58,30 @@ const CI_RELEASE_GATES = Object.freeze([
 
 function policyFailure(message) {
   throw new Error(`Workflow policy violation: ${message}`);
+}
+
+function validateCredentialReferences(source, workflowName) {
+  const references =
+    source.match(
+      /\$\{\{[^}\n]*\b(?:secrets\s*(?:\.|\[)|github\s*(?:\.\s*token\b|\[))[^}\n]*\}\}/giu,
+    ) ?? [];
+  if (workflowName !== "release.yml") {
+    if (references.length > 0) {
+      policyFailure(`${workflowName} cannot contain a repository secret reference.`);
+    }
+    return;
+  }
+  const expected = [
+    "${{ github.token }}",
+    "${{ github.token }}",
+    "${{ github.token }}",
+    "${{ secrets.NPM_TOKEN }}",
+  ].sort();
+  if (JSON.stringify(references.sort()) !== JSON.stringify(expected)) {
+    policyFailure(
+      "release token references must remain bound to reviewed release steps and GitHub API fields.",
+    );
+  }
 }
 
 function lineIndent(line) {
@@ -238,7 +270,9 @@ function validatePermissions(lines, workflowName) {
     }
     const entries = mappingEntries(lines, index, indent, `${workflowName} permissions`);
     for (const [name, value] of entries) {
-      if (value === "write" && name !== "security-events") {
+      const reviewedWrite =
+        name === "security-events" || (workflowName === "release.yml" && name === "id-token");
+      if (value === "write" && !reviewedWrite) {
         policyFailure(`${workflowName} cannot grant ${name}: write.`);
       }
       if (value !== "read" && value !== "write" && value !== "none") {
@@ -254,14 +288,21 @@ function validatePermissions(lines, workflowName) {
 function validateConcurrency(lines, workflowName) {
   const concurrencyIndex = requireTopLevelKey(lines, "concurrency", workflowName);
   const concurrency = mappingEntries(lines, concurrencyIndex, 0, `${workflowName} concurrency`);
+  const releaseWorkflow = workflowName === "release.yml";
+  const expectedGroup = releaseWorkflow
+    ? "${{ github.workflow }}"
+    : "${{ github.workflow }}-${{ github.ref }}";
+  const expectedCancellation = releaseWorkflow ? "false" : "true";
   if (
     concurrency.size !== 2 ||
-    concurrency.get("group") !== "${{ github.workflow }}-${{ github.ref }}"
+    concurrency.get("group") !== expectedGroup ||
+    concurrency.get("cancel-in-progress") !== expectedCancellation
   ) {
-    policyFailure(`${workflowName} concurrency must bind github.workflow and github.ref.`);
-  }
-  if (concurrency.get("cancel-in-progress") !== "true") {
-    policyFailure(`${workflowName} concurrency must cancel in-progress duplicate runs.`);
+    policyFailure(
+      releaseWorkflow
+        ? "release concurrency must serialize all package dist-tag transitions without cancellation."
+        : `${workflowName} concurrency must bind github.workflow/ref and cancel duplicates.`,
+    );
   }
 }
 
@@ -369,6 +410,21 @@ function validateActionInputs(
       .slice(action.line + 1, end)
       .map((line, index) => (line.trim() === "with:" ? action.line + 1 + index : -1))
       .filter((index) => index >= 0);
+    const directStepKeys = lines
+      .slice(action.line + 1, end)
+      .filter(
+        (line) =>
+          line.trim() !== "" &&
+          !line.trimStart().startsWith("#") &&
+          lineIndent(line) === lineIndent(lines[action.line]) + 2,
+      )
+      .map((line) => /^\s*([A-Za-z0-9_-]+):(?:\s.*)?$/u.exec(line)?.[1])
+      .filter(Boolean)
+      .sort();
+    const expectedStepKeys = expected.size === 0 ? [] : ["with"];
+    if (JSON.stringify(directStepKeys) !== JSON.stringify(expectedStepKeys)) {
+      policyFailure(`${workflowName} ${actionPath} action step keys are not reviewed.`);
+    }
     if (expected.size === 0) {
       if (withIndexes.length !== 0) {
         policyFailure(`${workflowName} ${actionPath} cannot add unreviewed inputs.`);
@@ -398,6 +454,27 @@ function validateActionInputs(
 
 function extractRunCommands(job) {
   return job.lines.map((line) => /^\s*-\s+run:\s+(.+)$/u.exec(line)?.[1]?.trim()).filter(Boolean);
+}
+
+function extractStepIdentities(job, workflowName) {
+  const steps = [];
+  for (const line of job.lines) {
+    if (!/^ {6}-\s+/u.test(line)) continue;
+    const action = /^ {6}- uses:\s+([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)?)@/u.exec(
+      line,
+    );
+    if (action) {
+      steps.push(`uses:${action[1]}`);
+      continue;
+    }
+    const command = /^ {6}- run:\s+(.+)$/u.exec(line);
+    if (command) {
+      steps.push(`run:${command[1].trim()}`);
+      continue;
+    }
+    policyFailure(`${workflowName} job ${job.name} contains an unreviewed step declaration.`);
+  }
+  return steps;
 }
 
 function validateCiWorkflow(lines, jobs, actions) {
@@ -622,6 +699,489 @@ function validateSecurityWorkflow(lines, jobs, actions) {
   );
 }
 
+function validateJobEnvironment(job, expectedEntries) {
+  const indexes = job.lines
+    .map((line, index) => (line === "    env:" ? index : -1))
+    .filter((index) => index >= 0);
+  if (indexes.length !== 1) {
+    policyFailure(`release.yml job ${job.name} must define one reviewed environment block.`);
+  }
+  const actual = mappingEntries(
+    job.lines,
+    indexes[0],
+    4,
+    `release.yml job ${job.name} environment`,
+  );
+  const expected = new Map(Object.entries(expectedEntries));
+  if (
+    actual.size !== expected.size ||
+    [...expected].some(([key, value]) => actual.get(key) !== value)
+  ) {
+    policyFailure(`release.yml job ${job.name} environment must match the reviewed values.`);
+  }
+}
+
+function validateRunStepEnvironments(job, expectedEntriesByCommand) {
+  const environmentIndexes = job.lines
+    .map((line, index) => (line === "        env:" ? index : -1))
+    .filter((index) => index >= 0);
+  if (environmentIndexes.length !== expectedEntriesByCommand.size) {
+    policyFailure(`release.yml job ${job.name} must preserve exact step credential isolation.`);
+  }
+  for (const [command, expectedEntries] of expectedEntriesByCommand) {
+    const runLine = `      - run: ${command}`;
+    const runIndexes = job.lines
+      .map((line, index) => (line === runLine ? index : -1))
+      .filter((index) => index >= 0);
+    if (runIndexes.length !== 1 || job.lines[runIndexes[0] + 1] !== "        env:") {
+      policyFailure(`release.yml command ${command} must define one reviewed step environment.`);
+    }
+    const actual = mappingEntries(
+      job.lines,
+      runIndexes[0] + 1,
+      8,
+      `release.yml command ${command} environment`,
+    );
+    const expected = new Map(Object.entries(expectedEntries));
+    if (
+      actual.size !== expected.size ||
+      [...expected].some(([key, value]) => actual.get(key) !== value)
+    ) {
+      policyFailure(`release.yml command ${command} environment must match the reviewed values.`);
+    }
+  }
+}
+
+function validateReleaseJobActions(job, expectedPaths, expectedInputs) {
+  const actions = validateActions(job.lines, `release.yml job ${job.name}`);
+  if (
+    JSON.stringify(actions.map(({ actionPath }) => actionPath)) !== JSON.stringify(expectedPaths)
+  ) {
+    policyFailure(`release.yml job ${job.name} must preserve its exact reviewed action chain.`);
+  }
+  for (const [actionPath, inputs] of expectedInputs) {
+    validateActionInputs(job.lines, actions, actionPath, inputs, "release.yml");
+  }
+}
+
+function validateReleaseWorkflow(lines, jobs) {
+  if (lines.filter((line) => line === "name: Release").length !== 1) {
+    policyFailure("release.yml name must be exactly Release.");
+  }
+  const onIndex = requireTopLevelKey(lines, "on", "release.yml");
+  if (
+    JSON.stringify(directBlockKeys(lines, onIndex, "release.yml on")) !==
+    JSON.stringify(["workflow_dispatch"])
+  ) {
+    policyFailure("release trigger block must contain only workflow_dispatch.");
+  }
+  const expectedTrigger = [
+    "  workflow_dispatch:",
+    "    inputs:",
+    "      mode:",
+    '        description: "Release mode: publish-next, verify-next, or promote-latest"',
+    "        required: true",
+    "        type: string",
+    "      sha:",
+    '        description: "Exact lowercase 40-character commit SHA on main"',
+    "        required: true",
+    "        type: string",
+    "      version:",
+    '        description: "Exact stable package version without a v prefix"',
+    "        required: true",
+    "        type: string",
+    "      verification_run_id:",
+    '        description: "Successful verify-next workflow run ID (promote-latest only)"',
+    "        required: false",
+    "        type: string",
+    '        default: ""',
+  ];
+  if (JSON.stringify(exactBlockLines(lines, onIndex)) !== JSON.stringify(expectedTrigger)) {
+    policyFailure(
+      "release trigger block and inputs must match the exact reviewed dispatch contract.",
+    );
+  }
+
+  const expectedJobs = [
+    "prepare-publish",
+    "promote-latest",
+    "publish-next",
+    "validate-dispatch",
+    "verify-next",
+  ];
+  if (JSON.stringify(jobs.map(({ name }) => name).sort()) !== JSON.stringify(expectedJobs)) {
+    policyFailure("release job inventory must contain only validation and the three exact modes.");
+  }
+  const byName = new Map(jobs.map((job) => [job.name, job]));
+  const validation = byName.get("validate-dispatch");
+  const preparation = byName.get("prepare-publish");
+  const publish = byName.get("publish-next");
+  const verify = byName.get("verify-next");
+  const promote = byName.get("promote-latest");
+  if (
+    lines.filter((line) => line === "    environment: npm-publish").length !== 1 ||
+    !publish.lines.includes("    environment: npm-publish") ||
+    lines.filter((line) => line === "    environment: production").length !== 1 ||
+    !promote.lines.includes("    environment: production")
+  ) {
+    policyFailure(
+      "release publication and promotion must bind only to their reviewed protected Environments.",
+    );
+  }
+  validateExactJobKeys(validation, ["runs-on", "timeout-minutes", "env", "steps"], "release.yml");
+  validateExactJobKeys(
+    preparation,
+    ["needs", "if", "permissions", "runs-on", "timeout-minutes", "env", "steps"],
+    "release.yml",
+  );
+  validateExactJobKeys(
+    publish,
+    ["needs", "if", "permissions", "environment", "runs-on", "timeout-minutes", "env", "steps"],
+    "release.yml",
+  );
+  validateExactJobKeys(
+    verify,
+    ["needs", "if", "runs-on", "timeout-minutes", "env", "steps"],
+    "release.yml",
+  );
+  validateExactJobKeys(
+    promote,
+    ["needs", "if", "permissions", "environment", "runs-on", "timeout-minutes", "env", "steps"],
+    "release.yml",
+  );
+
+  const conditions = lines.filter((line) => line.startsWith("    if:"));
+  if (
+    JSON.stringify(conditions) !==
+    JSON.stringify([
+      "    if: inputs.mode == 'publish-next'",
+      "    if: inputs.mode == 'publish-next'",
+      "    if: inputs.mode == 'verify-next'",
+      "    if: inputs.mode == 'promote-latest'",
+    ])
+  ) {
+    policyFailure(
+      "release publish-next, verify-next condition, and promote-latest conditions must be exact.",
+    );
+  }
+  if (
+    lines.filter((line) => line === "    needs: validate-dispatch").length !== 3 ||
+    !publish.lines.includes("    needs: prepare-publish")
+  ) {
+    policyFailure("release mode jobs must preserve the reviewed validation/preparation chain.");
+  }
+
+  validateExactNestedKeys(preparation, "permissions", 4, ["contents", "actions"], "release.yml");
+  validateExactNestedKeys(
+    publish,
+    "permissions",
+    4,
+    ["contents", "actions", "id-token"],
+    "release.yml",
+  );
+  validateExactNestedKeys(promote, "permissions", 4, ["contents", "actions"], "release.yml");
+  const publishPermissions = mappingEntries(
+    publish.lines,
+    publish.lines.indexOf("    permissions:"),
+    4,
+    "release.yml publish-next permissions",
+  );
+  if (
+    publishPermissions.get("contents") !== "read" ||
+    publishPermissions.get("actions") !== "read" ||
+    publishPermissions.get("id-token") !== "write"
+  ) {
+    policyFailure(
+      "release publish-next permissions must bind only contents/actions read and OIDC.",
+    );
+  }
+  const preparationPermissions = mappingEntries(
+    preparation.lines,
+    preparation.lines.indexOf("    permissions:"),
+    4,
+    "release.yml prepare-publish permissions",
+  );
+  if (
+    preparationPermissions.get("contents") !== "read" ||
+    preparationPermissions.get("actions") !== "read"
+  ) {
+    policyFailure("release prepare-publish permissions must bind only contents/actions read.");
+  }
+  const promotePermissions = mappingEntries(
+    promote.lines,
+    promote.lines.indexOf("    permissions:"),
+    4,
+    "release.yml promote-latest permissions",
+  );
+  if (
+    promotePermissions.get("contents") !== "read" ||
+    promotePermissions.get("actions") !== "read"
+  ) {
+    policyFailure("release promote-latest permissions must bind only contents/actions read.");
+  }
+
+  const commonEnvironment = {
+    RELEASE_MODE: "${{ inputs.mode }}",
+    RELEASE_SHA: "${{ inputs.sha }}",
+    RELEASE_VERSION: "${{ inputs.version }}",
+    VERIFICATION_RUN_ID: "${{ inputs.verification_run_id }}",
+  };
+  const evidenceRoot = "/tmp/ast-mcp-release-${{ inputs.sha }}-${{ inputs.version }}";
+  validateJobEnvironment(validation, commonEnvironment);
+  validateJobEnvironment(preparation, {
+    ...commonEnvironment,
+    RELEASE_ENVIRONMENT: "npm-publish",
+  });
+  validateJobEnvironment(publish, {
+    ...commonEnvironment,
+    RELEASE_ENVIRONMENT: "npm-publish",
+  });
+  validateJobEnvironment(verify, {
+    ...commonEnvironment,
+    RELEASE_EVIDENCE_ROOT: evidenceRoot,
+  });
+  validateJobEnvironment(promote, {
+    ...commonEnvironment,
+    RELEASE_EVIDENCE_ROOT: evidenceRoot,
+    RELEASE_ENVIRONMENT: "production",
+  });
+  validateRunStepEnvironments(validation, new Map());
+  validateRunStepEnvironments(
+    preparation,
+    new Map([
+      [
+        "node scripts/release-preflight.mjs authorize-publish",
+        { GITHUB_TOKEN: "${{ github.token }}" },
+      ],
+    ]),
+  );
+  validateRunStepEnvironments(publish, new Map());
+  validateRunStepEnvironments(verify, new Map());
+  validateRunStepEnvironments(
+    promote,
+    new Map([
+      [
+        "node scripts/release-preflight.mjs validate-promotion",
+        { GITHUB_TOKEN: "${{ github.token }}" },
+      ],
+      [
+        "node scripts/release-preflight.mjs promote-latest",
+        { NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}" },
+      ],
+    ]),
+  );
+
+  const checkoutInputs = {
+    ref: "${{ github.sha }}",
+    "persist-credentials": "false",
+  };
+  const setupInputs = {
+    "node-version": "24.16.0",
+    "package-manager-cache": "false",
+  };
+  const registrySetupInputs = {
+    ...setupInputs,
+    "registry-url": "https://registry.npmjs.org",
+  };
+  validateReleaseJobActions(
+    validation,
+    ["actions/checkout", "actions/setup-node"],
+    [
+      ["actions/checkout", checkoutInputs],
+      ["actions/setup-node", setupInputs],
+    ],
+  );
+  validateReleaseJobActions(
+    preparation,
+    ["actions/checkout", "actions/setup-node", "actions/upload-artifact"],
+    [
+      ["actions/checkout", checkoutInputs],
+      ["actions/setup-node", registrySetupInputs],
+      [
+        "actions/upload-artifact",
+        {
+          name: "ast-mcp-publish-${{ inputs.sha }}-${{ inputs.version }}",
+          path: "/tmp/ast-mcp-publish-${{ inputs.sha }}-${{ inputs.version }}",
+          "if-no-files-found": "error",
+          "retention-days": "1",
+          "compression-level": "0",
+          overwrite: "false",
+          "include-hidden-files": "false",
+        },
+      ],
+    ],
+  );
+  validateReleaseJobActions(
+    publish,
+    ["actions/checkout", "actions/setup-node", "actions/download-artifact"],
+    [
+      ["actions/checkout", checkoutInputs],
+      ["actions/setup-node", registrySetupInputs],
+      [
+        "actions/download-artifact",
+        {
+          name: "ast-mcp-publish-${{ inputs.sha }}-${{ inputs.version }}",
+          path: "/tmp/ast-mcp-publish-${{ inputs.sha }}-${{ inputs.version }}",
+        },
+      ],
+    ],
+  );
+  validateReleaseJobActions(
+    verify,
+    ["actions/checkout", "actions/setup-node", "actions/upload-artifact"],
+    [
+      ["actions/checkout", checkoutInputs],
+      ["actions/setup-node", registrySetupInputs],
+      [
+        "actions/upload-artifact",
+        {
+          name: "ast-mcp-release-${{ inputs.sha }}-${{ inputs.version }}",
+          path: "${{ env.RELEASE_EVIDENCE_ROOT }}",
+          "if-no-files-found": "error",
+          "retention-days": "30",
+          "compression-level": "0",
+          overwrite: "false",
+          "include-hidden-files": "false",
+        },
+      ],
+    ],
+  );
+  validateReleaseJobActions(
+    promote,
+    ["actions/checkout", "actions/setup-node", "actions/download-artifact"],
+    [
+      ["actions/checkout", checkoutInputs],
+      ["actions/setup-node", registrySetupInputs],
+      [
+        "actions/download-artifact",
+        {
+          name: "ast-mcp-release-${{ inputs.sha }}-${{ inputs.version }}",
+          path: "${{ env.RELEASE_EVIDENCE_ROOT }}",
+          "github-token": "${{ github.token }}",
+          repository: "${{ github.repository }}",
+          "run-id": "${{ inputs.verification_run_id }}",
+        },
+      ],
+    ],
+  );
+
+  const expectedCommands = new Map([
+    [
+      "validate-dispatch",
+      [
+        'test "$GITHUB_REF" = refs/heads/main && test "$RELEASE_SHA" = "$GITHUB_SHA"',
+        "node scripts/release-preflight.mjs validate-dispatch",
+      ],
+    ],
+    [
+      "prepare-publish",
+      [
+        "node scripts/release-preflight.mjs validate-environment",
+        "node scripts/release-preflight.mjs authorize-publish",
+        'env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" corepack enable',
+        'env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build',
+        "node scripts/release-preflight.mjs prepare-publish",
+      ],
+    ],
+    [
+      "publish-next",
+      [
+        "env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL node scripts/release-preflight.mjs validate-environment",
+        "node scripts/release-preflight.mjs publish-next",
+      ],
+    ],
+    [
+      "verify-next",
+      [
+        "node scripts/release-preflight.mjs validate-environment",
+        'env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" corepack enable',
+        'env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build',
+        'node scripts/registry-consumer-smoke.mjs --version "$RELEASE_VERSION" --expected-sha "$RELEASE_SHA" --registry https://registry.npmjs.org --metadata-output "$RELEASE_EVIDENCE_ROOT/registry-metadata.json" --audit-output "$RELEASE_EVIDENCE_ROOT/npm-audit-signatures.json" --output "$RELEASE_EVIDENCE_ROOT/registry-consumer.json"',
+        "node scripts/release-preflight.mjs verify-next",
+      ],
+    ],
+    [
+      "promote-latest",
+      [
+        "node scripts/release-preflight.mjs validate-promotion",
+        "node scripts/release-preflight.mjs promote-latest",
+      ],
+    ],
+  ]);
+  for (const job of jobs) {
+    if (
+      JSON.stringify(extractRunCommands(job)) !== JSON.stringify(expectedCommands.get(job.name))
+    ) {
+      policyFailure(`release ${job.name} command chain must remain exact and single-line.`);
+    }
+  }
+  const expectedSteps = new Map([
+    [
+      "validate-dispatch",
+      [
+        'run:test "$GITHUB_REF" = refs/heads/main && test "$RELEASE_SHA" = "$GITHUB_SHA"',
+        "uses:actions/checkout",
+        "uses:actions/setup-node",
+        "run:node scripts/release-preflight.mjs validate-dispatch",
+      ],
+    ],
+    [
+      "prepare-publish",
+      [
+        "uses:actions/checkout",
+        "uses:actions/setup-node",
+        "run:node scripts/release-preflight.mjs validate-environment",
+        "run:node scripts/release-preflight.mjs authorize-publish",
+        'run:env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" corepack enable',
+        'run:env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build',
+        "run:node scripts/release-preflight.mjs prepare-publish",
+        "uses:actions/upload-artifact",
+      ],
+    ],
+    [
+      "publish-next",
+      [
+        "uses:actions/checkout",
+        "uses:actions/setup-node",
+        "run:env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL node scripts/release-preflight.mjs validate-environment",
+        "uses:actions/download-artifact",
+        "run:node scripts/release-preflight.mjs publish-next",
+      ],
+    ],
+    [
+      "verify-next",
+      [
+        "uses:actions/checkout",
+        "uses:actions/setup-node",
+        "run:node scripts/release-preflight.mjs validate-environment",
+        'run:env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" corepack enable',
+        'run:env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build',
+        'run:node scripts/registry-consumer-smoke.mjs --version "$RELEASE_VERSION" --expected-sha "$RELEASE_SHA" --registry https://registry.npmjs.org --metadata-output "$RELEASE_EVIDENCE_ROOT/registry-metadata.json" --audit-output "$RELEASE_EVIDENCE_ROOT/npm-audit-signatures.json" --output "$RELEASE_EVIDENCE_ROOT/registry-consumer.json"',
+        "run:node scripts/release-preflight.mjs verify-next",
+        "uses:actions/upload-artifact",
+      ],
+    ],
+    [
+      "promote-latest",
+      [
+        "uses:actions/checkout",
+        "uses:actions/setup-node",
+        "uses:actions/download-artifact",
+        "run:node scripts/release-preflight.mjs validate-promotion",
+        "run:node scripts/release-preflight.mjs promote-latest",
+      ],
+    ],
+  ]);
+  for (const job of jobs) {
+    if (
+      JSON.stringify(extractStepIdentities(job, "release.yml")) !==
+      JSON.stringify(expectedSteps.get(job.name))
+    ) {
+      policyFailure(`release ${job.name} step chain must remain exact and ordered.`);
+    }
+  }
+}
+
 function validateWorkflowDocument(workflowName, source) {
   if (typeof source !== "string" || source.length === 0) {
     policyFailure(`${workflowName} must be a non-empty UTF-8 document.`);
@@ -652,9 +1212,7 @@ function validateWorkflowDocument(workflowName, source) {
     const trigger = source.match(/^\s*(pull_request_target|workflow_run):/mu)?.[1];
     policyFailure(`${workflowName} cannot use privileged trigger ${trigger}.`);
   }
-  if (/\$\{\{[^}\n]*\b(?:secrets\s*(?:\.|\[)|github\s*(?:\.\s*token\b|\[))/iu.test(source)) {
-    policyFailure(`${workflowName} cannot contain a repository secret reference.`);
-  }
+  validateCredentialReferences(source, workflowName);
   if (/\b(?:read-all|write-all)\b/u.test(source)) {
     policyFailure(`${workflowName} cannot use broad permission shorthands.`);
   }
@@ -672,6 +1230,7 @@ function validateWorkflowDocument(workflowName, source) {
       continue;
     }
     const runIndent = lineIndent(lines[index]);
+    const nestedLines = [];
     for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
       if (lines[cursor].trim() === "" || lines[cursor].trimStart().startsWith("#")) {
         continue;
@@ -679,6 +1238,20 @@ function validateWorkflowDocument(workflowName, source) {
       if (lineIndent(lines[cursor]) <= runIndent) {
         break;
       }
+      nestedLines.push(lines[cursor]);
+    }
+    const reviewedReleaseStepEnvironment =
+      workflowName === "release.yml" &&
+      nestedLines.length >= 2 &&
+      nestedLines[0] === `${" ".repeat(runIndent + 2)}env:` &&
+      nestedLines
+        .slice(1)
+        .every(
+          (line) =>
+            lineIndent(line) === runIndent + 4 &&
+            /^[A-Za-z_][A-Za-z0-9_]*:\s+\S(?:.*\S)?$/u.test(line.trim()),
+        );
+    if (nestedLines.length > 0 && !reviewedReleaseStepEnvironment) {
       policyFailure(`${workflowName} run steps must be single-line reviewed commands.`);
     }
   }
@@ -728,11 +1301,26 @@ function validateWorkflowDocument(workflowName, source) {
   validatePermissions(lines, workflowName);
   validateConcurrency(lines, workflowName);
   const jobs = parseJobs(lines, workflowName);
+  if (
+    workflowName === "release.yml" &&
+    JSON.stringify(jobs.map(({ name }) => name).sort()) !==
+      JSON.stringify([
+        "prepare-publish",
+        "promote-latest",
+        "publish-next",
+        "validate-dispatch",
+        "verify-next",
+      ])
+  ) {
+    policyFailure("release job inventory must contain only validation and the three exact modes.");
+  }
   validateJobBounds(jobs, workflowName);
   const actions = validateActions(lines, workflowName);
 
   if (workflowName === "ci.yml") {
     validateCiWorkflow(lines, jobs, actions);
+  } else if (workflowName === "release.yml") {
+    validateReleaseWorkflow(lines, jobs, actions);
   } else if (workflowName === "security.yml") {
     validateSecurityWorkflow(lines, jobs, actions);
   }

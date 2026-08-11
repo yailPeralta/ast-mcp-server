@@ -1,0 +1,200 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Release mode: publish-next, verify-next, or promote-latest"
+        required: true
+        type: string
+      sha:
+        description: "Exact lowercase 40-character commit SHA on main"
+        required: true
+        type: string
+      version:
+        description: "Exact stable package version without a v prefix"
+        required: true
+        type: string
+      verification_run_id:
+        description: "Successful verify-next workflow run ID (promote-latest only)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  validate-dispatch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      RELEASE_MODE: ${{ inputs.mode }}
+      RELEASE_SHA: ${{ inputs.sha }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+    steps:
+      - run: test "$GITHUB_REF" = refs/heads/main && test "$RELEASE_SHA" = "$GITHUB_SHA"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.16.0
+          package-manager-cache: false
+      - run: node scripts/release-preflight.mjs validate-dispatch
+
+  prepare-publish:
+    needs: validate-dispatch
+    if: inputs.mode == 'publish-next'
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RELEASE_MODE: ${{ inputs.mode }}
+      RELEASE_SHA: ${{ inputs.sha }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+      RELEASE_ENVIRONMENT: npm-publish
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.16.0
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+      - run: node scripts/release-preflight.mjs validate-environment
+      - run: node scripts/release-preflight.mjs authorize-publish
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" corepack enable
+      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build
+      - run: node scripts/release-preflight.mjs prepare-publish
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ast-mcp-publish-${{ inputs.sha }}-${{ inputs.version }}
+          path: /tmp/ast-mcp-publish-${{ inputs.sha }}-${{ inputs.version }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
+  publish-next:
+    needs: prepare-publish
+    if: inputs.mode == 'publish-next'
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    environment: npm-publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RELEASE_MODE: ${{ inputs.mode }}
+      RELEASE_SHA: ${{ inputs.sha }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+      RELEASE_ENVIRONMENT: npm-publish
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.16.0
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+      - run: env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL node scripts/release-preflight.mjs validate-environment
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ast-mcp-publish-${{ inputs.sha }}-${{ inputs.version }}
+          path: /tmp/ast-mcp-publish-${{ inputs.sha }}-${{ inputs.version }}
+      - run: node scripts/release-preflight.mjs publish-next
+
+  verify-next:
+    needs: validate-dispatch
+    if: inputs.mode == 'verify-next'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RELEASE_MODE: ${{ inputs.mode }}
+      RELEASE_SHA: ${{ inputs.sha }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+      RELEASE_EVIDENCE_ROOT: /tmp/ast-mcp-release-${{ inputs.sha }}-${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.16.0
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+      - run: node scripts/release-preflight.mjs validate-environment
+      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" corepack enable
+      - run: env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build
+      - run: node scripts/registry-consumer-smoke.mjs --version "$RELEASE_VERSION" --expected-sha "$RELEASE_SHA" --registry https://registry.npmjs.org --metadata-output "$RELEASE_EVIDENCE_ROOT/registry-metadata.json" --audit-output "$RELEASE_EVIDENCE_ROOT/npm-audit-signatures.json" --output "$RELEASE_EVIDENCE_ROOT/registry-consumer.json"
+      - run: node scripts/release-preflight.mjs verify-next
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ast-mcp-release-${{ inputs.sha }}-${{ inputs.version }}
+          path: ${{ env.RELEASE_EVIDENCE_ROOT }}
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
+  promote-latest:
+    needs: validate-dispatch
+    if: inputs.mode == 'promote-latest'
+    permissions:
+      contents: read
+      actions: read
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RELEASE_MODE: ${{ inputs.mode }}
+      RELEASE_SHA: ${{ inputs.sha }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+      RELEASE_EVIDENCE_ROOT: /tmp/ast-mcp-release-${{ inputs.sha }}-${{ inputs.version }}
+      RELEASE_ENVIRONMENT: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.16.0
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ast-mcp-release-${{ inputs.sha }}-${{ inputs.version }}
+          path: ${{ env.RELEASE_EVIDENCE_ROOT }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.verification_run_id }}
+      - run: node scripts/release-preflight.mjs validate-promotion
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - run: node scripts/release-preflight.mjs promote-latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
