@@ -363,7 +363,7 @@ Evidence:
 
 ### Task 5.1: Deterministic canary contract
 
-Status: pending.
+Status: complete.
 
 Files:
 
@@ -381,9 +381,14 @@ Preregister `AST_OPERATION_DEADLINE_MS=300000` inside every canary child environ
 
 After focused GREEN and the complete repository gate, commit only the harness, declarations, tests, workloads, SDD clarification and `package.json` as `test(canary): add deterministic production readiness harness`. Task 5.2 evidence MUST run from that clean commit; any later harness/workload edit invalidates all four reports.
 
+Evidence:
+
+- The final source cohort was committed as `2d0b21bbb80fae1acfca6a85d5891d87e68b59c1`, tree `af931d49769fabdf06f623965a6cfe1f9afb8a81`, after bounded compiler-parity remediation and dual-runtime gates.
+- The report-bearing tree `719b45ee3a73f43277981c0f842db13975f6b427` contains byte-identical source/harness blobs plus exactly the four checked reports.
+
 ### Task 5.2: Measure current repository
 
-Status: pending.
+Status: complete.
 
 Run:
 
@@ -392,9 +397,13 @@ Run:
 
 Require `"$AST_NODE_22_BIN" --version` to equal `v22.5.0` and `"$AST_NODE_24_BIN" --version` to match `^v24\.` before either command. The runner starts the deterministic fixture with the selected binary plus `--expose-gc`, invokes `global.gc()` exactly once before each RSS sample, and executes 10 warm-up plus 50 measured reads. Real-repository latency/RSS remains observational.
 
+Evidence:
+
+- Checked reports for `ast-mcp-server` under Node.js v22.5.0 and v24.16.0 retain 20 warm reads, 3 restarts, 40/40 passing gates each and zero semantic mismatches.
+
 ### Task 5.3: Measure `x-scraper` read-only
 
-Status: pending.
+Status: complete.
 
 Set `AST_X_SCRAPER_ROOT` to the canonical absolute clean `x-scraper` checkout or clone and run:
 
@@ -404,9 +413,14 @@ Set `AST_X_SCRAPER_ROOT` to the canonical absolute clean `x-scraper` checkout or
 
 Use isolated temporary cache roots. Capture byte-exact baseline/final git status inside the runner. Real `x-scraper` is read-only; all invalidation/failure cases remain in the generated fixture. Any source/config/status change invalidates the run. Both runtime reports MUST bind the same explicit physical `AST_X_SCRAPER_ROOT`, project identity and workload identity. Reports replace the host path with `[x-scraper]`.
 
+Evidence:
+
+- Checked reports for the clean `x-scraper` cohort at commit `a86fffb15ad21912a87583c2d498f813c47aa27e`, tree `9c359690b58867e01750905b76b1c0cca3ad15a2`, passed under Node.js v22.5.0 and v24.16.0 with 40/40 gates each, zero semantic mismatches and unchanged repository identity.
+
 ### Task 5.4: Define canary acceptance and support policy
 
-Status: pending.
+Status: complete under the prospective-commit convention: this status applies only if the exact
+reviewed documentation tree is committed unchanged.
 
 Files:
 
@@ -416,11 +430,21 @@ Files:
 
 Require zero semantic mismatches/mutation effects, successful rollback/fallback, bounded queue/session behavior and the preregistered fixture RSS/cache criteria from `MCP-PROD-404`. Record real-repository RSS/latency as observations only. Declare Linux supported; mark other platforms unverified unless equivalent gates are added.
 
+Evidence:
+
+- `README.md`, `benchmark/README.md` and `docs/support.md` define the verified Linux x64/GNU-coreutils dual-runtime matrix, local-stdio/freezer trust boundaries, fail-closed persistence policy and complete normative MCP-PROD-404 acceptance criteria without changing harness, workload or checked-report bytes.
+
 ### Task 5.5: Adversarial canary review and evidence commit
 
-Status: pending.
+Status: complete.
 
 Freeze reports/docs against the committed Task 5.1 harness. Run `yarn test test/canary-local-mcp.test.ts && yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build`, then the two exact Task 5.2 measurement commands, the two exact Task 5.3 measurement commands and exactly one Task 5.3 `freeze-report-set` command. Run `sha256sum benchmark/results/production-readiness/*.json`, `rg -n '/home/|mongodb(\\+srv)?://|redis://|Bearer[[:space:]]+|api[_-]?key|password|secret|token' benchmark/README.md benchmark/canary-workloads benchmark/results/production-readiness openspec/changes/2026-08-07-local-mcp-production-readiness` and `git diff --check`. Request read-only review of measurement honesty, path/secret hygiene and parity. Commit only reports/docs/evidence as `test(canary): add local production readiness matrix` after PASS.
+
+Evidence:
+
+- Commit `fbaee3294afa74b3e611b0a0646ee437cc330fb9`, tree `719b45ee3a73f43277981c0f842db13975f6b427`, preserves the exact reviewed report-bearing candidate.
+- All four reports passed 40/40 gates with 20 iterations and 3 restarts; raw bindings, canonical checked bytes, runtime/workload/harness/project identities, cohort consistency and path/secret hygiene passed.
+- Two independent exact-tree reviews returned PASS with zero unresolved Medium-or-higher findings.
 
 ## 6. Supply chain and release candidate
 

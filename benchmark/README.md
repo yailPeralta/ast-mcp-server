@@ -210,6 +210,26 @@ The command fails unless all integration gates pass:
 
 The 2026-08-07 second-remediation frozen-tree runs passed all 15 gates on Node.js v24.16.0 and v22.5.0. The script exits non-zero if any gate is false. Node 22.5 requires the experimental SQLite flag; the adapter uses bounded SQL pages because that runtime does not expose `StatementSync.iterate()`. Durations in the reports are local observations over a tiny synthetic fixture, not latency or capacity SLAs. Reports use placeholders for project/cache roots and contain no credentials or host paths.
 
+## Local production-readiness matrix
+
+`scripts/canary-local-mcp.mjs` exercises one immutable real-repository cohort and separate disposable failure/mutation fixtures under the exact selected Node binary. The checked matrix covers this repository and `x-scraper` under Node.js v22.5.0 and v24.16.0, with 20 warm reads and 3 unchanged restarts per report.
+
+The four checked reports under `benchmark/results/production-readiness/` passed 40/40 retained gates each. They establish:
+
+- exact compiler-result parity with no semantic mismatches across disabled, cold canary, warm, restart, and memory-only rollback runs;
+- byte-identical source/config status and worktree identity for both real repositories;
+- corruption and non-corruption write-failure fallback to independently measured compiler baselines, followed by explicit recovery;
+- byte-exact mutation rollback, exact postimage/replay behavior, and no cache side effect in a disposable fixture;
+- bounded queue saturation, queued/active cancellation, drained queues, and session capacity;
+- exactly 10 resource warmups, 50 measured reads, and 50 explicit pre-sample garbage collections;
+- bounded deterministic-fixture RSS growth and stable immutable-cache bytes: 20,480 bytes after both the first complete build and final restart in all four reports.
+
+The real-repository latency and peak-RSS values retained in those reports are observations from one machine and cohort. They are not release gates, capacity guarantees, or service-level objectives. Only the deterministic fixture's preregistered RSS/cache thresholds determine resource PASS/FAIL.
+
+Raw reports must be written as new direct children of physical `/tmp`. After all four runs pass against unchanged clean authorities, publish checked evidence exactly once with the closed `benchmark:freeze-production-readiness` report-set command. The freezer validates all identities and gates again and atomically exposes the complete fixed four-file directory; it does not support per-report publication or replacement of existing checked evidence.
+
+Linux x64 with GNU coreutils `mv --update=none-fail --no-copy --no-target-directory` is the supported evidence-publication platform. Other Linux architectures or systems without that primitive, macOS, and Windows remain unverified. See [the support policy](../docs/support.md) for the product boundary.
+
 ## Model-facing JSON and TOON
 
 `scripts/benchmark-formats.mjs` compares compact JSON with TOON for actual MCP logical results. It uses this repository for broad symbol search and deterministic temporary TypeScript fixtures for repeated references and non-empty diagnostics. File lists, outlines, exact source, and a prepared rename are retained as negative controls.
