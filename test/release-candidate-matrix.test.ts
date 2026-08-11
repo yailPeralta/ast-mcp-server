@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const matrixModule = await import("../scripts/release-candidate-matrix.mjs");
 const {
   RELEASE_CANDIDATE_COMMAND_IDS,
+  createCommandEnvironment,
   createRuntimeCommandPlan,
   createRuntimeEnvironment,
   parseReleaseCandidateMatrixArgs,
@@ -104,6 +105,20 @@ describe("release candidate matrix", () => {
     expect(node24).not.toHaveProperty("NODE_OPTIONS");
     expect(node24).not.toHaveProperty("GIT_INDEX_FILE");
     expect(ambient).toHaveProperty("NODE_OPTIONS", "--inspect");
+  });
+
+  it("clears Node options only for immutable dependency installation", () => {
+    const runtimeEnvironment = {
+      PATH: "/opt/node22/bin:/usr/bin",
+      NODE_OPTIONS: "--experimental-sqlite",
+    };
+
+    expect(createCommandEnvironment(runtimeEnvironment, "install")).toEqual({
+      PATH: "/opt/node22/bin:/usr/bin",
+      NODE_OPTIONS: "",
+    });
+    expect(createCommandEnvironment(runtimeEnvironment, "test")).toBe(runtimeEnvironment);
+    expect(runtimeEnvironment.NODE_OPTIONS).toBe("--experimental-sqlite");
   });
 
   it("captures bounded command evidence for success and failure", async () => {

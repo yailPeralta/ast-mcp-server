@@ -53,6 +53,61 @@ describe("workflow policy check", () => {
     expect(JSON.parse(stdout)).toEqual(validateWorkflowPolicyDocuments(documents));
   });
 
+  it("closes the CI GNU mv and package-manager Node-option boundaries", async () => {
+    const documents = await loadWorkflowDocuments();
+    const ci = documents["ci.yml"];
+    expect(ci).toBeTypeOf("string");
+    if (typeof ci !== "string") return;
+
+    const missingGnuMvPreparation = {
+      ...documents,
+      "ci.yml": replaceRequired(
+        ci,
+        "      - run: node scripts/ci-prepare-gnu-mv.mjs prepare\n",
+        "",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(missingGnuMvPreparation)).toThrow(
+      /command chain/u,
+    );
+
+    const ambientNodeOptionsOnCorepack = {
+      ...documents,
+      "ci.yml": replaceRequired(
+        ci,
+        "      - run: NODE_OPTIONS= corepack enable",
+        "      - run: corepack enable",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(ambientNodeOptionsOnCorepack)).toThrow(
+      /command chain/u,
+    );
+
+    const ambientNodeOptionsOnInstall = {
+      ...documents,
+      "ci.yml": replaceRequired(
+        ci,
+        "      - run: NODE_OPTIONS= yarn install --immutable",
+        "      - run: yarn install --immutable",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(ambientNodeOptionsOnInstall)).toThrow(
+      /command chain/u,
+    );
+
+    const unreviewedCoreutilsMode = {
+      ...documents,
+      "ci.yml": replaceRequired(
+        ci,
+        "node scripts/ci-prepare-gnu-mv.mjs prepare",
+        "node scripts/ci-prepare-gnu-mv.mjs probe",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(unreviewedCoreutilsMode)).toThrow(
+      /command chain/u,
+    );
+  });
+
   it("closes release dispatch, concurrency, jobs, permissions, and mode conditions", async () => {
     const documents = await loadWorkflowDocuments();
     const release = documents["release.yml"];

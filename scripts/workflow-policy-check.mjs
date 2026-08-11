@@ -38,8 +38,9 @@ const REVIEWED_ACTION_REVISIONS = new Map([
 const MAX_WORKFLOW_BYTES = 256 * 1024;
 const MAX_JOB_TIMEOUT_MINUTES = 60;
 const CI_RELEASE_GATES = Object.freeze([
-  "corepack enable",
-  "yarn install --immutable",
+  "node scripts/ci-prepare-gnu-mv.mjs prepare",
+  "NODE_OPTIONS= corepack enable",
+  "NODE_OPTIONS= yarn install --immutable",
   "yarn format:check",
   "yarn lint",
   "yarn typecheck",

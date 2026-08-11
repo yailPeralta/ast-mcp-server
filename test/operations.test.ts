@@ -212,7 +212,7 @@ describe("prepared structural operations", () => {
       newName: "renderValue",
     });
     clearProjectSessions();
-    process.env.AST_OPERATION_DEADLINE_MS = "1000";
+    vi.stubEnv("AST_OPERATION_DEADLINE_MS", "1000");
     let now = 0;
     const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => (now += 250));
     try {

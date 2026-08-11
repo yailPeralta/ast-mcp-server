@@ -136,6 +136,11 @@ export function createRuntimeCommandPlan(runtime, yarnEntry) {
   ]);
 }
 
+export function createCommandEnvironment(runtimeEnvironment, commandId) {
+  if (commandId !== "install") return runtimeEnvironment;
+  return { ...runtimeEnvironment, NODE_OPTIONS: "" };
+}
+
 function appendTail(current, chunk) {
   const combined = Buffer.concat([current, chunk]);
   return combined.length <= outputTailBytes
@@ -305,7 +310,7 @@ async function runRuntime(runtime, outputDir, candidateTree, packageVersion, ide
   for (const command of plan) {
     process.stderr.write(`[${runtime.id}] ${command.id}\n`);
     const result = await runBoundedProcess(command.file, [...command.args], {
-      env: runtime.environment,
+      env: createCommandEnvironment(runtime.environment, command.id),
     });
     commandReports.push(publicCommandResult(command, result));
     if (result.exitCode !== 0 || result.signal !== null || result.timedOut) {
