@@ -29,6 +29,9 @@ import {
 const temporaryDirectories: string[] = [];
 const temporaryFiles: string[] = [];
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const packageMetadata = JSON.parse(
+  await readFile(path.join(repositoryRoot, "package.json"), "utf8"),
+) as { name: string; version: string };
 
 const reportSetMembers = [
   {
@@ -355,8 +358,8 @@ function passingReport() {
     },
     identity: {
       package: {
-        name: "ast-mcp-server",
-        version: "0.6.0",
+        name: packageMetadata.name,
+        version: packageMetadata.version,
         commit: "a".repeat(40),
         head_tree: "b".repeat(40),
         tree: "b".repeat(40),
