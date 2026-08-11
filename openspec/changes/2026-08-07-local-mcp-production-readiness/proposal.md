@@ -21,7 +21,7 @@ For a local agent using the MCP over stdio:
 
 ## Product boundary
 
-The supported v0.7.0 product is a trusted single-user local stdio MCP for TypeScript/JavaScript projects on Linux, running Node `22.5.0` or the current Node 24 line. It operates with the permissions of the invoking user. Remote transport, untrusted clients, multi-tenancy and OS sandboxing are not part of this release.
+The supported v0.7.0 product is a trusted single-user local stdio MCP for TypeScript/JavaScript projects on Linux x64 with the required GNU coreutils publication primitive, running Node `22.5.0` or the current Node 24 line. It operates with the permissions of the invoking user. Remote transport, untrusted clients, multi-tenancy and OS sandboxing are not part of this release.
 
 ## Goals
 
@@ -68,7 +68,7 @@ The supported v0.7.0 product is a trusted single-user local stdio MCP for TypeSc
 - Add immutable read-only real-repository workloads for disabled and explicit-canary subprocesses.
 - Exercise restart reuse, parity and read-only policy rollback on real repositories; exercise changed-only rebuild, config invalidation, persistence-failure fallback, mutation byte rollback, queue saturation and cancellation only in disposable fixtures.
 - Run against this repository and `x-scraper`; report runtime identity, workload, raw latency, RSS, DB size and observability counters.
-- State Linux as the supported platform until other OS matrices pass.
+- State Linux x64 with the required GNU coreutils primitive as the supported target until equivalent architecture/OS matrices pass.
 
 ### Phase 4: supply chain and release candidate
 

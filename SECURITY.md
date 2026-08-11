@@ -10,7 +10,7 @@ Security fixes are provided for the latest published minor release and the curre
 | 0.6.x                              | Yes, until v0.7.0 becomes `latest` |
 | 0.5.x and earlier                  | No                                 |
 
-This project supports trusted single-user local stdio use. The current v0.7.0 target supports Linux only when GNU coreutils `mv` provides `--update=none-fail`, with Node.js 22.5.0 or the current Node.js 24 line. macOS, Windows and Linux systems without that primitive are unverified. Remote, untrusted and multi-tenant use is outside the supported security boundary.
+This project supports trusted single-user local stdio use. The current v0.7.0 target supports Linux x64 only when GNU coreutils `mv` provides `--update=none-fail`, with Node.js 22.5.0 or the current Node.js 24 line. Other Linux architectures, systems without that primitive, macOS and Windows are unverified. Remote, untrusted and multi-tenant use is outside the supported security boundary.
 
 ## Reporting a vulnerability
 

@@ -1,16 +1,16 @@
 # ADR 0005: Keep the symbol index memory-only until the runtime matrix is proven
 
-- Status: Accepted
+- Status: Superseded in part by ADR 0008 and ADR 0009
 - Date: 2026-08-06
 - Decision owners: ast-mcp-server maintainers
 
-> Runtime amendment: ADR 0008 raises the package floor to Node.js `>=22.5.0`. This ADR remains the memory-only persistence decision; it does not select or enable a durable backend.
+> Supersession note: ADR 0008 raises the package floor to Node.js `>=22.5.0`, and ADR 0009 later authorizes native SQLite only for the explicit canary policy while preserving memory-only default/rollback. This ADR records why persistence remained memory-only at this decision point; ADR 0009 defines the current backend policy.
 
 ## Decision
 
-Keep `InMemorySymbolIndex` as the only production backend for the current release. Do not add a native SQLite or portable/WASM SQLite dependency in Task 7.1, and do not introduce a JSON file store into the runtime path.
+At this decision point, keep `InMemorySymbolIndex` as the only production backend. Do not add a native SQLite or portable/WASM SQLite dependency in Task 7.1, and do not introduce a JSON file store into the runtime path.
 
-Re-open the decision only after a supported-runtime matrix provides real evidence for Node.js 20.19+, Node.js 22, lifecycle-disabled tarball installation, restart reuse, schema migration, corruption recovery, and the existing mutation/read safety gates.
+The original re-open gate required a supported-runtime matrix with real evidence for the then-supported Node.js 20.19+ and Node.js 22 lines, lifecycle-disabled tarball installation, restart reuse, schema migration, corruption recovery, and the existing mutation/read safety gates. ADRs 0008 and 0009 record the later runtime and persistence decisions.
 
 ## Question
 
@@ -19,7 +19,7 @@ Should the versioned `SymbolIndexStore` contract gain a persistent backend for w
 ## Forces and constraints
 
 - The index is derived read evidence, not compiler authority. A missing or corrupt index must fall back to compiler-backed synchronization and must never authorize a mutation.
-- The package supports Node.js `>=20.19`; a backend available only in newer Node versions cannot become the default without a compatibility plan.
+- At the time of this decision, the package supported Node.js `>=20.19`; a backend available only in newer Node versions could not become the default without a compatibility plan.
 - Yarn lifecycle scripts are disabled and packed consumers must remain isolated and reproducible.
 - The current store contract is asynchronous and project-scoped, with schema version, content/config fingerprints, body-free symbols, query limits, clear, and flush operations.
 - The project is a solo-maintained package. A persistence dependency adds packaging, native binary/WASM, migration, corruption, and support surface that must pay for itself.
@@ -31,7 +31,7 @@ Should the versioned `SymbolIndexStore` contract gain a persistent backend for w
 Pros:
 
 - No dependency or native/WASM loading risk.
-- Existing Node 20.19+ package contract remains unchanged.
+- The then-current Node 20.19+ package contract remains unchanged.
 - Fresh compiler synchronization is already the correctness fallback.
 - Corruption and restart semantics are explicit: rebuild from the compiler project.
 

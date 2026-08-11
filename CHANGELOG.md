@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — release candidate (unreleased, 2026-08-11)
+
+### Added
+
+- Compiler-backed, freshness-aware impact traversal with bounded direct/transitive relationships and fail-closed test-candidate evidence.
+- Opt-in SQLite symbol-index canary with corruption/write-failure fallback, restart reuse, explicit recovery, and bounded project-status observability; default and reserved `enabled` policies remain memory-only.
+- Bounded per-project scheduling, cancellation/deadline semantics, idempotent graceful shutdown, and a closed public-error envelope with correlation IDs.
+- Deterministic Linux x64 production-readiness evidence across Node.js 22.5.0 and Node.js 24 for this repository and `x-scraper`.
+- Exact-SHA staged release workflows for `next` publication, public-registry verification, and separately authorized `latest` promotion.
+
+### Changed
+
+- Symbol search and impact discovery now remain compiler-authoritative while applying deterministic limits before globally materializing expensive relationships.
+- The supported release target is explicitly Linux x64 with the required GNU coreutils publication primitive; other platforms and architectures remain unverified.
+- The package now ships its support and security policies alongside the README, changelog, binaries, and bundled structural-editing skill.
+
+### Security
+
+- Release preparation, GitHub authorization, OIDC publication, and npm-token promotion use physically separated least-authority phases with lifecycle scripts disabled.
+- Workflow actions, permissions, inputs, conditions, commands, environments, and credential placement are checked against a closed immutable policy.
+- Package publication binds exact tarball bytes and packed `gitHead` to the authorized SHA; consumer verification independently proves preview/apply/replay postimages and no-write failure paths.
+- Public MCP and stderr errors are bounded and sanitized against source, path, stack, environment, and credential disclosure.
+
 ## [0.6.0] - 2026-08-05
 
 ### Added
@@ -96,6 +119,7 @@ Initial public release.
 - Apply rejects stale workspaces, changed configs/sources, mismatched plan hashes, unsafe plan files, conflicting MCP registrations, and conflicting skill content.
 - Inputs, outputs, operation stores, subprocesses, batch fan-out, plan lifetime, and filesystem access are bounded.
 
+[0.6.0]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.6.0
 [0.5.1]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.5.1
 [0.5.0]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.5.0
 [0.4.0]: https://github.com/yailPeralta/ast-mcp-server/releases/tag/v0.4.0

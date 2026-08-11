@@ -1,12 +1,14 @@
 # Exploration: local MCP production readiness
 
-## Problem
+> Historical baseline: the opening problem and evidence below capture repository/public-release state on 2026-08-07, before this SDD's implementation tasks. They are retained as decision provenance and are superseded for current-state claims by the completed task evidence, current product documentation, and the Task 6.3 candidate metadata.
 
-The compiler-first core is verified, but the published product does not yet contain the approved tree and the local stdio runtime still lacks strict overload, cancellation, shutdown and uniform public-error boundaries. Calling the package production-ready before those boundaries are explicit would conflate semantic correctness with release and operational readiness.
+## Opening problem — 2026-08-07 baseline
+
+At SDD opening, the compiler-first core was verified, but the published product did not contain the approved tree and the local stdio runtime still lacked strict overload, cancellation, shutdown and uniform public-error boundaries. Calling the package production-ready before those boundaries were explicit would have conflated semantic correctness with release and operational readiness.
 
 The target user is a developer or coding agent running one trusted local `ast-mcp-server` process over stdio against TypeScript/JavaScript projects available to that operating-system user. The outcome is a bounded, observable, releasable local tool; it is not a remote multi-tenant code service.
 
-## Current evidence
+## Opening evidence — 2026-08-07 baseline
 
 ### Semantic and mutation core
 
@@ -51,6 +53,10 @@ The per-project queue has no admission cap or wait deadline. Requests retain the
 
 `benchmark/results/x-scraper.json` is a 2026-08-03 outline benchmark. It reports roughly 3.95 s fresh project load, 2.72 s cold cached-session outline and 180 ms warm cached-session outline, but predates the final persistence integration and does not measure current queue saturation, restart reuse, RSS, fallback rates or prolonged canary behavior.
 
+## Current closure
+
+The Task 6.3 candidate now includes bounded scheduling/cancellation/shutdown, sanitized correlated public errors, explicit Linux x64/GNU-coreutils support and trust boundaries, checked dual-runtime production-readiness evidence, hardened CI/release workflows, and package metadata/handshake version `0.7.0`. The public npm package remains `0.6.0`; Task 6.4, push, publication, registry verification, promotion, tag and hosted release remain pending and require their separate gates and authorizations.
+
 ## Decisions to make
 
 ### Decision 1: in-process governance or worker isolation?
@@ -71,10 +77,10 @@ The selected design must not claim hard preemption. It rejects overload before r
 
 ### Decision 3: broad cross-platform claim or explicit support policy?
 
-| Option                                                                                 | Strength                        | Cost/risk                                                      | Disposition |
-| -------------------------------------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------- | ----------- |
-| Claim Linux, macOS and Windows now                                                     | Broad audience                  | Existing filesystem guarantees are not proven on all platforms | Rejected    |
-| Support Linux for v0.7.0 and label other platforms unverified until CI evidence exists | Honest and immediately testable | Smaller initial support promise                                | Selected    |
+| Option                                                                                                                           | Strength                        | Cost/risk                                                      | Disposition |
+| -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------- | ----------- |
+| Claim Linux, macOS and Windows now                                                                                               | Broad audience                  | Existing filesystem guarantees are not proven on all platforms | Rejected    |
+| Support Linux x64 with the required GNU primitive for v0.7.0 and label other targets unverified until equivalent evidence exists | Honest and immediately testable | Smaller initial support promise                                | Selected    |
 
 macOS/Windows may be added later through platform-specific SDDs; they are not silently treated as working or broken.
 
@@ -111,7 +117,7 @@ Shutdown stops admission and cancels queued/cancellable work. If the graceful dr
 - Stable sanitized MCP error responses with correlated bounded stderr events.
 - Queue/runtime observability and a read-only canary harness.
 - Current-repository and `x-scraper` canary evidence with disabled-default rollback.
-- Explicit Linux support policy and current Node matrix.
+- Explicit Linux x64/GNU-coreutils support policy and current Node matrix.
 - Security/release documentation, CI hardening, version/changelog closure and public consumer smoke.
 - Archival/supersession of stale persistence evidence documents.
 

@@ -171,7 +171,7 @@ Checked reports MUST use repository aliases, contain no absolute runtime/project
 
 ### MCP-PROD-501 Supported platform truth
 
-v0.7.0 MUST explicitly support Linux with GNU coreutils `mv` supporting `--update=none-fail` only unless equivalent filesystem, process, MCP/CLI/package and mutation tests pass on another platform. Unverified platforms MUST be labeled unverified, not silently supported. Node 22.5 and the current Node 24 line remain mandatory on the supported platform.
+v0.7.0 MUST explicitly support Linux x64 with GNU coreutils `mv` supporting `--update=none-fail` only unless equivalent architecture, filesystem, process, MCP/CLI/package and mutation tests pass on another target. Unverified architectures/platforms MUST be labeled unverified, not silently supported. Node 22.5 and the current Node 24 line remain mandatory on the supported target.
 
 ### MCP-PROD-502 Trust boundary
 

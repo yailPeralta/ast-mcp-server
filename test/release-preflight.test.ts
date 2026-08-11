@@ -600,6 +600,8 @@ describe("release preflight", () => {
           { path: "package.json", size: 100 },
           { path: "README.md", size: 100 },
           { path: "CHANGELOG.md", size: 100 },
+          { path: "SECURITY.md", size: 100 },
+          { path: "docs/support.md", size: 100 },
           { path: "dist/index.js", size: 100 },
           { path: "dist/cli.js", size: 100 },
           { path: "skills/structural-code-editing/SKILL.md", size: 100 },
@@ -609,7 +611,7 @@ describe("release preflight", () => {
     expect(validatePackReport(pack, RELEASE_VERSION)).toEqual({
       package_name: "ast-mcp-server",
       version: RELEASE_VERSION,
-      file_count: 6,
+      file_count: 8,
     });
     expect(() => validatePackReport(pack, "0.7.1")).toThrow(/package version/u);
     expect(() =>
@@ -629,6 +631,24 @@ describe("release preflight", () => {
         RELEASE_VERSION,
       ),
     ).toThrow(/required package artifact/u);
+    for (const requiredPolicy of ["SECURITY.md", "docs/support.md"]) {
+      expect(() =>
+        validatePackReport(
+          [
+            {
+              ...pack[0],
+              files: pack[0].files.filter(({ path }) => path !== requiredPolicy),
+            },
+          ],
+          RELEASE_VERSION,
+        ),
+      ).toThrow(
+        new RegExp(
+          `required package artifact ${requiredPolicy.replace(".", "\\.")} is missing`,
+          "u",
+        ),
+      );
+    }
   });
 
   it("binds the physical package manifest to the exact release SHA", () => {

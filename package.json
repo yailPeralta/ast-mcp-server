@@ -1,6 +1,6 @@
 {
   "name": "ast-mcp-server",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Structural code MCP server and batch CLI for compact TypeScript/JavaScript reads and hash-bound AST edits.",
   "keywords": [
     "mcp",
@@ -35,7 +35,9 @@
     "dist",
     "skills",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "docs/support.md"
   ],
   "engines": {
     "node": ">=22.5.0"

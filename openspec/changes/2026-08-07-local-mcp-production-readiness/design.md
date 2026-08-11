@@ -175,7 +175,7 @@ The only checked-evidence transition is one closed `freeze-report-set`; no stand
 
 ## Platform/support policy
 
-v0.7.0 support is Linux with GNU coreutils `mv` supporting `--update=none-fail`, plus Node 22.5/24. CI keeps the complete matrix on Ubuntu. README and `SECURITY.md` state that macOS/Windows and Linux systems without that no-replace primitive are unverified for evidence freezing due to filesystem/process semantics. Package metadata is adjusted only if a truthful npm `os` restriction is intentionally desired; do not add one casually because it can block experimental users. No cross-platform claim is derived from TypeScript compilation alone.
+v0.7.0 support is Linux x64 with GNU coreutils `mv` supporting `--update=none-fail`, plus Node 22.5/24. CI keeps the complete matrix on Ubuntu x64. README and `SECURITY.md` state that other Linux architectures, macOS/Windows and Linux systems without that no-replace primitive are unverified for evidence freezing due to filesystem/process semantics. Package metadata is adjusted only if a truthful npm `os`/`cpu` restriction is intentionally desired; do not add one casually because it can block experimental users. No cross-platform claim is inferred from portable TypeScript alone.
 
 ## Supply chain and release
 
@@ -198,7 +198,7 @@ The stale `2026-08-06-symbol-index-persistence-evidence` change is historical ev
 
 ADR 0010 records:
 
-- local stdio/Linux product boundary;
+- local stdio/Linux x64 product boundary;
 - in-process bounded scheduler versus worker isolation;
 - cooperative cancellation limitation;
 - stable public error boundary;

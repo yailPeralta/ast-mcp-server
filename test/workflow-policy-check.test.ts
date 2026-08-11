@@ -902,11 +902,11 @@ describe("workflow policy check", () => {
     expect(securityPolicy).toContain("trusted single-user local stdio");
     expect(securityPolicy).toContain("GNU coreutils");
     expect(securityPolicy).toContain("--update=none-fail");
-    expect(securityPolicy).toContain("macOS, Windows");
+    expect(securityPolicy).toContain("Linux x64 only");
+    expect(securityPolicy).toContain("Other Linux architectures");
+    expect(securityPolicy).toContain("systems without that primitive");
+    expect(securityPolicy).toContain("macOS and Windows");
     expect(securityPolicy).toContain("unverified");
-    expect(securityPolicy).toContain(
-      "macOS, Windows and Linux systems without that primitive are unverified.",
-    );
     expect(securityPolicy).not.toMatch(/\/(?:home|Users)\//u);
 
     expect(dependabotPolicy.match(/package-ecosystem:/gu)).toHaveLength(2);

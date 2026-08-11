@@ -87,6 +87,8 @@ const REQUIRED_PACK_FILES = Object.freeze([
   "package.json",
   "README.md",
   "CHANGELOG.md",
+  "SECURITY.md",
+  "docs/support.md",
   "dist/index.js",
   "dist/cli.js",
   "skills/structural-code-editing/SKILL.md",

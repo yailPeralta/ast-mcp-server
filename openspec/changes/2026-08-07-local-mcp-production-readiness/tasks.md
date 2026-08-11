@@ -28,7 +28,7 @@ Files:
 
 - Create: `docs/adr/0010-local-stdio-runtime-governance.md`.
 
-Record local stdio/Linux support, in-process bounded scheduling versus worker isolation, cooperative cancellation, completion-critical shutdown, the frozen public error/status contracts, `next -> verify-next -> latest` release recovery and rollback/evolution. Run `yarn prettier --check docs/adr/0010-local-stdio-runtime-governance.md` and `git diff --check`; obtain a read-only ADR delta review, stage only that file, run `git diff --cached --check`, and commit `docs(adr): record local stdio runtime governance`.
+Record local stdio/Linux x64 support, in-process bounded scheduling versus worker isolation, cooperative cancellation, completion-critical shutdown, the frozen public error/status contracts, `next -> verify-next -> latest` release recovery and rollback/evolution. Run `yarn prettier --check docs/adr/0010-local-stdio-runtime-governance.md` and `git diff --check`; obtain a read-only ADR delta review, stage only that file, run `git diff --cached --check`, and commit `docs(adr): record local stdio runtime governance`.
 
 Evidence: commit `f6079a814608a3554e23e0194ef66c75d1dd12c6` created only `docs/adr/0010-local-stdio-runtime-governance.md` with the required conventional subject.
 
@@ -428,7 +428,7 @@ Files:
 - Modify: `README.md`.
 - Create: `docs/support.md`.
 
-Require zero semantic mismatches/mutation effects, successful rollback/fallback, bounded queue/session behavior and the preregistered fixture RSS/cache criteria from `MCP-PROD-404`. Record real-repository RSS/latency as observations only. Declare Linux supported; mark other platforms unverified unless equivalent gates are added.
+Require zero semantic mismatches/mutation effects, successful rollback/fallback, bounded queue/session behavior and the preregistered fixture RSS/cache criteria from `MCP-PROD-404`. Record real-repository RSS/latency as observations only. Declare Linux x64 with the required GNU primitive supported; mark other architectures/platforms unverified unless equivalent gates are added.
 
 Evidence:
 
@@ -463,7 +463,7 @@ Files:
 - Create: `scripts/workflow-policy-check.d.mts`.
 - Create: `test/workflow-policy-check.test.ts`.
 
-Add least permissions, job timeouts/concurrency and immutable reviewed action revisions. Verify Node 22.5/24 Linux matrix remains complete. Do not add secrets or broad write permissions. Run `yarn test test/workflow-policy-check.test.ts && node scripts/workflow-policy-check.mjs && yarn format:check && git diff --check`.
+Add least permissions, job timeouts/concurrency and immutable reviewed action revisions. Verify Node 22.5/24 Linux x64 matrix remains complete. Do not add secrets or broad write permissions. Run `yarn test test/workflow-policy-check.test.ts && node scripts/workflow-policy-check.mjs && yarn format:check && git diff --check`.
 
 Evidence:
 
@@ -499,7 +499,8 @@ Evidence:
 
 ### Task 6.3: Documentation consistency and v0.7.0 candidate
 
-Status: pending.
+Status: complete under the prospective-commit convention: this status applies only if the exact
+reviewed candidate tree is committed unchanged with the subject below.
 
 Files:
 
@@ -514,6 +515,15 @@ Files:
 - Verify: `test/agent-setup.test.ts`, `test/agent-targets.test.ts`, `test/setup-wizard.test.ts`, `test/skill-installer.test.ts`, `scripts/package-smoke.mjs` and package metadata.
 
 Run `rg -n '0\\.6\\.0|20\\.19|memory.only|15 tools|macOS|Windows|Linux|enabled_not_released|AST_SYMBOL_INDEX_PERSISTENCE' README.md CHANGELOG.md docs skills package.json openspec/changes benchmark/README.md`, classify every hit as current or dated history, and update current claims. Run `yarn test test/agent-setup.test.ts test/agent-targets.test.ts test/setup-wizard.test.ts test/skill-installer.test.ts && yarn test:package && yarn format:check && git diff --check`. Bump to `0.7.0` only after all implementation gates pass. Commit `chore(release): prepare v0.7.0`.
+
+Evidence:
+
+- Current support/runtime/persistence/error/release claims are aligned across README, support/security policy, ADRs 0008/0009/0010 and bundled skill 4.1.0. ADRs 0005/0008 now mark their superseded persistence clauses as historical and point to ADR 0009 for current policy.
+- The active exploration labels its opening problem/evidence as a dated 2026-08-07 baseline and records the Task 6.3 current closure separately. Changelog notes remain explicitly unreleased and identify a 0.7.0 release candidate; no tag/release link is claimed before the external transition.
+- Historical `0.6.0`, Node 20.19 and 15-tool references remain only in dated changelog, archived SDD verification, immutable report evidence, current-public-registry context or regression fixtures where those values are the subject under test.
+- Package and handshake metadata are `0.7.0`; the tarball includes README, changelog, support/security policy, the bundled skill and compiled executables.
+- Release preflight requires both shipped policy documents and rejects either independently; focused release-preflight/workflow-policy tests pass 51/51 and the policy CLI retains the closed 3-workflow/9-job/23-action contract.
+- Focused agent setup/target/wizard/skill tests, package smoke, formatting and whitespace gates are rerun against the final candidate bytes before exact-tree review.
 
 ### Task 6.4: Final local release candidate
 

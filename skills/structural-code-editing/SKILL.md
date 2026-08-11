@@ -1,7 +1,7 @@
 ---
 name: structural-code-editing
 description: Leer, navegar y editar proyectos TypeScript/JavaScript mediante el resolver real del compilador y operaciones AST preparadas, revisadas y vinculadas por hash.
-version: "4.0.0"
+version: "4.1.0"
 author: "yail"
 license: "ISC"
 metadata:
@@ -37,6 +37,16 @@ La presencia de este skill no demuestra que el transporte MCP esté configurado.
 - verificar Hermes con `hermes mcp test ast` y recargar la sesión si acaba de cambiar la configuración.
 
 El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reemplazar una configuración existente sin revisión explícita.
+
+## Runtime, soporte y errores
+
+El paquete requiere Node.js `>=22.5.0`. El target verificado para v0.7.0 es Linux x64 con Node.js 22.5.0 o la línea actual de Node.js 24 y el `mv` de GNU coreutils requerido por la publicación atómica de evidencia. Otras arquitecturas Linux, sistemas sin ese primitivo, macOS y Windows están sin verificar.
+
+El transporte soportado es stdio local bajo los permisos filesystem del usuario que invoca el proceso. No asumir autenticación HTTP, sandbox, aislamiento entre tenants ni una frontera segura para clientes remotos o no confiables.
+
+La persistencia del índice está deshabilitada por default. El modo `canary` requiere `AST_SYMBOL_INDEX_PERSISTENCE=canary` y un `AST_SYMBOL_INDEX_CACHE_ROOT` absoluto y aislado; `enabled` sigue sin publicarse y falla cerrado a memoria con `enabled_not_released`.
+
+Los errores públicos usan un vocabulario cerrado dentro de `{ "error": { "code", "message", "correlation_id" } }`, con `isError: true`. Conservar el `correlation_id` al reportar un fallo; no pedir ni exponer stacks, paths absolutos, source, cache, argumentos crudos, environment ni credenciales para diagnosticarlo.
 
 ## Flujo compacto de lectura
 

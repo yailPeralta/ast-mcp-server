@@ -7,7 +7,7 @@
 
 ## Decision
 
-Treat `ast-mcp-server` as a production-quality local MCP server for a trusted single user on Linux, transported over `stdio`, with TypeScript and JavaScript as the supported language surface. Node.js `22.5.0` and the current Node 24 line are the supported runtime matrix.
+Treat `ast-mcp-server` as a production-quality local MCP server for a trusted single user on Linux x64 with the required GNU coreutils publication primitive, transported over `stdio`, with TypeScript and JavaScript as the supported language surface. Node.js `22.5.0` and the current Node 24 line are the supported runtime matrix.
 
 Keep execution in process for this release, but place strict admission, scheduling, cancellation, lifecycle and disclosure boundaries around compiler work. Worker/process isolation remains a future option if measured workloads prove that cooperative in-process control is insufficient.
 
@@ -88,7 +88,11 @@ Production claims require deterministic fixture gates plus read-only canaries on
 
 Runtime evidence must execute explicit `AST_NODE_22_BIN` and `AST_NODE_24_BIN` binaries and validate their versions. Resource gates use the preregistered RSS and quiescent recursive cache-byte criteria from `MCP-PROD-404`; real-repository latency/RSS are observations, not release gates.
 
-Linux is supported. Other operating systems are unverified until they pass an equivalent SDD and evidence matrix.
+Linux x64 with GNU coreutils `mv --update=none-fail --no-copy --no-target-directory` is supported. Other Linux architectures or systems without that primitive, macOS and Windows are unverified until they pass an equivalent SDD and evidence matrix.
+
+The checked production-readiness cohort ran this repository and `x-scraper` under Node.js v22.5.0 and v24.16.0. All four immutable reports passed 40/40 retained gates with 20 warm reads, three restarts, zero semantic mismatches, exact repository identity, fallback/recovery, mutation rollback, queue/cancellation and MCP-PROD-404 resource evidence. The report set preserves 160/160 passing gates and is bound to the reviewed report tree `719b45ee3a73f43277981c0f842db13975f6b427`.
+
+The exact-SHA release workflow candidate separately passed the complete repository gate, local MCP/lifecycle/public-error/CLI/package and 16-gate consumer smokes, action/workflow policy validation, a lifecycle-disabled localhost registry publication retaining the exact packed `gitHead`, and independent compliance, security and behavior reviews with zero unresolved Medium-or-higher findings.
 
 ## Release governance
 
