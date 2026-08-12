@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
   chmod,
   link,
@@ -14,7 +15,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as canaryModule from "../scripts/canary-local-mcp.mjs";
 import {
   assertExpectedNodeVersion,
@@ -25,6 +26,7 @@ import {
   parseCanaryArguments,
   validateWorkloadManifest,
 } from "../scripts/canary-local-mcp.mjs";
+import { createGitEnvironment } from "../scripts/git-evidence-authority.mjs";
 
 const temporaryDirectories: string[] = [];
 const temporaryFiles: string[] = [];
@@ -105,6 +107,11 @@ type PrivateAtomicPublisher = (options: {
 
 type PrivateCanaryInternals = {
   readonly publishAtomicDirectorySet: PrivateAtomicPublisher;
+  readonly currentWorktreeTreeAttempt: (root: string) => Promise<string>;
+  readonly currentWorktreeTree: (
+    root: string,
+    attempt?: (root: string) => Promise<string>,
+  ) => Promise<string>;
   readonly canaryOperationDeadlineMs: number;
   readonly mcpRequestTimeoutMs: number;
   readonly projectEnvironment: (
@@ -133,18 +140,24 @@ function loadPrivateCanaryInternals(): Promise<PrivateCanaryInternals> {
       path.join(moduleRoot, "node_modules"),
       "dir",
     );
-    const [packageMetadata, productionSource] = await Promise.all([
+    const [packageMetadata, productionSource, gitAuthoritySource] = await Promise.all([
       readFile(path.join(repositoryRoot, "package.json"), "utf8"),
       readFile(path.join(repositoryRoot, "scripts", "canary-local-mcp.mjs"), "utf8"),
+      readFile(path.join(repositoryRoot, "scripts", "git-evidence-authority.mjs"), "utf8"),
     ]);
     await writeFile(path.join(moduleRoot, "package.json"), packageMetadata, "utf8");
+    await writeFile(
+      path.join(scriptsDirectory, "git-evidence-authority.mjs"),
+      gitAuthoritySource,
+      "utf8",
+    );
     expect(productionSource).not.toMatch(
-      /^export\s+(?:(?:async\s+)?function|const)\s+(?:publishAtomicDirectorySet|canonicalizeCanaryReport|assertPreparedCanaryReportSet|projectEnvironment|CANARY_OPERATION_DEADLINE_MS|MCP_REQUEST_TIMEOUT_MS)\b/m,
+      /^export\s+(?:(?:async\s+)?function|const)\s+(?:publishAtomicDirectorySet|canonicalizeCanaryReport|assertPreparedCanaryReportSet|projectEnvironment|currentWorktreeTreeAttempt|CANARY_OPERATION_DEADLINE_MS|MCP_REQUEST_TIMEOUT_MS)\b/m,
     );
     const testModulePath = path.join(scriptsDirectory, "canary-local-mcp.private-test.mjs");
     await writeFile(
       testModulePath,
-      `${productionSource}\nexport {\n  publishAtomicDirectorySet as __testOnlyPublishAtomicDirectorySet,\n  canonicalizeCanaryReport as __testOnlyCanonicalizeCanaryReport,\n  jsonValuesEqual as __testOnlyJsonValuesEqual,\n  assertPreparedCanaryReportSet as __testOnlyAssertPreparedCanaryReportSet,\n  projectEnvironment as __testOnlyProjectEnvironment,\n  CANARY_OPERATION_DEADLINE_MS as __testOnlyCanaryOperationDeadlineMs,\n  MCP_REQUEST_TIMEOUT_MS as __testOnlyMcpRequestTimeoutMs,\n};\n`,
+      `${productionSource}\nexport {\n  publishAtomicDirectorySet as __testOnlyPublishAtomicDirectorySet,\n  canonicalizeCanaryReport as __testOnlyCanonicalizeCanaryReport,\n  jsonValuesEqual as __testOnlyJsonValuesEqual,\n  assertPreparedCanaryReportSet as __testOnlyAssertPreparedCanaryReportSet,\n  projectEnvironment as __testOnlyProjectEnvironment,\n  currentWorktreeTreeAttempt as __testOnlyCurrentWorktreeTreeAttempt,\n  currentWorktreeTree as __testOnlyCurrentWorktreeTree,\n  CANARY_OPERATION_DEADLINE_MS as __testOnlyCanaryOperationDeadlineMs,\n  MCP_REQUEST_TIMEOUT_MS as __testOnlyMcpRequestTimeoutMs,\n};\n`,
       "utf8",
     );
     const testModule = await import(`${pathToFileURL(testModulePath).href}?id=${randomUUID()}`);
@@ -154,6 +167,8 @@ function loadPrivateCanaryInternals(): Promise<PrivateCanaryInternals> {
       "__testOnlyJsonValuesEqual",
       "__testOnlyAssertPreparedCanaryReportSet",
       "__testOnlyProjectEnvironment",
+      "__testOnlyCurrentWorktreeTreeAttempt",
+      "__testOnlyCurrentWorktreeTree",
     ]) {
       if (typeof testModule[name] !== "function") {
         throw new Error(`Private canary test projection ${name} is unavailable.`);
@@ -170,6 +185,10 @@ function loadPrivateCanaryInternals(): Promise<PrivateCanaryInternals> {
         testModule.__testOnlyAssertPreparedCanaryReportSet as PrivateCanaryInternals["assertPreparedCanaryReportSet"],
       projectEnvironment:
         testModule.__testOnlyProjectEnvironment as PrivateCanaryInternals["projectEnvironment"],
+      currentWorktreeTreeAttempt:
+        testModule.__testOnlyCurrentWorktreeTreeAttempt as PrivateCanaryInternals["currentWorktreeTreeAttempt"],
+      currentWorktreeTree:
+        testModule.__testOnlyCurrentWorktreeTree as PrivateCanaryInternals["currentWorktreeTree"],
       canaryOperationDeadlineMs: testModule.__testOnlyCanaryOperationDeadlineMs as number,
       mcpRequestTimeoutMs: testModule.__testOnlyMcpRequestTimeoutMs as number,
     };
@@ -290,6 +309,7 @@ function passingReport() {
     final_restart_ready: true,
   };
   const gates = {
+    git_authority: true,
     runtime_identity: true,
     package_tree_identity: true,
     repository_immutable: true,
@@ -357,6 +377,13 @@ function passingReport() {
       exact_argv: exactArgv,
     },
     identity: {
+      git: {
+        binary: "[trusted-git]",
+        realpath: "[trusted-git]",
+        version: "git version 2.53.0",
+        sha256: "1".repeat(64),
+        environment_keys: Object.keys(createGitEnvironment({ workTree: repositoryRoot })).sort(),
+      },
       package: {
         name: packageMetadata.name,
         version: packageMetadata.version,
@@ -609,7 +636,7 @@ describe("production-readiness canary contract", () => {
       "--restarts",
       "3",
       "--output",
-      path.join(os.tmpdir(), "ast-canary.raw.json"),
+      "/tmp/ast-canary.raw.json",
     ];
     const parsed = parseCanaryArguments(validArguments);
 
@@ -644,7 +671,7 @@ describe("production-readiness canary contract", () => {
         "--restarts",
         "3",
         "--output",
-        path.join(os.tmpdir(), "invalid.raw.json"),
+        "/tmp/invalid.raw.json",
       ]),
     ).toThrow(/node.*absolute|iterations.*20/i);
     const invalidExpectedNode = [...validArguments];
@@ -717,9 +744,16 @@ describe("production-readiness canary contract", () => {
   it("keeps the complete production publication surface closed", async () => {
     const scriptsDirectory = path.join(repositoryRoot, "scripts");
     const publicationFiles = (await readdir(scriptsDirectory))
-      .filter((name) => /^(?:canary-local-mcp|atomic-directory-set)(?:\.mjs|\.d\.mts)$/.test(name))
+      .filter((name) =>
+        /^(?:canary-local-mcp|git-evidence-authority)(?:\.mjs|\.d\.mts)$/.test(name),
+      )
       .sort();
-    expect(publicationFiles).toEqual(["canary-local-mcp.d.mts", "canary-local-mcp.mjs"]);
+    expect(publicationFiles).toEqual([
+      "canary-local-mcp.d.mts",
+      "canary-local-mcp.mjs",
+      "git-evidence-authority.d.mts",
+      "git-evidence-authority.mjs",
+    ]);
     expect(Object.keys(canaryModule).sort()).toEqual(
       [
         "assertExpectedNodeVersion",
@@ -742,6 +776,57 @@ describe("production-readiness canary contract", () => {
     expect(declarationSource).not.toMatch(
       /publishAtomicDirectorySet|AtomicDirectoryBeforeVisibilityContext|beforeVisibility|canaryReportValidationTestSeams|PreparedCanaryReport/,
     );
+  });
+
+  it("rejects ambient Git controls before a PATH-injected Git binary can execute", async () => {
+    const root = await temporaryDirectory("ast-canary-hostile-git-");
+    const sentinel = path.join(root, "sentinel");
+    const forgedGit = path.join(root, "git");
+    await writeFile(
+      forgedGit,
+      `#!/bin/sh\nprintf executed > ${JSON.stringify(sentinel)}\nexit 0\n`,
+      "utf8",
+    );
+    await chmod(forgedGit, 0o700);
+
+    const result = spawnSync(
+      process.execPath,
+      [path.join(repositoryRoot, "scripts", "canary-local-mcp.mjs"), "run"],
+      {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GIT_DIR: "/tmp/forged-git-dir",
+          PATH: `${root}:${process.env.PATH ?? ""}`,
+        },
+      },
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/ambient Git controls.*GIT_DIR/i);
+    await expect(readFile(sentinel, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("clones a source repository without binding the clone child to its existing worktree", async () => {
+    await expect(
+      privateCanaryInternals.currentWorktreeTreeAttempt(repositoryRoot),
+    ).resolves.toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  it.each([
+    ["snapshot", new Error("snapshot failed")],
+    ["cleanup", new Error("cleanup failed")],
+  ])("does not retry after a failed first Git %s attempt", async (_phase, firstError) => {
+    const attempt = vi
+      .fn<(root: string) => Promise<string>>()
+      .mockRejectedValueOnce(firstError)
+      .mockResolvedValue("a".repeat(40));
+
+    await expect(privateCanaryInternals.currentWorktreeTree(repositoryRoot, attempt)).rejects.toBe(
+      firstError,
+    );
+    expect(attempt).toHaveBeenCalledTimes(1);
   });
 
   it("validates runtime identity instead of trusting a label or filename", () => {
@@ -909,6 +994,16 @@ describe("production-readiness canary contract", () => {
       command: { raw_report_sha256: rawHash },
     });
     expect((frozen.command as Record<string, unknown>).exact_argv).toBeUndefined();
+
+    const forgedGit = passingReport();
+    forgedGit.identity.git.binary = "/tmp/git";
+    expect(() =>
+      canonicalizeCanaryReport(
+        forgedGit,
+        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        rawHash,
+      ),
+    ).toThrow(/Git authority/i);
 
     const failed = { ...passingReport(), overall_pass: false, status: "fail" };
     expect(() =>

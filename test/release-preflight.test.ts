@@ -48,13 +48,13 @@ const EXACT_SETUP_NODE_NPMRC =
   "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\nregistry=https://registry.npmjs.org/";
 const execFileAsync = promisify(execFile);
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const evidenceRoot = path.join(os.tmpdir(), `ast-mcp-release-${RELEASE_SHA}-${RELEASE_VERSION}`);
+const evidenceRoot = `/tmp/ast-mcp-release-${RELEASE_SHA}-${RELEASE_VERSION}`;
 const evidenceSymlinkTarget = path.join(
-  os.tmpdir(),
+  "/tmp",
   `ast-mcp-release-symlink-target-${RELEASE_SHA}-${RELEASE_VERSION}.json`,
 );
 const evidenceHardlinkTarget = path.join(
-  os.tmpdir(),
+  "/tmp",
   `ast-mcp-release-hardlink-target-${RELEASE_SHA}-${RELEASE_VERSION}.json`,
 );
 const npmConfigRoot = path.join(os.tmpdir(), `ast-mcp-release-npm-config-${RELEASE_SHA}`);

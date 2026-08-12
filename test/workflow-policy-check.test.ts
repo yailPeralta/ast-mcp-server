@@ -37,7 +37,7 @@ describe("workflow policy check", () => {
       status: "pass",
       workflow_count: 3,
       job_count: 9,
-      action_count: 23,
+      action_count: 24,
       workflows: ["ci.yml", "release.yml", "security.yml"],
     });
     await expect(checkWorkflowPolicy(repositoryRoot)).resolves.toEqual(
@@ -58,6 +58,14 @@ describe("workflow policy check", () => {
     const ci = documents["ci.yml"];
     expect(ci).toBeTypeOf("string");
     if (typeof ci !== "string") return;
+
+    const shallowCandidateCheckout = {
+      ...documents,
+      "ci.yml": replaceRequired(ci, "          fetch-depth: 2\n", "          fetch-depth: 1\n"),
+    };
+    expect(() => validateWorkflowPolicyDocuments(shallowCandidateCheckout)).toThrow(
+      /checkout inputs/u,
+    );
 
     const missingGnuMvPreparation = {
       ...documents,
@@ -94,6 +102,69 @@ describe("workflow policy check", () => {
     expect(() => validateWorkflowPolicyDocuments(ambientNodeOptionsOnInstall)).toThrow(
       /command chain/u,
     );
+
+    const packageManagerUsesMatrixRuntime = {
+      ...documents,
+      "ci.yml": replaceRequired(
+        ci,
+        '          node-version: "24"\n      - run: node scripts/ci-prepare-gnu-mv.mjs prepare',
+        "          node-version: ${{ matrix.node }}\n      - run: node scripts/ci-prepare-gnu-mv.mjs prepare",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(packageManagerUsesMatrixRuntime)).toThrow(
+      /action chain|setup-node inputs/u,
+    );
+
+    const missingRuntimeActivation = {
+      ...documents,
+      "ci.yml": replaceRequired(
+        ci,
+        "      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0\n        with:\n          node-version: ${{ matrix.node }}\n      - run: NODE_OPTIONS= corepack enable\n",
+        "",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(missingRuntimeActivation)).toThrow(
+      /action chain|command chain|step chain/u,
+    );
+
+    const runtimeSetupAction =
+      "      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0\n" +
+      "        with:\n" +
+      "          node-version: ${{ matrix.node }}\n";
+    const withoutRuntimeSetup = replaceRequired(ci, runtimeSetupAction, "");
+    const runtimeActivatedBeforeColdInstall = {
+      ...documents,
+      "ci.yml": replaceRequired(
+        withoutRuntimeSetup,
+        "      - run: node scripts/ci-prepare-gnu-mv.mjs prepare\n",
+        `${runtimeSetupAction}      - run: node scripts/ci-prepare-gnu-mv.mjs prepare\n`,
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(runtimeActivatedBeforeColdInstall)).toThrow(
+      /step chain/u,
+    );
+
+    const runtimeActivatedAfterQualityGate = {
+      ...documents,
+      "ci.yml": replaceRequired(
+        withoutRuntimeSetup,
+        "      - run: yarn lint\n",
+        `      - run: yarn lint\n${runtimeSetupAction}`,
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(runtimeActivatedAfterQualityGate)).toThrow(
+      /step chain/u,
+    );
+
+    const ambientRuntimeCorepack = {
+      ...documents,
+      "ci.yml": replaceRequired(
+        ci,
+        "      - run: NODE_OPTIONS= corepack enable\n      - run: yarn format:check",
+        "      - run: corepack enable\n      - run: yarn format:check",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(ambientRuntimeCorepack)).toThrow(/command chain/u);
 
     const unreviewedCoreutilsMode = {
       ...documents,

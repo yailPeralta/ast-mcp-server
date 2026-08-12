@@ -41,6 +41,7 @@ const CI_RELEASE_GATES = Object.freeze([
   "node scripts/ci-prepare-gnu-mv.mjs prepare",
   "NODE_OPTIONS= corepack enable",
   "NODE_OPTIONS= yarn install --immutable",
+  "NODE_OPTIONS= corepack enable",
   "yarn format:check",
   "yarn lint",
   "yarn typecheck",
@@ -54,7 +55,7 @@ const CI_RELEASE_GATES = Object.freeze([
   "yarn audit",
   "yarn pack --dry-run --json",
   "node scripts/workflow-policy-check.mjs",
-  "git diff --check",
+  "git diff --check HEAD^ HEAD",
 ]);
 
 function policyFailure(message) {
@@ -392,11 +393,16 @@ function validateActionInputs(
   expectedCount = 1,
 ) {
   const matchingActions = actions.filter((action) => action.actionPath === actionPath);
-  if (matchingActions.length !== expectedCount) {
-    policyFailure(`${workflowName} must invoke ${actionPath} exactly ${expectedCount} time(s).`);
+  const expectedSequence = Array.isArray(expectedEntries)
+    ? expectedEntries
+    : Array.from({ length: expectedCount }, () => expectedEntries);
+  if (matchingActions.length !== expectedSequence.length) {
+    policyFailure(
+      `${workflowName} must invoke ${actionPath} exactly ${expectedSequence.length} time(s).`,
+    );
   }
-  const expected = new Map(Object.entries(expectedEntries));
-  for (const action of matchingActions) {
+  for (const [actionIndex, action] of matchingActions.entries()) {
+    const expected = new Map(Object.entries(expectedSequence[actionIndex]));
     let end = lines.length;
     for (let index = action.line + 1; index < lines.length; index += 1) {
       if (
@@ -532,7 +538,7 @@ function validateCiWorkflow(lines, jobs, actions) {
   }
   if (
     JSON.stringify(actions.map(({ actionPath }) => actionPath)) !==
-    JSON.stringify(["actions/checkout", "actions/setup-node"])
+    JSON.stringify(["actions/checkout", "actions/setup-node", "actions/setup-node"])
   ) {
     policyFailure("ci.yml must preserve the exact reviewed action chain.");
   }
@@ -540,16 +546,26 @@ function validateCiWorkflow(lines, jobs, actions) {
     lines,
     actions,
     "actions/checkout",
-    { "persist-credentials": "false" },
+    { "fetch-depth": "2", "persist-credentials": "false" },
     "ci.yml",
   );
   validateActionInputs(
     lines,
     actions,
     "actions/setup-node",
-    { "node-version": "${{ matrix.node }}" },
+    [{ "node-version": '"24"' }, { "node-version": "${{ matrix.node }}" }],
     "ci.yml",
   );
+  const expectedSteps = [
+    "uses:actions/checkout",
+    "uses:actions/setup-node",
+    ...CI_RELEASE_GATES.slice(0, 3).map((command) => `run:${command}`),
+    "uses:actions/setup-node",
+    ...CI_RELEASE_GATES.slice(3).map((command) => `run:${command}`),
+  ];
+  if (JSON.stringify(extractStepIdentities(jobs[0], "ci.yml")) !== JSON.stringify(expectedSteps)) {
+    policyFailure("ci.yml must preserve the exact interleaved action and command step chain.");
+  }
 }
 
 function validateSecurityWorkflow(lines, jobs, actions) {

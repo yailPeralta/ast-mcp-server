@@ -25,6 +25,13 @@ import { performance } from "node:perf_hooks";
 import { clearInterval, clearTimeout, setInterval, setTimeout } from "node:timers";
 import { fileURLToPath } from "node:url";
 import { JSONRPCMessageSchema, LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
+import {
+  TRUSTED_GIT_BINARY,
+  assertNoAmbientGitControls,
+  assertTrustedGitVersion,
+  createGitEnvironment,
+  inspectTrustedGitFile,
+} from "./git-evidence-authority.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), "..");
@@ -47,6 +54,7 @@ const MAX_QUEUE_COUNTER = 2_147_483_647;
 const MAX_QUEUE_DURATION_MS = 86_400_000;
 const PHYSICAL_TMP_ROOT = "/tmp";
 const EMPTY_GIT_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+const TRUSTED_GIT_EVIDENCE_ALIAS = "[trusted-git]";
 const activeMcpProcesses = new Set();
 const FROZEN_REPORT_RESULTS_DIRECTORY = "benchmark/results";
 const FROZEN_REPORT_DIRECTORY_NAME = "production-readiness";
@@ -1373,9 +1381,26 @@ function validateFreezeReport(report, destination, rawSha256) {
   assertHash(rawSha256, 64, "Raw report SHA-256");
   const identity = assertExactKeys(
     value.identity,
-    ["harness", "os", "package", "project", "runtime", "workload"],
+    ["git", "harness", "os", "package", "project", "runtime", "workload"],
     "Canary report identity",
   );
+  const gitAuthority = assertExactKeys(
+    identity.git,
+    ["binary", "environment_keys", "realpath", "sha256", "version"],
+    "Canary Git authority",
+  );
+  if (
+    gitAuthority.binary !== TRUSTED_GIT_EVIDENCE_ALIAS ||
+    gitAuthority.realpath !== TRUSTED_GIT_EVIDENCE_ALIAS ||
+    typeof gitAuthority.version !== "string" ||
+    !/^git version \d+\.\d+(?:\.\d+)?(?:\s|$)/u.test(gitAuthority.version) ||
+    !Array.isArray(gitAuthority.environment_keys) ||
+    JSON.stringify(gitAuthority.environment_keys) !==
+      JSON.stringify(Object.keys(createGitEnvironment({ workTree: repositoryRoot })).sort())
+  ) {
+    fail("Canary Git authority is invalid.");
+  }
+  assertHash(gitAuthority.sha256, 64, "Canary Git authority SHA-256");
   const packageIdentity = assertExactKeys(
     identity.package,
     ["commit", "head_tree", "name", "status", "tree", "version"],
@@ -1852,6 +1877,7 @@ function validateFreezeReport(report, destination, rawSha256) {
   }
 
   const requiredTopLevelGates = [
+    "git_authority",
     "runtime_identity",
     "package_tree_identity",
     "repository_immutable",
@@ -1932,6 +1958,7 @@ function canonicalizeCanaryReport(report, checkedRelativePath, rawSha256) {
 }
 
 async function verifyLiveFreezeIdentity(report, destination, exactArgv, xScraperRoot) {
+  assertNoAmbientGitControls();
   const options = parseCanaryArguments(["run", ...exactArgv.slice(1)]);
   if (options.mode !== "run") fail("Raw report exact command is not a canary run.");
   const expectedProjectRoot =
@@ -1977,6 +2004,7 @@ async function verifyLiveFreezeIdentity(report, destination, exactArgv, xScraper
     packageStatus,
     projectStatus,
     harnessSha256,
+    gitAuthority,
   ] = await Promise.all([
     validateRuntimeBinary(options),
     loadWorkload(options.workloadPath),
@@ -1987,6 +2015,7 @@ async function verifyLiveFreezeIdentity(report, destination, exactArgv, xScraper
     packageStatusPromise,
     projectStatusPromise,
     sha256File(scriptPath),
+    inspectTrustedGitAuthority(),
   ]);
   if (
     physicalProjectRoot !== physicalExpectedProjectRoot ||
@@ -2012,6 +2041,7 @@ async function verifyLiveFreezeIdentity(report, destination, exactArgv, xScraper
       JSON.stringify(workloadSelection.manifest.calls.map((call) => call.id)) ||
     workload?.measurement_call_id !== workloadSelection.manifest.measurement_call_id ||
     identity?.harness?.sha256 !== harnessSha256 ||
+    !jsonValuesEqual(identity?.git, gitAuthority) ||
     packageIdentity?.commit !== packageRepository.commit ||
     packageIdentity?.head_tree !== packageRepository.tree ||
     packageIdentity?.tree !== packageTree ||
@@ -2158,6 +2188,7 @@ function assertPreparedCanaryReportSet(preparedReports) {
   }
   const seenDestinations = new Set();
   const cohortIdentityByAlias = new Map();
+  let sharedGitIdentity;
   let sharedPackageIdentity;
   let sharedHarnessSha256;
   for (const [index, prepared] of preparedReports.entries()) {
@@ -2202,13 +2233,19 @@ function assertPreparedCanaryReportSet(preparedReports) {
       );
     }
     const packageIdentity = canonicalJson(prepared.canonical.identity.package);
+    const gitIdentity = canonicalJson(prepared.canonical.identity.git);
     const harnessSha256 = prepared.canonical.identity.harness?.sha256;
     assertHash(harnessSha256, 64, "Prepared canary harness SHA-256");
     if (sharedPackageIdentity === undefined) {
       sharedPackageIdentity = packageIdentity;
+      sharedGitIdentity = gitIdentity;
       sharedHarnessSha256 = harnessSha256;
-    } else if (packageIdentity !== sharedPackageIdentity || harnessSha256 !== sharedHarnessSha256) {
-      fail("All four canary reports must share one clean package identity and harness hash.");
+    } else if (
+      packageIdentity !== sharedPackageIdentity ||
+      gitIdentity !== sharedGitIdentity ||
+      harnessSha256 !== sharedHarnessSha256
+    ) {
+      fail("All four canary reports must share one Git, package, and harness identity.");
     }
     if (
       typeof prepared.output !== "string" ||
@@ -2220,17 +2257,23 @@ function assertPreparedCanaryReportSet(preparedReports) {
     assertNoSensitiveText(prepared.output, `Prepared canary report ${expected.fileName}`);
   }
   return {
+    gitIdentity: preparedReports[0].canonical.identity.git,
     packageIdentity: preparedReports[0].canonical.identity.package,
     harnessSha256: sharedHarnessSha256,
   };
 }
 
-async function assertCleanLivePackageIdentity(expectedPackageIdentity, expectedHarnessSha256) {
-  const [repository, status, tree, harnessSha256] = await Promise.all([
+async function assertCleanLivePackageIdentity(
+  expectedPackageIdentity,
+  expectedHarnessSha256,
+  expectedGitIdentity,
+) {
+  const [repository, status, tree, harnessSha256, gitAuthority] = await Promise.all([
     repositoryIdentity(repositoryRoot),
     repositoryStatus(repositoryRoot),
     currentWorktreeTree(repositoryRoot),
     sha256File(scriptPath),
+    inspectTrustedGitAuthority(),
   ]);
   const digest = statusDigest(status);
   if (
@@ -2242,7 +2285,8 @@ async function assertCleanLivePackageIdentity(expectedPackageIdentity, expectedH
     digest.sha256 !== expectedPackageIdentity.status.sha256 ||
     digest.bytes !== expectedPackageIdentity.status.bytes ||
     digest.dirty !== expectedPackageIdentity.status.dirty ||
-    harnessSha256 !== expectedHarnessSha256
+    harnessSha256 !== expectedHarnessSha256 ||
+    !jsonValuesEqual(gitAuthority, expectedGitIdentity)
   ) {
     fail("The live package identity changed before the four-report publication transaction.");
   }
@@ -2264,13 +2308,15 @@ function exactOwnedStagingStatus(status, stageDirectory, fileNames) {
 async function assertLivePackageIdentityBeforeVisibility(
   expectedPackageIdentity,
   expectedHarnessSha256,
+  expectedGitIdentity,
   stageDirectory,
   fileNames,
 ) {
-  const [repository, status, harnessSha256] = await Promise.all([
+  const [repository, status, harnessSha256, gitAuthority] = await Promise.all([
     repositoryIdentity(repositoryRoot),
     repositoryStatus(repositoryRoot),
     sha256File(scriptPath),
+    inspectTrustedGitAuthority(),
   ]);
   exactOwnedStagingStatus(status, stageDirectory, fileNames);
   if (
@@ -2278,7 +2324,8 @@ async function assertLivePackageIdentityBeforeVisibility(
     repository.tree !== expectedPackageIdentity.head_tree ||
     expectedPackageIdentity.tree !== expectedPackageIdentity.head_tree ||
     expectedPackageIdentity.status.dirty !== false ||
-    harnessSha256 !== expectedHarnessSha256
+    harnessSha256 !== expectedHarnessSha256 ||
+    !jsonValuesEqual(gitAuthority, expectedGitIdentity)
   ) {
     fail("The live package identity changed immediately before report-set publication.");
   }
@@ -2383,6 +2430,7 @@ async function orchestrateCanaryReportSet(
 }
 
 export async function freezeCanaryReportSet(inputPaths, xScraperRoot) {
+  assertNoAmbientGitControls();
   const expectedXScraperRoot = validateXScraperRoot(xScraperRoot);
   const rawInputs = await readRawCanaryReportSet(inputPaths);
   const rawInputsByKey = new Map(rawInputs.map((input) => [input.member.inputKey, input]));
@@ -2394,6 +2442,7 @@ export async function freezeCanaryReportSet(inputPaths, xScraperRoot) {
       await assertCleanLivePackageIdentity(
         sharedIdentity.packageIdentity,
         sharedIdentity.harnessSha256,
+        sharedIdentity.gitIdentity,
       );
       await publishPreparedCanaryReportSet(preparedReports, {
         anchorRoot: repositoryRoot,
@@ -2403,6 +2452,7 @@ export async function freezeCanaryReportSet(inputPaths, xScraperRoot) {
             assertLivePackageIdentityBeforeVisibility(
               sharedIdentity.packageIdentity,
               sharedIdentity.harnessSha256,
+              sharedIdentity.gitIdentity,
               stageDirectory,
               fileNames,
             ),
@@ -2480,9 +2530,25 @@ async function spawnCapture(command, args, options = {}) {
   return result;
 }
 
-async function gitOutput(root, args, binary = false, environment = undefined) {
-  const result = await spawnCapture("git", ["-C", root, ...args], {
+async function inspectTrustedGitAuthority() {
+  const fileAuthority = await inspectTrustedGitFile();
+  const environment = createGitEnvironment({ workTree: repositoryRoot });
+  const result = await spawnCapture(TRUSTED_GIT_BINARY, ["--version"], {
     env: environment,
+    timeoutMs: 30_000,
+  });
+  return Object.freeze({
+    ...fileAuthority,
+    binary: TRUSTED_GIT_EVIDENCE_ALIAS,
+    realpath: TRUSTED_GIT_EVIDENCE_ALIAS,
+    version: assertTrustedGitVersion(result.stdout.toString("utf8")),
+    environment_keys: Object.keys(environment).sort(),
+  });
+}
+
+async function gitOutput(root, args, binary = false, environment = undefined) {
+  const result = await spawnCapture(TRUSTED_GIT_BINARY, ["-C", root, ...args], {
+    env: environment ?? createGitEnvironment({ workTree: root }),
     timeoutMs: 30_000,
   });
   return binary ? result.stdout : result.stdout.toString("utf8").trim();
@@ -2512,9 +2578,9 @@ async function currentWorktreeTreeAttempt(root) {
     ]);
     const physicalCommonDirectory = path.resolve(root, commonDirectory);
     await spawnCapture(
-      "git",
+      TRUSTED_GIT_BINARY,
       ["clone", "--shared", "--no-checkout", "--quiet", "--", root, cloneRoot],
-      { timeoutMs: 30_000 },
+      { env: createGitEnvironment(), timeoutMs: 30_000 },
     );
     const sourceExcludePath = path.join(physicalCommonDirectory, "info", "exclude");
     const sourceExcludes = (await pathExists(sourceExcludePath))
@@ -2525,13 +2591,15 @@ async function currentWorktreeTreeAttempt(root) {
       `${sourceExcludes}\n.git\n`,
       "utf8",
     );
-    const environment = {
-      ...process.env,
-      GIT_DIR: gitDirectory,
-      GIT_WORK_TREE: root,
-      GIT_INDEX_FILE: indexPath,
-      GIT_OPTIONAL_LOCKS: "0",
-    };
+    const environment = createGitEnvironment({
+      repositoryControls: {
+        GIT_DIR: gitDirectory,
+        GIT_WORK_TREE: root,
+        GIT_INDEX_FILE: indexPath,
+        GIT_OPTIONAL_LOCKS: "0",
+      },
+      workTree: root,
+    });
     await gitOutput(root, ["read-tree", "HEAD"], false, environment);
     await gitOutput(root, ["add", "-A", "--", ":/"], false, environment);
     const tree = await gitOutput(root, ["write-tree"], false, environment);
@@ -2544,17 +2612,8 @@ async function currentWorktreeTreeAttempt(root) {
   }
 }
 
-async function currentWorktreeTree(root) {
-  let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      return await currentWorktreeTreeAttempt(root);
-    } catch (error) {
-      lastError = error;
-      if (attempt < 3) emitProgress(`git_tree_retry_${attempt}`);
-    }
-  }
-  throw lastError;
+async function currentWorktreeTree(root, attempt = currentWorktreeTreeAttempt) {
+  return attempt(root);
 }
 
 function statusDigest(status) {
@@ -3791,6 +3850,7 @@ async function prepareCacheRoot(options) {
 }
 
 async function executeCanary(options) {
+  assertNoAmbientGitControls();
   if (process.platform !== "linux")
     fail("Production-readiness canary currently supports Linux only.");
   if (!(await pathExists(serverPath)))
@@ -3811,6 +3871,7 @@ async function executeCanary(options) {
     projectRepositoryIdentity,
     packageCandidateTree,
     projectCandidateTree,
+    gitAuthority,
   ] = await Promise.all([
     validateRuntimeBinary(options),
     loadWorkload(options.workloadPath),
@@ -3818,6 +3879,7 @@ async function executeCanary(options) {
     repositoryIdentity(options.projectRoot),
     packageTreePromise,
     projectTreePromise,
+    inspectTrustedGitAuthority(),
   ]);
   const executionOptions = { ...options, nodeBin: runtimeSelection.executable };
   const workload = workloadSelection.manifest;
@@ -3899,8 +3961,12 @@ async function executeCanary(options) {
     if ((await sha256File(scriptPath)) !== harnessSha256) {
       fail("Canary harness bytes changed during execution.");
     }
+    if (!jsonValuesEqual(await inspectTrustedGitAuthority(), gitAuthority)) {
+      fail("Trusted Git authority changed during canary execution.");
+    }
 
     const gates = {
+      git_authority: true,
       runtime_identity: true,
       package_tree_identity:
         options.candidateTree === undefined || packageCandidateTree === options.candidateTree,
@@ -3938,6 +4004,7 @@ async function executeCanary(options) {
       status: overallPass ? "pass" : "fail",
       command: { argv: options.reportArgv, exact_argv: options.exactArgv },
       identity: {
+        git: gitAuthority,
         package: {
           name: packageMetadata.name,
           version: packageMetadata.version,
@@ -4005,6 +4072,7 @@ async function executeCanary(options) {
 }
 
 export async function runCanary(options) {
+  assertNoAmbientGitControls();
   try {
     return await executeCanary(options);
   } catch (error) {
@@ -4149,6 +4217,7 @@ async function main() {
     await runFixtureServer();
     return;
   }
+  assertNoAmbientGitControls();
   const options = parseCanaryArguments(process.argv.slice(2));
   if (options.mode === "freeze-report-set") {
     const reports = await freezeCanaryReportSet(options.inputs, options.xScraperRoot);
