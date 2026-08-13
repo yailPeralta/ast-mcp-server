@@ -59,7 +59,7 @@ const EXPECTED_TOOLS = [
 ] as const;
 
 function semver(value: string): [number, number, number] | undefined {
-  const match = value.match(/(?:^|\s|v)(\d+)\.(\d+)\.(\d+)(?:\s|$|[-+()])/);
+  const match = value.match(/(?:^|\s|v)(\d+)\.(\d+)\.(\d+)(?=\s|$|[-+()]|\.(?:\s|$))/);
   return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
 }
 
@@ -119,6 +119,35 @@ function structuredInspection(
     : {
         status: "conflict",
         detail: "The existing 'ast' registration does not match this package.",
+      };
+}
+
+function copilotStructuredInspection(
+  result: AgentTargetCommandResult,
+  context: AgentTargetMcpContext,
+): AgentTargetMcpInspection {
+  if (result.exitCode !== 0) {
+    return /(?:not found|no mcp server)/i.test(`${result.stdout}\n${result.stderr}`)
+      ? { status: "missing" }
+      : { status: "error", operation: "MCP inspection", result };
+  }
+  const value = parseJson(result) as Record<string, unknown> | undefined;
+  const server = value?.[MCP_SERVER_NAME];
+  if (server === null || typeof server !== "object" || Array.isArray(server)) {
+    return { status: "error", operation: "MCP inspection", result };
+  }
+  const configuration = server as Record<string, unknown>;
+  return configuration.type === "local" &&
+    configuration.source === "user" &&
+    configuration.enabled === true &&
+    Array.isArray(configuration.tools) &&
+    configuration.tools.length === 1 &&
+    configuration.tools[0] === "*" &&
+    expected(context, configuration.command, configuration.args)
+    ? { status: "current" }
+    : {
+        status: "conflict",
+        detail: "The existing user-scoped 'ast' registration does not match this package.",
       };
 }
 
@@ -210,7 +239,7 @@ const codexMcp: AgentTargetMcpAdapter = {
 
 const copilotMcp: AgentTargetMcpAdapter = {
   async inspect(runtime, context) {
-    return structuredInspection(
+    return copilotStructuredInspection(
       await runtime.run(["mcp", "get", MCP_SERVER_NAME, "--json"]),
       context,
     );

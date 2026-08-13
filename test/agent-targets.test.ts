@@ -34,6 +34,11 @@ describe("agent target registry", () => {
     });
     expect(classifyAgentVersion("gemini", "0.39.1")).toMatchObject({ status: "compatible" });
     expect(classifyAgentVersion("copilot", "0.0.356")).toMatchObject({ status: "compatible" });
+    expect(classifyAgentVersion("copilot", "GitHub Copilot CLI 1.0.79.")).toEqual({
+      status: "compatible",
+      contract: "copilot-mcp-v1",
+      version: "1.0.79",
+    });
   });
 
   it("uses tested structured contracts and fail-closes unknown evidence", async () => {
@@ -57,8 +62,29 @@ describe("agent target registry", () => {
       [{ exitCode: 0, stdout: "ast is probably configured", stderr: "" }],
       context,
     );
+    const copilot = await inspectAgentFixture(
+      "copilot",
+      [
+        {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            ast: {
+              tools: ["*"],
+              type: "local",
+              command: "/node",
+              args: ["/package/dist/index.js"],
+              source: "user",
+              enabled: true,
+            },
+          }),
+          stderr: "",
+        },
+      ],
+      context,
+    );
 
     expect(codex).toEqual({ status: "current" });
+    expect(copilot).toEqual({ status: "current" });
     expect(copilotUnknown).toMatchObject({ status: "error", operation: "MCP inspection" });
   });
 

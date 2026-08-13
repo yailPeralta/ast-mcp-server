@@ -125,11 +125,12 @@ describe("registry consumer mutation evidence", () => {
     await Promise.all(
       ["claude", "hermes"].map((name) => symlink(symlinkTarget, path.join(symlinkBin, name))),
     );
+    await symlink(process.execPath, path.join(symlinkBin, "node"));
 
     const symlinkDetections = await detectInstalledAgents({
       environment: {
         ...process.env,
-        PATH: `${symlinkBin}${path.delimiter}${path.dirname(process.execPath)}`,
+        PATH: symlinkBin,
         FAKE_CLAUDE_STATE: path.join(symlinkRoot, "claude-state.json"),
         FAKE_HERMES_STATE: path.join(symlinkRoot, "hermes-state.json"),
       },
@@ -155,17 +156,18 @@ describe("registry consumer mutation evidence", () => {
         version: "Hermes Agent v0.17.0",
       },
       { id: "opencode", installed: false, executable: undefined, version: undefined },
-      { id: "codex", installed: true, executable: "codex.js", version: "codex-cli 0.144.0" },
+      { id: "codex", installed: false, executable: undefined, version: undefined },
       { id: "gemini", installed: false, executable: undefined, version: undefined },
       { id: "copilot", installed: false, executable: undefined, version: undefined },
     ]);
 
     const copyRoot = path.join(root, "copied");
     const copyBin = await createFakeAgents(copyRoot);
+    await symlink(process.execPath, path.join(copyBin, "node"));
     const copyDetections = await detectInstalledAgents({
       environment: {
         ...process.env,
-        PATH: `${copyBin}${path.delimiter}${path.dirname(process.execPath)}`,
+        PATH: copyBin,
         FAKE_CLAUDE_STATE: path.join(copyRoot, "claude-state.json"),
         FAKE_HERMES_STATE: path.join(copyRoot, "hermes-state.json"),
       },
@@ -192,7 +194,7 @@ describe("registry consumer mutation evidence", () => {
         version: "Hermes Agent v0.17.0",
       },
       { id: "opencode", installed: false, executable: undefined, version: undefined },
-      { id: "codex", installed: true, executable: "codex.js", version: "codex-cli 0.144.0" },
+      { id: "codex", installed: false, executable: undefined, version: undefined },
       { id: "gemini", installed: false, executable: undefined, version: undefined },
       { id: "copilot", installed: false, executable: undefined, version: undefined },
     ]);

@@ -44,7 +44,7 @@
   },
   "resolutions": {
     "hono": "4.12.34",
-    "nanoid": "3.3.17"
+    "nanoid": "3.3.18"
   },
   "scripts": {
     "build": "tsc",

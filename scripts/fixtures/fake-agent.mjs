@@ -28,7 +28,7 @@ if (args[0] === "--version") {
     opencode: "1.18.18",
     codex: "codex-cli 0.144.0",
     gemini: "0.39.1",
-    copilot: "0.0.356",
+    copilot: "GitHub Copilot CLI 1.0.79.",
   };
   console.log(
     versions[executableName] ?? (executableName === "fake-agent.mjs" ? versions.hermes : undefined),
@@ -98,11 +98,7 @@ if (executableName === "hermes" && args[0] === "mcp" && args[1] === "add") {
   process.exit(0);
 }
 
-if (
-  (executableName === "codex" || executableName === "copilot") &&
-  args[0] === "mcp" &&
-  args[1] === "get"
-) {
+if (executableName === "codex" && args[0] === "mcp" && args[1] === "get") {
   const state = readState();
   if (!state) {
     console.error("No MCP server named 'ast' found.");
@@ -112,6 +108,27 @@ if (
     JSON.stringify({
       name: "ast",
       transport: { type: "stdio", command: state.command, args: [state.entry] },
+    }),
+  );
+  process.exit(0);
+}
+
+if (executableName === "copilot" && args[0] === "mcp" && args[1] === "get") {
+  const state = readState();
+  if (!state) {
+    console.error('Error: Server "ast" not found.');
+    process.exit(1);
+  }
+  console.log(
+    JSON.stringify({
+      ast: {
+        tools: ["*"],
+        type: "local",
+        command: state.command,
+        args: [state.entry],
+        source: "user",
+        enabled: true,
+      },
     }),
   );
   process.exit(0);
