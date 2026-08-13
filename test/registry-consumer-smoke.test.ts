@@ -129,7 +129,7 @@ describe("registry consumer mutation evidence", () => {
     const symlinkDetections = await detectInstalledAgents({
       environment: {
         ...process.env,
-        PATH: `${symlinkBin}${path.delimiter}${process.env.PATH ?? ""}`,
+        PATH: `${symlinkBin}${path.delimiter}${path.dirname(process.execPath)}`,
         FAKE_CLAUDE_STATE: path.join(symlinkRoot, "claude-state.json"),
         FAKE_HERMES_STATE: path.join(symlinkRoot, "hermes-state.json"),
       },
@@ -154,6 +154,10 @@ describe("registry consumer mutation evidence", () => {
         executable: "fake-agent.mjs",
         version: "Hermes Agent v0.17.0",
       },
+      { id: "opencode", installed: false, executable: undefined, version: undefined },
+      { id: "codex", installed: true, executable: "codex.js", version: "codex-cli 0.144.0" },
+      { id: "gemini", installed: false, executable: undefined, version: undefined },
+      { id: "copilot", installed: false, executable: undefined, version: undefined },
     ]);
 
     const copyRoot = path.join(root, "copied");
@@ -161,7 +165,7 @@ describe("registry consumer mutation evidence", () => {
     const copyDetections = await detectInstalledAgents({
       environment: {
         ...process.env,
-        PATH: `${copyBin}${path.delimiter}${process.env.PATH ?? ""}`,
+        PATH: `${copyBin}${path.delimiter}${path.dirname(process.execPath)}`,
         FAKE_CLAUDE_STATE: path.join(copyRoot, "claude-state.json"),
         FAKE_HERMES_STATE: path.join(copyRoot, "hermes-state.json"),
       },
@@ -187,6 +191,10 @@ describe("registry consumer mutation evidence", () => {
         executable: "hermes",
         version: "Hermes Agent v0.17.0",
       },
+      { id: "opencode", installed: false, executable: undefined, version: undefined },
+      { id: "codex", installed: true, executable: "codex.js", version: "codex-cli 0.144.0" },
+      { id: "gemini", installed: false, executable: undefined, version: undefined },
+      { id: "copilot", installed: false, executable: undefined, version: undefined },
     ]);
   });
 

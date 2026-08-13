@@ -128,7 +128,7 @@ process.exit(2);
     hermesState,
     environment: {
       ...process.env,
-      PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
+      PATH: `${bin}${path.delimiter}${path.dirname(process.execPath)}`,
       CLAUDE_CONFIG_DIR: path.join(root, "claude-home"),
       HERMES_HOME: path.join(root, "hermes-home"),
       FAKE_CLAUDE_STATE: claudeState,
@@ -161,6 +161,16 @@ describe("agent setup", () => {
     expect(byId.claude.version).toContain("2.1.201");
     expect(byId.hermes.installed).toBe(true);
     expect(byId.hermes.version).toContain("0.17.0");
+    expect(detections.map((item) => item.id)).toEqual([
+      "claude",
+      "hermes",
+      "opencode",
+      "codex",
+      "gemini",
+      "copilot",
+    ]);
+    expect(byId.claude.compatibility).toMatchObject({ status: "compatible" });
+    expect(byId.opencode.compatibility).toMatchObject({ status: "unavailable" });
   });
 
   it("configures MCP and skills for both agents and is idempotent", async () => {
@@ -213,6 +223,13 @@ describe("agent setup", () => {
       "utf8",
     );
     expect(claudeSkill).toBe(hermesSkill);
+    expect(first).toMatchObject({
+      version: 1,
+      status: "ok",
+      command: "setup",
+      correlation_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+    expect(first.physical_writes).toHaveLength(2);
   });
 
   it("fails preflight on a conflicting MCP registration before any write", async () => {
@@ -311,5 +328,115 @@ describe("agent setup", () => {
         nodeExecutable: process.execPath,
       }),
     ).rejects.toThrow(/claude code.*not installed/i);
+  });
+
+  it("rejects incompatible detected evidence before artifact or skill writes", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "", "utf8");
+    const detections: AgentDetection[] = [
+      {
+        id: "codex",
+        label: "Codex CLI",
+        installed: true,
+        executable: path.join(fake.bin, "hermes"),
+        version: "unknown",
+        compatibility: { status: "incompatible", reason: "Unknown version contract." },
+      },
+    ];
+    await expect(
+      runAgentSetup({
+        agents: ["codex"],
+        detections,
+        environment: fake.environment,
+        sourceSkillPath: bundledSkillPath,
+        serverEntryPath,
+      }),
+    ).rejects.toMatchObject({ code: "AGENT_INCOMPATIBLE" });
+    await expect(access(path.join(root, ".agents", "skills"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("bounds and redacts command failures while retaining completed outcomes for retry", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const failing = path.join(fake.bin, "codex");
+    await writeFile(
+      failing,
+      `#!/usr/bin/env node\nif (process.argv[2] === "get") { console.error("secret=ghp_abcdefghijklmnopqrstuvwxyz123456 /private/path"); process.exit(9); } console.log("codex-cli 0.144.0");\n`,
+    );
+    await chmod(failing, 0o755);
+    const detections = await detectInstalledAgents({ environment: fake.environment });
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "", "utf8");
+    await expect(
+      runAgentSetup({
+        agents: ["claude", "codex"],
+        detections,
+        environment: fake.environment,
+        sourceSkillPath: bundledSkillPath,
+        serverEntryPath,
+      }),
+    ).rejects.toSatisfy((error: unknown) => {
+      const serialized = JSON.stringify(error);
+      return (
+        serialized.length < 4000 &&
+        !serialized.includes("ghp_") &&
+        !serialized.includes("/private/path")
+      );
+    });
+    await expect(access(fake.claudeState)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects an effective OpenCode conflict before skill or config writes", async () => {
+    const root = await makeTemporaryDirectory();
+    const selectedConfig = path.join(root, "selected.json");
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    const executable = path.join(root, "opencode");
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(selectedConfig, "{}\n");
+    await writeFile(serverEntryPath, "");
+    await writeFile(
+      executable,
+      '#!/usr/bin/env node\nif (process.argv[3] === "config") console.log(JSON.stringify({mcp:{ast:{command:["/wrong"]}}})); else console.log("1.18.18");\n',
+    );
+    await chmod(executable, 0o755);
+    const environment = {
+      ...process.env,
+      HOME: root,
+      OPENCODE_CONFIG: selectedConfig,
+      OPENCODE_CONFIG_DIR: path.join(root, "config-dir"),
+    };
+
+    await expect(
+      runAgentSetup({
+        agents: ["opencode"],
+        detections: [
+          {
+            id: "opencode",
+            label: "OpenCode",
+            installed: true,
+            executable,
+            compatibility: {
+              status: "compatible",
+              contract: "opencode-mcp-v1",
+              version: "1.18.18",
+            },
+          },
+        ],
+        environment,
+        sourceSkillPath: bundledSkillPath,
+        serverEntryPath,
+        nodeExecutable: process.execPath,
+      }),
+    ).rejects.toMatchObject({ code: "AGENT_MCP_CONFLICT" });
+    expect(await readFile(selectedConfig, "utf8")).toBe("{}\n");
+    await expect(access(path.join(root, ".agents", "skills"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 });

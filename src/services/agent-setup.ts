@@ -1,21 +1,29 @@
 import { spawn } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { randomUUID } from "node:crypto";
 import {
   installBundledSkill,
   SkillConflictError,
   type SkillInstallation,
-  type SkillTargetSelection,
 } from "./skill-installer.js";
 import { type AgentDetection, type AgentId } from "./setup-wizard.js";
 import {
   AGENT_IDS,
+  classifyAgentVersion,
   getAgentTarget,
   MCP_SERVER_NAME,
   type AgentTargetRuntime,
 } from "./agent-targets.js";
+import {
+  applyOpenCodeConfigPlan,
+  planOpenCodeConfig,
+  resolveOpenCodeConfigPath,
+  type OpenCodeConfigPlan,
+} from "./opencode-config.js";
 
 export type { AgentDetection } from "./setup-wizard.js";
 
@@ -30,7 +38,7 @@ interface CommandResult {
 
 interface McpInspection {
   agent: AgentId;
-  status: "missing" | "current" | "conflict";
+  status: "missing" | "current" | "conflict" | "blocked_untrusted_folder";
   detail?: string;
 }
 
@@ -59,6 +67,7 @@ export interface AgentSetupItem {
 }
 
 export interface AgentSetupResult {
+  version: 1;
   status: "ok";
   command: "setup";
   server: {
@@ -67,6 +76,8 @@ export interface AgentSetupResult {
     args: [string];
   };
   agents: AgentSetupItem[];
+  correlation_id: string;
+  physical_writes: Array<{ path: string; status: string }>;
 }
 
 export class AgentSetupError extends Error {
@@ -160,7 +171,6 @@ async function runCommand(
           new AgentSetupError(
             `Agent command exceeded ${MAX_COMMAND_OUTPUT_BYTES} output bytes.`,
             "AGENT_COMMAND_OUTPUT_LIMIT",
-            { executable, args },
           ),
         );
         return;
@@ -177,23 +187,15 @@ async function runCommand(
         new AgentSetupError(
           `Agent command timed out after ${options.timeoutMs}ms.`,
           "AGENT_COMMAND_TIMEOUT",
-          { executable, args },
         ),
       );
     }, options.timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => appendOutput("stdout", chunk));
     child.stderr.on("data", (chunk: Buffer) => appendOutput("stderr", chunk));
-    child.on("error", (error) => {
+    child.on("error", () => {
       finishWithError(
-        new AgentSetupError(
-          `Failed to start ${executable}: ${error.message}`,
-          "AGENT_COMMAND_START",
-          {
-            executable,
-            args,
-          },
-        ),
+        new AgentSetupError("Failed to start the agent command.", "AGENT_COMMAND_START"),
       );
     });
     child.on("close", (exitCode) => {
@@ -210,11 +212,10 @@ async function runCommand(
 }
 
 function commandFailure(agent: AgentId, operation: string, result: CommandResult): AgentSetupError {
-  const output = `${result.stdout}\n${result.stderr}`.trim().slice(0, 4000);
   return new AgentSetupError(
     `${getAgentTarget(agent).label} ${operation} failed with exit code ${result.exitCode}.`,
     "AGENT_COMMAND_FAILED",
-    { agent, operation, output },
+    { agent, operation, reason: `Command exited with code ${result.exitCode}.` },
   );
 }
 
@@ -254,6 +255,50 @@ async function inspectMcp(
     status: inspection.status,
     ...(inspection.detail ? { detail: inspection.detail } : {}),
   };
+}
+
+async function verifyOpenCode(
+  detection: AgentDetection,
+  environment: NodeJS.ProcessEnv,
+  timeoutMs: number,
+  context: { nodeExecutable: string; serverEntryPath: string },
+): Promise<void> {
+  const runtime = targetRuntime(detection, environment, timeoutMs);
+  const resolved = await runtime.run(["debug", "config", "--pure"]);
+  if (resolved.exitCode !== 0)
+    throw commandFailure("opencode", "resolved configuration verification", resolved);
+  let config: any;
+  try {
+    config = JSON.parse(resolved.stdout);
+  } catch {
+    throw new AgentSetupError(
+      "OpenCode resolved configuration output is unknown.",
+      "AGENT_VERIFICATION_FAILED",
+      { agent: "opencode" },
+    );
+  }
+  const command = config?.mcp?.ast?.command;
+  if (
+    !Array.isArray(command) ||
+    command.length !== 2 ||
+    command[0] !== context.nodeExecutable ||
+    command[1] !== context.serverEntryPath
+  ) {
+    throw new AgentSetupError(
+      "OpenCode resolved configuration does not contain the expected ast server.",
+      "AGENT_VERIFICATION_FAILED",
+      { agent: "opencode" },
+    );
+  }
+  const listed = await runtime.run(["mcp", "list", "--pure"]);
+  const plainList = listed.stdout.replaceAll("\u001b", "");
+  if (listed.exitCode !== 0 || !/ast[\s\S]*connected/i.test(plainList)) {
+    throw new AgentSetupError(
+      "OpenCode did not report the ast server as connected.",
+      "AGENT_VERIFICATION_FAILED",
+      { agent: "opencode" },
+    );
+  }
 }
 
 async function configureMcp(
@@ -322,7 +367,12 @@ export async function detectInstalledAgents(
       const definition = getAgentTarget(id);
       const executable = await findExecutable(definition.command, environment);
       if (executable === undefined) {
-        return { id, label: definition.label, installed: false };
+        return {
+          id,
+          label: definition.label,
+          installed: false,
+          compatibility: { status: "unavailable", reason: "Not found in PATH." },
+        };
       }
 
       let version: string | undefined;
@@ -338,12 +388,20 @@ export async function detectInstalledAgents(
       } catch {
         version = undefined;
       }
-      return { id, label: definition.label, installed: true, executable, version };
+      const compatibility =
+        version === undefined
+          ? {
+              status: "incompatible" as const,
+              reason: "Version command did not produce admitted evidence.",
+            }
+          : classifyAgentVersion(id, version);
+      return { id, label: definition.label, installed: true, executable, version, compatibility };
     }),
   );
 }
 
 export async function runAgentSetup(options: RunAgentSetupOptions): Promise<AgentSetupResult> {
+  const correlationId = randomUUID();
   const environment = options.environment ?? process.env;
   const nodeExecutable = options.nodeExecutable ?? process.execPath;
   const timeoutMs = options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
@@ -362,20 +420,87 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
         { agent },
       );
     }
+    if (detection.compatibility && detection.compatibility.status !== "compatible") {
+      throw new AgentSetupError(
+        `${getAgentTarget(agent).label} is incompatible: ${detection.compatibility.reason}`,
+        detection.compatibility.status === "blocked_untrusted_folder"
+          ? "AGENT_TRUST_REQUIRED"
+          : "AGENT_INCOMPATIBLE",
+        { agent, correlation_id: correlationId },
+      );
+    }
   }
   await assertRegularFile(options.serverEntryPath, "MCP server entrypoint");
   await assertRegularFile(options.sourceSkillPath, "Bundled skill");
 
+  let openCodePlan: OpenCodeConfigPlan | undefined;
+  if (requested.includes("opencode")) {
+    openCodePlan = await planOpenCodeConfig({
+      filePath: resolveOpenCodeConfigPath(environment, environment.HOME ?? os.homedir()),
+      nodeExecutable,
+      serverEntryPath: options.serverEntryPath,
+    }).catch((error: unknown) => {
+      throw new AgentSetupError(
+        error instanceof Error ? error.message : "OpenCode configuration preflight failed.",
+        "AGENT_MCP_CONFLICT",
+        { agent: "opencode", correlation_id: correlationId },
+      );
+    });
+    const effective = await targetRuntime(
+      detectionMap.get("opencode")!,
+      environment,
+      timeoutMs,
+    ).run(["debug", "config", "--pure"]);
+    if (effective.exitCode !== 0) {
+      throw new AgentSetupError(
+        `OpenCode effective configuration preflight failed with exit code ${effective.exitCode}.`,
+        "AGENT_MCP_CONFLICT",
+        { agent: "opencode", correlation_id: correlationId },
+      );
+    }
+    let effectiveConfig: any;
+    try {
+      effectiveConfig = JSON.parse(effective.stdout);
+    } catch {
+      throw new AgentSetupError(
+        "OpenCode effective configuration output is unknown.",
+        "AGENT_MCP_CONFLICT",
+        { agent: "opencode", correlation_id: correlationId },
+      );
+    }
+    const effectiveAst = effectiveConfig?.mcp?.ast;
+    const desiredAst = {
+      type: "local",
+      command: [nodeExecutable, options.serverEntryPath],
+      enabled: true,
+    };
+    if (effectiveAst !== undefined && JSON.stringify(effectiveAst) !== JSON.stringify(desiredAst)) {
+      throw new AgentSetupError(
+        "OpenCode effective configuration conflict at mcp.ast.",
+        "AGENT_MCP_CONFLICT",
+        { agent: "opencode", correlation_id: correlationId },
+      );
+    }
+    if (effectiveAst !== undefined && openCodePlan.status === "installed") {
+      openCodePlan = { ...openCodePlan, status: "unchanged" };
+    }
+  }
+
   const inspections = await Promise.all(
     requested.map((agent) =>
-      inspectMcp(
-        agent,
-        detectionMap.get(agent)!,
-        options.serverEntryPath,
-        nodeExecutable,
-        environment,
-        timeoutMs,
-      ),
+      agent === "opencode"
+        ? Promise.resolve<McpInspection>({
+            agent,
+            status: openCodePlan?.status === "unchanged" ? "current" : "missing",
+          })
+        : inspectMcp(
+            agent,
+            detectionMap.get(agent)!,
+            options.serverEntryPath,
+            nodeExecutable,
+            environment,
+            timeoutMs,
+          ),
     ),
   );
   const conflict = inspections.find((item) => item.status === "conflict");
@@ -386,11 +511,17 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
       { agent: conflict.agent },
     );
   }
+  const blocked = inspections.find((item) => item.status === "blocked_untrusted_folder");
+  if (blocked !== undefined) {
+    throw new AgentSetupError(
+      `${getAgentTarget(blocked.agent).label} requires the working folder to be trusted before setup.`,
+      "AGENT_TRUST_REQUIRED",
+      { agent: blocked.agent, correlation_id: correlationId },
+    );
+  }
 
-  const skillTarget: SkillTargetSelection =
-    requested.length === AGENT_IDS.length ? "all" : getAgentTarget(requested[0]!).skillTarget;
   const skillResult = await installBundledSkill({
-    target: skillTarget,
+    target: requested,
     scope: "user",
     force: options.forceSkill ?? false,
     sourceSkillPath: options.sourceSkillPath,
@@ -415,14 +546,26 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
     const inspection = inspections.find((item) => item.agent === agent)!;
     try {
       if (inspection.status === "missing") {
-        await configureMcp(
-          agent,
-          detection,
-          options.serverEntryPath,
+        if (agent === "opencode") {
+          await applyOpenCodeConfigPlan(openCodePlan!);
+          await verifyOpenCode(detection, environment, timeoutMs, {
+            nodeExecutable,
+            serverEntryPath: options.serverEntryPath,
+          });
+        } else
+          await configureMcp(
+            agent,
+            detection,
+            options.serverEntryPath,
+            nodeExecutable,
+            environment,
+            timeoutMs,
+          );
+      } else if (agent === "opencode") {
+        await verifyOpenCode(detection, environment, timeoutMs, {
           nodeExecutable,
-          environment,
-          timeoutMs,
-        );
+          serverEntryPath: options.serverEntryPath,
+        });
       }
       completed.push({
         agent,
@@ -444,9 +587,17 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
   }
 
   return {
+    version: 1,
     status: "ok",
     command: "setup",
     server: { name: MCP_SERVER_NAME, command: nodeExecutable, args: [options.serverEntryPath] },
     agents: completed,
+    correlation_id: correlationId,
+    physical_writes: [
+      ...skillResult.physicalWrites,
+      ...(openCodePlan?.status === "installed"
+        ? [{ path: openCodePlan.filePath, status: "installed" }]
+        : []),
+    ],
   };
 }

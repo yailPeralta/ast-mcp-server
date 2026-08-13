@@ -2,15 +2,102 @@ import { describe, expect, it } from "vitest";
 import {
   AGENT_IDS,
   AGENT_TARGETS,
+  classifyAgentVersion,
   getAgentTarget,
+  inspectAgentFixture,
   type AgentTargetId,
+  type AgentTargetRuntime,
 } from "../src/services/agent-targets.js";
 
 describe("agent target registry", () => {
   it("keeps the supported targets ordered and uniquely addressable", () => {
-    expect(AGENT_IDS).toEqual(["claude", "hermes"]);
+    expect(AGENT_IDS).toEqual(["claude", "hermes", "opencode", "codex", "gemini", "copilot"]);
     expect(new Set(AGENT_TARGETS.map((target) => target.id)).size).toBe(AGENT_TARGETS.length);
-    expect(AGENT_TARGETS.map((target) => target.skillTarget)).toEqual(["claude", "hermes"]);
+    expect(AGENT_TARGETS.map((target) => target.skillTarget)).toEqual([
+      "claude",
+      "hermes",
+      "agents",
+      "agents",
+      "agents",
+      "agents",
+    ]);
+  });
+
+  it("fails closed on unknown versions and enforces the OpenCode minimum", () => {
+    expect(classifyAgentVersion("opencode", "1.18.18")).toMatchObject({ status: "compatible" });
+    expect(classifyAgentVersion("opencode", "1.18.17")).toMatchObject({
+      status: "incompatible",
+      reason: expect.stringContaining("1.18.18"),
+    });
+    expect(classifyAgentVersion("codex", "codex-cli unknown")).toMatchObject({
+      status: "incompatible",
+    });
+    expect(classifyAgentVersion("gemini", "0.39.1")).toMatchObject({ status: "compatible" });
+    expect(classifyAgentVersion("copilot", "0.0.356")).toMatchObject({ status: "compatible" });
+  });
+
+  it("uses tested structured contracts and fail-closes unknown evidence", async () => {
+    const context = { nodeExecutable: "/node", serverEntryPath: "/package/dist/index.js" };
+    const codex = await inspectAgentFixture(
+      "codex",
+      [
+        {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            name: "ast",
+            transport: { type: "stdio", command: "/node", args: ["/package/dist/index.js"] },
+          }),
+          stderr: "",
+        },
+      ],
+      context,
+    );
+    const copilotUnknown = await inspectAgentFixture(
+      "copilot",
+      [{ exitCode: 0, stdout: "ast is probably configured", stderr: "" }],
+      context,
+    );
+
+    expect(codex).toEqual({ status: "current" });
+    expect(copilotUnknown).toMatchObject({ status: "error", operation: "MCP inspection" });
+  });
+
+  it("classifies Gemini trust separately and emits exact registration commands", async () => {
+    const calls: string[][] = [];
+    const runtime: AgentTargetRuntime = {
+      async run(args) {
+        calls.push([...args]);
+        return {
+          exitCode: 0,
+          stdout: "MCP servers are disabled in untrusted folders. Trust this folder to continue.\n",
+          stderr: "",
+        };
+      },
+    };
+    const context = { nodeExecutable: "/node", serverEntryPath: "/package/dist/index.js" };
+    const inspection = await getAgentTarget("gemini").mcp.inspect(runtime, context);
+    await getAgentTarget("gemini").mcp.register(runtime, context);
+
+    expect(inspection).toMatchObject({ status: "blocked_untrusted_folder" });
+    expect(calls).toEqual([
+      ["mcp", "list"],
+      ["mcp", "add", "ast", "/node", "/package/dist/index.js", "--scope", "user"],
+    ]);
+  });
+
+  it("uses Copilot's separator-based registration syntax", async () => {
+    const calls: string[][] = [];
+    await getAgentTarget("copilot").mcp.register(
+      {
+        async run(args) {
+          calls.push([...args]);
+          return { exitCode: 0, stdout: "Added MCP server ast", stderr: "" };
+        },
+      },
+      { nodeExecutable: "/node", serverEntryPath: "/package/dist/index.js" },
+    );
+
+    expect(calls).toEqual([["mcp", "add", "ast", "--", "/node", "/package/dist/index.js"]]);
   });
 
   it("describes executable discovery and MCP registration per target", () => {

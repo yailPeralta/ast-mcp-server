@@ -7,8 +7,10 @@ import process from "node:process";
 
 const executableName = path.basename(process.argv[1]).replace(/\.(?:cmd|exe)$/i, "");
 const args = process.argv.slice(2);
-const isClaude = executableName === "claude";
-const statePath = isClaude ? process.env.FAKE_CLAUDE_STATE : process.env.FAKE_HERMES_STATE;
+const stateEnvironment = `FAKE_${executableName.toUpperCase()}_STATE`;
+const statePath =
+  process.env[stateEnvironment] ??
+  (executableName === "fake-agent.mjs" ? process.env.FAKE_HERMES_STATE : undefined);
 
 if (!statePath) {
   console.error(`Missing fake state path for ${executableName}.`);
@@ -20,11 +22,21 @@ const readState = () =>
 const writeState = (value) => fs.writeFileSync(statePath, JSON.stringify(value));
 
 if (args[0] === "--version") {
-  console.log(isClaude ? "2.1.201 (Claude Code)" : "Hermes Agent v0.17.0");
+  const versions = {
+    claude: "2.1.201 (Claude Code)",
+    hermes: "Hermes Agent v0.17.0",
+    opencode: "1.18.18",
+    codex: "codex-cli 0.144.0",
+    gemini: "0.39.1",
+    copilot: "0.0.356",
+  };
+  console.log(
+    versions[executableName] ?? (executableName === "fake-agent.mjs" ? versions.hermes : undefined),
+  );
   process.exit(0);
 }
 
-if (isClaude && args[0] === "mcp" && args[1] === "get") {
+if (executableName === "claude" && args[0] === "mcp" && args[1] === "get") {
   const state = readState();
   if (!state) {
     console.error('No MCP server named "ast".');
@@ -39,19 +51,19 @@ if (isClaude && args[0] === "mcp" && args[1] === "get") {
   process.exit(0);
 }
 
-if (isClaude && args[0] === "mcp" && args[1] === "add") {
+if (executableName === "claude" && args[0] === "mcp" && args[1] === "add") {
   const separator = args.indexOf("--");
   writeState({ command: args[separator + 1], entry: args[separator + 2] });
   console.log("Added stdio MCP server ast");
   process.exit(0);
 }
 
-if (!isClaude && args[0] === "mcp" && args[1] === "list") {
+if (executableName === "hermes" && args[0] === "mcp" && args[1] === "list") {
   console.log(readState() ? "ast  stdio  all  ✓ enabled" : "No MCP servers configured.");
   process.exit(0);
 }
 
-if (!isClaude && args[0] === "mcp" && args[1] === "test") {
+if (executableName === "hermes" && args[0] === "mcp" && args[1] === "test") {
   const state = readState();
   if (!state || state.conflict) {
     console.error("Failed to connect");
@@ -78,11 +90,75 @@ if (!isClaude && args[0] === "mcp" && args[1] === "test") {
   process.exit(0);
 }
 
-if (!isClaude && args[0] === "mcp" && args[1] === "add") {
+if (executableName === "hermes" && args[0] === "mcp" && args[1] === "add") {
   const commandIndex = args.indexOf("--command");
   const argsIndex = args.indexOf("--args");
   writeState({ command: args[commandIndex + 1], entry: args[argsIndex + 1] });
   console.log("✓ Saved 'ast' (15/15 tools enabled)");
+  process.exit(0);
+}
+
+if (
+  (executableName === "codex" || executableName === "copilot") &&
+  args[0] === "mcp" &&
+  args[1] === "get"
+) {
+  const state = readState();
+  if (!state) {
+    console.error("No MCP server named 'ast' found.");
+    process.exit(1);
+  }
+  console.log(
+    JSON.stringify({
+      name: "ast",
+      transport: { type: "stdio", command: state.command, args: [state.entry] },
+    }),
+  );
+  process.exit(0);
+}
+
+if (
+  (executableName === "codex" || executableName === "copilot") &&
+  args[0] === "mcp" &&
+  args[1] === "add"
+) {
+  const separator = args.indexOf("--");
+  const commandIndex = args.indexOf("--command");
+  const argsIndex = args.indexOf("--args");
+  if (executableName === "copilot" && (separator < 0 || commandIndex >= 0 || argsIndex >= 0)) {
+    console.error("Unsupported Copilot MCP add syntax.");
+    process.exit(2);
+  }
+  writeState({ command: args[separator + 1], entry: args[separator + 2] });
+  console.log("Added MCP server ast");
+  process.exit(0);
+}
+
+if (executableName === "gemini" && args[0] === "mcp" && args[1] === "list") {
+  const state = readState();
+  console.log(
+    state
+      ? `ast Connected command: ${state.command}, args: [${state.entry}]`
+      : "No MCP servers configured.",
+  );
+  process.exit(0);
+}
+if (executableName === "gemini" && args[0] === "mcp" && args[1] === "add") {
+  writeState({ command: args[3], entry: args[4] });
+  console.log("MCP server ast added.");
+  process.exit(0);
+}
+
+if (executableName === "opencode" && args[0] === "debug" && args[1] === "config") {
+  const configPath = process.env.OPENCODE_CONFIG;
+  let config = "{}";
+  if (configPath && fs.existsSync(configPath))
+    config = fs.readFileSync(configPath, "utf8").replace(/\/\/.*$/gm, "");
+  console.log(config);
+  process.exit(0);
+}
+if (executableName === "opencode" && args[0] === "mcp" && args[1] === "list") {
+  console.log("ast connected");
   process.exit(0);
 }
 

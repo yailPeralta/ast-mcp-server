@@ -732,6 +732,7 @@ __metadata:
     diff: "npm:^9.0.0"
     eslint: "npm:^10.8.0"
     gpt-tokenizer: "npm:3.4.0"
+    jsonc-parser: "npm:^3.3.1"
     prettier: "npm:^3.9.6"
     ts-morph: "npm:24.0.0"
     typescript: "npm:^5.6.0"
@@ -1603,6 +1604,13 @@ __metadata:
   version: 1.0.1
   resolution: "json-stable-stringify-without-jsonify@npm:1.0.1"
   checksum: 10c0/cb168b61fd4de83e58d09aaa6425ef71001bae30d260e2c57e7d09a5fd82223e2f22a042dedaab8db23b7d9ae46854b08bb1f91675a8be11c5cffebef5fb66a5
+  languageName: node
+  linkType: hard
+
+"jsonc-parser@npm:^3.3.1":
+  version: 3.3.1
+  resolution: "jsonc-parser@npm:3.3.1"
+  checksum: 10c0/269c3ae0a0e4f907a914bf334306c384aabb9929bd8c99f909275ebd5c2d3bc70b9bcd119ad794f339dec9f24b6a4ee9cd5a8ab2e6435e730ad4075388fc2ab6
   languageName: node
   linkType: hard
 

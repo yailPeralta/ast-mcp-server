@@ -35,6 +35,20 @@ function withoutGitIndexFile(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessE
   return environment;
 }
 
+async function readPidWhenReady(pidFile: string, timeoutMs: number): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      return Number.parseInt(await readFile(pidFile, "utf8"), 10);
+    } catch (error) {
+      if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT"))
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+  throw new Error(`process readiness file was not readable within ${timeoutMs}ms: ${pidFile}`);
+}
+
 describe("release candidate matrix", () => {
   it("requires an absolute output directory and accepts an optional exact candidate tree", () => {
     expect(
@@ -581,6 +595,20 @@ describe("release candidate matrix", () => {
     expect(result.signal).toMatch(/^SIG(?:TERM|KILL)$/u);
   });
 
+  it("waits boundedly for delayed process readiness evidence", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "ast-matrix-readiness-test-"));
+    const pidFile = path.join(root, "grandchild.pid");
+    try {
+      setTimeout(() => void writeFile(pidFile, "1234"), 25);
+      await expect(readPidWhenReady(pidFile, 200)).resolves.toBe(1234);
+      await expect(readPidWhenReady(path.join(root, "missing.pid"), 20)).rejects.toThrow(
+        "process readiness file was not readable within 20ms",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("terminates the complete process group when a command exceeds its deadline", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "ast-matrix-process-tree-test-"));
     const pidFile = path.join(root, "grandchild.pid");
@@ -598,7 +626,7 @@ describe("release candidate matrix", () => {
         { timeoutMs: 100 },
       );
       expect(result.timedOut).toBe(true);
-      const grandchildPid = Number.parseInt(await readFile(pidFile, "utf8"), 10);
+      const grandchildPid = await readPidWhenReady(pidFile, 1000);
       await expect(
         (async () => {
           for (let attempt = 0; attempt < 50; attempt += 1) {

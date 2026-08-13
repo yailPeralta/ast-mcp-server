@@ -1,0 +1,76 @@
+schema: spec-driven
+strict_tdd: true
+
+context: |
+  Tech stack: Node.js >=22.5, ESM TypeScript 5.6, Yarn 4.15, MCP SDK, ts-morph, Zod, TOON
+  Architecture: stdio/CLI entrypoints, MCP tool registration, runtime services, and in-memory batch orchestration
+  Testing: Vitest 4.1 unit and MCP integration tests plus built-artifact smoke scripts; no configured coverage or browser E2E
+  Style: strict TypeScript, ESLint, Prettier, compiler-first fail-closed operations with bounded, hash-bound mutations
+
+testing:
+  strict_tdd: true
+  detected: 2026-08-13
+  runner:
+    framework: Vitest 4.1
+    command: yarn test
+    include: test/**/*.test.ts
+  layers:
+    unit:
+      available: true
+      tool: Vitest
+    integration:
+      available: true
+      tool: Vitest and built-artifact smoke scripts
+    e2e:
+      available: false
+      tool: null
+  coverage:
+    available: false
+    command: null
+    threshold: 0
+  quality:
+    formatter: yarn format:check
+    linter: yarn lint
+    type_checker: yarn typecheck
+    build: yarn build
+    smoke:
+      - yarn test:mcp
+      - yarn test:lifecycle
+      - yarn test:cli
+      - yarn test:errors
+      - yarn test:package
+
+rules:
+  proposal:
+    - Define user-visible intent, scope, risks, and rollback for risky changes
+    - Preserve the compiler-first, fail-closed safety model
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - Specify freshness, diagnostics, bounded-output, and mutation-safety behavior when applicable
+  design:
+    - Document architecture decisions and tradeoffs with rationale
+    - Include sequence diagrams for complex flows
+    - Keep tool registration, orchestration, and runtime service responsibilities separated
+  tasks:
+    - Group work into reviewable behavior slices with hierarchical numbering
+    - Keep tasks completable in one session and tests paired with implementation
+  apply:
+    guidelines:
+      - Follow existing TypeScript and service-boundary patterns
+      - Preserve prepared hash-bound mutations, workspace locking, and idempotent receipts where applicable
+    tdd: true
+    test_command: yarn test
+  verify:
+    test_command: yarn test
+    build_command: yarn build
+    coverage_threshold: 0
+    commands:
+      - yarn format:check
+      - yarn lint
+      - yarn typecheck
+      - yarn test
+      - yarn build
+  archive:
+    - Warn before merging destructive deltas
+    - Never delete or modify legacy artifacts under openspec/archive/

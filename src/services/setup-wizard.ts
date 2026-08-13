@@ -1,8 +1,15 @@
-import { AGENT_IDS, getAgentTarget, type AgentTargetId } from "./agent-targets.js";
+import {
+  AGENT_IDS,
+  getAgentTarget,
+  type AgentTargetId,
+  type Compatibility,
+} from "./agent-targets.js";
+import { runRawCheckbox, type RawCheckboxOptions } from "./raw-tty.js";
 
 export { AGENT_IDS } from "./agent-targets.js";
-
 export type AgentId = AgentTargetId;
+export type DetectionCompatibility =
+  Compatibility | { status: "unavailable" | "blocked_untrusted_folder"; reason: string };
 
 export interface AgentDetection {
   id: AgentId;
@@ -10,129 +17,75 @@ export interface AgentDetection {
   installed: boolean;
   executable?: string;
   version?: string;
+  compatibility?: DetectionCompatibility;
 }
 
-export type SetupQuestion = (question: string) => Promise<string>;
+export type AgentSelectionRequest = AgentId[] | { mode: "all" };
 
 function isAgentId(value: string): value is AgentId {
   return AGENT_IDS.includes(value as AgentId);
 }
 
-export function parseAgentsArgument(value: string): AgentId[] {
+export function parseAgentsArgument(value: string): AgentSelectionRequest {
   const normalized = value.trim().toLowerCase();
-  if (normalized === "") {
-    throw new Error("The --agents value cannot be empty.");
-  }
-  if (normalized === "all") {
-    return [...AGENT_IDS];
-  }
-
+  if (!normalized) throw new Error("The --agents value cannot be empty.");
+  if (normalized === "all") return { mode: "all" };
   const requested = normalized
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
-  if (requested.length === 0) {
-    throw new Error("The --agents value cannot be empty.");
-  }
   const unsupported = requested.find((item) => !isAgentId(item));
-  if (unsupported !== undefined) {
-    throw new Error(`Unsupported agent: ${unsupported}. Expected claude, hermes, or all.`);
-  }
-
+  if (unsupported)
+    throw new Error(`Unsupported agent: ${unsupported}. Expected ${AGENT_IDS.join(", ")}, or all.`);
   const selected = new Set(requested as AgentId[]);
-  return AGENT_IDS.filter((agent) => selected.has(agent));
+  return AGENT_IDS.filter((id) => selected.has(id));
 }
 
-export function applyAgentDeselections(answer: string, detections: AgentDetection[]): AgentId[] {
-  const installed = detections.filter((item) => item.installed);
-  const selected = new Set(installed.map((item) => item.id));
-  const normalized = answer.trim().toLowerCase();
-  if (normalized === "") {
-    return AGENT_IDS.filter((agent) => selected.has(agent));
-  }
-  if (normalized === "none") {
-    return [];
-  }
-
-  const tokens = normalized
-    .split(/[\s,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  for (const token of tokens) {
-    let detection: AgentDetection | undefined;
-    if (/^\d+$/.test(token)) {
-      detection = detections[Number(token) - 1];
-    } else if (isAgentId(token)) {
-      detection = detections.find((item) => item.id === token);
-    }
-
-    if (detection === undefined) {
-      throw new Error(`Invalid selection: ${token}.`);
-    }
-    if (!detection.installed) {
-      throw new Error(`${detection.label} is not installed.`);
-    }
-    selected.delete(detection.id);
-  }
-
-  return AGENT_IDS.filter((agent) => selected.has(agent));
+function usability(detection: AgentDetection): { usable: boolean; reason?: string } {
+  if (!detection.installed)
+    return {
+      usable: false,
+      reason:
+        detection.compatibility?.status === "unavailable"
+          ? detection.compatibility.reason
+          : "Not found in PATH.",
+    };
+  if (!detection.compatibility || detection.compatibility.status === "compatible")
+    return { usable: true };
+  return { usable: false, reason: detection.compatibility.reason };
 }
 
-function renderSelectionQuestion(detections: AgentDetection[], validationMessage?: string): string {
-  const choices = detections
-    .map((item, index) => {
-      const marker = item.installed ? "x" : " ";
-      const detail = item.installed
-        ? [item.version, item.executable].filter(Boolean).join(" · ")
-        : "not installed";
-      return `  [${marker}] ${index + 1}. ${getAgentTarget(item.id).label} (${detail})`;
-    })
-    .join("\n");
-  const validation = validationMessage === undefined ? "" : `\n${validationMessage}\n`;
-  return `\nDetected agents (all installed agents are selected):\n${choices}\n${validation}\nEnter agents to deselect by number or name, 'none' to deselect all, or press Enter to keep all:\n> `;
-}
-
-function renderConfirmation(agents: AgentId[], validationMessage?: string): string {
-  const labels = agents.map((agent) => getAgentTarget(agent).label).join(", ");
-  const validation = validationMessage === undefined ? "" : `\n${validationMessage}\n`;
-  return `${validation}\nSetup will install the MCP server and skill for: ${labels}.\nContinue? [Y/n] `;
+export function resolveAgentSelection(
+  request: AgentSelectionRequest,
+  detections: readonly AgentDetection[],
+): AgentId[] {
+  const byId = new Map(detections.map((item) => [item.id, item]));
+  const ids = Array.isArray(request) ? request : AGENT_IDS.filter((id) => byId.get(id)?.installed);
+  for (const id of ids) {
+    const detection = byId.get(id);
+    const result = detection
+      ? usability(detection)
+      : { usable: false, reason: "Detection result is missing." };
+    if (!result.usable) throw new Error(`${getAgentTarget(id).label}: ${result.reason}`);
+  }
+  return AGENT_IDS.filter((id) => ids.includes(id));
 }
 
 export async function promptForAgentSelection(
-  detections: AgentDetection[],
-  ask: SetupQuestion,
+  detections: readonly AgentDetection[],
+  options: Omit<RawCheckboxOptions<AgentId>, "choices">,
 ): Promise<AgentId[]> {
-  if (!detections.some((item) => item.installed)) {
-    throw new Error("No supported agents were detected in PATH.");
-  }
-
-  let selected: AgentId[];
-  let selectionError: string | undefined;
-  while (true) {
-    const answer = await ask(renderSelectionQuestion(detections, selectionError));
-    try {
-      selected = applyAgentDeselections(answer, detections);
-      break;
-    } catch (error) {
-      selectionError = error instanceof Error ? error.message : String(error);
-    }
-  }
-
-  if (selected.length === 0) {
-    return [];
-  }
-
-  let confirmationError: string | undefined;
-  while (true) {
-    const answer = (await ask(renderConfirmation(selected, confirmationError)))
-      .trim()
-      .toLowerCase();
-    if (answer === "" || answer === "y" || answer === "yes") {
-      return selected;
-    }
-    if (answer === "n" || answer === "no") {
-      return [];
-    }
-    confirmationError = "Enter y or n.";
-  }
+  return runRawCheckbox({
+    ...options,
+    choices: detections.map((item) => {
+      const result = usability(item);
+      return {
+        id: item.id,
+        label: item.label,
+        enabled: result.usable,
+        checked: result.usable,
+        ...(result.reason ? { reason: result.reason } : {}),
+      };
+    }),
+  });
 }

@@ -35,30 +35,36 @@ ast-tool setup
 ast-tool setup --agents claude,hermes --yes
 ```
 
-Interactive setup detects Claude Code and Hermes executables, selects every detected agent by default, lets the operator deselect agents, shows the exact plan, and asks for confirmation.
+Interactive setup detects exactly Claude Code, Hermes, OpenCode, Codex CLI, Gemini CLI, and GitHub Copilot CLI. It uses a native raw-TTY checkbox reducer with idempotent cleanup. Editor-integrated clients remain excluded.
 
 The non-interactive form exists for CI and automation. It rejects missing agents and requires `--yes`.
 
 ### Wizard implementation
 
-Use Node's built-in readline APIs rather than adding a prompt dependency. This keeps the setup UX inside the existing package and avoids adding supply-chain surface to solve a dependency-security problem.
+Use a pure checkbox reducer and Node's native TTY APIs rather than adding a prompt dependency. One cleanup owner restores raw mode, cursor state, listeners, and signal handlers on every exit.
 
 ### Agent configuration
 
-Use each agent's public CLI rather than editing private config formats:
+Use each agent's public CLI except for one bounded OpenCode exception:
 
 - Claude Code: `claude mcp add --scope user --transport stdio ...`
 - Hermes: `hermes mcp add ...`, accepting its default of enabling every discovered tool, followed by `hermes mcp test ast`.
+- Codex and Copilot: structured get/list contracts and public add commands.
+- Gemini: connection-aware list and user-scoped add; an untrusted folder blocks setup without writes.
+- OpenCode: preserve routed JSON/JSONC and atomically update only `mcp.ast`, because its add command does not honor custom routing. Require version 1.18.18 or newer.
 
 The configured command is the current Node executable plus the absolute packaged `dist/index.js` entrypoint.
 
 Before any writes, setup checks every selected agent for an existing `ast` MCP registration. A healthy registration of this server is idempotently preserved. A conflicting registration fails closed and must be resolved manually; setup does not remove agent configuration automatically.
 
 Skill destinations reuse the existing installer. Different local skill content also fails closed unless `--force-skill` is explicit.
+Claude and Hermes retain client-specific destinations. OpenCode, Codex, Gemini, and Copilot share `~/.agents/skills`; setup canonicalizes the nearest existing ancestor, writes a physical destination once, and reports every logical client binding.
 
 ### Failure model
 
 Setup is convergent and retry-safe, not transactionally atomic across independent agent CLIs. It performs global preflight before writes, installs skills as one preflighted operation, then configures missing MCP registrations. If an external CLI fails mid-run, the result reports completed steps and a retry preserves completed work.
+
+Machine output is one stable versioned JSON value. Command time and output are bounded. Provider output is never copied into public diagnostics; a correlation ID ties bounded failures to the setup result. Rollback reverts adapters, checkbox control, and planning code while retaining valid user registrations and skill files. Mixed-version rollout fails closed on unknown contracts.
 
 ## Alternatives considered
 

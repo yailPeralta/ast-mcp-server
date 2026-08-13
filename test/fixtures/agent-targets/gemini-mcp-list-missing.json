@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "agent": "gemini",
+  "operation": "mcp-list-missing",
+  "version": "0.39.1",
+  "command": ["gemini", "mcp", "list"],
+  "cwd": "<WORKING_DIRECTORY>",
+  "exitCode": 0,
+  "stdout": "No MCP servers configured.\n",
+  "stderr": "",
+  "sha256": "ca9b4fec8d2dadae4df3d9a66cca158c8aeae6aa658c28f96050efb4e7a33c32"
+}

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 import process from "node:process";
-import { createInterface } from "node:readline/promises";
 
 import { ZodError } from "zod";
 import { BatchExecutionError, parseBatchDocument, runBatchDocument } from "./batch/runner.js";
@@ -23,7 +22,9 @@ import {
 import {
   parseAgentsArgument,
   promptForAgentSelection,
+  resolveAgentSelection,
   type AgentId,
+  type AgentSelectionRequest,
 } from "./services/setup-wizard.js";
 
 interface CliFailure {
@@ -195,13 +196,13 @@ function parseInstallSkillArgs(args: string[]): InstallSkillArgs {
 }
 
 interface SetupArgs {
-  agents?: AgentId[];
+  agents?: AgentSelectionRequest;
   yes: boolean;
   forceSkill: boolean;
 }
 
 function parseSetupArgs(args: string[]): SetupArgs {
-  let agents: AgentId[] | undefined;
+  let agents: AgentSelectionRequest | undefined;
   let yes = false;
   let forceSkill = false;
 
@@ -341,8 +342,8 @@ export async function runCli(args: string[]): Promise<unknown> {
     const options = parseSetupArgs(commandArgs);
     try {
       const detections = await detectInstalledAgents();
-      let agents = options.agents;
-      if (agents === undefined) {
+      let agents: AgentId[];
+      if (options.agents === undefined) {
         if (process.stdin.isTTY !== true || process.stderr.isTTY !== true) {
           throw new CliError(
             "Interactive setup requires a TTY. Use --agents claude,hermes --yes for automation.",
@@ -351,18 +352,15 @@ export async function runCli(args: string[]): Promise<unknown> {
             command,
           );
         }
-        const prompt = createInterface({ input: process.stdin, output: process.stderr });
-        try {
-          agents = await promptForAgentSelection(detections, (question) =>
-            prompt.question(question),
-          );
-        } finally {
-          prompt.close();
-        }
+        agents = await promptForAgentSelection(detections, {
+          input: process.stdin,
+          output: process.stderr,
+          signals: process,
+        });
         if (agents.length === 0) {
           return { status: "cancelled", command: "setup", agents: [] };
         }
-      }
+      } else agents = resolveAgentSelection(options.agents, detections);
 
       const executablePath = process.argv[1];
       if (!executablePath) {

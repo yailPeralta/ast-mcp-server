@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "agent": "copilot",
+  "operation": "mcp-list-missing",
+  "version": "0.0.356",
+  "command": ["copilot", "mcp", "list", "--json"],
+  "cwd": "<WORKING_DIRECTORY>",
+  "exitCode": 0,
+  "stdout": "{\"servers\":[]}\n",
+  "stderr": "",
+  "sha256": "c5aaffc369be9c12de2020570c9fc0ae577bd1d6a072c8c3962423d242988e1c"
+}

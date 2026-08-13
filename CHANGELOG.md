@@ -11,6 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Promotion preflight now validates raw npm registry metadata exactly once, compares live integrity with the verified artifact before and after mutation, and classifies the normalized readback without reinterpreting its field schema.
 - Added a composed regression covering eligible, already-promoted, and integrity-drift promotion readbacks.
 
+### Added
+
+- Expanded convergent setup to Claude Code, Hermes, OpenCode, Codex CLI, Gemini CLI, and GitHub Copilot CLI with fail-closed versioned contracts.
+- Added native checkbox selection, shared `.agents/skills` planning, routed JSONC-safe OpenCode configuration, bounded correlated diagnostics, and fixture admission gates.
+
 ## [0.7.1] — published to `next`, verified, not promoted (2026-08-12)
 
 ### Fixed

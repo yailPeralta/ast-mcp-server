@@ -134,7 +134,7 @@ From a source checkout, use the Yarn script; it builds first and then opens the 
 yarn setup
 ```
 
-The wizard detects Claude Code and Hermes from `PATH`, shows their executable and version, selects every detected agent by default, and lets you deselect agents before confirmation. For each selected agent it:
+The wizard supports exactly six CLI clients in this order: Claude Code, Hermes, OpenCode, Codex CLI, Gemini CLI, and GitHub Copilot CLI. Cursor, Windsurf, Cline, and other editor-integrated clients are intentionally excluded. Compatible detected clients start checked; unavailable or incompatible clients are disabled with a reason. Use Up/Down to move, Space to toggle, Enter to submit, or Escape/Ctrl-C to cancel.
 
 1. preflights any existing `ast` MCP registration;
 2. installs the bundled `structural-code-editing` skill;
@@ -147,10 +147,14 @@ For automation, make the target set and confirmation explicit:
 
 ```bash
 ast-tool setup --agents all --yes
-ast-tool setup --agents claude --yes
+ast-tool setup --agents claude,codex --yes
 ```
 
 From a source checkout, replace `ast-tool` with `yarn setup` in those commands.
+
+`--agents all` is resolved only after detection and means every detected compatible client. If any detected client has unknown or incompatible output, setup fails before writes. Explicit IDs are strict and reject unavailable clients. Non-interactive setup requires both `--agents` and `--yes`.
+
+OpenCode 1.18.18 or newer is required. Because `opencode mcp add` ignores custom config routing, setup updates only `mcp.ast` in `OPENCODE_CONFIG`, then `OPENCODE_CONFIG_DIR/opencode.json`, then `~/.config/opencode/opencode.json`. JSONC comments, unrelated keys, and file mode are preserved; verification reuses the same environment. Gemini setup may require trusting the current folder before registration. Diagnostics use a correlation ID and never include command arguments, environment, paths, or raw provider output.
 
 ## Install the agent skill
 
@@ -169,10 +173,11 @@ ast-tool install-skill hermes
 
 The default is user scope. It writes to Claude Code's personal skill directory and to the active `HERMES_HOME`:
 
-| Target      | Destination                                                                                                |
-| ----------- | ---------------------------------------------------------------------------------------------------------- |
-| Claude Code | `$CLAUDE_CONFIG_DIR/skills/structural-code-editing/SKILL.md`, or `~/.claude/skills/...` by default         |
-| Hermes      | `$HERMES_HOME/skills/software-development/structural-code-editing/SKILL.md`, or `~/.hermes/...` by default |
+| Target                           | Destination                                                                                                |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Claude Code                      | `$CLAUDE_CONFIG_DIR/skills/structural-code-editing/SKILL.md`, or `~/.claude/skills/...` by default         |
+| Hermes                           | `$HERMES_HOME/skills/software-development/structural-code-editing/SKILL.md`, or `~/.hermes/...` by default |
+| OpenCode, Codex, Gemini, Copilot | `~/.agents/skills/structural-code-editing/SKILL.md` (one physical write, four logical outcomes)            |
 
 To commit the skill into one project for Claude Code, use project scope:
 

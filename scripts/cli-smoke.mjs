@@ -19,6 +19,8 @@ const hermesHome = path.join(fixtureRoot, "hermes");
 const fakeBin = path.join(fixtureRoot, "bin");
 const fakeClaudeState = path.join(fixtureRoot, "fake-claude-state.json");
 const fakeHermesState = path.join(fixtureRoot, "fake-hermes-state.json");
+const sharedAgentsHome = path.join(fixtureRoot, "home");
+const openCodeConfig = path.join(fixtureRoot, "opencode.json");
 const environment = {
   ...process.env,
   PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
@@ -27,6 +29,12 @@ const environment = {
   HERMES_HOME: hermesHome,
   FAKE_CLAUDE_STATE: fakeClaudeState,
   FAKE_HERMES_STATE: fakeHermesState,
+  FAKE_OPENCODE_STATE: path.join(fixtureRoot, "fake-opencode-state.json"),
+  FAKE_CODEX_STATE: path.join(fixtureRoot, "fake-codex-state.json"),
+  FAKE_GEMINI_STATE: path.join(fixtureRoot, "fake-gemini-state.json"),
+  FAKE_COPILOT_STATE: path.join(fixtureRoot, "fake-copilot-state.json"),
+  HOME: sharedAgentsHome,
+  OPENCODE_CONFIG: openCodeConfig,
 };
 
 async function invoke(args) {
@@ -140,7 +148,7 @@ async function installFakeAgents() {
   await mkdir(fakeBin, { recursive: true });
   await writeFile(path.join(fakeBin, "package.json"), '{"type":"module"}\n', "utf8");
   const fixture = path.join(repositoryRoot, "scripts", "fixtures", "fake-agent.mjs");
-  for (const agent of ["claude", "hermes"]) {
+  for (const agent of ["claude", "hermes", "opencode", "codex", "gemini", "copilot"]) {
     const executable = path.join(fakeBin, agent);
     await copyFile(fixture, executable);
     await chmod(executable, 0o755);
@@ -425,8 +433,11 @@ try {
 
   const agentSetup = await invoke(["setup", "--agents", "all", "--yes"]);
   if (
-    agentSetup.agents?.length !== 2 ||
-    !agentSetup.agents.every((agent) => agent.mcp === "configured" && agent.skill === "unchanged")
+    agentSetup.agents?.length !== 6 ||
+    !agentSetup.agents.every(
+      (agent) =>
+        agent.mcp === "configured" && (agent.skill === "unchanged" || agent.skill === "installed"),
+    )
   ) {
     throw new Error(`Unexpected agent setup output: ${JSON.stringify(agentSetup)}`);
   }
@@ -437,6 +448,11 @@ try {
     )
   ) {
     throw new Error(`Agent setup was not idempotent: ${JSON.stringify(agentSetupReplay)}`);
+  }
+  if (agentSetup.version !== 1 || !Array.isArray(agentSetup.physical_writes)) {
+    throw new Error(
+      `Agent setup output is not versioned and stable: ${JSON.stringify(agentSetup)}`,
+    );
   }
 
   const claudeProject = path.join(fixtureRoot, "claude-project");

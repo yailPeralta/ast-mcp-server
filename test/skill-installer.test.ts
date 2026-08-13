@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -161,5 +161,40 @@ describe("skill installer", () => {
         homeDirectory: root,
       }),
     ).rejects.toThrow(/project scope.*Claude Code/i);
+  });
+
+  it("writes the shared agents destination once and reports four logical outcomes", async () => {
+    const root = await temporaryDirectory();
+    const result = await installBundledSkill({
+      target: ["opencode", "codex", "gemini", "copilot"],
+      scope: "user",
+      homeDirectory: root,
+    });
+
+    expect(result.physicalWrites).toHaveLength(1);
+    expect(result.installations.map((item) => item.target)).toEqual([
+      "opencode",
+      "codex",
+      "gemini",
+      "copilot",
+    ]);
+    expect(new Set(result.installations.map((item) => item.path)).size).toBe(1);
+    expect(result.installations.every((item) => item.status === "installed")).toBe(true);
+  });
+
+  it("deduplicates aliases by nearest-existing-ancestor realpath and fails on races", async () => {
+    const root = await temporaryDirectory();
+    const realHome = path.join(root, "real-home");
+    const aliasHome = path.join(root, "alias-home");
+    await mkdir(realHome);
+    await symlink(realHome, aliasHome, "dir");
+
+    const result = await installBundledSkill({
+      target: ["codex", "gemini"],
+      scope: "user",
+      homeDirectory: aliasHome,
+    });
+    expect(result.physicalWrites).toHaveLength(1);
+    expect(result.installations[0]?.path).toBe(result.installations[1]?.path);
   });
 });

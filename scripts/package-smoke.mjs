@@ -28,6 +28,8 @@ const hermesRoot = path.join(temporaryRoot, "hermes");
 const fakeBin = path.join(temporaryRoot, "bin");
 const fakeClaudeState = path.join(temporaryRoot, "fake-claude-state.json");
 const fakeHermesState = path.join(temporaryRoot, "fake-hermes-state.json");
+const sharedHome = path.join(temporaryRoot, "home");
+const openCodeConfig = path.join(temporaryRoot, "opencode.json");
 const globalPrefix = path.join(temporaryRoot, "global");
 const globalClaudeRoot = path.join(temporaryRoot, "global-claude");
 const globalHermesRoot = path.join(temporaryRoot, "global-hermes");
@@ -89,7 +91,7 @@ async function installFakeAgents() {
   await mkdir(fakeBin, { recursive: true });
   await writeFile(path.join(fakeBin, "package.json"), '{"type":"module"}\n', "utf8");
   const fixture = path.join(repositoryRoot, "scripts", "fixtures", "fake-agent.mjs");
-  for (const agent of ["claude", "hermes"]) {
+  for (const agent of ["claude", "hermes", "opencode", "codex", "gemini", "copilot"]) {
     const executable = path.join(fakeBin, agent);
     await copyFile(fixture, executable);
     await chmod(executable, 0o755);
@@ -244,10 +246,16 @@ try {
           PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
           FAKE_CLAUDE_STATE: fakeClaudeState,
           FAKE_HERMES_STATE: fakeHermesState,
+          FAKE_OPENCODE_STATE: path.join(temporaryRoot, "fake-opencode-state.json"),
+          FAKE_CODEX_STATE: path.join(temporaryRoot, "fake-codex-state.json"),
+          FAKE_GEMINI_STATE: path.join(temporaryRoot, "fake-gemini-state.json"),
+          FAKE_COPILOT_STATE: path.join(temporaryRoot, "fake-copilot-state.json"),
+          OPENCODE_CONFIG: openCodeConfig,
         }
       : {}),
     CLAUDE_CONFIG_DIR: claudeRoot,
     HERMES_HOME: hermesRoot,
+    HOME: sharedHome,
   };
   const setupArgs = setupSupported
     ? ["setup", "--agents", "all", "--yes"]
@@ -266,14 +274,14 @@ try {
   const firstItems = setupSupported ? firstResult.agents : firstResult.installations;
   const secondItems = setupSupported ? secondResult.agents : secondResult.installations;
   if (
-    firstItems?.length !== 2 ||
+    firstItems?.length !== (setupSupported ? 6 : 2) ||
     !firstItems.every((item) => item.skill === "installed" || item.status === "installed") ||
     (setupSupported && !firstItems.every((item) => item.mcp === "configured"))
   ) {
     throw new Error(`tarball setup did not configure both agents: ${first.stdout}`);
   }
   if (
-    secondItems?.length !== 2 ||
+    secondItems?.length !== (setupSupported ? 6 : 2) ||
     !secondItems.every((item) => item.skill === "unchanged" || item.status === "unchanged") ||
     (setupSupported && !secondItems.every((item) => item.mcp === "unchanged"))
   ) {
