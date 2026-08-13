@@ -49,6 +49,11 @@ export interface RegistryReadback {
   latest: string;
 }
 
+export interface PromotionReadbackState {
+  state: "eligible_to_promote" | "already_promoted";
+  promote: boolean;
+}
+
 export interface VerificationEvidence {
   schema_version: 1;
   status: "pass";
@@ -246,7 +251,19 @@ export function classifyPromotionReadback(
   metadata: unknown,
   expectedVersion: string,
   expectedSha: string,
+): PromotionReadbackState;
+export function validatePromotionRegistryState(
+  metadata: unknown,
+  expectedVersion: string,
+  expectedSha: string,
+  expectedIntegrity: string,
 ): {
-  state: "eligible_to_promote" | "already_promoted";
-  promote: boolean;
+  registry: RegistryReadback;
+  state: PromotionReadbackState;
 };
+export function validatePromotedRegistryState(
+  metadata: unknown,
+  expectedVersion: string,
+  expectedSha: string,
+  expectedIntegrity: string,
+): RegistryReadback;

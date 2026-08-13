@@ -1,6 +1,6 @@
 # Support policy
 
-This document defines the supported platform, runtime, persistence, and operational boundary for `ast-mcp-server` v0.7.1.
+This document defines the supported platform, runtime, persistence, and operational boundary for `ast-mcp-server` v0.7.2.
 
 ## Supported release target
 
@@ -35,7 +35,7 @@ Operation locks coordinate cooperating same-user processes. They do not stop edi
 
 The supported default is memory-only indexing. When `AST_SYMBOL_INDEX_PERSISTENCE` is absent, persistence remains disabled and no persistent cache is created.
 
-The only candidate-authorized opt-in persistence policy is `canary`; it is not enabled by default in v0.7.1:
+The only candidate-authorized opt-in persistence policy is `canary`; it is not enabled by default in v0.7.2:
 
 ```bash
 AST_SYMBOL_INDEX_PERSISTENCE=canary \

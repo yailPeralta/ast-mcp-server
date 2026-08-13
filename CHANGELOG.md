@@ -4,12 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.1] — release candidate (unreleased, 2026-08-12)
+## [0.7.2] — release candidate (unreleased, 2026-08-12)
+
+### Fixed
+
+- Promotion preflight now validates raw npm registry metadata exactly once, compares live integrity with the verified artifact before and after mutation, and classifies the normalized readback without reinterpreting its field schema.
+- Added a composed regression covering eligible, already-promoted, and integrity-drift promotion readbacks.
+
+## [0.7.1] — published to `next`, verified, not promoted (2026-08-12)
 
 ### Fixed
 
 - Public-registry verification now creates physical fake Claude Code and Hermes executables, preserving each agent identity after executable canonicalization.
 - Added a regression through the real agent detector so future consumer smokes cannot reintroduce identity-collapsing symlinks.
+
+### Release status
+
+- The package was published under the `next` dist-tag with valid npm provenance and passed its exact-SHA public-consumer verification. Promotion was rejected before mutation because the preflight passed a normalized registry record back into the raw-record validator. It was never promoted to `latest`, tagged, or released on GitHub; `0.7.2` supersedes it.
 
 ## [0.7.0] — published to `next`, not promoted (2026-08-12)
 

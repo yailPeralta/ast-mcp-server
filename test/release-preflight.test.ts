@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
-import { link, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, link, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,6 +30,8 @@ import {
   validatePreparedPackageRecord,
   validatePromotionAuthorization,
   validatePromotionGateRecord,
+  validatePromotedRegistryState,
+  validatePromotionRegistryState,
   validatePublishAuthorizationRecord,
   validateReleaseCredentialBoundary,
   validateRegistryReadback,
@@ -58,6 +60,7 @@ const evidenceHardlinkTarget = path.join(
   `ast-mcp-release-hardlink-target-${RELEASE_SHA}-${RELEASE_VERSION}.json`,
 );
 const npmConfigRoot = path.join(os.tmpdir(), `ast-mcp-release-npm-config-${RELEASE_SHA}`);
+const npmInvocationLog = path.join(npmConfigRoot, "npm-invocation.log");
 
 function registryReadback(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -135,6 +138,81 @@ async function writeEvidenceMembers() {
     Object.entries(members).map(([name, bytes]) => writeFile(path.join(evidenceRoot, name), bytes)),
   );
   return members;
+}
+
+async function writePromotionEvidence() {
+  const members = await writeEvidenceMembers();
+  const evidence = buildVerificationEvidence({
+    sha: RELEASE_SHA,
+    version: RELEASE_VERSION,
+    verification_run_id: VERIFICATION_RUN_ID,
+    integrity: INTEGRITY,
+    members,
+  });
+  const evidenceBytes = Buffer.from(`${JSON.stringify(evidence)}\n`);
+  const gate = buildPromotionGateRecord({
+    sha: RELEASE_SHA,
+    version: RELEASE_VERSION,
+    verification_run_id: VERIFICATION_RUN_ID,
+    artifact_id: 24680,
+    integrity: INTEGRITY,
+    verification_evidence: evidenceBytes,
+  });
+  await Promise.all([
+    writeFile(path.join(evidenceRoot, "verification.json"), evidenceBytes),
+    writeFile(path.join(evidenceRoot, PROMOTION_AUTHORIZATION_FILE), `${JSON.stringify(gate)}\n`),
+  ]);
+}
+
+async function runPromoteLatestWithPostIntegrityDrift() {
+  await writePromotionEvidence();
+  const userconfig = path.join(npmConfigRoot, ".npmrc");
+  const fakeBin = path.join(npmConfigRoot, "bin");
+  const fakeNpm = path.join(fakeBin, "npm");
+  const fetchPreload = path.join(npmConfigRoot, "fetch-preload.mjs");
+  await mkdir(fakeBin, { recursive: true });
+  await Promise.all([
+    writeFile(userconfig, EXACT_SETUP_NODE_NPMRC),
+    writeFile(fakeNpm, `#!/bin/sh\nprintf '%s\\n' "$@" > '${npmInvocationLog}'\n`),
+    writeFile(
+      fetchPreload,
+      `const before = ${JSON.stringify(registryReadback())};\n` +
+        `const after = ${JSON.stringify(
+          registryReadback({
+            dist: {
+              ...(registryReadback().dist as Record<string, unknown>),
+              integrity: `sha512-${Buffer.from("post-mutation-drift").toString("base64")}`,
+            },
+          }),
+        )};\n` +
+        `const responses = [before, { "dist-tags": before.dist_tags }, after, { "dist-tags": { next: "${RELEASE_VERSION}", latest: "${RELEASE_VERSION}" } }];\n` +
+        `let index = 0;\n` +
+        `globalThis.fetch = async () => new Response(JSON.stringify(responses[index++]), { status: 200, headers: { "content-type": "application/json" } });\n`,
+    ),
+  ]);
+  await chmod(fakeNpm, 0o755);
+
+  return execFileAsync(
+    process.execPath,
+    ["--import", fetchPreload, "scripts/release-preflight.mjs", "promote-latest"],
+    {
+      cwd: repositoryRoot,
+      env: {
+        ...cleanReleaseCliEnvironment(),
+        PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+        RELEASE_MODE: "promote-latest",
+        RELEASE_SHA,
+        RELEASE_VERSION,
+        VERIFICATION_RUN_ID,
+        GITHUB_SHA: RELEASE_SHA,
+        GITHUB_REF: "refs/heads/main",
+        RELEASE_ENVIRONMENT: "production",
+        NODE_AUTH_TOKEN: "test-token",
+        NPM_CONFIG_USERCONFIG: userconfig,
+        RUNNER_TEMP: npmConfigRoot,
+      },
+    },
+  );
 }
 
 function cleanReleaseCliEnvironment(): NodeJS.ProcessEnv {
@@ -1054,5 +1132,85 @@ describe("release preflight", () => {
         RELEASE_SHA,
       ),
     ).toThrow(/next dist-tag/u);
+  });
+
+  it("validates and classifies raw promotion registry state exactly once", () => {
+    const eligible = validatePromotionRegistryState(
+      registryReadback(),
+      RELEASE_VERSION,
+      RELEASE_SHA,
+      INTEGRITY,
+    );
+    expect(eligible.registry).toEqual(
+      validateRegistryReadback(registryReadback(), RELEASE_VERSION, RELEASE_SHA),
+    );
+    expect(eligible.state).toEqual({ state: "eligible_to_promote", promote: true });
+
+    for (const invalidIdentity of [
+      registryReadback({ name: "other-package" }),
+      registryReadback({ version: "0.7.1" }),
+      registryReadback({ gitHead: OTHER_SHA }),
+    ]) {
+      expect(() =>
+        validatePromotionRegistryState(invalidIdentity, RELEASE_VERSION, RELEASE_SHA, INTEGRITY),
+      ).toThrow(/package name or exact version|gitHead/u);
+    }
+
+    expect(
+      validatePromotionRegistryState(
+        registryReadback({ dist_tags: { next: RELEASE_VERSION, latest: RELEASE_VERSION } }),
+        RELEASE_VERSION,
+        RELEASE_SHA,
+        INTEGRITY,
+      ).state,
+    ).toEqual({ state: "already_promoted", promote: false });
+
+    expect(() =>
+      validatePromotionRegistryState(
+        registryReadback(),
+        RELEASE_VERSION,
+        RELEASE_SHA,
+        `sha512-${Buffer.from("different-integrity").toString("base64")}`,
+      ),
+    ).toThrow(/live registry integrity/u);
+  });
+
+  it("revalidates integrity and exact latest state after promotion", () => {
+    expect(
+      validatePromotedRegistryState(
+        registryReadback({ dist_tags: { next: RELEASE_VERSION, latest: RELEASE_VERSION } }),
+        RELEASE_VERSION,
+        RELEASE_SHA,
+        INTEGRITY,
+      ),
+    ).toEqual(
+      validateRegistryReadback(
+        registryReadback({ dist_tags: { next: RELEASE_VERSION, latest: RELEASE_VERSION } }),
+        RELEASE_VERSION,
+        RELEASE_SHA,
+      ),
+    );
+
+    expect(() =>
+      validatePromotedRegistryState(
+        registryReadback({ dist_tags: { next: RELEASE_VERSION, latest: RELEASE_VERSION } }),
+        RELEASE_VERSION,
+        RELEASE_SHA,
+        `sha512-${Buffer.from("different-integrity").toString("base64")}`,
+      ),
+    ).toThrow(/live registry integrity/u);
+
+    expect(() =>
+      validatePromotedRegistryState(registryReadback(), RELEASE_VERSION, RELEASE_SHA, INTEGRITY),
+    ).toThrow(/latest dist-tag/u);
+  });
+
+  it("fails the composed promotion after mutation when registry integrity drifts", async () => {
+    await expect(runPromoteLatestWithPostIntegrityDrift()).rejects.toMatchObject({
+      stderr: expect.stringMatching(/live registry integrity/u),
+    });
+    await expect(readFile(npmInvocationLog, "utf8")).resolves.toBe(
+      `dist-tag\nadd\nast-mcp-server@${RELEASE_VERSION}\nlatest\n--registry=${OFFICIAL_NPM_REGISTRY}\n`,
+    );
   });
 });

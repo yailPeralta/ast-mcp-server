@@ -2,15 +2,16 @@
 
 ## Supported versions
 
-Security fixes are provided for the latest published minor release and the current `main` development line. During the v0.7.1 release-candidate cycle, the support window is:
+Security fixes are provided for the latest published minor release and the current `main` development line. During the v0.7.2 release-candidate cycle, the support window is:
 
 | Version                            | Supported                          |
 | ---------------------------------- | ---------------------------------- |
-| `main` / v0.7.1 release candidates | Yes                                |
-| 0.6.x                              | Yes, until v0.7.1 becomes `latest` |
+| `main` / v0.7.2 release candidates | Yes                                |
+| 0.6.x                              | Yes, until v0.7.2 becomes `latest` |
+| 0.7.0 / 0.7.1                      | No, superseded `next` candidates   |
 | 0.5.x and earlier                  | No                                 |
 
-This project supports trusted single-user local stdio use. The current v0.7.1 target supports Linux x64 only when GNU coreutils `mv` provides `--update=none-fail`, with Node.js 22.5.0 or the current Node.js 24 line. Other Linux architectures, systems without that primitive, macOS and Windows are unverified. Remote, untrusted and multi-tenant use is outside the supported security boundary.
+This project supports trusted single-user local stdio use. The current v0.7.2 target supports Linux x64 only when GNU coreutils `mv` provides `--update=none-fail`, with Node.js 22.5.0 or the current Node.js 24 line. Other Linux architectures, systems without that primitive, macOS and Windows are unverified. Remote, untrusted and multi-tenant use is outside the supported security boundary.
 
 ## Reporting a vulnerability
 

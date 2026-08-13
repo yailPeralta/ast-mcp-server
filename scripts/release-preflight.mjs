@@ -932,12 +932,48 @@ function validateEnvironmentCredentialBoundary(phase) {
   return boundary;
 }
 
-export function classifyPromotionReadback(metadata, expectedVersion, expectedSha) {
-  const readback = validateRegistryReadback(metadata, expectedVersion, expectedSha);
+function classifyValidatedPromotionReadback(readback) {
   if (readback.latest === readback.version) {
     return { state: "already_promoted", promote: false };
   }
   return { state: "eligible_to_promote", promote: true };
+}
+
+export function classifyPromotionReadback(metadata, expectedVersion, expectedSha) {
+  return classifyValidatedPromotionReadback(
+    validateRegistryReadback(metadata, expectedVersion, expectedSha),
+  );
+}
+
+export function validatePromotionRegistryState(
+  metadata,
+  expectedVersion,
+  expectedSha,
+  expectedIntegrity,
+) {
+  const registry = validateRegistryReadback(metadata, expectedVersion, expectedSha);
+  if (registry.integrity !== expectedIntegrity) {
+    releaseFailure("live registry integrity no longer matches promotion authorization.");
+  }
+  return { registry, state: classifyValidatedPromotionReadback(registry) };
+}
+
+export function validatePromotedRegistryState(
+  metadata,
+  expectedVersion,
+  expectedSha,
+  expectedIntegrity,
+) {
+  const { registry, state } = validatePromotionRegistryState(
+    metadata,
+    expectedVersion,
+    expectedSha,
+    expectedIntegrity,
+  );
+  if (state.state !== "already_promoted") {
+    releaseFailure("latest dist-tag readback does not match after promotion.");
+  }
+  return registry;
 }
 
 async function assertExactEvidenceDirectory(evidenceRoot, expectedNames) {
@@ -1633,15 +1669,12 @@ async function runValidatePromotion(dispatch) {
     dispatch.version,
     token,
   );
-  const liveRegistry = validateRegistryReadback(
+  validatePromotionRegistryState(
     await fetchRegistryReadback(dispatch.version),
     dispatch.version,
     dispatch.sha,
+    registry.integrity,
   );
-  if (liveRegistry.integrity !== registry.integrity) {
-    releaseFailure("live registry integrity no longer matches verification evidence.");
-  }
-  classifyPromotionReadback(liveRegistry, dispatch.version, dispatch.sha);
   const gate = buildPromotionGateRecord({
     sha: dispatch.sha,
     version: dispatch.version,
@@ -1696,11 +1729,12 @@ async function runPromoteLatest(dispatch) {
     verification_evidence: evidenceBytes,
   });
   const before = await fetchRegistryReadback(dispatch.version);
-  const state = classifyPromotionReadback(before, dispatch.version, dispatch.sha);
-  const liveRegistry = validateRegistryReadback(before, dispatch.version, dispatch.sha);
-  if (liveRegistry.integrity !== registry.integrity) {
-    releaseFailure("live registry integrity no longer matches promotion authorization.");
-  }
+  const { state } = validatePromotionRegistryState(
+    before,
+    dispatch.version,
+    dispatch.sha,
+    registry.integrity,
+  );
   if (!state.promote) {
     return {
       status: "pass",
@@ -1726,14 +1760,12 @@ async function runPromoteLatest(dispatch) {
       }),
     },
   );
-  const after = validateRegistryReadback(
+  validatePromotedRegistryState(
     await fetchRegistryReadback(dispatch.version),
     dispatch.version,
     dispatch.sha,
+    registry.integrity,
   );
-  if (after.latest !== dispatch.version) {
-    releaseFailure("latest dist-tag readback does not match after promotion.");
-  }
   return {
     status: "pass",
     mode: dispatch.mode,
