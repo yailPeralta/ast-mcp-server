@@ -62,6 +62,6 @@ Revert adapters, checkbox controller, and destination planner together; restore 
 
 ## Success Criteria
 
-- [ ] All six CLI clients satisfy tested detection, selection, preflight, setup, verification, idempotency, and JSON scenarios.
-- [ ] OpenCode custom routing and 1.18.18 minimum fail closed without unintended writes.
-- [ ] Interactive Space toggling and terminal cleanup pass; editor clients remain unsupported.
+- [x] All six CLI clients satisfy tested detection, selection, preflight, setup, verification, idempotency, and JSON scenarios.
+- [x] OpenCode custom routing and 1.18.18 minimum fail closed without unintended writes.
+- [x] Interactive Space toggling and terminal cleanup pass; editor clients remain unsupported.

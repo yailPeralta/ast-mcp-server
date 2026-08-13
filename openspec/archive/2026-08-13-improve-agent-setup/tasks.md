@@ -7,14 +7,14 @@
 | Estimated lines         | 2,800–3,600          |
 | Budget                  | 800 lines            |
 | 800-line budget risk    | High                 |
-| Chained PRs recommended | Yes                  |
+| Chained PRs recommended | Yes (forecast)       |
 | Split                   | PR 1 → 2 → 3 → 4 → 5 |
-| Delivery strategy       | ask-on-risk          |
-| Chain strategy          | pending              |
+| Delivery strategy       | approved size exception |
+| Chain strategy          | not used             |
 
-Decision needed before apply: Yes
-Chained PRs recommended: Yes
-Chain strategy: pending
+Decision before apply: resolved by explicit approval of one `size:exception` delivery
+Chained PRs recommended: Yes (historical forecast)
+Chain strategy: not used
 400-line budget risk: High
 
 ### Suggested Work Units
