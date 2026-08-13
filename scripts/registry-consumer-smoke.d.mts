@@ -2,6 +2,8 @@ export interface RegistrySmokeToolClient {
   callTool(request: { name: string; arguments: Record<string, unknown> }): Promise<unknown>;
 }
 
+export function createFakeAgents(root: string): Promise<string>;
+
 export function preparePreviewApplyReplay(
   client: RegistrySmokeToolClient,
   name: string,

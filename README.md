@@ -82,7 +82,7 @@ The included batch benchmark records a 50% reduction in model round-trips and a 
 
 ## Supported environment and trust boundary
 
-The supported v0.7.0 target is Linux x64 with GNU coreutils `mv` supporting `--update=none-fail`, under Node.js 22.5.0 and the current Node.js 24 line. The production-readiness matrix covers both runtimes on that target; the Node 22.5 persistence canary requires `--experimental-sqlite`. Other Linux architectures or systems without the required GNU `mv`, macOS, and Windows are unverified until they pass equivalent filesystem, process, MCP/CLI/package, and mutation gates.
+The supported v0.7.1 target is Linux x64 with GNU coreutils `mv` supporting `--update=none-fail`, under Node.js 22.5.0 and the current Node.js 24 line. The production-readiness matrix covers both runtimes on that target; the Node 22.5 persistence canary requires `--experimental-sqlite`. Other Linux architectures or systems without the required GNU `mv`, macOS, and Windows are unverified until they pass equivalent filesystem, process, MCP/CLI/package, and mutation gates.
 
 This is a local stdio server. It runs with the invoking user's filesystem permissions, and clients may request any `project_root` that user can access. It does not provide HTTP authentication, sandboxing, tenant isolation, or a remote-service security boundary. Remote, untrusted, and multi-tenant operation is unsupported.
 

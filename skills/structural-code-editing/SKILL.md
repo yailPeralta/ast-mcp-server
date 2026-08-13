@@ -40,7 +40,7 @@ El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reempl
 
 ## Runtime, soporte y errores
 
-El paquete requiere Node.js `>=22.5.0`. El target verificado para v0.7.0 es Linux x64 con Node.js 22.5.0 o la línea actual de Node.js 24 y el `mv` de GNU coreutils requerido por la publicación atómica de evidencia. Otras arquitecturas Linux, sistemas sin ese primitivo, macOS y Windows están sin verificar.
+El paquete requiere Node.js `>=22.5.0`. El target verificado para v0.7.1 es Linux x64 con Node.js 22.5.0 o la línea actual de Node.js 24 y el `mv` de GNU coreutils requerido por la publicación atómica de evidencia. Otras arquitecturas Linux, sistemas sin ese primitivo, macOS y Windows están sin verificar.
 
 El transporte soportado es stdio local bajo los permisos filesystem del usuario que invoca el proceso. No asumir autenticación HTTP, sandbox, aislamiento entre tenants ni una frontera segura para clientes remotos o no confiables.
 

@@ -12,7 +12,6 @@ import {
   readFile,
   readdir,
   rm,
-  symlink,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -310,15 +309,15 @@ async function createFixture(root) {
   );
 }
 
-async function createFakeAgents(root) {
+export async function createFakeAgents(root) {
   const binRoot = path.join(root, "fake-bin");
   await mkdir(binRoot, { recursive: true });
   const fakeAgentSource = path.join(repositoryRoot, "scripts", "fixtures", "fake-agent.mjs");
-  const fakeAgent = path.join(binRoot, "fake-agent.mjs");
-  await copyFile(fakeAgentSource, fakeAgent);
-  await chmod(fakeAgent, 0o755);
+  await writeFile(path.join(binRoot, "package.json"), '{"type":"module"}\n', "utf8");
   for (const name of ["claude", "hermes"]) {
-    await symlink(fakeAgent, path.join(binRoot, name));
+    const executable = path.join(binRoot, name);
+    await copyFile(fakeAgentSource, executable);
+    await chmod(executable, 0o755);
   }
   return binRoot;
 }

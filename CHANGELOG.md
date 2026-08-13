@@ -4,7 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0] — release candidate (unreleased, 2026-08-11)
+## [0.7.1] — release candidate (unreleased, 2026-08-12)
+
+### Fixed
+
+- Public-registry verification now creates physical fake Claude Code and Hermes executables, preserving each agent identity after executable canonicalization.
+- Added a regression through the real agent detector so future consumer smokes cannot reintroduce identity-collapsing symlinks.
+
+## [0.7.0] — published to `next`, not promoted (2026-08-12)
 
 ### Added
 
@@ -26,6 +33,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Workflow actions, permissions, inputs, conditions, commands, environments, and credential placement are checked against a closed immutable policy.
 - Package publication binds exact tarball bytes and packed `gitHead` to the authorized SHA; consumer verification independently proves preview/apply/replay postimages and no-write failure paths.
 - Public MCP and stderr errors are bounded and sanitized against source, path, stack, environment, and credential disclosure.
+
+### Release status
+
+- The package was published under the `next` dist-tag with valid npm provenance, but its deterministic public-consumer verification failed because the verifier canonicalized both fake agent symlinks to one fixture identity. The package was never promoted to `latest`, tagged, or released on GitHub; `0.7.1` supersedes it.
 
 ## [0.6.0] - 2026-08-05
 

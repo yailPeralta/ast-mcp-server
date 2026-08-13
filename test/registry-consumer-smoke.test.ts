@@ -1,11 +1,15 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import { createTwoFilesPatch } from "diff";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { preparePreviewApplyReplay } from "../scripts/registry-consumer-smoke.mjs";
+import {
+  createFakeAgents,
+  preparePreviewApplyReplay,
+} from "../scripts/registry-consumer-smoke.mjs";
+import { detectInstalledAgents } from "../src/services/agent-setup.js";
 
 const OPERATION_ID = "12345678-1234-4123-8123-123456789abc";
 const PLAN_HASH = "a".repeat(64);
@@ -106,6 +110,84 @@ describe("registry consumer mutation evidence", () => {
     await Promise.all(
       temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
     );
+  });
+
+  it("reproduces symlink identity collapse and preserves physical copy identities", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "ast-mcp-registry-agent-test-"));
+    temporaryRoots.push(root);
+    const symlinkRoot = path.join(root, "symlinked");
+    const symlinkBin = path.join(symlinkRoot, "fake-bin");
+    const fakeAgentSource = path.resolve(process.cwd(), "scripts", "fixtures", "fake-agent.mjs");
+    const symlinkTarget = path.join(symlinkBin, "fake-agent.mjs");
+    await mkdir(symlinkBin, { recursive: true });
+    await copyFile(fakeAgentSource, symlinkTarget);
+    await chmod(symlinkTarget, 0o755);
+    await Promise.all(
+      ["claude", "hermes"].map((name) => symlink(symlinkTarget, path.join(symlinkBin, name))),
+    );
+
+    const symlinkDetections = await detectInstalledAgents({
+      environment: {
+        ...process.env,
+        PATH: `${symlinkBin}${path.delimiter}${process.env.PATH ?? ""}`,
+        FAKE_CLAUDE_STATE: path.join(symlinkRoot, "claude-state.json"),
+        FAKE_HERMES_STATE: path.join(symlinkRoot, "hermes-state.json"),
+      },
+    });
+    expect(
+      symlinkDetections.map(({ id, installed, executable, version }) => ({
+        id,
+        installed,
+        executable: executable === undefined ? undefined : path.basename(executable),
+        version,
+      })),
+    ).toEqual([
+      {
+        id: "claude",
+        installed: true,
+        executable: "fake-agent.mjs",
+        version: "Hermes Agent v0.17.0",
+      },
+      {
+        id: "hermes",
+        installed: true,
+        executable: "fake-agent.mjs",
+        version: "Hermes Agent v0.17.0",
+      },
+    ]);
+
+    const copyRoot = path.join(root, "copied");
+    const copyBin = await createFakeAgents(copyRoot);
+    const copyDetections = await detectInstalledAgents({
+      environment: {
+        ...process.env,
+        PATH: `${copyBin}${path.delimiter}${process.env.PATH ?? ""}`,
+        FAKE_CLAUDE_STATE: path.join(copyRoot, "claude-state.json"),
+        FAKE_HERMES_STATE: path.join(copyRoot, "hermes-state.json"),
+      },
+    });
+
+    expect(
+      copyDetections.map(({ id, installed, executable, version }) => ({
+        id,
+        installed,
+        executable: executable === undefined ? undefined : path.basename(executable),
+        version,
+      })),
+    ).toEqual([
+      {
+        id: "claude",
+        installed: true,
+        executable: "claude",
+        version: "2.1.201 (Claude Code)",
+      },
+      {
+        id: "hermes",
+        installed: true,
+        executable: "hermes",
+        version: "Hermes Agent v0.17.0",
+      },
+    ]);
   });
 
   it.each(
