@@ -29,10 +29,12 @@ const {
 
 const candidateTree = "a".repeat(40);
 
-function withoutGitIndexFile(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
-  const environment = { ...process.env, ...overrides };
-  delete environment.GIT_INDEX_FILE;
-  return environment;
+function withoutAmbientGitControls(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const environment = { ...process.env };
+  for (const key of Object.keys(environment)) {
+    if (key.startsWith("GIT_")) delete environment[key];
+  }
+  return { ...environment, ...overrides };
 }
 
 async function readPidWhenReady(pidFile: string, timeoutMs: number): Promise<number> {
@@ -213,7 +215,7 @@ describe("release candidate matrix", () => {
         ],
         {
           cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
-          env: withoutGitIndexFile({
+          env: withoutAmbientGitControls({
             AST_NODE_22_BIN: process.execPath,
             AST_NODE_24_BIN: process.execPath,
             PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
@@ -252,7 +254,7 @@ describe("release candidate matrix", () => {
         ],
         {
           cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
-          env: withoutGitIndexFile({
+          env: withoutAmbientGitControls({
             AST_NODE_22_BIN: process.execPath,
             AST_NODE_24_BIN: process.execPath,
             GIT_DIR: "/tmp/forged-git-dir",
@@ -275,6 +277,7 @@ describe("release candidate matrix", () => {
       GIT_INDEX_FILE: "/tmp/foreign-index",
       HOME: "/tmp/home",
       TMPDIR: "/tmp/runtime",
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "1",
       YARN_ENABLE_SCRIPTS: "false",
       NPM_TOKEN: "must-not-leak",
       HTTPS_PROXY: "http://ambient.invalid",
@@ -286,6 +289,7 @@ describe("release candidate matrix", () => {
       TMPDIR: "/tmp/runtime",
     });
     expect(node22.PATH).toBe("/opt/node22/bin:/usr/bin:/bin");
+    expect(node22).toHaveProperty("COREPACK_ENABLE_DOWNLOAD_PROMPT", "0");
     expect(node22).not.toHaveProperty("GIT_INDEX_FILE");
     expect(node22).not.toHaveProperty("YARN_ENABLE_SCRIPTS");
     expect(node22).not.toHaveProperty("NPM_TOKEN");
@@ -307,6 +311,7 @@ describe("release candidate matrix", () => {
       PATH: "/opt/node24/bin:/usr/bin",
       NODE_OPTIONS: "--inspect",
       HOME: "/ambient/home",
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "1",
       YARN_NPM_AUTH_TOKEN: "must-not-leak",
       COREPACK_HOME: "/ambient/corepack",
       NPM_TOKEN: "must-not-leak",
@@ -323,6 +328,7 @@ describe("release candidate matrix", () => {
       createCommandEnvironment(runtimeEnvironment, "install", closedPackageManagerEnvironment),
     ).toEqual({
       CI: "1",
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0",
       HOME: "/private/home",
       LANG: "C.UTF-8",
       LC_ALL: "C.UTF-8",
@@ -353,6 +359,7 @@ describe("release candidate matrix", () => {
     );
     expect(privateEnvironment).toEqual({
       CI: "1",
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0",
       HOME: "/private/home",
       LANG: "C.UTF-8",
       LC_ALL: "C.UTF-8",
@@ -634,7 +641,12 @@ describe("release candidate matrix", () => {
               const stat = await readFile(`/proc/${grandchildPid}/stat`, "utf8");
               if (stat.split(" ")[2] === "Z") return;
             } catch (error) {
-              if (error && typeof error === "object" && "code" in error && error.code === "ENOENT")
+              if (
+                error &&
+                typeof error === "object" &&
+                "code" in error &&
+                (error.code === "ENOENT" || error.code === "ESRCH")
+              )
                 return;
               throw error;
             }
@@ -732,7 +744,7 @@ describe("release candidate matrix", () => {
         ],
         {
           cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
-          env: withoutGitIndexFile({
+          env: withoutAmbientGitControls({
             AST_NODE_22_BIN: process.execPath,
             AST_NODE_24_BIN: process.execPath,
           }),

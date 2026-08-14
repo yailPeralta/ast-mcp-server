@@ -2,16 +2,16 @@
 
 ## Supported versions
 
-Security fixes are provided for the latest published minor release and the current `main` development line. The support window is:
+Security fixes are provided for the exact version currently identified by the npm registry's `latest` dist-tag and for the current `main` development line. The support window is registry-authoritative:
 
-| Version               | Supported                        |
-| --------------------- | -------------------------------- |
-| `main` / `Unreleased` | Yes                              |
-| 0.7.2                 | Yes, current `latest`            |
-| 0.7.0 / 0.7.1         | No, superseded `next` candidates |
-| 0.6.x and earlier     | No                               |
+| Release state                               | Supported |
+| ------------------------------------------- | --------- |
+| `main` / `Unreleased`                       | Yes       |
+| Exact npm version currently tagged `latest` | Yes       |
+| Earlier npm versions                        | No        |
+| Unpublished release candidates              | No        |
 
-This project supports trusted single-user local stdio use; the supported operating-system and architecture boundary remains Linux x64 only. The package engine floor is Node.js `>=22.5.0`, and published v0.7.2 evidence covers Linux x64 under exact Node.js 22.5.0 and the current Node.js 24 line. The `Unreleased` managed setup-file implementation is freshly verified only on Node.js 24 and additionally requires GNU coreutils 9.7 `mv --update=none-fail --exchange --no-copy --no-target-directory`, GNU coreutils `ln -L -T`, and procfs descriptor-relative paths at `/proc/self/fd` with `O_DIRECTORY`/`O_NOFOLLOW`. Current-source managed setup on Node.js 22.5.0 is unverified. Other Linux architectures and systems without those primitives are unverified, as are macOS and Windows. Remote, untrusted, and multi-tenant use is outside the supported security boundary.
+This project supports trusted single-user local stdio use; the supported operating-system and architecture boundary remains Linux x64 only. The package engine floor is Node.js `>=22.5.0`, and the v0.8.0 release matrix covers Linux x64 under exact Node.js 22.5.0 and the current Node.js 24 line, including managed setup-file publication. That mutation requires GNU coreutils 9.7 `mv --update=none-fail --exchange --no-copy --no-target-directory`, GNU coreutils `ln -L -T`, and procfs descriptor-relative paths at `/proc/self/fd` with `O_DIRECTORY`/`O_NOFOLLOW`. Other Linux architectures and systems without those primitives are unverified, as are macOS and Windows. Remote, untrusted, and multi-tenant use is outside the supported security boundary.
 
 ## Reporting a vulnerability
 

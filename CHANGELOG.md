@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.8.0] — release candidate (unreleased, 2026-08-14)
+
 ### Fixed
 
 - OpenCode effective-config discovery and verification now run against disposable routed copies because the client normalizes both configured files even for diagnostic commands; the real planned destination remains snapshot-protected.
@@ -21,6 +23,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `install-skill` uses the same official-byte manifest but remains skill-only; explicit force never bypasses guidance ownership, route, or race checks.
 - Managed file writes hold staged and preimage inodes through publication, use no-clobber descriptor links for creation and atomic exchange with exact-pair rollback for replacement, reject same-inode content or mode races before cleanup, then reauthenticate unchanged/completed postimages before later asset or MCP writes.
 
+### Release status
+
+- This version is bound to exact-SHA CI and the repository's staged `next` publication, public-registry verification, `latest` promotion, annotated-tag, and hosted-release sequence. npm registry and GitHub readbacks remain authoritative for those external transitions.
+
 ## [0.7.2] — published to `latest` and `next`, registry verified (2026-08-13)
 
 ### Fixed
@@ -35,7 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release status
 
-- npm exposes the immutable published `0.7.2` bytes under both `latest` and `next`. The managed-guidance changes above are newer, unreleased development bytes and cannot be attributed to that package version.
+- npm exposes the immutable published `0.7.2` bytes under both `latest` and `next`. The `0.8.0` section above describes distinct release bytes and cannot be attributed to that package version.
 
 ## [0.7.1] — published to `next`, verified, not promoted (2026-08-12)
 

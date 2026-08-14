@@ -46,7 +46,7 @@ El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reempl
 
 ## Runtime, soporte y errores
 
-El paquete requiere Node.js `>=22.5.0`. La matriz publicada de v0.7.2 cubre Linux x64 con Node.js 22.5.0 y la línea actual de Node.js 24, pero la implementación `Unreleased` de archivos gestionados por setup tiene evidencia exact-tree fresca únicamente en Node.js 24. Esa mutación requiere además GNU coreutils 9.7 `mv` con `--update=none-fail`, `--exchange`, `--no-copy` y `--no-target-directory`, GNU coreutils `ln -L -T`, y procfs en `/proc/self/fd` con `O_DIRECTORY`/`O_NOFOLLOW`. El setup del source actual bajo Node.js 22.5.0, otras arquitecturas Linux, sistemas sin esos primitivos, macOS y Windows están sin verificar.
+El paquete requiere Node.js `>=22.5.0`. La matriz de release de v0.8.0 cubre Linux x64 con Node.js 22.5.0 y la línea actual de Node.js 24, incluida la publicación de archivos gestionados por setup. Esa mutación requiere además GNU coreutils 9.7 `mv` con `--update=none-fail`, `--exchange`, `--no-copy` y `--no-target-directory`, GNU coreutils `ln -L -T`, y procfs en `/proc/self/fd` con `O_DIRECTORY`/`O_NOFOLLOW`. Otras arquitecturas Linux, sistemas sin esos primitivos, macOS y Windows están sin verificar.
 
 El transporte soportado es stdio local bajo los permisos filesystem del usuario que invoca el proceso. No asumir autenticación HTTP, sandbox, aislamiento entre tenants ni una frontera segura para clientes remotos o no confiables.
 

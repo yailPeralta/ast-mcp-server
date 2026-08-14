@@ -133,6 +133,7 @@ export function createRuntimeEnvironment(runtimeId, nodeBinary, ambientEnvironme
   }
   return Object.freeze({
     CI: "1",
+    COREPACK_ENABLE_DOWNLOAD_PROMPT: "0",
     HOME: home,
     LANG: "C.UTF-8",
     LC_ALL: "C.UTF-8",
@@ -230,6 +231,7 @@ export function createPackageManagerEnvironment(
   }
   return Object.freeze({
     CI: "1",
+    COREPACK_ENABLE_DOWNLOAD_PROMPT: "0",
     HOME: privateHome,
     LANG: "C.UTF-8",
     LC_ALL: "C.UTF-8",
@@ -750,7 +752,7 @@ async function main() {
   const packageMetadata = JSON.parse(
     await readFile(path.join(repositoryRoot, "package.json"), "utf8"),
   );
-  if (packageMetadata.version !== "0.7.2") fail("package version must be exactly 0.7.2.");
+  if (packageMetadata.version !== "0.8.0") fail("package version must be exactly 0.8.0.");
   const identity = Object.freeze({
     head,
     head_tree: headTree,

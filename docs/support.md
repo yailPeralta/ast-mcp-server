@@ -1,19 +1,19 @@
 # Support policy
 
-This document defines the supported platform, runtime, persistence, and operational boundary for published `ast-mcp-server` v0.7.2 and the current `Unreleased` development line.
+This document defines the supported platform, runtime, persistence, and operational boundary for `ast-mcp-server` v0.8.0 and the current `Unreleased` development line.
 
 ## Supported release target
 
-| Environment                                                                   | Status      | Contract                                                                                                                                                    |
-| ----------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Linux x64 with required GNU coreutils and procfs, Node.js 22.5.0              | Partial     | Package engine floor and published-v0.7.2 matrix target. Current `Unreleased` managed setup-file mutation has no fresh exact-tree evidence on this runtime. |
-| Linux x64 with required GNU coreutils and procfs, current Node.js 24 line     | Supported   | Current-source repository, MCP/CLI/package, lifecycle, mutation, managed setup-file publication, and production-readiness gates.                            |
-| Other Linux architectures or systems without the required filesystem features | Unverified  | Not supported until equivalent architecture, mutation, and filesystem-publication gates pass.                                                               |
-| macOS                                                                         | Unverified  | Not supported until equivalent filesystem, process, package, mutation, and canary gates pass.                                                               |
-| Windows                                                                       | Unverified  | Not supported until equivalent filesystem, process, package, mutation, and canary gates pass.                                                               |
-| Remote, untrusted, or multi-tenant service use                                | Unsupported | No network authentication, sandbox, or tenant-isolation boundary is provided.                                                                               |
+| Environment                                                                   | Status      | Contract                                                                                      |
+| ----------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------- |
+| Linux x64 with required GNU coreutils and procfs, Node.js 22.5.0              | Supported   | v0.8.0 exact release matrix for MCP/CLI/package, lifecycle, mutation, and managed setup.      |
+| Linux x64 with required GNU coreutils and procfs, current Node.js 24 line     | Supported   | v0.8.0 exact release matrix for MCP/CLI/package, lifecycle, mutation, and managed setup.      |
+| Other Linux architectures or systems without the required filesystem features | Unverified  | Not supported until equivalent architecture, mutation, and filesystem-publication gates pass. |
+| macOS                                                                         | Unverified  | Not supported until equivalent filesystem, process, package, mutation, and canary gates pass. |
+| Windows                                                                       | Unverified  | Not supported until equivalent filesystem, process, package, mutation, and canary gates pass. |
+| Remote, untrusted, or multi-tenant service use                                | Unsupported | No network authentication, sandbox, or tenant-isolation boundary is provided.                 |
 
-The package engine floor is Node.js `>=22.5.0`; it is not a claim that every current-source capability was freshly exercised at that floor. Published v0.7.2 evidence covers exact Node.js 22.5.0 and the current Node.js 24 line on Linux. The newer managed setup-file implementation is currently verified only on Node.js 24, and a newer version satisfying the engine range is not automatically a verified release target.
+The package engine floor is Node.js `>=22.5.0`. The v0.8.0 release matrix exercises exact Node.js 22.5.0 and the current Node.js 24 line on Linux, including managed setup-file publication; a future version satisfying the engine range is not automatically a verified release target.
 
 The checked-evidence freezer requires GNU coreutils 9.7 `mv` with `--update=none-fail`, `--no-copy`, and `--no-target-directory`. Managed setup-file mutation additionally requires that same `mv` with `--exchange`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, `O_DIRECTORY`, and `O_NOFOLLOW`. It fails closed when any verified Linux primitive is unavailable. Equivalent publication, exchange, descriptor-link, and descriptor-relative mutation semantics have not been verified on other operating systems or architectures.
 
@@ -35,7 +35,7 @@ Operation locks coordinate cooperating same-user processes. They do not stop edi
 
 The supported default is memory-only indexing. When `AST_SYMBOL_INDEX_PERSISTENCE` is absent, persistence remains disabled and no persistent cache is created.
 
-The only candidate-authorized opt-in persistence policy is `canary`; it is not enabled by default in v0.7.2:
+The only candidate-authorized opt-in persistence policy is `canary`; it is not enabled by default in v0.8.0:
 
 ```bash
 AST_SYMBOL_INDEX_PERSISTENCE=canary \
@@ -49,7 +49,7 @@ The cache root must be explicit and absolute. Use a dedicated local directory wi
 
 ## Production-readiness acceptance
 
-The checked published-v0.7.2 Linux x64 matrix covers `ast-mcp-server` and `x-scraper` under Node.js 22.5.0 and Node.js 24. It predates the `Unreleased` managed setup-file implementation and does not authenticate those newer bytes on Node.js 22.5.0. MCP-PROD-404 is normative; its complete release gate requires all four reports to pass the following contract:
+The four retained Linux x64 production-readiness reports cover `ast-mcp-server` and `x-scraper` under Node.js 22.5.0 and Node.js 24 for package version 0.6.0, commit `2d0b21bbb80fae1acfca6a85d5891d87e68b59c1`, and tree `af931d49769fabdf06f623965a6cfe1f9afb8a81`. They are historical integration evidence only: they are not reattributed to v0.8.0 and do not establish managed setup-file publication for that release. The separate exact v0.8.0 release matrix validates the current repository under both runtime lines, including managed setup-file publication. MCP-PROD-404 remains normative for the retained four-report cohort; all four reports must pass the following contract:
 
 - zero semantic mismatches across disabled, cold, warm, restart, and rollback reads;
 - byte-identical real-repository status and worktree trees;
