@@ -39,6 +39,7 @@ import {
   validateSetupNodeNpmUserconfig,
   validateTrustedPublishingNpmVersion,
   validateVerificationEvidence,
+  waitForPromotedRegistryState,
 } from "../scripts/release-preflight.mjs";
 
 const RELEASE_SHA = "a".repeat(40);
@@ -164,30 +165,30 @@ async function writePromotionEvidence() {
   ]);
 }
 
-async function runPromoteLatestWithPostIntegrityDrift() {
+async function runPromoteLatestWithPostMutationReadbacks(
+  postMutationReadbacks: Array<Record<string, unknown>>,
+) {
   await writePromotionEvidence();
   const userconfig = path.join(npmConfigRoot, ".npmrc");
   const fakeBin = path.join(npmConfigRoot, "bin");
   const fakeNpm = path.join(fakeBin, "npm");
   const fetchPreload = path.join(npmConfigRoot, "fetch-preload.mjs");
+  const before = registryReadback();
+  const responses: Array<Record<string, unknown>> = [before, { "dist-tags": before.dist_tags }];
+  for (const readback of postMutationReadbacks) {
+    responses.push(readback, { "dist-tags": readback.dist_tags });
+  }
   await mkdir(fakeBin, { recursive: true });
   await Promise.all([
     writeFile(userconfig, EXACT_SETUP_NODE_NPMRC),
     writeFile(fakeNpm, `#!/bin/sh\nprintf '%s\\n' "$@" > '${npmInvocationLog}'\n`),
     writeFile(
       fetchPreload,
-      `const before = ${JSON.stringify(registryReadback())};\n` +
-        `const after = ${JSON.stringify(
-          registryReadback({
-            dist: {
-              ...(registryReadback().dist as Record<string, unknown>),
-              integrity: `sha512-${Buffer.from("post-mutation-drift").toString("base64")}`,
-            },
-          }),
-        )};\n` +
-        `const responses = [before, { "dist-tags": before.dist_tags }, after, { "dist-tags": { next: "${RELEASE_VERSION}", latest: "${RELEASE_VERSION}" } }];\n` +
+      `const responses = ${JSON.stringify(responses)};\n` +
         `let index = 0;\n` +
-        `globalThis.fetch = async () => new Response(JSON.stringify(responses[index++]), { status: 200, headers: { "content-type": "application/json" } });\n`,
+        `globalThis.fetch = async () => new Response(JSON.stringify(responses[index++]), { status: 200, headers: { "content-type": "application/json" } });\n` +
+        `const realSetTimeout = globalThis.setTimeout;\n` +
+        `globalThis.setTimeout = (callback, _delay, ...args) => realSetTimeout(callback, 0, ...args);\n`,
     ),
   ]);
   await chmod(fakeNpm, 0o755);
@@ -213,6 +214,17 @@ async function runPromoteLatestWithPostIntegrityDrift() {
       },
     },
   );
+}
+
+async function runPromoteLatestWithPostIntegrityDrift() {
+  return runPromoteLatestWithPostMutationReadbacks([
+    registryReadback({
+      dist: {
+        ...(registryReadback().dist as Record<string, unknown>),
+        integrity: `sha512-${Buffer.from("post-mutation-drift").toString("base64")}`,
+      },
+    }),
+  ]);
 }
 
 function cleanReleaseCliEnvironment(): NodeJS.ProcessEnv {
@@ -1210,6 +1222,75 @@ describe("release preflight", () => {
     expect(() =>
       validatePromotedRegistryState(registryReadback(), RELEASE_VERSION, RELEASE_SHA, INTEGRITY),
     ).toThrow(/latest dist-tag/u);
+  });
+
+  it("retries bounded stale latest readbacks while revalidating the full registry identity", async () => {
+    const readbacks = [
+      registryReadback(),
+      registryReadback(),
+      registryReadback({ dist_tags: { next: RELEASE_VERSION, latest: RELEASE_VERSION } }),
+    ];
+    const delays: number[] = [];
+    let reads = 0;
+
+    await expect(
+      waitForPromotedRegistryState({
+        readRegistry: async () => readbacks[reads++],
+        expectedVersion: RELEASE_VERSION,
+        expectedSha: RELEASE_SHA,
+        expectedIntegrity: INTEGRITY,
+        maxAttempts: 3,
+        delayMs: 17,
+        sleep: async (milliseconds: number) => {
+          delays.push(milliseconds);
+        },
+      }),
+    ).resolves.toEqual(validateRegistryReadback(readbacks[2], RELEASE_VERSION, RELEASE_SHA));
+    expect(reads).toBe(3);
+    expect(delays).toEqual([17, 17]);
+  });
+
+  it("fails closed after the bounded promotion readback budget is exhausted", async () => {
+    let reads = 0;
+    let delays = 0;
+
+    await expect(
+      waitForPromotedRegistryState({
+        readRegistry: async () => {
+          reads += 1;
+          return registryReadback();
+        },
+        expectedVersion: RELEASE_VERSION,
+        expectedSha: RELEASE_SHA,
+        expectedIntegrity: INTEGRITY,
+        maxAttempts: 3,
+        delayMs: 0,
+        sleep: async () => {
+          delays += 1;
+        },
+      }),
+    ).rejects.toThrow(/after 3 bounded promotion checks/u);
+    expect(reads).toBe(3);
+    expect(delays).toBe(2);
+  });
+
+  it("closes the composed promotion after a stale post-mutation dist-tag readback", async () => {
+    const result = await runPromoteLatestWithPostMutationReadbacks([
+      registryReadback(),
+      registryReadback({ dist_tags: { next: RELEASE_VERSION, latest: RELEASE_VERSION } }),
+    ]);
+
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: "pass",
+      mode: "promote-latest",
+      sha: RELEASE_SHA,
+      version: RELEASE_VERSION,
+      state: "promoted",
+      promote: true,
+    });
+    await expect(readFile(npmInvocationLog, "utf8")).resolves.toBe(
+      `dist-tag\nadd\nast-mcp-server@${RELEASE_VERSION}\nlatest\n--registry=${OFFICIAL_NPM_REGISTRY}\n`,
+    );
   });
 
   it("fails the composed promotion after mutation when registry integrity drifts", async () => {

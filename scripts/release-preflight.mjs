@@ -23,6 +23,8 @@ const MAX_PACK_FILES = 10_000;
 const MAX_TARBALL_BYTES = 50 * 1024 * 1024;
 const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 const NETWORK_TIMEOUT_MS = 20_000;
+const PROMOTION_READBACK_MAX_ATTEMPTS = 6;
+const PROMOTION_READBACK_DELAY_MS = 2_000;
 const API_VERSION = "2026-03-10";
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
 const STABLE_SEMVER_PATTERN = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u;
@@ -978,6 +980,45 @@ export function validatePromotedRegistryState(
   return registry;
 }
 
+export async function waitForPromotedRegistryState({
+  readRegistry,
+  expectedVersion,
+  expectedSha,
+  expectedIntegrity,
+  maxAttempts = PROMOTION_READBACK_MAX_ATTEMPTS,
+  delayMs = PROMOTION_READBACK_DELAY_MS,
+  sleep = (milliseconds) =>
+    new Promise((resolve) => {
+      globalThis.setTimeout(resolve, milliseconds);
+    }),
+}) {
+  if (
+    typeof readRegistry !== "function" ||
+    typeof sleep !== "function" ||
+    !Number.isSafeInteger(maxAttempts) ||
+    maxAttempts < 1 ||
+    maxAttempts > 20 ||
+    !Number.isSafeInteger(delayMs) ||
+    delayMs < 0 ||
+    delayMs > 30_000
+  ) {
+    releaseFailure("promotion readback retry configuration is invalid.");
+  }
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const { registry, state } = validatePromotionRegistryState(
+      await readRegistry(),
+      expectedVersion,
+      expectedSha,
+      expectedIntegrity,
+    );
+    if (state.state === "already_promoted") return registry;
+    if (attempt < maxAttempts) await sleep(delayMs);
+  }
+  releaseFailure(
+    `latest dist-tag readback does not match after ${maxAttempts} bounded promotion checks.`,
+  );
+}
+
 async function assertExactEvidenceDirectory(evidenceRoot, expectedNames) {
   const rootMetadata = await lstat(evidenceRoot);
   if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink()) {
@@ -1762,12 +1803,12 @@ async function runPromoteLatest(dispatch) {
       }),
     },
   );
-  validatePromotedRegistryState(
-    await fetchRegistryReadback(dispatch.version),
-    dispatch.version,
-    dispatch.sha,
-    registry.integrity,
-  );
+  await waitForPromotedRegistryState({
+    readRegistry: () => fetchRegistryReadback(dispatch.version),
+    expectedVersion: dispatch.version,
+    expectedSha: dispatch.sha,
+    expectedIntegrity: registry.integrity,
+  });
   return {
     status: "pass",
     mode: dispatch.mode,

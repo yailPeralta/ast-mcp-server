@@ -6,7 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.8.1] — release candidate (unreleased, 2026-08-14)
+### Fixed
+
+- Promotion now tolerates bounded npm dist-tag propagation lag while revalidating package version, `gitHead`, integrity, provenance, and the complete `next`/`latest` state on every readback.
+
+## [0.8.1] — published to `latest` and `next`, registry verified (2026-08-14)
 
 ### Fixed
 
@@ -14,7 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release status
 
-- This version is bound to exact-SHA CI and the repository's staged `next` publication, public-registry verification, `latest` promotion, annotated-tag, and hosted-release sequence. npm registry and GitHub readbacks remain authoritative for those external transitions.
+- npm published these immutable bytes under `next` with provenance and the expected Git commit. Public-consumer verification passed, `latest` and `next` both resolve to `0.8.1`, and the annotated `v0.8.1` tag plus GitHub Release resolve to the same release commit.
 
 ## [0.8.0] — published to `next`, verification failed, not promoted (2026-08-14)
 
@@ -35,7 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release status
 
-- npm published these immutable bytes under `next` with provenance and the expected Git commit. Public-consumer verification stopped during managed setup because the verification workflow had not prepared its required GNU coreutils 9.7 `mv`; the package was never promoted to `latest`, tagged, or released on GitHub. Version `0.8.1` is the patch candidate intended to supersede it after verified publication.
+- npm published these immutable bytes under `next` with provenance and the expected Git commit. Public-consumer verification stopped during managed setup because the verification workflow had not prepared its required GNU coreutils 9.7 `mv`; the package was never promoted to `latest`, tagged, or released on GitHub. Version `0.8.1` superseded it after verified publication.
 
 ## [0.7.2] — published to `latest`, registry verified (2026-08-13)
 
