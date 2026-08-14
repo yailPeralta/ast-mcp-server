@@ -1111,6 +1111,7 @@ function validateReleaseWorkflow(lines, jobs) {
       "verify-next",
       [
         "node scripts/release-preflight.mjs validate-environment",
+        "node scripts/ci-prepare-gnu-mv.mjs prepare",
         'env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" corepack enable',
         'env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build',
         'node scripts/registry-consumer-smoke.mjs --version "$RELEASE_VERSION" --expected-sha "$RELEASE_SHA" --registry https://registry.npmjs.org --metadata-output "$RELEASE_EVIDENCE_ROOT/registry-metadata.json" --audit-output "$RELEASE_EVIDENCE_ROOT/npm-audit-signatures.json" --output "$RELEASE_EVIDENCE_ROOT/registry-consumer.json"',
@@ -1171,6 +1172,7 @@ function validateReleaseWorkflow(lines, jobs) {
         "uses:actions/checkout",
         "uses:actions/setup-node",
         "run:node scripts/release-preflight.mjs validate-environment",
+        "run:node scripts/ci-prepare-gnu-mv.mjs prepare",
         'run:env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" corepack enable',
         'run:env -i HOME="$HOME" PATH="$PATH" CI=true RUNNER_TEMP="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" yarn install --immutable --mode=skip-build',
         'run:node scripts/registry-consumer-smoke.mjs --version "$RELEASE_VERSION" --expected-sha "$RELEASE_SHA" --registry https://registry.npmjs.org --metadata-output "$RELEASE_EVIDENCE_ROOT/registry-metadata.json" --audit-output "$RELEASE_EVIDENCE_ROOT/npm-audit-signatures.json" --output "$RELEASE_EVIDENCE_ROOT/registry-consumer.json"',

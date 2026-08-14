@@ -6,7 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.8.0] — release candidate (unreleased, 2026-08-14)
+## [0.8.1] — release candidate (unreleased, 2026-08-14)
+
+### Fixed
+
+- Public-registry verification now prepares the pinned GNU coreutils 9.7 `mv` primitive before running the managed-setup consumer smoke, and workflow policy rejects removal or reordering of that prerequisite.
+
+### Release status
+
+- This version is bound to exact-SHA CI and the repository's staged `next` publication, public-registry verification, `latest` promotion, annotated-tag, and hosted-release sequence. npm registry and GitHub readbacks remain authoritative for those external transitions.
+
+## [0.8.0] — published to `next`, verification failed, not promoted (2026-08-14)
 
 ### Fixed
 
@@ -25,9 +35,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release status
 
-- This version is bound to exact-SHA CI and the repository's staged `next` publication, public-registry verification, `latest` promotion, annotated-tag, and hosted-release sequence. npm registry and GitHub readbacks remain authoritative for those external transitions.
+- npm published these immutable bytes under `next` with provenance and the expected Git commit. Public-consumer verification stopped during managed setup because the verification workflow had not prepared its required GNU coreutils 9.7 `mv`; the package was never promoted to `latest`, tagged, or released on GitHub. Version `0.8.1` is the patch candidate intended to supersede it after verified publication.
 
-## [0.7.2] — published to `latest` and `next`, registry verified (2026-08-13)
+## [0.7.2] — published to `latest`, registry verified (2026-08-13)
 
 ### Fixed
 
@@ -41,7 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release status
 
-- npm exposes the immutable published `0.7.2` bytes under both `latest` and `next`. The `0.8.0` section above describes distinct release bytes and cannot be attributed to that package version.
+- npm promoted the immutable `0.7.2` bytes to `latest`. Later `next` assignments do not alter those bytes, and the `0.8.x` sections above describe distinct package versions that cannot be attributed to `0.7.2`.
 
 ## [0.7.1] — published to `next`, verified, not promoted (2026-08-12)
 

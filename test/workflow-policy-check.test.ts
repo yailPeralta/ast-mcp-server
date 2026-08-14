@@ -185,6 +185,18 @@ describe("workflow policy check", () => {
     expect(release).toBeTypeOf("string");
     if (typeof release !== "string") return;
 
+    const missingVerificationGnuMvPreparation = {
+      ...documents,
+      "release.yml": replaceRequired(
+        release,
+        "      - run: node scripts/ci-prepare-gnu-mv.mjs prepare\n",
+        "",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(missingVerificationGnuMvPreparation)).toThrow(
+      /release verify-next command chain/u,
+    );
+
     expect(release).toContain("  group: ${{ github.workflow }}\n");
     const versionSplitConcurrency = {
       ...documents,

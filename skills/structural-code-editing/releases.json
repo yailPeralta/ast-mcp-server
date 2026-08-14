@@ -3,7 +3,7 @@
   "algorithm": "sha256",
   "current": {
     "version": "4.2.0",
-    "sha256": "b072ccf68ebd50a825dc9fdbdaaf35cdbf7045ae5fb9a9d7a412dc7b702ee7a0"
+    "sha256": "43a07546fcc8417b5e937881e20d4bb87e57bba0bce1ae0c5bb58d75a6f75870"
   },
   "predecessors": [
     {
@@ -40,6 +40,11 @@
       "version": "4.1.0",
       "sha256": "6284fbeaf054947d20693d317604ceabf5a53d32e3c836855a321e5e26766e29",
       "npm_versions": ["0.7.2"]
+    },
+    {
+      "version": "4.2.0",
+      "sha256": "b072ccf68ebd50a825dc9fdbdaaf35cdbf7045ae5fb9a9d7a412dc7b702ee7a0",
+      "npm_versions": ["0.8.0"]
     }
   ]
 }
