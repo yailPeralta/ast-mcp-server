@@ -1,13 +1,25 @@
-import { randomUUID } from "node:crypto";
-import { link, mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { z } from "zod";
+import {
+  applyManagedFilePlan,
+  canonicalizeFuturePath,
+  captureManagedFileSnapshot,
+  createManagedFileApplyContext,
+  hashBytes,
+  verifyManagedFilePostimage,
+  type ManagedFileApplyContext,
+  type ManagedFilePlan,
+  type ManagedFileStatus,
+} from "./managed-file.js";
 
 const SKILL_NAME = "structural-code-editing";
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 export type SkillTarget = "claude" | "hermes" | "opencode" | "codex" | "gemini" | "copilot";
 export type SkillTargetSelection = SkillTarget | "all" | readonly SkillTarget[];
 export type SkillScope = "user" | "project";
-type InstallationStatus = "installed" | "unchanged" | "updated";
+export type InstallationStatus = ManagedFileStatus;
 
 interface SkillInstallerEnvironment {
   CLAUDE_CONFIG_DIR?: string;
@@ -17,6 +29,7 @@ export interface InstallBundledSkillOptions {
   target: SkillTargetSelection;
   scope: SkillScope;
   sourceSkillPath: string;
+  releaseManifestPath?: string;
   projectRoot?: string;
   force?: boolean;
   environment?: SkillInstallerEnvironment;
@@ -36,6 +49,37 @@ export interface SkillInstallationResult {
   installations: SkillInstallation[];
   physicalWrites: Array<{ path: string; status: InstallationStatus }>;
 }
+export interface BundledSkillAssets {
+  skillPath: string;
+  guidancePath: string;
+  releasesPath: string;
+}
+export interface SkillInstallationPlan {
+  installations: SkillInstallation[];
+  files: ManagedFilePlan[];
+}
+
+const ReleaseRecordSchema = z
+  .object({
+    version: z.string().min(1),
+    sha256: z.string().regex(SHA256_PATTERN),
+    npm_versions: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+const SkillReleaseManifestSchema = z
+  .object({
+    schema_version: z.literal(1),
+    algorithm: z.literal("sha256"),
+    current: z
+      .object({
+        version: z.string().min(1),
+        sha256: z.string().regex(SHA256_PATTERN),
+      })
+      .strict(),
+    predecessors: z.array(ReleaseRecordSchema),
+  })
+  .strict();
+type SkillReleaseManifest = z.infer<typeof SkillReleaseManifestSchema>;
 
 export class SkillConflictError extends Error {
   constructor(readonly destination: string) {
@@ -46,34 +90,34 @@ export class SkillConflictError extends Error {
   }
 }
 
-export async function resolveBundledSkillPath(executablePath: string): Promise<string> {
-  return path.resolve(
+export async function resolveBundledSkillAssets(
+  executablePath: string,
+): Promise<BundledSkillAssets> {
+  const root = path.resolve(
     path.dirname(await realpath(executablePath)),
     "..",
     "skills",
     SKILL_NAME,
-    "SKILL.md",
   );
+  const assets = {
+    skillPath: path.join(root, "SKILL.md"),
+    guidancePath: path.join(root, "guidance.md"),
+    releasesPath: path.join(root, "releases.json"),
+  };
+  for (const [label, filePath] of Object.entries(assets)) {
+    const info = await stat(filePath).catch(() => undefined);
+    if (!info?.isFile())
+      throw new Error(`Bundled ${label} is missing or not a regular file: ${filePath}`);
+  }
+  return assets;
+}
+
+export async function resolveBundledSkillPath(executablePath: string): Promise<string> {
+  return (await resolveBundledSkillAssets(executablePath)).skillPath;
 }
 
 function configured(value: string | undefined, fallback: string, cwd: string): string {
   return path.resolve(cwd, value ?? fallback);
-}
-
-async function canonicalizeFuturePath(target: string): Promise<string> {
-  const suffix: string[] = [];
-  let cursor = path.resolve(target);
-  for (;;) {
-    try {
-      return path.join(await realpath(cursor), ...suffix.reverse());
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      const parent = path.dirname(cursor);
-      if (parent === cursor) throw error;
-      suffix.push(path.basename(cursor));
-      cursor = parent;
-    }
-  }
 }
 
 async function destinations(
@@ -127,66 +171,113 @@ async function destinations(
   );
 }
 
-async function classify(
-  destination: string,
-  content: string,
-  force: boolean,
-): Promise<InstallationStatus> {
+async function readReleaseManifest(manifestPath: string): Promise<SkillReleaseManifest> {
+  let parsed: unknown;
   try {
-    const existing = await readFile(destination, "utf8");
-    if (existing === content) return "unchanged";
-    if (!force) throw new SkillConflictError(destination);
-    return "updated";
+    parsed = JSON.parse(await readFile(manifestPath, "utf8"));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "installed";
-    throw error;
+    throw new Error(
+      `Skill release manifest is unreadable or invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
   }
+  const result = SkillReleaseManifestSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(
+      `Skill release manifest is invalid: ${result.error.issues[0]?.message ?? "unknown error"}`,
+    );
+  }
+  const digests = [
+    result.data.current.sha256,
+    ...result.data.predecessors.map((item) => item.sha256),
+  ];
+  if (new Set(digests).size !== digests.length) {
+    throw new Error("Skill release manifest contains a duplicate digest.");
+  }
+  const predecessorVersions = result.data.predecessors.flatMap((item) => item.npm_versions);
+  if (new Set(predecessorVersions).size !== predecessorVersions.length) {
+    throw new Error("Skill release manifest contains a duplicate npm version provenance entry.");
+  }
+  return result.data;
 }
 
-async function write(
-  destination: string,
-  content: string,
-  status: InstallationStatus,
-): Promise<void> {
-  if (status === "unchanged") return;
-  const directory = path.dirname(destination);
-  await mkdir(directory, { recursive: true });
-  const temporary = path.join(
-    directory,
-    `.${path.basename(destination)}.${process.pid}.${randomUUID()}.tmp`,
+export async function planBundledSkillInstallation(
+  options: InstallBundledSkillOptions,
+): Promise<SkillInstallationPlan> {
+  const sourcePath = path.resolve(options.sourceSkillPath);
+  const source = await readFile(sourcePath);
+  const sourceDigest = hashBytes(source);
+  const manifestPath = path.resolve(
+    options.releaseManifestPath ?? path.join(path.dirname(sourcePath), "releases.json"),
   );
-  await writeFile(temporary, content, { encoding: "utf8", flag: "wx", mode: 0o644 });
-  try {
-    if (status === "installed") {
-      await link(temporary, destination).catch((error: unknown) => {
-        if ((error as NodeJS.ErrnoException).code === "EEXIST")
-          throw new Error(`Skill appeared concurrently at ${destination}; no files were replaced.`);
-        throw error;
-      });
-      await rm(temporary);
-    } else await rename(temporary, destination);
-  } finally {
-    await rm(temporary, { force: true });
+  const manifest = await readReleaseManifest(manifestPath);
+  if (sourceDigest !== manifest.current.sha256) {
+    throw new Error(
+      `Skill release manifest current digest does not match source skill bytes: ${sourcePath}`,
+    );
+  }
+  const admittedPredecessors = new Set(manifest.predecessors.map((item) => item.sha256));
+  const logical = await destinations(options);
+  const filesByPath = new Map<string, ManagedFilePlan>();
+
+  for (const item of logical) {
+    if (filesByPath.has(item.path)) continue;
+    const snapshot = await captureManagedFileSnapshot(item.path);
+    let status: InstallationStatus;
+    if (!snapshot.exists) status = "installed";
+    else if (snapshot.sha256 === sourceDigest) status = "unchanged";
+    else if (admittedPredecessors.has(snapshot.sha256) || options.force === true)
+      status = "updated";
+    else throw new SkillConflictError(item.path);
+    filesByPath.set(item.path, {
+      path: item.path,
+      snapshot,
+      postimage: source,
+      postimageSha256: sourceDigest,
+      status,
+    });
+  }
+
+  return {
+    installations: logical.map((item) => ({
+      ...item,
+      status: filesByPath.get(item.path)!.status,
+    })),
+    files: [...filesByPath.values()],
+  };
+}
+
+export async function applySkillInstallationPlan(
+  plan: SkillInstallationPlan,
+  onApplied?: (file: ManagedFilePlan) => void | Promise<void>,
+  context: ManagedFileApplyContext = createManagedFileApplyContext(),
+): Promise<void> {
+  const authenticated: ManagedFilePlan[] = [];
+  for (const file of plan.files) {
+    for (const current of authenticated) {
+      await verifyManagedFilePostimage(current, context);
+    }
+    await applyManagedFilePlan(file, context);
+    authenticated.push(file);
+    await onApplied?.(file);
+  }
+  for (const current of authenticated) {
+    await verifyManagedFilePostimage(current, context);
   }
 }
 
 export async function installBundledSkill(
   options: InstallBundledSkillOptions,
 ): Promise<SkillInstallationResult> {
-  const content = await readFile(path.resolve(options.sourceSkillPath), "utf8");
-  const logical = await destinations(options);
-  const statusByPath = new Map<string, InstallationStatus>();
-  for (const item of logical)
-    if (!statusByPath.has(item.path))
-      statusByPath.set(item.path, await classify(item.path, content, options.force ?? false));
-  for (const [destination, status] of statusByPath) await write(destination, content, status);
+  const plan = await planBundledSkillInstallation(options);
+  await applySkillInstallationPlan(plan);
   return {
     version: 1,
     status: "ok",
     skill: SKILL_NAME,
-    installations: logical.map((item) => ({ ...item, status: statusByPath.get(item.path)! })),
-    physicalWrites: [...statusByPath]
-      .filter(([, status]) => status !== "unchanged")
-      .map(([destination, status]) => ({ path: destination, status })),
+    installations: plan.installations,
+    physicalWrites: plan.files
+      .filter((file) => file.status !== "unchanged")
+      .map((file) => ({ path: file.path, status: file.status })),
   };
 }

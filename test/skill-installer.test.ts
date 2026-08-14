@@ -1,9 +1,11 @@
-import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { access, chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   installBundledSkill as installBundledSkillFromSource,
+  resolveBundledSkillAssets,
   type InstallBundledSkillOptions,
 } from "../src/services/skill-installer.js";
 
@@ -17,6 +19,37 @@ const sourceSkillPath = path.resolve(
 
 function installBundledSkill(options: Omit<InstallBundledSkillOptions, "sourceSkillPath">) {
   return installBundledSkillFromSource({ ...options, sourceSkillPath });
+}
+
+function sha256(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+async function writeReleaseFixture(
+  root: string,
+  options: { source: string; predecessors?: Array<{ content: string; version: string }> },
+) {
+  const assets = path.join(root, "skills", "structural-code-editing");
+  await mkdir(assets, { recursive: true });
+  const sourcePath = path.join(assets, "SKILL.md");
+  const guidancePath = path.join(assets, "guidance.md");
+  const manifestPath = path.join(assets, "releases.json");
+  await writeFile(sourcePath, options.source);
+  await writeFile(guidancePath, "Load structural-code-editing when compiler semantics matter.\n");
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify({
+      schema_version: 1,
+      algorithm: "sha256",
+      current: { version: "9.0.0", sha256: sha256(options.source) },
+      predecessors: (options.predecessors ?? []).map((item, index) => ({
+        version: item.version,
+        sha256: sha256(item.content),
+        npm_versions: [`0.${index + 1}.0`],
+      })),
+    })}\n`,
+  );
+  return { sourcePath, guidancePath, manifestPath };
 }
 
 async function temporaryDirectory(): Promise<string> {
@@ -34,6 +67,146 @@ afterEach(async () => {
 });
 
 describe("skill installer", () => {
+  it("resolves every packaged structural editing asset from the executable", async () => {
+    const root = await temporaryDirectory();
+    const executable = path.join(root, "bin", "ast-tool");
+    await mkdir(path.dirname(executable), { recursive: true });
+    await writeFile(executable, "#!/usr/bin/env node\n");
+    await chmod(executable, 0o755);
+    const skillRoot = path.join(root, "skills", "structural-code-editing");
+    await mkdir(skillRoot, { recursive: true });
+    for (const name of ["SKILL.md", "guidance.md", "releases.json"])
+      await writeFile(path.join(skillRoot, name), `${name}\n`);
+
+    await expect(resolveBundledSkillAssets(executable)).resolves.toEqual({
+      skillPath: path.join(skillRoot, "SKILL.md"),
+      guidancePath: path.join(skillRoot, "guidance.md"),
+      releasesPath: path.join(skillRoot, "releases.json"),
+    });
+  });
+
+  it("updates a registry-proven predecessor without force", async () => {
+    const root = await temporaryDirectory();
+    const predecessor = "---\nversion: 8.0.0\n---\nofficial predecessor\n";
+    const assets = await writeReleaseFixture(root, {
+      source: "---\nversion: 9.0.0\n---\ncurrent\n",
+      predecessors: [{ content: predecessor, version: "8.0.0" }],
+    });
+    const claudeRoot = path.join(root, "claude");
+    const destination = path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md");
+    await mkdir(path.dirname(destination), { recursive: true });
+    await writeFile(destination, predecessor);
+
+    const result = await installBundledSkillFromSource({
+      target: "claude",
+      scope: "user",
+      sourceSkillPath: assets.sourcePath,
+      releaseManifestPath: assets.manifestPath,
+      environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+      homeDirectory: root,
+    });
+
+    expect(result.installations[0]?.status).toBe("updated");
+    expect(await readFile(destination, "utf8")).toContain("version: 9.0.0");
+  });
+
+  it("rejects an unknown digest even when frontmatter claims an official version", async () => {
+    const root = await temporaryDirectory();
+    const assets = await writeReleaseFixture(root, {
+      source: "---\nversion: 9.0.0\n---\ncurrent\n",
+      predecessors: [{ content: "official bytes\n", version: "4.0.0" }],
+    });
+    const claudeRoot = path.join(root, "claude");
+    const destination = path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md");
+    const unknown = "---\nversion: 4.0.0\n---\nlocally changed\n";
+    await mkdir(path.dirname(destination), { recursive: true });
+    await writeFile(destination, unknown);
+
+    await expect(
+      installBundledSkillFromSource({
+        target: "claude",
+        scope: "user",
+        sourceSkillPath: assets.sourcePath,
+        releaseManifestPath: assets.manifestPath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      }),
+    ).rejects.toThrow(/already exists.*--force/i);
+    expect(await readFile(destination, "utf8")).toBe(unknown);
+  });
+
+  it("fails before destination writes when source bytes do not match the manifest", async () => {
+    const root = await temporaryDirectory();
+    const assets = await writeReleaseFixture(root, { source: "current\n" });
+    await writeFile(assets.sourcePath, "tampered\n");
+    const claudeRoot = path.join(root, "claude");
+    const destination = path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md");
+
+    await expect(
+      installBundledSkillFromSource({
+        target: "claude",
+        scope: "user",
+        sourceSkillPath: assets.sourcePath,
+        releaseManifestPath: assets.manifestPath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      }),
+    ).rejects.toThrow(/manifest.*source|source.*digest/i);
+    await expect(access(destination)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects malformed and duplicate release digests", async () => {
+    const root = await temporaryDirectory();
+    const source = "current\n";
+    const assets = await writeReleaseFixture(root, { source });
+    await writeFile(
+      assets.manifestPath,
+      JSON.stringify({
+        schema_version: 1,
+        algorithm: "sha256",
+        current: { version: "9.0.0", sha256: sha256(source) },
+        predecessors: [{ version: "8.0.0", sha256: sha256(source), npm_versions: ["0.1.0"] }],
+      }),
+    );
+
+    await expect(
+      installBundledSkillFromSource({
+        target: "claude",
+        scope: "user",
+        sourceSkillPath: assets.sourcePath,
+        releaseManifestPath: assets.manifestPath,
+        environment: { CLAUDE_CONFIG_DIR: path.join(root, "claude") },
+        homeDirectory: root,
+      }),
+    ).rejects.toThrow(/duplicate.*digest/i);
+  });
+
+  it("rejects unsupported digest algorithms and excludes the unknown installed Hermes digest", async () => {
+    const root = await temporaryDirectory();
+    const assets = await writeReleaseFixture(root, { source: "current\n" });
+    const manifest = JSON.parse(await readFile(assets.manifestPath, "utf8"));
+    manifest.algorithm = "sha512";
+    await writeFile(assets.manifestPath, JSON.stringify(manifest));
+    await expect(
+      installBundledSkillFromSource({
+        target: "claude",
+        scope: "user",
+        sourceSkillPath: assets.sourcePath,
+        releaseManifestPath: assets.manifestPath,
+        environment: { CLAUDE_CONFIG_DIR: path.join(root, "claude") },
+        homeDirectory: root,
+      }),
+    ).rejects.toThrow(/manifest.*invalid/i);
+
+    const bundledManifest = JSON.parse(
+      await readFile(path.join(path.dirname(sourceSkillPath), "releases.json"), "utf8"),
+    );
+    expect([
+      bundledManifest.current.sha256,
+      ...bundledManifest.predecessors.map((item: { sha256: string }) => item.sha256),
+    ]).not.toContain("c25ed470e5c504c38a9be75ffa38f4b6c5a4046548b562e6a33ddba9044fa4d2");
+  });
+
   it("installs the bundled skill for Claude Code and Hermes at user scope", async () => {
     const root = await temporaryDirectory();
     const claudeRoot = path.join(root, "claude");
@@ -64,6 +237,9 @@ describe("skill installer", () => {
       expect(content).toContain("name: structural-code-editing");
       expect(path.isAbsolute(installation.path)).toBe(true);
     }
+    await expect(access(path.join(claudeRoot, "CLAUDE.md"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("is idempotent when the installed content is already current", async () => {
@@ -196,5 +372,25 @@ describe("skill installer", () => {
     });
     expect(result.physicalWrites).toHaveLength(1);
     expect(result.installations[0]?.path).toBe(result.installations[1]?.path);
+  });
+
+  it("rejects a final skill symlink instead of following it", async () => {
+    const root = await temporaryDirectory();
+    const claudeRoot = path.join(root, "claude");
+    const destination = path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md");
+    const target = path.join(root, "custom-skill.md");
+    await mkdir(path.dirname(destination), { recursive: true });
+    await writeFile(target, "custom\n");
+    await symlink(target, destination);
+
+    await expect(
+      installBundledSkill({
+        target: "claude",
+        scope: "user",
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      }),
+    ).rejects.toThrow(/regular file/i);
+    expect(await readFile(target, "utf8")).toBe("custom\n");
   });
 });

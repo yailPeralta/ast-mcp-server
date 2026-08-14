@@ -1,7 +1,7 @@
 ---
 name: structural-code-editing
 description: Leer, navegar y editar proyectos TypeScript/JavaScript mediante el resolver real del compilador y operaciones AST preparadas, revisadas y vinculadas por hash.
-version: "4.1.0"
+version: "4.2.0"
 author: "yail"
 license: "ISC"
 metadata:
@@ -11,6 +11,12 @@ metadata:
 ---
 
 # Edición estructural con el servidor MCP `ast`
+
+## Contrato de activación
+
+Cargar `structural-code-editing` antes de navegar semánticamente, analizar impacto o referencias, consultar diagnostics o preparar una mutación estructural en un proyecto TypeScript/JavaScript gobernado por el compilador. Preferir las tools compiler-backed del servidor `ast` para esas operaciones y revisar cualquier plan antes de aplicarlo.
+
+No forzar un roundtrip AST para Markdown, configuración, comentarios ni una edición textual trivial en un archivo ya conocido. Si las tools `ast_*` no están disponibles, declarar el fallback y no presentar búsquedas textuales como evidencia compiler-backed.
 
 ## Cuándo usarlo
 
@@ -40,13 +46,13 @@ El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reempl
 
 ## Runtime, soporte y errores
 
-El paquete requiere Node.js `>=22.5.0`. El target verificado para v0.7.2 es Linux x64 con Node.js 22.5.0 o la línea actual de Node.js 24 y el `mv` de GNU coreutils requerido por la publicación atómica de evidencia. Otras arquitecturas Linux, sistemas sin ese primitivo, macOS y Windows están sin verificar.
+El paquete requiere Node.js `>=22.5.0`. La matriz publicada de v0.7.2 cubre Linux x64 con Node.js 22.5.0 y la línea actual de Node.js 24, pero la implementación `Unreleased` de archivos gestionados por setup tiene evidencia exact-tree fresca únicamente en Node.js 24. Esa mutación requiere además GNU coreutils 9.7 `mv` con `--update=none-fail`, `--exchange`, `--no-copy` y `--no-target-directory`, GNU coreutils `ln -L -T`, y procfs en `/proc/self/fd` con `O_DIRECTORY`/`O_NOFOLLOW`. El setup del source actual bajo Node.js 22.5.0, otras arquitecturas Linux, sistemas sin esos primitivos, macOS y Windows están sin verificar.
 
 El transporte soportado es stdio local bajo los permisos filesystem del usuario que invoca el proceso. No asumir autenticación HTTP, sandbox, aislamiento entre tenants ni una frontera segura para clientes remotos o no confiables.
 
 La persistencia del índice está deshabilitada por default. El modo `canary` requiere `AST_SYMBOL_INDEX_PERSISTENCE=canary` y un `AST_SYMBOL_INDEX_CACHE_ROOT` absoluto y aislado; `enabled` sigue sin publicarse y falla cerrado a memoria con `enabled_not_released`.
 
-Los errores públicos usan un vocabulario cerrado dentro de `{ "error": { "code", "message", "correlation_id" } }`, con `isError: true`. Conservar el `correlation_id` al reportar un fallo; no pedir ni exponer stacks, paths absolutos, source, cache, argumentos crudos, environment ni credenciales para diagnosticarlo.
+Los errores públicos de las tools MCP usan un vocabulario cerrado dentro de `{ "error": { "code", "message", "correlation_id" } }`, con `isError: true`. Conservar el `correlation_id` al reportar un fallo; no pedir ni exponer stacks, paths absolutos, source, cache, argumentos crudos, environment ni credenciales para diagnosticarlo. Los errores del comando local `setup` pueden incluir un path destino acotado para permitir inspeccionar una escritura incierta o pendiente, pero no argumentos, environment, credenciales ni output crudo del proveedor.
 
 ## Flujo compacto de lectura
 

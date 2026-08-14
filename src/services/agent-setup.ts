@@ -6,10 +6,27 @@ import path from "node:path";
 import process from "node:process";
 import { randomUUID } from "node:crypto";
 import {
-  installBundledSkill,
+  planBundledSkillInstallation,
   SkillConflictError,
   type SkillInstallation,
+  type SkillInstallationPlan,
 } from "./skill-installer.js";
+import {
+  planManagedGuidance,
+  type GuidanceStatus,
+  type ManagedGuidancePlan,
+} from "./managed-guidance.js";
+import {
+  applyManagedFilePlan,
+  createManagedFileApplyContext,
+  ManagedFileApplyError,
+  ManagedFileRollbackError,
+  revalidateManagedFilePlan,
+  verifyManagedFilePostimage,
+  type ManagedFileApplyContext,
+  type ManagedFileApplyHooks,
+  type ManagedFilePlan,
+} from "./managed-file.js";
 import { type AgentDetection, type AgentId } from "./setup-wizard.js";
 import {
   AGENT_IDS,
@@ -22,6 +39,7 @@ import {
   applyOpenCodeConfigPlan,
   planOpenCodeConfig,
   resolveOpenCodeConfigPath,
+  withIsolatedOpenCodeConfig,
   type OpenCodeConfigPlan,
 } from "./opencode-config.js";
 
@@ -51,6 +69,8 @@ export interface RunAgentSetupOptions {
   agents: readonly AgentId[];
   detections: readonly AgentDetection[];
   sourceSkillPath: string;
+  sourceGuidancePath: string;
+  releaseManifestPath: string;
   serverEntryPath: string;
   environment?: NodeJS.ProcessEnv;
   nodeExecutable?: string;
@@ -64,10 +84,11 @@ export interface AgentSetupItem {
   version?: string;
   mcp: "configured" | "unchanged";
   skill: SkillInstallation["status"];
+  guidance: GuidanceStatus;
 }
 
 export interface AgentSetupResult {
-  version: 1;
+  version: 2;
   status: "ok";
   command: "setup";
   server: {
@@ -77,7 +98,11 @@ export interface AgentSetupResult {
   };
   agents: AgentSetupItem[];
   correlation_id: string;
-  physical_writes: Array<{ path: string; status: string }>;
+  physical_writes: Array<{
+    path: string;
+    asset: "skill" | "guidance" | "mcp_config";
+    status: string;
+  }>;
 }
 
 export class AgentSetupError extends Error {
@@ -89,6 +114,109 @@ export class AgentSetupError extends Error {
     this.name = "AgentSetupError";
     this.code = code;
     this.details = details;
+  }
+}
+
+export async function applyManagedAssetPlans(
+  skillPlan: SkillInstallationPlan,
+  guidancePlan: ManagedGuidancePlan,
+  context: ManagedFileApplyContext = createManagedFileApplyContext(),
+  hooks: ManagedFileApplyHooks = {},
+): Promise<AgentSetupResult["physical_writes"]> {
+  const physicalWrites: AgentSetupResult["physical_writes"] = [];
+  const possiblyCommitted: AgentSetupResult["physical_writes"] = [];
+  const rolledBack: AgentSetupResult["physical_writes"] = [];
+  const rollbackFailed: AgentSetupResult["physical_writes"] = [];
+  const authenticated: ManagedFilePlan[] = [];
+  let activePlan: { file: ManagedFilePlan; asset: "skill" | "guidance" } | undefined;
+  try {
+    for (const file of [...skillPlan.files, ...guidancePlan.files]) {
+      await revalidateManagedFilePlan(file);
+    }
+    const plans = [
+      ...skillPlan.files.map((file) => ({ file, asset: "skill" as const })),
+      ...guidancePlan.files.map((file) => ({ file, asset: "guidance" as const })),
+    ];
+    for (const { file, asset } of plans) {
+      activePlan = { file, asset };
+      for (const current of authenticated) {
+        await verifyManagedFilePostimage(current, context);
+      }
+      await applyManagedFilePlan(file, context, hooks);
+      authenticated.push(file);
+      if (file.status !== "unchanged") {
+        physicalWrites.push({ path: file.path, asset, status: file.status });
+      }
+      activePlan = undefined;
+    }
+    for (const current of authenticated) {
+      await verifyManagedFilePostimage(current, context);
+    }
+    return physicalWrites;
+  } catch (error) {
+    if (activePlan !== undefined && activePlan.file.status !== "unchanged") {
+      const write = {
+        path: activePlan.file.path,
+        asset: activePlan.asset,
+        status: activePlan.file.status,
+      };
+      if (error instanceof ManagedFileRollbackError) {
+        rolledBack.push(write);
+      } else if (error instanceof ManagedFileApplyError) {
+        if (error.commitState === "committed") {
+          physicalWrites.push(write);
+        } else {
+          possiblyCommitted.push(write);
+        }
+        if (error.rollbackState === "failed") {
+          rollbackFailed.push(write);
+        }
+      }
+    }
+    throw new AgentSetupError(
+      error instanceof Error ? error.message : "Managed asset apply failed.",
+      "AGENT_ASSET_APPLY_FAILED",
+      {
+        completed_writes: physicalWrites,
+        possibly_committed: possiblyCommitted,
+        rolled_back: rolledBack,
+        rollback_failed: rollbackFailed,
+        pending: [
+          ...skillPlan.files
+            .filter((file) => file.status !== "unchanged")
+            .map((file) => ({ path: file.path, asset: "skill", status: file.status })),
+          ...guidancePlan.files
+            .filter((file) => file.status !== "unchanged")
+            .map((file) => ({ path: file.path, asset: "guidance", status: file.status })),
+        ].filter(
+          (pending) =>
+            !physicalWrites.some(
+              (completed) => completed.path === pending.path && completed.asset === pending.asset,
+            ) &&
+            !possiblyCommitted.some(
+              (uncertain) => uncertain.path === pending.path && uncertain.asset === pending.asset,
+            ),
+        ),
+      },
+    );
+  }
+}
+
+async function verifyManagedAssetPlans(
+  skillPlan: SkillInstallationPlan,
+  guidancePlan: ManagedGuidancePlan,
+  context: ManagedFileApplyContext,
+): Promise<void> {
+  try {
+    for (const file of [...skillPlan.files, ...guidancePlan.files]) {
+      await verifyManagedFilePostimage(file, context);
+    }
+  } catch (error) {
+    throw new AgentSetupError(
+      error instanceof Error ? error.message : "Managed asset postimage verification failed.",
+      "AGENT_ASSET_APPLY_FAILED",
+      { cause: error instanceof Error ? error.message : String(error) },
+    );
   }
 }
 
@@ -263,42 +391,48 @@ async function verifyOpenCode(
   timeoutMs: number,
   context: { nodeExecutable: string; serverEntryPath: string },
 ): Promise<void> {
-  const runtime = targetRuntime(detection, environment, timeoutMs);
-  const resolved = await runtime.run(["debug", "config", "--pure"]);
-  if (resolved.exitCode !== 0)
-    throw commandFailure("opencode", "resolved configuration verification", resolved);
-  let config: any;
-  try {
-    config = JSON.parse(resolved.stdout);
-  } catch {
-    throw new AgentSetupError(
-      "OpenCode resolved configuration output is unknown.",
-      "AGENT_VERIFICATION_FAILED",
-      { agent: "opencode" },
-    );
-  }
-  const command = config?.mcp?.ast?.command;
-  if (
-    !Array.isArray(command) ||
-    command.length !== 2 ||
-    command[0] !== context.nodeExecutable ||
-    command[1] !== context.serverEntryPath
-  ) {
-    throw new AgentSetupError(
-      "OpenCode resolved configuration does not contain the expected ast server.",
-      "AGENT_VERIFICATION_FAILED",
-      { agent: "opencode" },
-    );
-  }
-  const listed = await runtime.run(["mcp", "list", "--pure"]);
-  const plainList = listed.stdout.replaceAll("\u001b", "");
-  if (listed.exitCode !== 0 || !/ast[\s\S]*connected/i.test(plainList)) {
-    throw new AgentSetupError(
-      "OpenCode did not report the ast server as connected.",
-      "AGENT_VERIFICATION_FAILED",
-      { agent: "opencode" },
-    );
-  }
+  await withIsolatedOpenCodeConfig(
+    environment,
+    environment.HOME ?? os.homedir(),
+    async (isolatedEnvironment) => {
+      const runtime = targetRuntime(detection, isolatedEnvironment, timeoutMs);
+      const resolved = await runtime.run(["debug", "config", "--pure"]);
+      if (resolved.exitCode !== 0)
+        throw commandFailure("opencode", "resolved configuration verification", resolved);
+      let config: any;
+      try {
+        config = JSON.parse(resolved.stdout);
+      } catch {
+        throw new AgentSetupError(
+          "OpenCode resolved configuration output is unknown.",
+          "AGENT_VERIFICATION_FAILED",
+          { agent: "opencode" },
+        );
+      }
+      const command = config?.mcp?.ast?.command;
+      if (
+        !Array.isArray(command) ||
+        command.length !== 2 ||
+        command[0] !== context.nodeExecutable ||
+        command[1] !== context.serverEntryPath
+      ) {
+        throw new AgentSetupError(
+          "OpenCode resolved configuration does not contain the expected ast server.",
+          "AGENT_VERIFICATION_FAILED",
+          { agent: "opencode" },
+        );
+      }
+      const listed = await runtime.run(["mcp", "list", "--pure"]);
+      const plainList = listed.stdout.replaceAll("\u001b", "");
+      if (listed.exitCode !== 0 || !/ast[\s\S]*connected/i.test(plainList)) {
+        throw new AgentSetupError(
+          "OpenCode did not report the ast server as connected.",
+          "AGENT_VERIFICATION_FAILED",
+          { agent: "opencode" },
+        );
+      }
+    },
+  );
 }
 
 async function configureMcp(
@@ -446,11 +580,16 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
         { agent: "opencode", correlation_id: correlationId },
       );
     });
-    const effective = await targetRuntime(
-      detectionMap.get("opencode")!,
+    const effective = await withIsolatedOpenCodeConfig(
       environment,
-      timeoutMs,
-    ).run(["debug", "config", "--pure"]);
+      environment.HOME ?? os.homedir(),
+      (isolatedEnvironment) =>
+        targetRuntime(detectionMap.get("opencode")!, isolatedEnvironment, timeoutMs).run([
+          "debug",
+          "config",
+          "--pure",
+        ]),
+    );
     if (effective.exitCode !== 0) {
       throw new AgentSetupError(
         `OpenCode effective configuration preflight failed with exit code ${effective.exitCode}.`,
@@ -520,13 +659,18 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
     );
   }
 
-  const skillResult = await installBundledSkill({
-    target: requested,
-    scope: "user",
-    force: options.forceSkill ?? false,
-    sourceSkillPath: options.sourceSkillPath,
-    environment,
-  }).catch((error: unknown) => {
+  let skillPlan: SkillInstallationPlan;
+  try {
+    skillPlan = await planBundledSkillInstallation({
+      target: requested,
+      scope: "user",
+      force: options.forceSkill ?? false,
+      sourceSkillPath: options.sourceSkillPath,
+      releaseManifestPath: options.releaseManifestPath,
+      environment,
+      homeDirectory: environment.HOME ?? os.homedir(),
+    });
+  } catch (error) {
     if (error instanceof SkillConflictError) {
       throw new AgentSetupError(
         `Skill already exists with different content at ${error.destination}; pass --force-skill to replace it.`,
@@ -534,20 +678,54 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
         { path: error.destination },
       );
     }
-    throw error;
-  });
+    throw new AgentSetupError(
+      error instanceof Error ? error.message : "Skill preflight failed.",
+      "SETUP_ASSET_INVALID",
+      { asset: "skill", correlation_id: correlationId },
+    );
+  }
+
+  let guidancePlan: ManagedGuidancePlan;
+  try {
+    guidancePlan = await planManagedGuidance({
+      agents: requested,
+      sourceGuidancePath: options.sourceGuidancePath,
+      environment,
+      homeDirectory: environment.HOME ?? os.homedir(),
+    });
+  } catch (error) {
+    throw new AgentSetupError(
+      error instanceof Error ? error.message : "Managed guidance preflight failed.",
+      "AGENT_GUIDANCE_CONFLICT",
+      { asset: "guidance", correlation_id: correlationId },
+    );
+  }
+
   const skillStatuses = new Map(
-    skillResult.installations.map((installation) => [installation.target, installation.status]),
+    skillPlan.installations.map((installation) => [installation.target, installation.status]),
   );
+  const guidanceStatuses = new Map(
+    guidancePlan.installations.map((installation) => [installation.agent, installation.status]),
+  );
+  const applyContext = createManagedFileApplyContext();
+  const physicalWrites = await applyManagedAssetPlans(skillPlan, guidancePlan, applyContext);
 
   const completed: AgentSetupItem[] = [];
   for (const agent of requested) {
     const detection = detectionMap.get(agent)!;
     const inspection = inspections.find((item) => item.agent === agent)!;
     try {
+      await verifyManagedAssetPlans(skillPlan, guidancePlan, applyContext);
       if (inspection.status === "missing") {
         if (agent === "opencode") {
           await applyOpenCodeConfigPlan(openCodePlan!);
+          if (openCodePlan!.status === "installed") {
+            physicalWrites.push({
+              path: openCodePlan!.filePath,
+              asset: "mcp_config",
+              status: "installed",
+            });
+          }
           await verifyOpenCode(detection, environment, timeoutMs, {
             nodeExecutable,
             serverEntryPath: options.serverEntryPath,
@@ -567,19 +745,23 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
           serverEntryPath: options.serverEntryPath,
         });
       }
+      await verifyManagedAssetPlans(skillPlan, guidancePlan, applyContext);
       completed.push({
         agent,
         executable: detection.executable!,
         version: detection.version,
         mcp: inspection.status === "current" ? "unchanged" : "configured",
         skill: skillStatuses.get(agent)!,
+        guidance: guidanceStatuses.get(agent)!,
       });
     } catch (error) {
       if (error instanceof AgentSetupError) {
         throw new AgentSetupError(error.message, error.code, {
           cause: error.details,
           completed,
-          skills: skillResult.installations,
+          skills: skillPlan.installations,
+          guidance: guidancePlan.installations,
+          completed_writes: physicalWrites,
         });
       }
       throw error;
@@ -587,17 +769,12 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
   }
 
   return {
-    version: 1,
+    version: 2,
     status: "ok",
     command: "setup",
     server: { name: MCP_SERVER_NAME, command: nodeExecutable, args: [options.serverEntryPath] },
     agents: completed,
     correlation_id: correlationId,
-    physical_writes: [
-      ...skillResult.physicalWrites,
-      ...(openCodePlan?.status === "installed"
-        ? [{ path: openCodePlan.filePath, status: "installed" }]
-        : []),
-    ],
+    physical_writes: physicalWrites,
   };
 }

@@ -92,6 +92,8 @@ const REQUIRED_PACK_FILES = Object.freeze([
   "dist/index.js",
   "dist/cli.js",
   "skills/structural-code-editing/SKILL.md",
+  "skills/structural-code-editing/guidance.md",
+  "skills/structural-code-editing/releases.json",
 ]);
 const CONSUMER_GATES = Object.freeze([
   "lifecycle_scripts_disabled",

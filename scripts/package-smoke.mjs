@@ -19,7 +19,7 @@ const releaseMetadata = JSON.parse(
 );
 const yarnExecutable = process.platform === "win32" ? "yarn.cmd" : "yarn";
 const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
-const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ast-package-smoke-"));
+const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ast package smoke-"));
 const packageDirectory = path.join(temporaryRoot, "package");
 const consumerDirectory = path.join(temporaryRoot, "consumer");
 const archivePath = path.join(packageDirectory, "ast-mcp-server.tgz");
@@ -153,6 +153,20 @@ try {
     path.join(installedPackageRoot, "CHANGELOG.md"),
     "utf8",
   );
+  const [packagedSkill, packagedGuidance, packagedReleases] = await Promise.all([
+    readFile(
+      path.join(installedPackageRoot, "skills", "structural-code-editing", "SKILL.md"),
+      "utf8",
+    ),
+    readFile(
+      path.join(installedPackageRoot, "skills", "structural-code-editing", "guidance.md"),
+      "utf8",
+    ),
+    readFile(
+      path.join(installedPackageRoot, "skills", "structural-code-editing", "releases.json"),
+      "utf8",
+    ),
+  ]);
   if (
     installedMetadata.name !== releaseMetadata.name ||
     installedMetadata.version !== releaseMetadata.version ||
@@ -160,7 +174,11 @@ try {
     installedMetadata.license !== releaseMetadata.license ||
     installedMetadata.repository?.url !== releaseMetadata.repository?.url ||
     installedMetadata.publishConfig?.access !== releaseMetadata.publishConfig?.access ||
-    !installedChangelog.includes(`## [${releaseMetadata.version}]`)
+    !installedChangelog.includes("## [Unreleased]") ||
+    !installedChangelog.includes(`## [${releaseMetadata.version}]`) ||
+    !packagedSkill.includes("name: structural-code-editing") ||
+    packagedGuidance.includes("ast-tool:structural-code-editing guidance") ||
+    JSON.parse(packagedReleases).current?.version !== "4.2.0"
   ) {
     throw new Error("installed tarball release metadata is incomplete");
   }
@@ -260,6 +278,11 @@ try {
   const setupArgs = setupSupported
     ? ["setup", "--agents", "all", "--yes"]
     : ["install-skill", "all"];
+  const humanClaudeGuidance = "# Consumer-owned rules\n\nPreserve these bytes.\n";
+  if (setupSupported) {
+    await mkdir(claudeRoot, { recursive: true });
+    await writeFile(path.join(claudeRoot, "CLAUDE.md"), humanClaudeGuidance, "utf8");
+  }
   const first = await executeFile(executable, setupArgs, {
     cwd: consumerDirectory,
     env: environment,
@@ -276,14 +299,28 @@ try {
   if (
     firstItems?.length !== (setupSupported ? 6 : 2) ||
     !firstItems.every((item) => item.skill === "installed" || item.status === "installed") ||
-    (setupSupported && !firstItems.every((item) => item.mcp === "configured"))
+    (setupSupported &&
+      (!firstItems.every((item) => item.mcp === "configured") ||
+        firstResult.version !== 2 ||
+        firstItems.find((item) => item.agent === "claude")?.guidance !== "updated" ||
+        firstItems.find((item) => item.agent === "opencode")?.guidance !== "updated" ||
+        firstItems.find((item) => item.agent === "codex")?.guidance !== "installed" ||
+        firstItems.find((item) => item.agent === "gemini")?.guidance !== "installed" ||
+        firstItems.find((item) => item.agent === "hermes")?.guidance !== "skill_only" ||
+        firstItems.find((item) => item.agent === "copilot")?.guidance !== "skill_only"))
   ) {
     throw new Error(`tarball setup did not configure both agents: ${first.stdout}`);
   }
   if (
     secondItems?.length !== (setupSupported ? 6 : 2) ||
     !secondItems.every((item) => item.skill === "unchanged" || item.status === "unchanged") ||
-    (setupSupported && !secondItems.every((item) => item.mcp === "unchanged"))
+    (setupSupported &&
+      (!secondItems.every(
+        (item) =>
+          item.mcp === "unchanged" &&
+          (item.guidance === "unchanged" || item.guidance === "skill_only"),
+      ) ||
+        secondResult.physical_writes?.length !== 0))
   ) {
     throw new Error(`tarball setup was not idempotent: ${second.stdout}`);
   }
@@ -298,6 +335,38 @@ try {
   );
   if (!claudeSkill.includes("name: structural-code-editing") || claudeSkill !== hermesSkill) {
     throw new Error("installed tarball skills do not match");
+  }
+  if (setupSupported) {
+    const [claudeGuidance, codexGuidance, geminiGuidance] = await Promise.all([
+      readFile(path.join(claudeRoot, "CLAUDE.md"), "utf8"),
+      readFile(path.join(sharedHome, ".codex", "AGENTS.md"), "utf8"),
+      readFile(path.join(sharedHome, ".gemini", "GEMINI.md"), "utf8"),
+    ]);
+    const discoveredInstructions = new Map(
+      await Promise.all(
+        ["claude", "opencode", "codex", "gemini"].map(async (agent) => {
+          const discovery = await executeFile(
+            path.join(fakeBin, agent),
+            ["debug", "instructions"],
+            { cwd: consumerDirectory, env: environment },
+          );
+          return [agent, JSON.parse(discovery.stdout)];
+        }),
+      ),
+    );
+    const managedBegin = "<!-- ast-tool:structural-code-editing guidance v1 begin -->";
+    if (
+      !claudeGuidance.startsWith(humanClaudeGuidance) ||
+      ![claudeGuidance, codexGuidance, geminiGuidance].every(
+        (content) => content.split(managedBegin).length === 2,
+      ) ||
+      discoveredInstructions.get("claude")?.content !== claudeGuidance ||
+      discoveredInstructions.get("opencode")?.content !== claudeGuidance ||
+      discoveredInstructions.get("codex")?.content !== codexGuidance ||
+      discoveredInstructions.get("gemini")?.content !== geminiGuidance
+    ) {
+      throw new Error("packed setup did not preserve and discover managed guidance exactly once");
+    }
   }
 
   await executeFile(

@@ -683,13 +683,15 @@ describe("release preflight", () => {
           { path: "dist/index.js", size: 100 },
           { path: "dist/cli.js", size: 100 },
           { path: "skills/structural-code-editing/SKILL.md", size: 100 },
+          { path: "skills/structural-code-editing/guidance.md", size: 100 },
+          { path: "skills/structural-code-editing/releases.json", size: 100 },
         ],
       },
     ];
     expect(validatePackReport(pack, RELEASE_VERSION)).toEqual({
       package_name: "ast-mcp-server",
       version: RELEASE_VERSION,
-      file_count: 8,
+      file_count: 10,
     });
     expect(() => validatePackReport(pack, "0.7.1")).toThrow(/package version/u);
     expect(() =>
@@ -709,7 +711,12 @@ describe("release preflight", () => {
         RELEASE_VERSION,
       ),
     ).toThrow(/required package artifact/u);
-    for (const requiredPolicy of ["SECURITY.md", "docs/support.md"]) {
+    for (const requiredPolicy of [
+      "SECURITY.md",
+      "docs/support.md",
+      "skills/structural-code-editing/guidance.md",
+      "skills/structural-code-editing/releases.json",
+    ]) {
       expect(() =>
         validatePackReport(
           [

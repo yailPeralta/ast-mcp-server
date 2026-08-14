@@ -15,7 +15,7 @@ import {
 } from "./services/agent-setup.js";
 import {
   installBundledSkill,
-  resolveBundledSkillPath,
+  resolveBundledSkillAssets,
   type SkillScope,
   type SkillTargetSelection,
 } from "./services/skill-installer.js";
@@ -366,10 +366,13 @@ export async function runCli(args: string[]): Promise<unknown> {
       if (!executablePath) {
         throw new Error("Cannot resolve the ast-tool executable path.");
       }
+      const assets = await resolveBundledSkillAssets(executablePath);
       return await runAgentSetup({
         agents,
         detections,
-        sourceSkillPath: await resolveBundledSkillPath(executablePath),
+        sourceSkillPath: assets.skillPath,
+        sourceGuidancePath: assets.guidancePath,
+        releaseManifestPath: assets.releasesPath,
         serverEntryPath: await resolveServerEntryPath(executablePath),
         forceSkill: options.forceSkill,
       });
@@ -406,9 +409,11 @@ export async function runCli(args: string[]): Promise<unknown> {
       if (!executablePath) {
         throw new Error("Cannot resolve the ast-tool executable path.");
       }
+      const assets = await resolveBundledSkillAssets(executablePath);
       return await installBundledSkill({
         ...options,
-        sourceSkillPath: await resolveBundledSkillPath(executablePath),
+        sourceSkillPath: assets.skillPath,
+        releaseManifestPath: assets.releasesPath,
       });
     } catch (error) {
       throw new CliError(

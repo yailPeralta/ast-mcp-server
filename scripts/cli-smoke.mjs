@@ -431,25 +431,75 @@ try {
     throw new Error(`Skill installation was not idempotent: ${JSON.stringify(skillReplay)}`);
   }
 
+  const humanClaudeGuidance = "# Personal Claude rules\n\nKeep this exact text.\n";
+  await writeFile(path.join(claudeConfigDirectory, "CLAUDE.md"), humanClaudeGuidance, "utf8");
   const agentSetup = await invoke(["setup", "--agents", "all", "--yes"]);
+  const guidanceByAgent = new Map(
+    agentSetup.agents?.map((agent) => [agent.agent, agent.guidance]) ?? [],
+  );
   if (
     agentSetup.agents?.length !== 6 ||
     !agentSetup.agents.every(
       (agent) =>
         agent.mcp === "configured" && (agent.skill === "unchanged" || agent.skill === "installed"),
-    )
+    ) ||
+    guidanceByAgent.get("claude") !== "updated" ||
+    guidanceByAgent.get("opencode") !== "updated" ||
+    guidanceByAgent.get("codex") !== "installed" ||
+    guidanceByAgent.get("gemini") !== "installed" ||
+    guidanceByAgent.get("hermes") !== "skill_only" ||
+    guidanceByAgent.get("copilot") !== "skill_only"
   ) {
     throw new Error(`Unexpected agent setup output: ${JSON.stringify(agentSetup)}`);
+  }
+  const [claudeGuidance, codexGuidance, geminiGuidance] = await Promise.all([
+    readFile(path.join(claudeConfigDirectory, "CLAUDE.md"), "utf8"),
+    readFile(path.join(sharedAgentsHome, ".codex", "AGENTS.md"), "utf8"),
+    readFile(path.join(sharedAgentsHome, ".gemini", "GEMINI.md"), "utf8"),
+  ]);
+  const discoveredInstructions = new Map(
+    await Promise.all(
+      ["claude", "opencode", "codex", "gemini"].map(async (agent) => {
+        const discovery = await executeFile(path.join(fakeBin, agent), ["debug", "instructions"], {
+          cwd: repositoryRoot,
+          env: environment,
+        });
+        return [agent, JSON.parse(discovery.stdout)];
+      }),
+    ),
+  );
+  const managedBegin = "<!-- ast-tool:structural-code-editing guidance v1 begin -->";
+  if (
+    !claudeGuidance.startsWith(humanClaudeGuidance) ||
+    ![claudeGuidance, codexGuidance, geminiGuidance].every(
+      (content) => content.split(managedBegin).length === 2,
+    ) ||
+    discoveredInstructions.get("claude")?.content !== claudeGuidance ||
+    discoveredInstructions.get("opencode")?.content !== claudeGuidance ||
+    discoveredInstructions.get("codex")?.content !== codexGuidance ||
+    discoveredInstructions.get("gemini")?.content !== geminiGuidance
+  ) {
+    throw new Error("Managed guidance was not discovered once or did not preserve human content.");
   }
   const agentSetupReplay = await invoke(["setup", "--agents", "all", "--yes"]);
   if (
     !agentSetupReplay.agents.every(
-      (agent) => agent.mcp === "unchanged" && agent.skill === "unchanged",
-    )
+      (agent) =>
+        agent.mcp === "unchanged" &&
+        agent.skill === "unchanged" &&
+        (agent.guidance === "unchanged" || agent.guidance === "skill_only"),
+    ) ||
+    agentSetupReplay.physical_writes?.length !== 0
   ) {
     throw new Error(`Agent setup was not idempotent: ${JSON.stringify(agentSetupReplay)}`);
   }
-  if (agentSetup.version !== 1 || !Array.isArray(agentSetup.physical_writes)) {
+  if (
+    agentSetup.version !== 2 ||
+    !Array.isArray(agentSetup.physical_writes) ||
+    !agentSetup.physical_writes.every((write) =>
+      ["skill", "guidance", "mcp_config"].includes(write.asset),
+    )
+  ) {
     throw new Error(
       `Agent setup output is not versioned and stable: ${JSON.stringify(agentSetup)}`,
     );

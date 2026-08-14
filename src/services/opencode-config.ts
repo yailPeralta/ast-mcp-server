@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { link, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
 
@@ -24,6 +25,56 @@ export function resolveOpenCodeConfigPath(
   if (environment.OPENCODE_CONFIG_DIR)
     return path.resolve(environment.OPENCODE_CONFIG_DIR, "opencode.json");
   return path.join(homeDirectory, ".config", "opencode", "opencode.json");
+}
+
+export async function withIsolatedOpenCodeConfig<T>(
+  environment: NodeJS.ProcessEnv,
+  homeDirectory: string,
+  operation: (isolatedEnvironment: NodeJS.ProcessEnv) => Promise<T>,
+): Promise<T> {
+  const selectedConfig = resolveOpenCodeConfigPath(environment, homeDirectory);
+  const routedDirectory = path.resolve(
+    environment.OPENCODE_CONFIG_DIR ?? path.join(homeDirectory, ".config", "opencode"),
+  );
+  const routedConfig = path.join(routedDirectory, "opencode.json");
+  const readConfig = async (filePath: string): Promise<string> => {
+    try {
+      return await readFile(filePath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return "{}\n";
+      throw error;
+    }
+  };
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ast-opencode-preflight-"));
+  const temporaryRoutedDirectory = path.join(temporaryRoot, "config-dir");
+  const temporaryRoutedConfig = path.join(temporaryRoutedDirectory, "opencode.json");
+  const selectedAndRoutedAreSame = selectedConfig === routedConfig;
+  const temporarySelectedConfig = selectedAndRoutedAreSame
+    ? temporaryRoutedConfig
+    : path.join(temporaryRoot, "selected", path.basename(selectedConfig));
+  try {
+    await mkdir(path.dirname(temporarySelectedConfig), { recursive: true });
+    await mkdir(temporaryRoutedDirectory, { recursive: true });
+    await writeFile(temporarySelectedConfig, await readConfig(selectedConfig), {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600,
+    });
+    if (!selectedAndRoutedAreSame) {
+      await writeFile(temporaryRoutedConfig, await readConfig(routedConfig), {
+        encoding: "utf8",
+        flag: "wx",
+        mode: 0o600,
+      });
+    }
+    return await operation({
+      ...environment,
+      OPENCODE_CONFIG: temporarySelectedConfig,
+      OPENCODE_CONFIG_DIR: temporaryRoutedDirectory,
+    });
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
 }
 
 export async function planOpenCodeConfig(options: {

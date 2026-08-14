@@ -82,7 +82,7 @@ The included batch benchmark records a 50% reduction in model round-trips and a 
 
 ## Supported environment and trust boundary
 
-The supported v0.7.2 target is Linux x64 with GNU coreutils `mv` supporting `--update=none-fail`, under Node.js 22.5.0 and the current Node.js 24 line. The production-readiness matrix covers both runtimes on that target; the Node 22.5 persistence canary requires `--experimental-sqlite`. Other Linux architectures or systems without the required GNU `mv`, macOS, and Windows are unverified until they pass equivalent filesystem, process, MCP/CLI/package, and mutation gates.
+The package engine floor remains Node.js `>=22.5.0`. Published v0.7.2 production-readiness evidence covers Linux x64 under exact Node.js 22.5.0 and the current Node.js 24 line, but the newer `Unreleased` managed setup-file implementation has fresh exact-tree evidence only on Node.js 24. Its mutation target additionally requires GNU coreutils 9.7 `mv` supporting `--update=none-fail`, `--exchange`, `--no-copy`, and `--no-target-directory`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, and `O_DIRECTORY`/`O_NOFOLLOW`. Current-source managed setup on Node.js 22.5.0, other Linux architectures or systems without those filesystem primitives, macOS, and Windows is unverified until equivalent exact-tree gates pass.
 
 This is a local stdio server. It runs with the invoking user's filesystem permissions, and clients may request any `project_root` that user can access. It does not provide HTTP authentication, sandboxing, tenant isolation, or a remote-service security boundary. Remote, untrusted, and multi-tenant operation is unsupported.
 
@@ -136,12 +136,28 @@ yarn setup
 
 The wizard supports exactly six CLI clients in this order: Claude Code, Hermes, OpenCode, Codex CLI, Gemini CLI, and GitHub Copilot CLI. Cursor, Windsurf, Cline, and other editor-integrated clients are intentionally excluded. Compatible detected clients start checked; unavailable or incompatible clients are disabled with a reason. Use Up/Down to move, Space to toggle, Enter to submit, or Escape/Ctrl-C to cancel.
 
-1. preflights any existing `ast` MCP registration;
-2. installs the bundled `structural-code-editing` skill;
-3. registers this package's MCP server through the agent's official CLI;
-4. reconnects and verifies the expected tools.
+1. preflights every selected client's existing `ast` MCP registration, skill destination, and effective managed-guidance destination;
+2. installs or safely upgrades the bundled `structural-code-editing` skill;
+3. adds one marker-owned activation block to each verified global instruction surface while preserving all user-owned bytes;
+4. registers this package's MCP server through the agent's official CLI;
+5. reconnects and verifies the expected tools.
 
-Existing matching registrations and skill files are unchanged. Conflicting MCP registrations fail before any write; remove or rename them explicitly instead of letting a setup script guess. Conflicting skill content also fails closed unless `--force-skill` is explicit.
+Existing matching registrations, skill files, and managed blocks are unchanged. Conflicting MCP registrations or malformed/unknown managed guidance fail before any write; resolve them explicitly instead of letting a setup script guess. Skill upgrades are automatic only when the installed bytes match an exact SHA-256 admitted from a published npm tarball. Unknown or customized skill bytes fail closed unless `--force-skill` is explicit. That flag applies only to the skill and cannot override guidance conflicts, unsafe routes, or filesystem races.
+
+Guidance uses each client's verified global instruction contract rather than one universal filename:
+
+| Client   | Managed guidance destination                                                                                          |
+| -------- | --------------------------------------------------------------------------------------------------------------------- |
+| Claude   | `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md`                                                              |
+| OpenCode | Effective native `AGENTS.md`; an existing Claude fallback may be shared or preserved when OpenCode has no native file |
+| Codex    | Non-empty `$CODEX_HOME/AGENTS.override.md`, otherwise `$CODEX_HOME/AGENTS.md`; `CODEX_HOME` defaults to `~/.codex`    |
+| Gemini   | The one supported safe `context.fileName` from `~/.gemini/settings.json`, otherwise `~/.gemini/GEMINI.md`             |
+| Hermes   | `skill_only`; setup does not modify `SOUL.md` or invent a global instruction destination                              |
+| Copilot  | `skill_only`; setup does not invent a personal global instruction destination                                         |
+
+The managed range is delimited by `ast-tool:structural-code-editing guidance v1` begin/end markers. Setup updates only that range, preserves the file's UTF-8 BOM, newline style, mode, and all content outside the range, and rejects duplicate, partial, reordered, unknown, symlinked, or non-regular destinations. Writes pin the parent chain, preimage, held temporary inode, and destination. New files use descriptor-bound no-clobber publication; replacements use an atomic same-directory exchange, validate both exchanged identities plus the pinned preimage bytes and mode, and roll the exact pair back when an in-call substitution or same-inode edit is detected. Every completed postimage is reauthenticated before later asset or MCP mutation. Cross-client setup is convergent rather than globally transactional.
+
+Successful setup output uses schema `version: 2`. Each agent reports `mcp`, `skill`, and `guidance`; physical writes include an `asset` of `skill`, `guidance`, or `mcp_config`. A complete replay returns every applicable item as `unchanged`/`skill_only` and an empty `physical_writes` array. A failed managed publication separates `completed_writes`, `possibly_committed`, `rolled_back`, `rollback_failed`, and `pending`; an uncertain commit or failed rollback is never reported as untouched and requires inspection plus a fresh replan.
 
 For automation, make the target set and confirmation explicit:
 
@@ -154,7 +170,7 @@ From a source checkout, replace `ast-tool` with `yarn setup` in those commands.
 
 `--agents all` is resolved only after detection and means every detected compatible client. If any detected client has unknown or incompatible output, setup fails before writes. Explicit IDs are strict and reject unavailable clients. Non-interactive setup requires both `--agents` and `--yes`.
 
-OpenCode 1.18.18 or newer is required. Because `opencode mcp add` ignores custom config routing, setup updates only `mcp.ast` in `OPENCODE_CONFIG`, then `OPENCODE_CONFIG_DIR/opencode.json`, then `~/.config/opencode/opencode.json`. JSONC comments, unrelated keys, and file mode are preserved; verification reuses the same environment. Gemini setup may require trusting the current folder before registration. Diagnostics use a correlation ID and never include command arguments, environment, paths, or raw provider output.
+OpenCode 1.18.18 or newer is required. Because `opencode mcp add` ignores custom config routing, setup updates only `mcp.ast` in `OPENCODE_CONFIG`, then `OPENCODE_CONFIG_DIR/opencode.json`, then `~/.config/opencode/opencode.json`. JSONC comments, unrelated keys, and file mode are preserved. OpenCode's nominally diagnostic config command normalizes both routed config files, so setup runs discovery and verification against disposable copies while retaining the selected config bytes and fails closed if the planned real destination changes. Gemini setup may require trusting the current folder before registration. Diagnostics use a correlation ID and omit command arguments, environment, credentials, and raw provider output; setup failures may include a bounded destination path so the operator can inspect an uncertain or pending write.
 
 ## Install the agent skill
 
@@ -187,7 +203,7 @@ ast-tool install-skill claude --scope project --project-root /absolute/project
 
 This writes `.claude/skills/structural-code-editing/SKILL.md` below that project. Project scope is intentionally rejected for Hermes because Hermes skills belong to a profile, not a source repository.
 
-Installation is idempotent. Existing identical content is left untouched; different content fails closed unless `--force` is explicit. From an unlinked source checkout, replace `ast-tool` with `yarn node /absolute/path/to/ast-mcp-server/dist/cli.js`.
+Installation is idempotent. Existing current bytes are left untouched; exact predecessor bytes admitted by the bundled npm-provenance manifest are upgraded safely. Unknown or customized bytes fail closed unless `--force` is explicit. `install-skill` never writes global guidance or configures MCP. From an unlinked source checkout, replace `ast-tool` with `yarn node /absolute/path/to/ast-mcp-server/dist/cli.js`.
 
 Claude Code detects changes in an existing skill directory live; restart it if the top-level skills directory did not exist when the session started. In Hermes, run `/reload-skills` or start a new session, then verify with `hermes skills list`.
 
@@ -426,11 +442,12 @@ yarn build
 yarn test:mcp
 yarn test:cli
 yarn test:package
+yarn test:installed-agents
 yarn npm audit --all --recursive
 yarn pack --dry-run
 ```
 
-`test:mcp` exercises the built stdio server. `test:cli` runs a read pipeline and a prepare/apply/replay workflow across separate Node processes.
+`test:mcp` exercises the built stdio server. `test:cli` runs a read pipeline and a prepare/apply/replay workflow across separate Node processes. `test:installed-agents` is a host-dependent manual gate: it builds first, detects locally installed supported clients, uses only disposable homes/config roots, verifies deterministic effective discovery without model calls, reports unavailable clients, and removes the disposable state. It is not a portable CI requirement because CI does not install every external client.
 
 ## Benchmarks
 

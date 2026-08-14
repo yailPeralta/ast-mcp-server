@@ -336,6 +336,9 @@ async function verifySetupIdempotency(consumerRoot, installedPackageRoot) {
     CLAUDE_CONFIG_DIR: claudeRoot,
     HERMES_HOME: hermesRoot,
   };
+  const humanClaudeGuidance = "# Registry consumer rules\n\nPreserve these bytes.\n";
+  await mkdir(claudeRoot, { recursive: true });
+  await writeFile(path.join(claudeRoot, "CLAUDE.md"), humanClaudeGuidance, "utf8");
   const args = ["setup", "--agents", "all", "--yes"];
   const first = object(
     parseJson(
@@ -354,44 +357,82 @@ async function verifySetupIdempotency(consumerRoot, installedPackageRoot) {
   if (
     !Array.isArray(first.agents) ||
     first.agents.length !== 2 ||
+    first.version !== 2 ||
     !first.agents.every(
       (item) => isPlainObject(item) && item.skill === "installed" && item.mcp === "configured",
-    )
+    ) ||
+    first.agents.find((item) => item.agent === "claude")?.guidance !== "updated" ||
+    first.agents.find((item) => item.agent === "hermes")?.guidance !== "skill_only"
   ) {
-    fail("installed setup did not configure MCP and skills for both bundled integrations.");
+    fail("installed setup did not configure MCP, skills, and managed guidance.");
   }
   if (
     !Array.isArray(second.agents) ||
     second.agents.length !== 2 ||
     !second.agents.every(
-      (item) => isPlainObject(item) && item.skill === "unchanged" && item.mcp === "unchanged",
-    )
+      (item) =>
+        isPlainObject(item) &&
+        item.skill === "unchanged" &&
+        item.mcp === "unchanged" &&
+        (item.guidance === "unchanged" || item.guidance === "skill_only"),
+    ) ||
+    !Array.isArray(second.physical_writes) ||
+    second.physical_writes.length !== 0
   ) {
-    fail("installed setup was not idempotent for both bundled integrations.");
+    fail("installed setup replay was not a zero-write convergence.");
   }
-  const [claudeSkill, hermesSkill, packagedSkill] = await Promise.all([
-    readFile(path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md"), "utf8"),
-    readFile(
-      path.join(
-        hermesRoot,
-        "skills",
-        "software-development",
-        "structural-code-editing",
-        "SKILL.md",
+  const [claudeSkill, hermesSkill, packagedSkill, packagedGuidance, packagedReleases] =
+    await Promise.all([
+      readFile(path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md"), "utf8"),
+      readFile(
+        path.join(
+          hermesRoot,
+          "skills",
+          "software-development",
+          "structural-code-editing",
+          "SKILL.md",
+        ),
+        "utf8",
       ),
-      "utf8",
-    ),
-    readFile(
-      path.join(installedPackageRoot, "skills", "structural-code-editing", "SKILL.md"),
-      "utf8",
-    ),
-  ]);
+      readFile(
+        path.join(installedPackageRoot, "skills", "structural-code-editing", "SKILL.md"),
+        "utf8",
+      ),
+      readFile(
+        path.join(installedPackageRoot, "skills", "structural-code-editing", "guidance.md"),
+        "utf8",
+      ),
+      readFile(
+        path.join(installedPackageRoot, "skills", "structural-code-editing", "releases.json"),
+        "utf8",
+      ),
+    ]);
   if (
     !packagedSkill.includes("name: structural-code-editing") ||
     claudeSkill !== packagedSkill ||
-    hermesSkill !== packagedSkill
+    hermesSkill !== packagedSkill ||
+    packagedGuidance.includes("ast-tool:structural-code-editing guidance") ||
+    JSON.parse(packagedReleases).current?.version !== "4.2.0"
   ) {
-    fail("installed setup did not preserve the bundled integration skill bytes.");
+    fail("installed setup did not preserve all bundled managed assets.");
+  }
+  const claudeGuidance = await readFile(path.join(claudeRoot, "CLAUDE.md"), "utf8");
+  const discovery = parseJson(
+    (
+      await execute(path.join(fakeBin, "claude"), ["debug", "instructions"], {
+        cwd: consumerRoot,
+        env: environment,
+      })
+    ).stdout,
+    "fake Claude instruction discovery",
+  );
+  if (
+    !claudeGuidance.startsWith(humanClaudeGuidance) ||
+    claudeGuidance.split("<!-- ast-tool:structural-code-editing guidance v1 begin -->").length !==
+      2 ||
+    discovery.content !== claudeGuidance
+  ) {
+    fail("installed setup did not preserve or expose effective managed guidance exactly once.");
   }
 }
 

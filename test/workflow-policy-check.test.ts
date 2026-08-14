@@ -1028,9 +1028,14 @@ describe("workflow policy check", () => {
     expect(securityPolicy).toContain("trusted single-user local stdio");
     expect(securityPolicy).toContain("GNU coreutils");
     expect(securityPolicy).toContain("--update=none-fail");
+    expect(securityPolicy).toContain("--exchange");
+    expect(securityPolicy).toContain("ln -L -T");
+    expect(securityPolicy).toContain("/proc/self/fd");
+    expect(securityPolicy).toContain("O_DIRECTORY");
+    expect(securityPolicy).toContain("O_NOFOLLOW");
     expect(securityPolicy).toContain("Linux x64 only");
     expect(securityPolicy).toContain("Other Linux architectures");
-    expect(securityPolicy).toContain("systems without that primitive");
+    expect(securityPolicy).toContain("systems without those primitives");
     expect(securityPolicy).toContain("macOS and Windows");
     expect(securityPolicy).toContain("unverified");
     expect(securityPolicy).not.toMatch(/\/(?:home|Users)\//u);

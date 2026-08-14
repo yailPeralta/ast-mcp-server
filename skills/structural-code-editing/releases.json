@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "algorithm": "sha256",
+  "current": {
+    "version": "4.2.0",
+    "sha256": "0bf35c4d9c8980ec9076b169c6e7001e1eb17cb9e5d7703ad27baf348b996c0a"
+  },
+  "predecessors": [
+    {
+      "version": "3.3.0",
+      "sha256": "61251830f0a247d63873fbe6a912187a36ff99489241c24c5b2558563f79ab7f",
+      "npm_versions": ["0.3.0"]
+    },
+    {
+      "version": "3.4.0",
+      "sha256": "b9f75a8cb4900f5c6ad652c106d373ea1e951c8757870b4424a59469dd3b0868",
+      "npm_versions": ["0.4.0"]
+    },
+    {
+      "version": "4.0.0",
+      "sha256": "fbc6a9eeb11d3e4ecb5a585283a49b0e4df102b413e7fd82316c2f6e44b2cd56",
+      "npm_versions": ["0.5.0", "0.5.1"]
+    },
+    {
+      "version": "4.0.0",
+      "sha256": "622ab59511396f4acf289bad39fb2a03114352f6dc8556f12b37bde98d67a6b3",
+      "npm_versions": ["0.6.0"]
+    },
+    {
+      "version": "4.1.0",
+      "sha256": "e10f89e8834c97fdb68157b7c5d97ebe59311fb8bbcca0f5f26fb47d684cbf52",
+      "npm_versions": ["0.7.0"]
+    },
+    {
+      "version": "4.1.0",
+      "sha256": "672307b01a93a16e395d40b0b58e06cfca34b54ffd05b697ef471633bc476ad1",
+      "npm_versions": ["0.7.1"]
+    },
+    {
+      "version": "4.1.0",
+      "sha256": "6284fbeaf054947d20693d317604ceabf5a53d32e3c836855a321e5e26766e29",
+      "npm_versions": ["0.7.2"]
+    }
+  ]
+}

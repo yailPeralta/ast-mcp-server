@@ -21,6 +21,53 @@ const readState = () =>
   fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, "utf8")) : null;
 const writeState = (value) => fs.writeFileSync(statePath, JSON.stringify(value));
 
+const configuredRoot = (value, fallback) => path.resolve(process.cwd(), value ?? fallback);
+const nonEmptyFile = (filePath) => {
+  try {
+    const information = fs.statSync(filePath);
+    return information.isFile() && information.size > 0;
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+};
+
+function effectiveInstructionPath() {
+  const home = process.env.HOME;
+  if (!home) throw new Error("Missing HOME for fake instruction discovery.");
+  const claudePath = path.join(
+    configuredRoot(process.env.CLAUDE_CONFIG_DIR, path.join(home, ".claude")),
+    "CLAUDE.md",
+  );
+  if (executableName === "claude") return claudePath;
+  if (executableName === "opencode") {
+    const root = process.env.OPENCODE_CONFIG
+      ? path.dirname(path.resolve(process.cwd(), process.env.OPENCODE_CONFIG))
+      : configuredRoot(process.env.OPENCODE_CONFIG_DIR, path.join(home, ".config", "opencode"));
+    const nativePath = path.join(root, "AGENTS.md");
+    return nonEmptyFile(nativePath)
+      ? nativePath
+      : nonEmptyFile(claudePath)
+        ? claudePath
+        : nativePath;
+  }
+  if (executableName === "codex") {
+    const root = configuredRoot(process.env.CODEX_HOME, path.join(home, ".codex"));
+    const overridePath = path.join(root, "AGENTS.override.md");
+    return nonEmptyFile(overridePath) ? overridePath : path.join(root, "AGENTS.md");
+  }
+  if (executableName === "gemini") {
+    const root = path.join(home, ".gemini");
+    const settingsPath = path.join(root, "settings.json");
+    if (!fs.existsSync(settingsPath)) return path.join(root, "GEMINI.md");
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    const configuredName = settings?.context?.fileName;
+    const fileName = Array.isArray(configuredName) ? configuredName[0] : configuredName;
+    return path.join(root, fileName ?? "GEMINI.md");
+  }
+  throw new Error(`Fake instruction discovery is unsupported for ${executableName}.`);
+}
+
 if (args[0] === "--version") {
   const versions = {
     claude: "2.1.201 (Claude Code)",
@@ -32,6 +79,21 @@ if (args[0] === "--version") {
   };
   console.log(
     versions[executableName] ?? (executableName === "fake-agent.mjs" ? versions.hermes : undefined),
+  );
+  process.exit(0);
+}
+
+if (args[0] === "debug" && args[1] === "instructions") {
+  if (!["claude", "opencode", "codex", "gemini"].includes(executableName)) {
+    console.error(`No verified global instruction surface for ${executableName}.`);
+    process.exit(1);
+  }
+  const instructionPath = effectiveInstructionPath();
+  console.log(
+    JSON.stringify({
+      path: instructionPath,
+      content: fs.existsSync(instructionPath) ? fs.readFileSync(instructionPath, "utf8") : null,
+    }),
   );
   process.exit(0);
 }

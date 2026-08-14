@@ -1,12 +1,19 @@
-import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  applyManagedAssetPlans,
   detectInstalledAgents,
   runAgentSetup,
   type AgentDetection,
 } from "../src/services/agent-setup.js";
+import {
+  createManagedFileApplyContext,
+  verifyManagedFilePostimage,
+} from "../src/services/managed-file.js";
+import { planManagedGuidance } from "../src/services/managed-guidance.js";
+import { planBundledSkillInstallation } from "../src/services/skill-installer.js";
 
 const temporaryDirectories: string[] = [];
 const bundledSkillPath = path.resolve(
@@ -15,6 +22,11 @@ const bundledSkillPath = path.resolve(
   "structural-code-editing",
   "SKILL.md",
 );
+const bundledAssets = {
+  sourceSkillPath: bundledSkillPath,
+  sourceGuidancePath: path.join(path.dirname(bundledSkillPath), "guidance.md"),
+  releaseManifestPath: path.join(path.dirname(bundledSkillPath), "releases.json"),
+};
 
 async function makeTemporaryDirectory(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "ast-agent-setup-test-"));
@@ -185,20 +197,20 @@ describe("agent setup", () => {
       agents: ["claude", "hermes"] as const,
       detections,
       environment: fake.environment,
-      sourceSkillPath: bundledSkillPath,
+      ...bundledAssets,
       serverEntryPath,
       nodeExecutable: process.execPath,
     };
     const first = await runAgentSetup(options);
     const second = await runAgentSetup(options);
 
-    expect(first.agents.map((item) => [item.agent, item.mcp, item.skill])).toEqual([
-      ["claude", "configured", "installed"],
-      ["hermes", "configured", "installed"],
+    expect(first.agents.map((item) => [item.agent, item.mcp, item.skill, item.guidance])).toEqual([
+      ["claude", "configured", "installed", "installed"],
+      ["hermes", "configured", "installed", "skill_only"],
     ]);
-    expect(second.agents.map((item) => [item.agent, item.mcp, item.skill])).toEqual([
-      ["claude", "unchanged", "unchanged"],
-      ["hermes", "unchanged", "unchanged"],
+    expect(second.agents.map((item) => [item.agent, item.mcp, item.skill, item.guidance])).toEqual([
+      ["claude", "unchanged", "unchanged", "unchanged"],
+      ["hermes", "unchanged", "unchanged", "skill_only"],
     ]);
     await access(fake.claudeState);
     await access(fake.hermesState);
@@ -224,12 +236,22 @@ describe("agent setup", () => {
     );
     expect(claudeSkill).toBe(hermesSkill);
     expect(first).toMatchObject({
-      version: 1,
+      version: 2,
       status: "ok",
       command: "setup",
       correlation_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
-    expect(first.physical_writes).toHaveLength(2);
+    expect(first.physical_writes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ asset: "skill", status: "installed" }),
+        expect.objectContaining({ asset: "guidance", status: "installed" }),
+      ]),
+    );
+    expect(first.physical_writes).toHaveLength(3);
+    expect(second.physical_writes).toEqual([]);
+    expect(
+      await readFile(path.join(fake.environment.CLAUDE_CONFIG_DIR!, "CLAUDE.md"), "utf8"),
+    ).toContain("ast-tool:structural-code-editing guidance v1 begin");
   });
 
   it("fails preflight on a conflicting MCP registration before any write", async () => {
@@ -250,7 +272,7 @@ describe("agent setup", () => {
         agents: ["claude", "hermes"],
         detections,
         environment: fake.environment,
-        sourceSkillPath: bundledSkillPath,
+        ...bundledAssets,
         serverEntryPath,
         nodeExecutable: process.execPath,
       }),
@@ -290,7 +312,7 @@ describe("agent setup", () => {
       agents: ["hermes"] as const,
       detections,
       environment: fake.environment,
-      sourceSkillPath: bundledSkillPath,
+      ...bundledAssets,
       serverEntryPath,
       nodeExecutable: process.execPath,
     };
@@ -323,7 +345,7 @@ describe("agent setup", () => {
         agents: ["claude"],
         detections,
         environment: fake.environment,
-        sourceSkillPath: bundledSkillPath,
+        ...bundledAssets,
         serverEntryPath: path.join(root, "dist", "index.js"),
         nodeExecutable: process.execPath,
       }),
@@ -351,7 +373,7 @@ describe("agent setup", () => {
         agents: ["codex"],
         detections,
         environment: fake.environment,
-        sourceSkillPath: bundledSkillPath,
+        ...bundledAssets,
         serverEntryPath,
       }),
     ).rejects.toMatchObject({ code: "AGENT_INCOMPATIBLE" });
@@ -378,7 +400,7 @@ describe("agent setup", () => {
         agents: ["claude", "codex"],
         detections,
         environment: fake.environment,
-        sourceSkillPath: bundledSkillPath,
+        ...bundledAssets,
         serverEntryPath,
       }),
     ).rejects.toSatisfy((error: unknown) => {
@@ -429,7 +451,7 @@ describe("agent setup", () => {
           },
         ],
         environment,
-        sourceSkillPath: bundledSkillPath,
+        ...bundledAssets,
         serverEntryPath,
         nodeExecutable: process.execPath,
       }),
@@ -438,5 +460,536 @@ describe("agent setup", () => {
     await expect(access(path.join(root, ".agents", "skills"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+  });
+
+  it("isolates mutating OpenCode effective-config discovery from the real config", async () => {
+    const root = await makeTemporaryDirectory();
+    const selectedConfig = path.join(root, "config", "opencode.json");
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    const executable = path.join(root, "opencode");
+    const invalidManifestPath = path.join(root, "releases.json");
+    await mkdir(path.dirname(selectedConfig), { recursive: true });
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(selectedConfig, "{}\n");
+    await writeFile(serverEntryPath, "");
+    await writeFile(invalidManifestPath, "{}\n");
+    await writeFile(
+      executable,
+      `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+if (process.argv[2] === "debug" && process.argv[3] === "config") {
+  fs.writeFileSync(process.env.OPENCODE_CONFIG, '{"$schema":"mutated"}\\n');
+  fs.writeFileSync(path.join(process.env.OPENCODE_CONFIG_DIR, "opencode.json"), '{"$schema":"mutated"}\\n');
+  console.log(JSON.stringify({}));
+} else console.log("1.18.18");
+`,
+    );
+    await chmod(executable, 0o755);
+    const environment = {
+      ...process.env,
+      HOME: root,
+      OPENCODE_CONFIG: selectedConfig,
+      OPENCODE_CONFIG_DIR: path.dirname(selectedConfig),
+    };
+
+    let rejection: unknown;
+    try {
+      await runAgentSetup({
+        agents: ["opencode"],
+        detections: [
+          {
+            id: "opencode",
+            label: "OpenCode",
+            installed: true,
+            executable,
+            compatibility: {
+              status: "compatible",
+              contract: "opencode-mcp-v1",
+              version: "1.18.18",
+            },
+          },
+        ],
+        environment,
+        ...bundledAssets,
+        releaseManifestPath: invalidManifestPath,
+        serverEntryPath,
+        nodeExecutable: process.execPath,
+      });
+    } catch (error) {
+      rejection = error;
+    }
+
+    expect(await readFile(selectedConfig, "utf8")).toBe("{}\n");
+    expect(rejection).toMatchObject({ code: "SETUP_ASSET_INVALID" });
+    await expect(access(path.join(root, ".agents", "skills"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("stops a post-preflight race before the first managed write", async () => {
+    const root = await makeTemporaryDirectory();
+    const claudeRoot = path.join(root, "claude");
+    const guidancePath = path.join(claudeRoot, "CLAUDE.md");
+    const skillPlan = await planBundledSkillInstallation({
+      target: ["claude"],
+      scope: "user",
+      force: false,
+      sourceSkillPath: bundledAssets.sourceSkillPath,
+      releaseManifestPath: bundledAssets.releaseManifestPath,
+      environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+      homeDirectory: root,
+    });
+    const guidancePlan = await planManagedGuidance({
+      agents: ["claude"],
+      sourceGuidancePath: bundledAssets.sourceGuidancePath,
+      environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+      homeDirectory: root,
+    });
+    await mkdir(path.dirname(guidancePath), { recursive: true });
+    await writeFile(guidancePath, "concurrent human policy\n", "utf8");
+
+    let rejection: unknown;
+    try {
+      await applyManagedAssetPlans(skillPlan, guidancePlan);
+    } catch (error) {
+      rejection = error;
+    }
+
+    expect(rejection).toMatchObject({
+      code: "AGENT_ASSET_APPLY_FAILED",
+      details: {
+        completed_writes: [],
+        pending: [
+          expect.objectContaining({ asset: "skill", status: "installed" }),
+          expect.objectContaining({ path: guidancePath, asset: "guidance" }),
+        ],
+      },
+    });
+    expect(await readFile(guidancePath, "utf8")).toBe("concurrent human policy\n");
+    await expect(
+      access(path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("revalidates unchanged assets before applying any later managed write", async () => {
+    const root = await makeTemporaryDirectory();
+    const claudeRoot = path.join(root, "claude");
+    const skillPath = path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md");
+    const guidancePath = path.join(claudeRoot, "CLAUDE.md");
+    await mkdir(path.dirname(skillPath), { recursive: true });
+    await writeFile(skillPath, await readFile(bundledAssets.sourceSkillPath));
+
+    const skillPlan = await planBundledSkillInstallation({
+      target: ["claude"],
+      scope: "user",
+      force: false,
+      sourceSkillPath: bundledAssets.sourceSkillPath,
+      releaseManifestPath: bundledAssets.releaseManifestPath,
+      environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+      homeDirectory: root,
+    });
+    const guidancePlan = await planManagedGuidance({
+      agents: ["claude"],
+      sourceGuidancePath: bundledAssets.sourceGuidancePath,
+      environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+      homeDirectory: root,
+    });
+    expect(skillPlan.files[0]?.status).toBe("unchanged");
+    await writeFile(skillPath, "concurrent custom skill\n");
+
+    await expect(applyManagedAssetPlans(skillPlan, guidancePlan)).rejects.toMatchObject({
+      code: "AGENT_ASSET_APPLY_FAILED",
+      details: {
+        completed_writes: [],
+        pending: [expect.objectContaining({ path: guidancePath, asset: "guidance" })],
+      },
+    });
+    expect(await readFile(skillPath, "utf8")).toBe("concurrent custom skill\n");
+    await expect(access(guidancePath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects an identical-byte unchanged asset inode replaced before a later setup phase", async () => {
+    const root = await makeTemporaryDirectory();
+    const claudeRoot = path.join(root, "claude");
+    const skillPath = path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md");
+    await mkdir(path.dirname(skillPath), { recursive: true });
+    await writeFile(skillPath, await readFile(bundledAssets.sourceSkillPath));
+
+    const skillPlan = await planBundledSkillInstallation({
+      target: ["claude"],
+      scope: "user",
+      force: false,
+      sourceSkillPath: bundledAssets.sourceSkillPath,
+      releaseManifestPath: bundledAssets.releaseManifestPath,
+      environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+      homeDirectory: root,
+    });
+    const guidancePlan = await planManagedGuidance({
+      agents: [],
+      sourceGuidancePath: bundledAssets.sourceGuidancePath,
+      environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+      homeDirectory: root,
+    });
+    const context = createManagedFileApplyContext();
+    await applyManagedAssetPlans(skillPlan, guidancePlan, context);
+    const replacement = path.join(path.dirname(skillPath), ".replacement");
+    await writeFile(replacement, await readFile(skillPath));
+    await rename(replacement, skillPath);
+
+    await expect(verifyManagedFilePostimage(skillPlan.files[0]!, context)).rejects.toThrow(
+      /postimage.*no longer current/i,
+    );
+  });
+
+  it.runIf(process.platform === "linux")(
+    "reports a committed write when post-commit verification fails",
+    async () => {
+      const root = await makeTemporaryDirectory();
+      const claudeRoot = path.join(root, "claude");
+      const guidancePath = path.join(claudeRoot, "CLAUDE.md");
+      await mkdir(claudeRoot);
+      await writeFile(guidancePath, "before\n");
+      const skillPlan = await planBundledSkillInstallation({
+        target: [],
+        scope: "user",
+        force: false,
+        sourceSkillPath: bundledAssets.sourceSkillPath,
+        releaseManifestPath: bundledAssets.releaseManifestPath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      });
+      const guidancePlan = await planManagedGuidance({
+        agents: ["claude"],
+        sourceGuidancePath: bundledAssets.sourceGuidancePath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      });
+
+      await expect(
+        applyManagedAssetPlans(skillPlan, guidancePlan, createManagedFileApplyContext(), {
+          afterCommit: async () => chmod(guidancePath, 0o600),
+        }),
+      ).rejects.toMatchObject({
+        code: "AGENT_ASSET_APPLY_FAILED",
+        details: {
+          completed_writes: [{ path: guidancePath, asset: "guidance", status: "updated" }],
+          possibly_committed: [],
+          pending: [],
+        },
+      });
+      expect(await readFile(guidancePath, "utf8")).toContain("guidance v1 begin");
+    },
+  );
+
+  it.runIf(process.platform === "linux")(
+    "reports a replaced post-commit destination as possibly committed instead of pending",
+    async () => {
+      const root = await makeTemporaryDirectory();
+      const claudeRoot = path.join(root, "claude");
+      const guidancePath = path.join(claudeRoot, "CLAUDE.md");
+      const replacement = path.join(claudeRoot, ".replacement");
+      await mkdir(claudeRoot);
+      await writeFile(guidancePath, "before\n");
+      const skillPlan = await planBundledSkillInstallation({
+        target: [],
+        scope: "user",
+        force: false,
+        sourceSkillPath: bundledAssets.sourceSkillPath,
+        releaseManifestPath: bundledAssets.releaseManifestPath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      });
+      const guidancePlan = await planManagedGuidance({
+        agents: ["claude"],
+        sourceGuidancePath: bundledAssets.sourceGuidancePath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      });
+
+      await expect(
+        applyManagedAssetPlans(skillPlan, guidancePlan, createManagedFileApplyContext(), {
+          afterCommit: async () => {
+            await writeFile(replacement, "concurrent post-commit content\n");
+            await rename(replacement, guidancePath);
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: "AGENT_ASSET_APPLY_FAILED",
+        details: {
+          completed_writes: [],
+          possibly_committed: [{ path: guidancePath, asset: "guidance", status: "updated" }],
+          pending: [],
+        },
+      });
+      expect(await readFile(guidancePath, "utf8")).toBe("concurrent post-commit content\n");
+    },
+  );
+
+  it.runIf(process.platform === "linux")(
+    "classifies a post-commit hook failure as committed instead of pending",
+    async () => {
+      const root = await makeTemporaryDirectory();
+      const claudeRoot = path.join(root, "claude");
+      const guidancePath = path.join(claudeRoot, "CLAUDE.md");
+      await mkdir(claudeRoot);
+      await writeFile(guidancePath, "before\n");
+      const skillPlan = await planBundledSkillInstallation({
+        target: [],
+        scope: "user",
+        force: false,
+        sourceSkillPath: bundledAssets.sourceSkillPath,
+        releaseManifestPath: bundledAssets.releaseManifestPath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      });
+      const guidancePlan = await planManagedGuidance({
+        agents: ["claude"],
+        sourceGuidancePath: bundledAssets.sourceGuidancePath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      });
+
+      await expect(
+        applyManagedAssetPlans(skillPlan, guidancePlan, createManagedFileApplyContext(), {
+          afterCommit: () => {
+            throw new Error("injected post-commit failure");
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: "AGENT_ASSET_APPLY_FAILED",
+        details: {
+          completed_writes: [{ path: guidancePath, asset: "guidance", status: "updated" }],
+          possibly_committed: [],
+          pending: [],
+        },
+      });
+      expect(await readFile(guidancePath, "utf8")).toContain("guidance v1 begin");
+    },
+  );
+
+  it.runIf(process.platform === "linux")(
+    "reports a successful exact-pair rollback separately while keeping the asset pending",
+    async () => {
+      const root = await makeTemporaryDirectory();
+      const claudeRoot = path.join(root, "claude");
+      const guidancePath = path.join(claudeRoot, "CLAUDE.md");
+      const replacement = path.join(claudeRoot, ".replacement");
+      await mkdir(claudeRoot);
+      await writeFile(guidancePath, "before\n");
+      const skillPlan = await planBundledSkillInstallation({
+        target: [],
+        scope: "user",
+        force: false,
+        sourceSkillPath: bundledAssets.sourceSkillPath,
+        releaseManifestPath: bundledAssets.releaseManifestPath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      });
+      const guidancePlan = await planManagedGuidance({
+        agents: ["claude"],
+        sourceGuidancePath: bundledAssets.sourceGuidancePath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      });
+      const write = { path: guidancePath, asset: "guidance", status: "updated" };
+
+      await expect(
+        applyManagedAssetPlans(skillPlan, guidancePlan, createManagedFileApplyContext(), {
+          afterDestinationRevalidated: async () => {
+            await writeFile(replacement, "before\n");
+            await rename(replacement, guidancePath);
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: "AGENT_ASSET_APPLY_FAILED",
+        details: {
+          completed_writes: [],
+          possibly_committed: [],
+          rolled_back: [write],
+          rollback_failed: [],
+          pending: [write],
+        },
+      });
+      expect(await readFile(guidancePath, "utf8")).toBe("before\n");
+    },
+  );
+
+  it.runIf(process.platform === "linux")(
+    "reports a same-inode concurrent edit as rolled back and pending",
+    async () => {
+      const root = await makeTemporaryDirectory();
+      const claudeRoot = path.join(root, "claude");
+      const guidancePath = path.join(claudeRoot, "CLAUDE.md");
+      await mkdir(claudeRoot);
+      await writeFile(guidancePath, "before\n");
+      const skillPlan = await planBundledSkillInstallation({
+        target: [],
+        scope: "user",
+        force: false,
+        sourceSkillPath: bundledAssets.sourceSkillPath,
+        releaseManifestPath: bundledAssets.releaseManifestPath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      });
+      const guidancePlan = await planManagedGuidance({
+        agents: ["claude"],
+        sourceGuidancePath: bundledAssets.sourceGuidancePath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      });
+      const write = { path: guidancePath, asset: "guidance", status: "updated" };
+
+      await expect(
+        applyManagedAssetPlans(skillPlan, guidancePlan, createManagedFileApplyContext(), {
+          afterDestinationRevalidated: async () => {
+            await writeFile(guidancePath, "concurrent human policy\n");
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: "AGENT_ASSET_APPLY_FAILED",
+        details: {
+          completed_writes: [],
+          possibly_committed: [],
+          rolled_back: [write],
+          rollback_failed: [],
+          pending: [write],
+        },
+      });
+      expect(await readFile(guidancePath, "utf8")).toBe("concurrent human policy\n");
+    },
+  );
+
+  it.runIf(process.platform === "linux")(
+    "reports failed rollback separately from a possibly committed operation",
+    async () => {
+      const root = await makeTemporaryDirectory();
+      const claudeRoot = path.join(root, "claude");
+      const guidancePath = path.join(claudeRoot, "CLAUDE.md");
+      const replacement = path.join(claudeRoot, ".replacement");
+      await mkdir(claudeRoot);
+      await writeFile(guidancePath, "before\n");
+      const skillPlan = await planBundledSkillInstallation({
+        target: [],
+        scope: "user",
+        force: false,
+        sourceSkillPath: bundledAssets.sourceSkillPath,
+        releaseManifestPath: bundledAssets.releaseManifestPath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      });
+      const guidancePlan = await planManagedGuidance({
+        agents: ["claude"],
+        sourceGuidancePath: bundledAssets.sourceGuidancePath,
+        environment: { CLAUDE_CONFIG_DIR: claudeRoot },
+        homeDirectory: root,
+      });
+      const write = { path: guidancePath, asset: "guidance", status: "updated" };
+
+      await expect(
+        applyManagedAssetPlans(skillPlan, guidancePlan, createManagedFileApplyContext(), {
+          afterDestinationRevalidated: async () => {
+            await writeFile(replacement, "before\n");
+            await rename(replacement, guidancePath);
+          },
+          beforeRollback: () => {
+            throw new Error("injected rollback failure");
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: "AGENT_ASSET_APPLY_FAILED",
+        details: {
+          completed_writes: [],
+          possibly_committed: [write],
+          rolled_back: [],
+          rollback_failed: [write],
+          pending: [],
+        },
+      });
+      expect(await readFile(guidancePath, "utf8")).toContain("guidance v1 begin");
+    },
+  );
+
+  it("rejects a guidance conflict before any skill or MCP write", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const claudeGuidance = path.join(fake.environment.CLAUDE_CONFIG_DIR!, "CLAUDE.md");
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await mkdir(path.dirname(claudeGuidance), { recursive: true });
+    await writeFile(serverEntryPath, "", "utf8");
+    await writeFile(
+      claudeGuidance,
+      "human\n<!-- ast-tool:structural-code-editing guidance v2 begin -->\nunknown\n",
+      "utf8",
+    );
+    const detections = await detectInstalledAgents({ environment: fake.environment });
+
+    await expect(
+      runAgentSetup({
+        agents: ["claude", "hermes"],
+        detections,
+        environment: fake.environment,
+        ...bundledAssets,
+        serverEntryPath,
+        nodeExecutable: process.execPath,
+        forceSkill: true,
+      }),
+    ).rejects.toMatchObject({ code: "AGENT_GUIDANCE_CONFLICT" });
+
+    expect(await readFile(claudeGuidance, "utf8")).toContain("guidance v2 begin");
+    await expect(access(fake.claudeState)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(fake.hermesState)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      access(
+        path.join(
+          fake.environment.CLAUDE_CONFIG_DIR!,
+          "skills",
+          "structural-code-editing",
+          "SKILL.md",
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects a source and release-manifest mismatch before any write", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    const releaseManifestPath = path.join(root, "releases.json");
+    const manifest = JSON.parse(await readFile(bundledAssets.releaseManifestPath, "utf8"));
+    manifest.current.sha256 = "0".repeat(64);
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "", "utf8");
+    await writeFile(releaseManifestPath, JSON.stringify(manifest), "utf8");
+    const detections = await detectInstalledAgents({ environment: fake.environment });
+
+    await expect(
+      runAgentSetup({
+        agents: ["claude", "hermes"],
+        detections,
+        environment: fake.environment,
+        ...bundledAssets,
+        releaseManifestPath,
+        serverEntryPath,
+        nodeExecutable: process.execPath,
+      }),
+    ).rejects.toMatchObject({ code: "SETUP_ASSET_INVALID" });
+
+    await expect(access(fake.claudeState)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(fake.hermesState)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      access(
+        path.join(
+          fake.environment.CLAUDE_CONFIG_DIR!,
+          "skills",
+          "structural-code-editing",
+          "SKILL.md",
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      access(path.join(fake.environment.CLAUDE_CONFIG_DIR!, "CLAUDE.md")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

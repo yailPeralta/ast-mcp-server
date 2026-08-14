@@ -4,7 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.2] — release candidate (unreleased, 2026-08-12)
+## [Unreleased]
+
+### Fixed
+
+- OpenCode effective-config discovery and verification now run against disposable routed copies because the client normalizes both configured files even for diagnostic commands; the real planned destination remains snapshot-protected.
+
+### Added
+
+- Added managed `structural-code-editing` activation guidance for the verified Claude, OpenCode, Codex, and Gemini global instruction surfaces; Hermes and Copilot remain explicitly skill-only.
+- Added an exact SHA-256 release manifest for safe upgrades from registry-proven skill bytes and packaged the canonical marker-free guidance payload.
+
+### Changed
+
+- Setup now preflights MCP, skill, and guidance across every selected client before mutation, preserves user-owned instruction bytes, applies snapshot-checked descriptor-bound file writes, and reports schema v2 with logical outcomes plus completed, possibly committed, rolled-back, rollback-failed, pending, and successful physical asset states.
+- `install-skill` uses the same official-byte manifest but remains skill-only; explicit force never bypasses guidance ownership, route, or race checks.
+- Managed file writes hold staged and preimage inodes through publication, use no-clobber descriptor links for creation and atomic exchange with exact-pair rollback for replacement, reject same-inode content or mode races before cleanup, then reauthenticate unchanged/completed postimages before later asset or MCP writes.
+
+## [0.7.2] — published to `latest` and `next`, registry verified (2026-08-13)
 
 ### Fixed
 
@@ -15,6 +32,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Expanded convergent setup to Claude Code, Hermes, OpenCode, Codex CLI, Gemini CLI, and GitHub Copilot CLI with fail-closed versioned contracts.
 - Added native checkbox selection, shared `.agents/skills` planning, routed JSONC-safe OpenCode configuration, bounded correlated diagnostics, and fixture admission gates.
+
+### Release status
+
+- npm exposes the immutable published `0.7.2` bytes under both `latest` and `next`. The managed-guidance changes above are newer, unreleased development bytes and cannot be attributed to that package version.
 
 ## [0.7.1] — published to `next`, verified, not promoted (2026-08-12)
 
