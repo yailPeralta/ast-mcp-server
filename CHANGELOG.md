@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.9.0] — local release candidate, pending release (2026-08-16)
+
 ### Added
 
 - Added bounded `ast-tool cache inspect` and confirmation-gated `ast-tool cache clear --yes`; both avoid host paths, reject unsafe trees, preserve unknown files, and perform no automatic garbage collection.
@@ -24,6 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Security
 
 - Package-created cache directories use `0700`; SQLite main, WAL, SHM and quarantine artifacts use `0600` on supported Linux, with no-follow, ownership, link-count and device/inode validation around database open, quarantine and cleanup.
+
+### Release status
+
+- This local candidate is pending exact-tree CI and the repository's separately authorized delivery sequence. It has not been published to npm, assigned to `next` or `latest`, tagged in Git, or released on GitHub; registry and GitHub readbacks remain authoritative.
 
 ## [0.8.1] — published to `latest` and `next`, registry verified (2026-08-14)
 

@@ -1,20 +1,20 @@
 # Support policy
 
-This document defines the supported platform, runtime, persistence, and operational boundary for `ast-mcp-server` v0.8.1 and the current `Unreleased` development line.
+This document defines the supported platform, runtime, persistence, and operational boundary for published `ast-mcp-server` v0.8.1 and the local `0.9.0` release candidate.
 
 ## Supported release target
 
-| Environment                                                                   | Status      | Contract                                                                                      |
-| ----------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------- |
-| Linux x64 with required GNU coreutils and procfs, Node.js 22.5.0              | Published   | Immutable v0.8.1 release matrix; not the runtime floor of the current development tree.       |
-| Linux x64 with required GNU coreutils and procfs, exact Node.js 22.13.0       | Supported   | Current `Unreleased` package, persistence, MCP/CLI/package, lifecycle and mutation matrix.    |
-| Linux x64 with required GNU coreutils and procfs, current Node.js 24 line     | Supported   | Published v0.8.1 and current `Unreleased` matrices, each bound to its own package/tree bytes. |
-| Other Linux architectures or systems without the required filesystem features | Unverified  | Not supported until equivalent architecture, mutation, and filesystem-publication gates pass. |
-| macOS                                                                         | Unverified  | Not supported until equivalent filesystem, process, package, mutation, and canary gates pass. |
-| Windows                                                                       | Unverified  | Not supported until equivalent filesystem, process, package, mutation, and canary gates pass. |
-| Remote, untrusted, or multi-tenant service use                                | Unsupported | No network authentication, sandbox, or tenant-isolation boundary is provided.                 |
+| Environment                                                                   | Status      | Contract                                                                                       |
+| ----------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------- |
+| Linux x64 with required GNU coreutils and procfs, Node.js 22.5.0              | Published   | Immutable v0.8.1 release matrix; not the runtime floor of the current development tree.        |
+| Linux x64 with required GNU coreutils and procfs, exact Node.js 22.13.0       | Supported   | Local 0.9.0 candidate package, persistence, MCP/CLI/package, lifecycle and mutation matrix.    |
+| Linux x64 with required GNU coreutils and procfs, current Node.js 24 line     | Supported   | Published v0.8.1 and local 0.9.0 candidate matrices, each bound to its own package/tree bytes. |
+| Other Linux architectures or systems without the required filesystem features | Unverified  | Not supported until equivalent architecture, mutation, and filesystem-publication gates pass.  |
+| macOS                                                                         | Unverified  | Not supported until equivalent filesystem, process, package, mutation, and canary gates pass.  |
+| Windows                                                                       | Unverified  | Not supported until equivalent filesystem, process, package, mutation, and canary gates pass.  |
+| Remote, untrusted, or multi-tenant service use                                | Unsupported | No network authentication, sandbox, or tenant-isolation boundary is provided.                  |
 
-The current `Unreleased` package engine floor is Node.js `>=22.13.0`; its local matrix executes exact Node.js 22.13.0 and the governed Node.js 24 major. Published v0.8.1 retains its immutable `>=22.5.0` metadata and exact Node.js 22.5.0/24 release evidence. A future runtime satisfying an engine range is not automatically a verified release target.
+The local `0.9.0` candidate requires Node.js `>=22.13.0`; its matrix targets exact Node.js 22.13.0 and the governed Node.js 24 major. Published v0.8.1 retains its immutable `>=22.5.0` metadata and exact Node.js 22.5.0/24 release evidence. A future runtime satisfying an engine range is not automatically a verified release target.
 
 The checked-evidence freezer requires GNU coreutils 9.7 `mv` with `--update=none-fail`, `--no-copy`, and `--no-target-directory`. Managed setup-file mutation additionally requires that same `mv` with `--exchange`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, `O_DIRECTORY`, and `O_NOFOLLOW`. It fails closed when any verified Linux primitive is unavailable. Equivalent publication, exchange, descriptor-link, and descriptor-relative mutation semantics have not been verified on other operating systems or architectures.
 
@@ -34,7 +34,7 @@ Operation locks coordinate cooperating same-user processes. They do not stop edi
 
 ## Symbol-index persistence
 
-Published v0.8.1 remains memory-default. In the current `Unreleased` line, absence and explicit `enabled` select native SQLite; operators requiring no persistent index state must set `disabled` explicitly:
+Published v0.8.1 remains memory-default. In the local `0.9.0` candidate, absence and explicit `enabled` select native SQLite; operators requiring no persistent index state must set `disabled` explicitly:
 
 ```bash
 AST_SYMBOL_INDEX_PERSISTENCE=disabled \
@@ -60,11 +60,11 @@ ast-tool cache inspect
 ast-tool cache clear --yes
 ```
 
-Both commands are bounded and path-free. Clear preflights the tree, refuses unsafe or active SQLite artifacts, rechecks identity before unlink and preserves unknown regular files/directories. There is no automatic garbage collection in this development line.
+Both commands are bounded and path-free. Clear preflights the tree, refuses unsafe or active SQLite artifacts, rechecks identity before unlink and preserves unknown regular files/directories. There is no automatic garbage collection in this candidate.
 
 ## Production-readiness acceptance
 
-The four retained Linux x64 production-readiness reports cover `ast-mcp-server` and `x-scraper` under Node.js 22.5.0 and Node.js 24 for package version 0.6.0, commit `2d0b21bbb80fae1acfca6a85d5891d87e68b59c1`, and tree `af931d49769fabdf06f623965a6cfe1f9afb8a81`. They are historical integration evidence only: they are not reattributed to v0.8.1 and do not establish managed setup-file publication for that release. The separate exact v0.8.1 release matrix validates the current repository under both supported runtime lines, including managed setup, but does not rebind those historical reports. MCP-PROD-404 remains normative for admission:
+The four retained Linux x64 production-readiness reports cover `ast-mcp-server` and `x-scraper` under Node.js 22.5.0 and Node.js 24 for package version 0.6.0, commit `2d0b21bbb80fae1acfca6a85d5891d87e68b59c1`, and tree `af931d49769fabdf06f623965a6cfe1f9afb8a81`. They are historical integration evidence only: they are not reattributed to v0.8.1 or the local 0.9.0 candidate. The separate exact 0.9.0 release matrix is the candidate-specific gate for current repository bytes under both supported runtime lines, including managed setup; it does not rebind those historical reports. MCP-PROD-404 remains normative for admission:
 
 - zero semantic mismatches across disabled, cold, warm, restart, and rollback reads;
 - byte-identical real-repository status and worktree trees;

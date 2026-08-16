@@ -46,7 +46,7 @@ El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reempl
 
 ## Runtime, soporte y errores
 
-El árbol actual `Unreleased` requiere Node.js `>=22.13.0` y se verifica con Node.js exacto 22.13.0 y la línea actual de Node.js 24. La versión publicada v0.8.1 conserva su matriz inmutable 22.5.0/24. La publicación de archivos gestionados por setup requiere además GNU coreutils 9.7 `mv` con `--update=none-fail`, `--exchange`, `--no-copy` y `--no-target-directory`, GNU coreutils `ln -L -T`, y procfs en `/proc/self/fd` con `O_DIRECTORY`/`O_NOFOLLOW`. Otras arquitecturas Linux, sistemas sin esos primitivos, macOS y Windows están sin verificar.
+El candidato local 0.9.0 requiere Node.js `>=22.13.0` y se verifica con Node.js exacto 22.13.0 y la línea actual de Node.js 24. La versión publicada v0.8.1 conserva su matriz inmutable 22.5.0/24. La publicación de archivos gestionados por setup requiere además GNU coreutils 9.7 `mv` con `--update=none-fail`, `--exchange`, `--no-copy` y `--no-target-directory`, GNU coreutils `ln -L -T`, y procfs en `/proc/self/fd` con `O_DIRECTORY`/`O_NOFOLLOW`. Otras arquitecturas Linux, sistemas sin esos primitivos, macOS y Windows están sin verificar.
 
 El transporte soportado es stdio local bajo los permisos filesystem del usuario que invoca el proceso. No asumir autenticación HTTP, sandbox, aislamiento entre tenants ni una frontera segura para clientes remotos o no confiables.
 
