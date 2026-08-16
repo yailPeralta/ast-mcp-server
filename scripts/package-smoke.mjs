@@ -5,7 +5,17 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
 import console from "node:console";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -34,6 +44,21 @@ const globalPrefix = path.join(temporaryRoot, "global");
 const globalClaudeRoot = path.join(temporaryRoot, "global-claude");
 const globalHermesRoot = path.join(temporaryRoot, "global-hermes");
 const mcpFixtureRoot = path.join(temporaryRoot, "mcp-fixture");
+const mcpXdgCacheHome = path.join(temporaryRoot, "mcp-xdg-cache");
+const mcpTemp = path.join(temporaryRoot, "mcp-tmp");
+const mcpCacheRoot = path.join(mcpXdgCacheHome, "ast-mcp-server", "symbol-index");
+
+function isolatedMcpEnvironment() {
+  const environment = {
+    ...process.env,
+    HOME: sharedHome,
+    XDG_CACHE_HOME: mcpXdgCacheHome,
+    TMPDIR: mcpTemp,
+  };
+  delete environment.AST_SYMBOL_INDEX_PERSISTENCE;
+  delete environment.AST_SYMBOL_INDEX_CACHE_ROOT;
+  return environment;
+}
 
 async function executeFile(file, args, options = {}) {
   return execFileAsync(file, args, {
@@ -168,6 +193,7 @@ try {
     ),
   ]);
   if (
+    releaseMetadata.engines?.node !== ">=22.13.0" ||
     installedMetadata.name !== releaseMetadata.name ||
     installedMetadata.version !== releaseMetadata.version ||
     installedMetadata.engines?.node !== releaseMetadata.engines?.node ||
@@ -178,12 +204,17 @@ try {
     !installedChangelog.includes(`## [${releaseMetadata.version}]`) ||
     !packagedSkill.includes("name: structural-code-editing") ||
     packagedGuidance.includes("ast-tool:structural-code-editing guidance") ||
-    JSON.parse(packagedReleases).current?.version !== "4.2.0"
+    JSON.parse(packagedReleases).current?.version !== "4.3.0"
   ) {
     throw new Error("installed tarball release metadata is incomplete");
   }
 
-  await mkdir(path.join(mcpFixtureRoot, "src"), { recursive: true });
+  await Promise.all([
+    mkdir(path.join(mcpFixtureRoot, "src"), { recursive: true }),
+    mkdir(sharedHome, { recursive: true, mode: 0o700 }),
+    mkdir(mcpXdgCacheHome, { recursive: true, mode: 0o700 }),
+    mkdir(mcpTemp, { recursive: true, mode: 0o700 }),
+  ]);
   await writeFile(
     path.join(mcpFixtureRoot, "tsconfig.json"),
     JSON.stringify({ compilerOptions: { strict: true }, include: ["src/**/*"] }),
@@ -194,6 +225,7 @@ try {
   const mcpTransport = new StdioClientTransport({
     command: process.execPath,
     args: [path.join(installedPackageRoot, "dist", "index.js")],
+    env: isolatedMcpEnvironment(),
     stderr: "pipe",
   });
   try {
@@ -203,6 +235,22 @@ try {
       throw new Error(
         `packed MCP handshake version mismatch: ${String(serverVersion)} != ${installedMetadata.version}`,
       );
+    }
+    const firstStatus = await mcpClient.callTool({
+      name: "ast_get_project_status",
+      arguments: { project_root: mcpFixtureRoot },
+    });
+    const firstObservability = firstStatus.structuredContent?.index_observability;
+    if (
+      firstStatus.isError === true ||
+      firstObservability?.policy !== "enabled" ||
+      firstObservability.backend !== "sqlite" ||
+      firstObservability.state !== "ready" ||
+      firstObservability.operation !== "rebuild" ||
+      firstObservability.fallback_count !== 0 ||
+      JSON.stringify(firstStatus).includes(mcpXdgCacheHome)
+    ) {
+      throw new Error("packed MCP default persistence did not rebuild privately in SQLite");
     }
     const serverStderr = mcpTransport.stderr;
     if (serverStderr === null) {
@@ -247,6 +295,52 @@ try {
     }
   } finally {
     await mcpClient.close();
+  }
+
+  const restartClient = new Client({ name: "ast-package-smoke-restart", version: "1.0.0" });
+  const restartTransport = new StdioClientTransport({
+    command: process.execPath,
+    args: [path.join(installedPackageRoot, "dist", "index.js")],
+    env: isolatedMcpEnvironment(),
+    stderr: "pipe",
+  });
+  try {
+    await restartClient.connect(restartTransport);
+    const restartStatus = await restartClient.callTool({
+      name: "ast_get_project_status",
+      arguments: { project_root: mcpFixtureRoot },
+    });
+    const observability = restartStatus.structuredContent?.index_observability;
+    if (
+      restartStatus.isError === true ||
+      observability?.policy !== "enabled" ||
+      observability.backend !== "sqlite" ||
+      observability.state !== "ready" ||
+      observability.operation !== "hit" ||
+      observability.fallback_count !== 0 ||
+      JSON.stringify(restartStatus).includes(mcpXdgCacheHome)
+    ) {
+      throw new Error("packed MCP default persistence did not reuse the SQLite cache on restart");
+    }
+  } finally {
+    await restartClient.close();
+  }
+  const cacheEntries = await readdir(mcpCacheRoot, { withFileTypes: true });
+  const cacheDatabases = cacheEntries.filter(
+    (entry) => entry.isFile() && /^symbol-index-[0-9a-f]{64}\.sqlite$/u.test(entry.name),
+  );
+  if (cacheDatabases.length !== 1 || cacheEntries.some((entry) => entry.isSymbolicLink())) {
+    throw new Error("packed MCP default persistence did not create one physical SQLite cache");
+  }
+  const cacheMetadata = await lstat(path.join(mcpCacheRoot, cacheDatabases[0].name));
+  if (
+    !cacheMetadata.isFile() ||
+    cacheMetadata.isSymbolicLink() ||
+    cacheMetadata.nlink !== 1 ||
+    cacheMetadata.size < 1 ||
+    (process.platform === "linux" && (cacheMetadata.mode & 0o077) !== 0)
+  ) {
+    throw new Error("packed MCP default SQLite cache is not a private unique regular file");
   }
 
   const executable =
@@ -402,6 +496,9 @@ try {
       package_version: installedMetadata.version,
       node_engine: installedMetadata.engines?.node,
       handshake_version: installedMetadata.version,
+      default_sqlite_rebuild: true,
+      default_sqlite_restart_hit: true,
+      private_cache_artifact: true,
       packed_error: true,
       stderr_correlation: true,
       global_install: true,

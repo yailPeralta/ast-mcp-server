@@ -1,13 +1,13 @@
 # ADR 0010: Govern the local stdio production runtime
 
-- Status: Accepted
+- Status: Accepted; runtime and persistence clauses superseded by ADR 0011
 - Date: 2026-08-07
 - Decision owners: ast-mcp-server maintainers
 - Scope: local MCP runtime, lifecycle, operational contract and release transitions
 
 ## Decision
 
-Treat `ast-mcp-server` as a production-quality local MCP server for a trusted single user on Linux x64 with the required GNU coreutils publication primitive, transported over `stdio`, with TypeScript and JavaScript as the supported language surface. Node.js `22.5.0` and the current Node 24 line are the supported runtime matrix.
+Treat `ast-mcp-server` as a production-quality local MCP server for a trusted single user on Linux x64 with the required GNU coreutils publication primitive, transported over `stdio`, with TypeScript and JavaScript as the supported language surface. ADR 0011 updates the current development-line runtime matrix to exact Node.js `22.13.0` and the governed Node 24 line; the `22.5.0` matrix recorded later in this ADR is historical release evidence.
 
 Keep execution in process for this release, but place strict admission, scheduling, cancellation, lifecycle and disclosure boundaries around compiler work. Worker/process isolation remains a future option if measured workloads prove that cooperative in-process control is insufficient.
 
@@ -75,18 +75,18 @@ If non-critical work exceeds grace, the entrypoint emits one bounded event and e
 
 ## Persistence boundary
 
-ADR 0009 remains authoritative:
+ADR 0011 now governs persistence:
 
-- `AST_SYMBOL_INDEX_PERSISTENCE=disabled` is the default and rollback;
+- absent or `enabled` selects SQLite;
+- `disabled` is the immediate memory-only rollback;
 - `canary` requires an explicit canonical cache root;
-- `enabled` remains unreleased and fails closed with `enabled_not_released`;
 - SQLite is a body-free, replaceable derived projection and never semantic authority.
 
 ## Verification and support
 
 Production claims require deterministic fixture gates plus read-only canaries on representative real repositories. Real repository source/config/status bytes must remain unchanged. Invalidation and corruption tests run only in disposable fixtures.
 
-Runtime evidence must execute explicit `AST_NODE_22_BIN` and `AST_NODE_24_BIN` binaries and validate their versions. Resource gates use the preregistered RSS and quiescent recursive cache-byte criteria from `MCP-PROD-404`; real-repository latency/RSS are observations, not release gates.
+Current runtime evidence must execute explicit `AST_NODE_22_13_BIN` and `AST_NODE_24_BIN` binaries and validate exact `v22.13.0` and major 24 respectively. The retained report freezer still uses its historical Node 22.5 authority. Resource gates use the preregistered RSS and quiescent recursive cache-byte criteria from `MCP-PROD-404`; real-repository latency/RSS are observations, not release gates.
 
 Linux x64 with GNU coreutils 9.7 `mv --update=none-fail --exchange --no-copy --no-target-directory`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, and `O_DIRECTORY`/`O_NOFOLLOW` is supported. Other Linux architectures or systems without those primitives, macOS and Windows are unverified until they pass an equivalent SDD and evidence matrix.
 

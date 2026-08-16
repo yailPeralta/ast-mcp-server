@@ -4,7 +4,19 @@ import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
-import { access, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
@@ -23,10 +35,15 @@ export { TRUSTED_GIT_BINARY };
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const commandTimeoutMs = 20 * 60 * 1000;
 const outputTailBytes = 64 * 1024;
+const TRUSTED_MV_BINARY = "/usr/bin/mv";
+const trustedMvVersion = "mv (GNU coreutils) 9.7";
 const candidateTreePattern = /^[0-9a-f]{40}$/u;
 const nodeVersionPattern = /^v(\d+)\.(\d+)\.(\d+)$/u;
+const runtimeEvidenceAuthority = new WeakSet();
+const runtimeReportAuthority = new WeakSet();
+const summaryReportAuthority = new WeakSet();
 let terminalContext;
-let terminalPhase = "preflight";
+let terminalPublishAttempted = false;
 
 export const RELEASE_CANDIDATE_COMMAND_IDS = Object.freeze([
   "install",
@@ -107,17 +124,19 @@ export function validateRuntimeVersion(runtimeId, rawVersion) {
     minor: Number(match[2]),
     patch: Number(match[3]),
   };
-  const expected =
-    runtimeId === "node22.5"
-      ? { major: 22, minimumMinor: 5 }
-      : runtimeId === "node24"
-        ? { major: 24, minimumMinor: 0 }
-        : undefined;
-  if (expected === undefined) fail(`Unknown runtime identity: ${runtimeId}`);
-  if (version.major !== expected.major || version.minor < expected.minimumMinor) {
-    fail(
-      `${runtimeId} requires Node ${expected.major}.${expected.minimumMinor}.0 or newer within major ${expected.major}; received ${rawVersion.trim()}.`,
-    );
+  if (runtimeId === "node22.13") {
+    if (version.major !== 22) {
+      fail(`node22.13 requires Node major 22; received ${rawVersion.trim()}.`);
+    }
+    if (version.minor !== 13 || version.patch !== 0) {
+      fail(`node22.13 requires exact Node 22.13.0; received ${rawVersion.trim()}.`);
+    }
+  } else if (runtimeId === "node24") {
+    if (version.major !== 24) {
+      fail(`node24 requires Node major 24; received ${rawVersion.trim()}.`);
+    }
+  } else {
+    fail(`Unknown runtime identity: ${runtimeId}`);
   }
   return Object.freeze({ raw: rawVersion.trim(), ...version });
 }
@@ -128,7 +147,7 @@ export function createRuntimeEnvironment(runtimeId, nodeBinary, ambientEnvironme
   if (!path.isAbsolute(home ?? "") || !path.isAbsolute(temporaryDirectory)) {
     fail("runtime HOME and TMPDIR must be absolute paths.");
   }
-  if (runtimeId !== "node22.5" && runtimeId !== "node24") {
+  if (runtimeId !== "node22.13" && runtimeId !== "node24") {
     fail(`Unknown runtime identity: ${runtimeId}`);
   }
   return Object.freeze({
@@ -137,7 +156,7 @@ export function createRuntimeEnvironment(runtimeId, nodeBinary, ambientEnvironme
     HOME: home,
     LANG: "C.UTF-8",
     LC_ALL: "C.UTF-8",
-    NODE_OPTIONS: runtimeId === "node22.5" ? "--experimental-sqlite" : "",
+    NODE_OPTIONS: "",
     PATH: `${path.dirname(nodeBinary)}${path.delimiter}${TRUSTED_SYSTEM_PATH}`,
     TMPDIR: temporaryDirectory,
   });
@@ -345,10 +364,19 @@ export async function executeCommandOnce(command, options, executor = runBounded
 }
 
 function publicCommandResult(command, result) {
+  const passed = result.exitCode === 0 && result.signal === null && !result.timedOut;
+  const failureCode = passed
+    ? null
+    : result.timedOut
+      ? "timeout"
+      : result.signal === null
+        ? "nonzero-exit"
+        : "signal";
   return Object.freeze({
     id: command.id,
+    status: passed ? "pass" : "fail",
+    command_failure_code: failureCode,
     exit_code: result.exitCode,
-    signal: result.signal,
     timed_out: result.timedOut,
     duration_ms: result.durationMs,
     stdout_bytes: result.stdoutBytes,
@@ -552,23 +580,285 @@ async function inspectRuntime(runtimeId, nodeBinary) {
   });
 }
 
-async function writeJsonExclusive(filePath, value) {
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, {
-    encoding: "utf8",
-    flag: "wx",
-    mode: 0o600,
+function brandRuntimeEvidence(evidence) {
+  const branded = Object.freeze(evidence);
+  runtimeEvidenceAuthority.add(branded);
+  return branded;
+}
+
+function brandRuntimeReport(report) {
+  const branded = Object.freeze(report);
+  runtimeReportAuthority.add(branded);
+  return branded;
+}
+
+function brandSummaryReport(report) {
+  const branded = Object.freeze(report);
+  summaryReportAuthority.add(branded);
+  return branded;
+}
+
+function createPublicationEnvironment() {
+  return Object.freeze({
+    HOME: "/nonexistent",
+    LANG: "C.UTF-8",
+    LC_ALL: "C.UTF-8",
+    PATH: TRUSTED_SYSTEM_PATH,
   });
 }
 
-function safeFailureTail(value) {
-  return value
-    .replace(/Bearer\s+\S+/giu, "Bearer [REDACTED]")
-    .replace(/(token|password|secret|api[_-]?key)=\S+/giu, "$1=[REDACTED]")
-    .slice(-2000);
+async function inspectTrustedMoveBinary() {
+  const entryMetadata = await lstat(TRUSTED_MV_BINARY).catch(() => undefined);
+  const resolved = await realpath(TRUSTED_MV_BINARY).catch(() => undefined);
+  const targetMetadata =
+    resolved === undefined ? undefined : await lstat(resolved).catch(() => undefined);
+  if (
+    entryMetadata === undefined ||
+    (!entryMetadata.isFile() && !entryMetadata.isSymbolicLink()) ||
+    entryMetadata.uid !== 0 ||
+    (entryMetadata.isFile() && (entryMetadata.mode & 0o022) !== 0) ||
+    targetMetadata === undefined ||
+    !targetMetadata.isFile() ||
+    targetMetadata.uid !== 0 ||
+    (targetMetadata.mode & 0o022) !== 0
+  ) {
+    fail("trusted move binary authority is invalid.");
+  }
+  await access(TRUSTED_MV_BINARY, fsConstants.X_OK).catch(() =>
+    fail("trusted move binary is not executable."),
+  );
+  const versionResult = await runBoundedProcess(TRUSTED_MV_BINARY, ["--version"], {
+    env: createPublicationEnvironment(),
+    timeoutMs: 30_000,
+  });
+  if (
+    versionResult.exitCode !== 0 ||
+    versionResult.signal !== null ||
+    versionResult.timedOut ||
+    versionResult.stdoutTail.split("\n", 1)[0] !== trustedMvVersion
+  ) {
+    fail("trusted move binary version is invalid.");
+  }
 }
 
-function safeErrorMessage(error) {
-  return safeFailureTail(error instanceof Error ? error.message : String(error));
+async function syncDirectory(directoryPath) {
+  const handle = await open(
+    directoryPath,
+    fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+  );
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function writeStagedJson(filePath, value) {
+  const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
+  const handle = await open(
+    filePath,
+    fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
+    0o600,
+  );
+  try {
+    await handle.chmod(0o600);
+    await handle.writeFile(bytes);
+    await handle.sync();
+    const metadata = await handle.stat();
+    if (
+      !metadata.isFile() ||
+      metadata.nlink !== 1 ||
+      (metadata.mode & 0o777) !== 0o600 ||
+      metadata.size !== bytes.length
+    ) {
+      fail("staged report file authority is invalid.");
+    }
+    return Object.freeze({
+      bytes,
+      dev: metadata.dev,
+      ino: metadata.ino,
+      size: metadata.size,
+    });
+  } finally {
+    await handle.close();
+  }
+}
+
+async function verifyPublishedReportFile(filePath, expected) {
+  const handle = await open(filePath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    const metadata = await handle.stat();
+    if (
+      !metadata.isFile() ||
+      metadata.nlink !== 1 ||
+      (metadata.mode & 0o777) !== 0o600 ||
+      metadata.dev !== expected.dev ||
+      metadata.ino !== expected.ino ||
+      metadata.size !== expected.size ||
+      !Buffer.from(await handle.readFile()).equals(expected.bytes)
+    ) {
+      fail("published report file verification failed.");
+    }
+  } finally {
+    await handle.close();
+  }
+  const pathMetadata = await lstat(filePath);
+  if (
+    !pathMetadata.isFile() ||
+    pathMetadata.isSymbolicLink() ||
+    pathMetadata.nlink !== 1 ||
+    pathMetadata.dev !== expected.dev ||
+    pathMetadata.ino !== expected.ino
+  ) {
+    fail("published report file identity changed during verification.");
+  }
+}
+
+async function verifyPublishedReportSet(outputDir, stagedDirectory, stagedFiles) {
+  const metadata = await lstat(outputDir);
+  if (
+    !metadata.isDirectory() ||
+    metadata.isSymbolicLink() ||
+    (metadata.mode & 0o777) !== 0o700 ||
+    metadata.dev !== stagedDirectory.dev ||
+    metadata.ino !== stagedDirectory.ino
+  ) {
+    fail("published report directory verification failed.");
+  }
+  const expectedNames = [...stagedFiles.keys()].sort();
+  const actualNames = (await readdir(outputDir)).sort();
+  if (
+    actualNames.length !== expectedNames.length ||
+    actualNames.some((name, index) => name !== expectedNames[index])
+  ) {
+    fail("published report directory members are invalid.");
+  }
+  for (const [fileName, expected] of stagedFiles) {
+    await verifyPublishedReportFile(path.join(outputDir, fileName), expected);
+  }
+  const finalMetadata = await lstat(outputDir);
+  if (
+    !finalMetadata.isDirectory() ||
+    finalMetadata.isSymbolicLink() ||
+    finalMetadata.dev !== stagedDirectory.dev ||
+    finalMetadata.ino !== stagedDirectory.ino
+  ) {
+    fail("published report directory identity changed during verification.");
+  }
+}
+
+async function publishReportSet(outputDir, runtimeReports, summary) {
+  if (
+    !path.isAbsolute(outputDir) ||
+    path.normalize(outputDir) !== outputDir ||
+    !runtimeReports.every((report) => runtimeReportAuthority.has(report)) ||
+    !summaryReportAuthority.has(summary)
+  ) {
+    fail("report-set publication authority is invalid.");
+  }
+  const runtimeIds = new Set();
+  const entries = [];
+  for (const report of runtimeReports) {
+    if (
+      (report.runtime !== "node22.13" && report.runtime !== "node24") ||
+      runtimeIds.has(report.runtime)
+    ) {
+      fail("runtime report publication set is invalid.");
+    }
+    runtimeIds.add(report.runtime);
+    entries.push([`${report.runtime}.json`, report]);
+  }
+  entries.push(["summary.json", summary]);
+
+  const parentDirectory = path.dirname(outputDir);
+  const stagingPrefix = path.join(parentDirectory, `.${path.basename(outputDir)}.stage-`);
+  await mkdir(parentDirectory, { recursive: true });
+  const stagingDirectory = await mkdtemp(stagingPrefix);
+  const stagedFiles = new Map();
+  try {
+    await chmod(stagingDirectory, 0o700);
+    const stagingMetadata = await lstat(stagingDirectory);
+    if (
+      !stagingMetadata.isDirectory() ||
+      stagingMetadata.isSymbolicLink() ||
+      (stagingMetadata.mode & 0o777) !== 0o700
+    ) {
+      fail("staged report directory authority is invalid.");
+    }
+    for (const [fileName, value] of entries) {
+      stagedFiles.set(
+        fileName,
+        await writeStagedJson(path.join(stagingDirectory, fileName), value),
+      );
+    }
+    await syncDirectory(stagingDirectory);
+    await inspectTrustedMoveBinary();
+    const moveResult = await runBoundedProcess(
+      TRUSTED_MV_BINARY,
+      ["--update=none-fail", "--no-copy", "--no-target-directory", stagingDirectory, outputDir],
+      {
+        cwd: parentDirectory,
+        env: createPublicationEnvironment(),
+        timeoutMs: 30_000,
+      },
+    );
+    if (moveResult.exitCode !== 0 || moveResult.signal !== null || moveResult.timedOut) {
+      fail("atomic report-set publication failed.");
+    }
+    await verifyPublishedReportSet(outputDir, stagingMetadata, stagedFiles);
+    await syncDirectory(parentDirectory);
+  } finally {
+    await rm(stagingDirectory, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+export async function createRuntimeCacheSentinel(privateHome) {
+  if (!path.isAbsolute(privateHome)) fail("runtime cache sentinel HOME must be absolute.");
+  const filePath = path.join(privateHome, "symbol-index-suite-sentinel.txt");
+  const bytes = Buffer.from("symbol-index suite sentinel\n", "utf8");
+  await writeFile(filePath, bytes, { flag: "wx", mode: 0o600 });
+  const metadata = await lstat(filePath);
+  if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.nlink !== 1) {
+    fail("runtime cache sentinel must be a physical single-link file.");
+  }
+  return Object.freeze({
+    filePath,
+    bytes,
+    dev: metadata.dev,
+    ino: metadata.ino,
+    size: metadata.size,
+  });
+}
+
+export async function assertRuntimeCacheSentinel(privateHome, sentinel) {
+  if (
+    !path.isAbsolute(privateHome) ||
+    path.dirname(sentinel.filePath) !== privateHome ||
+    !Buffer.isBuffer(sentinel.bytes)
+  ) {
+    fail("runtime cache sentinel authority is invalid.");
+  }
+  const metadata = await lstat(sentinel.filePath).catch(() => undefined);
+  if (
+    metadata === undefined ||
+    !metadata.isFile() ||
+    metadata.isSymbolicLink() ||
+    metadata.nlink !== 1 ||
+    metadata.dev !== sentinel.dev ||
+    metadata.ino !== sentinel.ino ||
+    metadata.size !== sentinel.size ||
+    !Buffer.from(await readFile(sentinel.filePath)).equals(sentinel.bytes)
+  ) {
+    fail("runtime cache sentinel changed during candidate gates.");
+  }
+  const implicitCacheRoot = path.join(privateHome, ".cache", "ast-mcp-server", "symbol-index");
+  const cacheMetadata = await lstat(implicitCacheRoot).catch((error) => {
+    if (error?.code === "ENOENT") return undefined;
+    throw error;
+  });
+  if (cacheMetadata !== undefined) {
+    fail("candidate gates created an implicit symbol-index cache outside owned test roots.");
+  }
 }
 
 class CombinedOperationCleanupError extends AggregateError {
@@ -590,37 +880,164 @@ function splitTerminalFailures(runtimeError, cleanupError) {
   return Object.freeze({ runtimeError, cleanupError });
 }
 
-export function buildRuntimeTerminalReport({
-  fallbackReport,
-  runtimeReport,
-  runtimeError,
-  cleanupError,
-}) {
-  const failures = splitTerminalFailures(runtimeError, cleanupError);
-  if (failures.runtimeError === undefined && failures.cleanupError === undefined) {
-    if (runtimeReport?.status !== "pass") fail("successful runtime is missing PASS evidence.");
-    return Object.freeze({ ...runtimeReport, cleanup_status: "pass" });
+function runtimeFailureCode(failedPhase) {
+  if (RELEASE_CANDIDATE_COMMAND_IDS.includes(failedPhase)) return "command-failed";
+  if (failedPhase === "materialization") return "materialization-failed";
+  if (failedPhase === "command-plan") return "command-plan-failed";
+  if (failedPhase.startsWith("runtime-cache-sentinel")) return "runtime-guard-failed";
+  if (failedPhase.endsWith("postcondition")) return "postcondition-failed";
+  return "runtime-failed";
+}
+
+function closedCommandReports(evidence) {
+  if (
+    !Array.isArray(evidence.commands) ||
+    evidence.commands.length > RELEASE_CANDIDATE_COMMAND_IDS.length
+  ) {
+    fail("runtime command evidence is invalid.");
   }
-  const evidence =
-    runtimeError?.matrixReport ??
-    failures.runtimeError?.matrixReport ??
-    runtimeReport ??
-    fallbackReport;
-  if (evidence === undefined) fail("failed runtime is missing terminal report context.");
-  return Object.freeze({
-    ...evidence,
-    status: "fail",
-    failed_phase:
-      evidence.failed_phase ??
-      (failures.runtimeError === undefined ? "cleanup" : "materialization"),
+  return Object.freeze(
+    evidence.commands.map((command, index) => {
+      if (command.id !== RELEASE_CANDIDATE_COMMAND_IDS[index]) {
+        fail("runtime command evidence order is invalid.");
+      }
+      return Object.freeze({
+        id: command.id,
+        status: command.status,
+        command_failure_code: command.command_failure_code,
+        exit_code: command.exit_code,
+        timed_out: command.timed_out,
+        duration_ms: command.duration_ms,
+        stdout_bytes: command.stdout_bytes,
+        stderr_bytes: command.stderr_bytes,
+        stdout_sha256: command.stdout_sha256,
+        stderr_sha256: command.stderr_sha256,
+      });
+    }),
+  );
+}
+
+function buildRuntimeTerminalReport({ fallbackReport, runtimeReport, runtimeError, cleanupError }) {
+  const failures = splitTerminalFailures(runtimeError, cleanupError);
+  const candidateEvidence = [
+    failures.runtimeError?.matrixReport,
+    runtimeReport,
+    fallbackReport,
+  ].find((evidence) => runtimeEvidenceAuthority.has(evidence));
+  if (candidateEvidence === undefined) fail("runtime terminal evidence authority is invalid.");
+  const passed = failures.runtimeError === undefined && failures.cleanupError === undefined;
+  if (passed && candidateEvidence.status !== "pass") {
+    fail("successful runtime is missing PASS evidence.");
+  }
+  const failedPhase = passed
+    ? null
+    : (candidateEvidence.failed_phase ??
+      (failures.runtimeError === undefined ? "cleanup" : "materialization"));
+  const identity = candidateEvidence.identity;
+  return brandRuntimeReport({
+    schema_version: 1,
+    status: passed ? "pass" : "fail",
+    runtime: candidateEvidence.runtime,
+    node_version: candidateEvidence.node_version,
+    runtime_home_private: candidateEvidence.runtime_home_private,
+    runtime_tmpdir_private: candidateEvidence.runtime_tmpdir_private,
+    package_manager_node_version: candidateEvidence.package_manager_node_version,
+    package_manager_environment_key_count:
+      candidateEvidence.package_manager_environment_keys.length,
+    cold_workspace: candidateEvidence.cold_workspace,
+    workspace_tree: candidateEvidence.workspace_tree,
+    workspace_commit: candidateEvidence.workspace_commit,
+    package_version: candidateEvidence.package_version,
+    candidate_tree: candidateEvidence.candidate_tree,
+    head: identity.head,
+    head_tree: identity.head_tree,
+    initial_index_tree: identity.initial_index_tree,
+    git_version: identity.git_authority.version,
+    git_sha256: identity.git_authority.sha256,
+    command_order: RELEASE_CANDIDATE_COMMAND_IDS,
+    commands: closedCommandReports(candidateEvidence),
+    failed_phase: failedPhase,
+    runtime_failure_code:
+      passed || failures.runtimeError === undefined ? null : runtimeFailureCode(failedPhase),
     cleanup_status: failures.cleanupError === undefined ? "pass" : "fail",
-    ...(failures.runtimeError === undefined
-      ? {}
-      : { runtime_error: safeErrorMessage(failures.runtimeError) }),
-    ...(failures.cleanupError === undefined
-      ? {}
-      : { cleanup_error: safeErrorMessage(failures.cleanupError) }),
+    cleanup_failure_code: failures.cleanupError === undefined ? null : "cleanup-failed",
+    index_tree: candidateEvidence.index_tree ?? null,
+    runtime_cache_sentinel_unchanged: candidateEvidence.runtime_cache_sentinel_unchanged ?? null,
   });
+}
+
+function runtimeSummaryEntry(report) {
+  if (!runtimeReportAuthority.has(report)) fail("runtime summary evidence authority is invalid.");
+  return Object.freeze({
+    id: report.runtime,
+    node_version: report.node_version,
+    report: `${report.runtime}.json`,
+    status: report.status,
+    command_count: report.commands.length,
+  });
+}
+
+function buildPassSummary({
+  packageVersion,
+  candidateTree,
+  initialIndexTree,
+  finalIndexTree,
+  packageManagerNodeVersion,
+  reports,
+}) {
+  return brandSummaryReport({
+    schema_version: 1,
+    status: "pass",
+    package_version: packageVersion,
+    candidate_tree: candidateTree,
+    initial_index_tree: initialIndexTree,
+    final_index_tree: finalIndexTree,
+    package_manager_node_version: packageManagerNodeVersion,
+    package_manager_environment_key_count: reports[0]?.package_manager_environment_key_count ?? 0,
+    runtimes: Object.freeze(reports.map(runtimeSummaryEntry)),
+  });
+}
+
+function buildFailureSummary({
+  packageVersion,
+  candidateTree,
+  initialIndexTree,
+  packageManagerNodeVersion,
+  failedReport,
+  reports,
+}) {
+  if (!runtimeReportAuthority.has(failedReport) || failedReport.status !== "fail") {
+    fail("failed runtime summary evidence authority is invalid.");
+  }
+  return brandSummaryReport({
+    schema_version: 1,
+    status: "fail",
+    package_version: packageVersion,
+    candidate_tree: candidateTree,
+    initial_index_tree: initialIndexTree,
+    package_manager_node_version: packageManagerNodeVersion,
+    failed_runtime: failedReport.runtime,
+    failed_phase: failedReport.failed_phase,
+    runtime_failure_code: failedReport.runtime_failure_code,
+    cleanup_status: failedReport.cleanup_status,
+    cleanup_failure_code: failedReport.cleanup_failure_code,
+    runtimes: Object.freeze([...reports, failedReport].map(runtimeSummaryEntry)),
+  });
+}
+
+function buildPreflightSummary(candidateTree) {
+  return brandSummaryReport({
+    schema_version: 1,
+    status: "fail",
+    candidate_tree: candidateTree,
+    failed_phase: "preflight",
+    failure_code: "preflight-failed",
+  });
+}
+
+async function publishTerminalReportSet(outputDir, runtimeReports, summary) {
+  terminalPublishAttempted = true;
+  await publishReportSet(outputDir, runtimeReports, summary);
 }
 
 async function runRuntime(
@@ -666,7 +1083,10 @@ async function runRuntime(
     command_order: RELEASE_CANDIDATE_COMMAND_IDS,
   });
   let failedPhase = "command-plan";
+  let runtimeCacheSentinelUnchanged = null;
   try {
+    failedPhase = "runtime-cache-sentinel-setup";
+    const cacheSentinel = await createRuntimeCacheSentinel(runtimeGateEnvironment.HOME);
     const plan = createRuntimeCommandPlan(
       runtime,
       runtime.yarnEntry,
@@ -675,7 +1095,6 @@ async function runRuntime(
     );
     for (const command of plan) {
       failedPhase = command.id;
-      process.stderr.write(`[${runtime.id}] ${command.id}\n`);
       const result = await executeCommandOnce(command, {
         cwd: materialization.workspaceRoot,
         env: createCommandEnvironment(
@@ -687,8 +1106,7 @@ async function runRuntime(
       });
       commandReports.push(publicCommandResult(command, result));
       if (result.exitCode !== 0 || result.signal !== null || result.timedOut) {
-        const detail = safeFailureTail(result.stderrTail || result.stdoutTail);
-        fail(`${runtime.id} command ${command.id} failed.${detail === "" ? "" : ` ${detail}`}`);
+        fail(`${runtime.id} command ${command.id} failed.`);
       }
       if (command.id === "workflow-policy") {
         let policy;
@@ -700,6 +1118,9 @@ async function runRuntime(
         if (policy?.status !== "pass") fail(`${runtime.id} workflow policy did not report PASS.`);
       }
     }
+    failedPhase = "runtime-cache-sentinel-postcondition";
+    await assertRuntimeCacheSentinel(runtimeGateEnvironment.HOME, cacheSentinel);
+    runtimeCacheSentinelUnchanged = true;
     failedPhase = "worktree-postcondition";
     const workspaceTree = await assertCandidateWorktreeState(
       materialization.workspaceRoot,
@@ -707,21 +1128,24 @@ async function runRuntime(
     );
     failedPhase = "index-postcondition";
     const finalIndexTree = await assertRepositoryState(candidateTree);
-    return Object.freeze({
+    return brandRuntimeEvidence({
       ...reportBase,
       status: "pass",
+      failed_phase: null,
       workspace_tree: workspaceTree,
       index_tree: finalIndexTree,
-      commands: commandReports,
+      runtime_cache_sentinel_unchanged: runtimeCacheSentinelUnchanged,
+      commands: Object.freeze(commandReports),
     });
   } catch (error) {
     const wrapped = new Error(`${runtime.id} failed during ${failedPhase}.`, { cause: error });
-    wrapped.matrixReport = Object.freeze({
+    wrapped.matrixReport = brandRuntimeEvidence({
       ...reportBase,
       status: "fail",
       failed_phase: failedPhase,
-      commands: commandReports,
-      error: safeErrorMessage(error),
+      index_tree: null,
+      runtime_cache_sentinel_unchanged: runtimeCacheSentinelUnchanged,
+      commands: Object.freeze(commandReports),
     });
     throw wrapped;
   }
@@ -732,18 +1156,17 @@ async function main() {
     fail("the verified release matrix is limited to Linux x64.");
   }
   const options = parseReleaseCandidateMatrixArgs(process.argv.slice(2));
-  const node22Binary = process.env.AST_NODE_22_BIN;
-  const node24Binary = process.env.AST_NODE_24_BIN;
-  if (node22Binary === undefined || node24Binary === undefined) {
-    fail("AST_NODE_22_BIN and AST_NODE_24_BIN are required.");
-  }
-  assertNoAmbientGitControls();
-  await mkdir(path.dirname(options.outputDir), { recursive: true });
-  await mkdir(options.outputDir, { mode: 0o700 });
   terminalContext = Object.freeze({
     outputDir: options.outputDir,
     candidateTree: options.candidateTree ?? null,
   });
+  const node22Binary = process.env.AST_NODE_22_13_BIN;
+  const node24Binary = process.env.AST_NODE_24_BIN;
+  if (node22Binary === undefined || node24Binary === undefined) {
+    fail("AST_NODE_22_13_BIN and AST_NODE_24_BIN are required.");
+  }
+  assertNoAmbientGitControls();
+  await mkdir(path.dirname(options.outputDir), { recursive: true });
 
   const gitAuthority = await inspectTrustedGitBinary();
 
@@ -761,7 +1184,7 @@ async function main() {
   });
 
   const runtimes = [
-    await inspectRuntime("node22.5", node22Binary),
+    await inspectRuntime("node22.13", node22Binary),
     await inspectRuntime("node24", node24Binary),
   ];
   const packageManager = runtimes.find(({ id }) => id === "node24");
@@ -769,7 +1192,7 @@ async function main() {
   const materializedTree = options.candidateTree ?? initialIndexTree;
   const reports = [];
   for (const runtime of runtimes) {
-    const fallbackReport = Object.freeze({
+    const fallbackReport = brandRuntimeEvidence({
       runtime: runtime.id,
       node_version: runtime.version.raw,
       node_binary: runtime.nodeBinary,
@@ -782,13 +1205,16 @@ async function main() {
       package_manager_node_options: "",
       package_manager_environment_keys: [],
       cold_workspace: true,
-      workspace_tree: materializedTree,
+      workspace_tree: null,
       workspace_commit: null,
       package_version: packageMetadata.version,
       candidate_tree: options.candidateTree ?? null,
       identity,
       command_order: RELEASE_CANDIDATE_COMMAND_IDS,
-      commands: [],
+      failed_phase: null,
+      index_tree: null,
+      runtime_cache_sentinel_unchanged: null,
+      commands: Object.freeze([]),
     });
     let materialization;
     let runtimeReport;
@@ -820,35 +1246,16 @@ async function main() {
       runtimeError,
       cleanupError,
     });
-    await writeJsonExclusive(path.join(options.outputDir, `${runtime.id}.json`), terminalReport);
     if (terminalReport.status === "fail") {
-      const summary = {
-        status: "fail",
-        package_version: packageMetadata.version,
-        candidate_tree: options.candidateTree ?? null,
-        initial_index_tree: initialIndexTree,
-        package_manager_node_version: packageManager.version.raw,
-        failed_runtime: runtime.id,
-        failed_phase: terminalReport.failed_phase,
-        cleanup_status: terminalReport.cleanup_status,
-        runtimes: [
-          ...reports.map((report) => ({
-            id: report.runtime,
-            node_version: report.node_version,
-            report: `${report.runtime}.json`,
-            status: report.status,
-            command_count: report.commands.length,
-          })),
-          {
-            id: terminalReport.runtime,
-            node_version: terminalReport.node_version,
-            report: `${terminalReport.runtime}.json`,
-            status: "fail",
-            command_count: terminalReport.commands.length,
-          },
-        ],
-      };
-      await writeJsonExclusive(path.join(options.outputDir, "summary.json"), summary);
+      const summary = buildFailureSummary({
+        packageVersion: packageMetadata.version,
+        candidateTree: options.candidateTree ?? null,
+        initialIndexTree,
+        packageManagerNodeVersion: packageManager.version.raw,
+        failedReport: terminalReport,
+        reports,
+      });
+      await publishTerminalReportSet(options.outputDir, [...reports, terminalReport], summary);
       if (runtimeError !== undefined && cleanupError !== undefined) {
         throw new CombinedOperationCleanupError(
           runtimeError,
@@ -860,55 +1267,34 @@ async function main() {
     }
     reports.push(terminalReport);
   }
-  terminalPhase = "final-index-postcondition";
   const finalIndexTree = await assertRepositoryState(options.candidateTree);
-  const summary = {
-    status: "pass",
-    package_version: packageMetadata.version,
-    candidate_tree: options.candidateTree ?? null,
-    initial_index_tree: initialIndexTree,
-    final_index_tree: finalIndexTree,
-    package_manager_node_version: packageManager.version.raw,
-    package_manager_environment_keys: reports[0]?.package_manager_environment_keys ?? [],
-    runtimes: reports.map((report) => ({
-      id: report.runtime,
-      node_version: report.node_version,
-      report: `${report.runtime}.json`,
-      command_count: report.commands.length,
-    })),
-  };
-  await writeJsonExclusive(path.join(options.outputDir, "summary.json"), summary);
+  const summary = buildPassSummary({
+    packageVersion: packageMetadata.version,
+    candidateTree: options.candidateTree ?? null,
+    initialIndexTree,
+    finalIndexTree,
+    packageManagerNodeVersion: packageManager.version.raw,
+    reports,
+  });
+  await publishTerminalReportSet(options.outputDir, reports, summary);
   process.stdout.write(`${JSON.stringify(summary)}\n`);
 }
 
 const entryPath = process.argv[1] === undefined ? undefined : path.resolve(process.argv[1]);
 if (entryPath === fileURLToPath(import.meta.url)) {
-  main().catch(async (error) => {
-    let terminalWriteError;
-    if (terminalContext !== undefined) {
+  main().catch(async () => {
+    if (terminalContext !== undefined && !terminalPublishAttempted) {
       try {
-        await writeJsonExclusive(path.join(terminalContext.outputDir, "summary.json"), {
-          status: "fail",
-          candidate_tree: terminalContext.candidateTree,
-          failed_phase: terminalPhase,
-          error: safeErrorMessage(error),
-        });
-      } catch (caughtWriteError) {
-        if (!(
-          caughtWriteError &&
-          typeof caughtWriteError === "object" &&
-          caughtWriteError.code === "EEXIST"
-        )) {
-          terminalWriteError = caughtWriteError;
-        }
+        await publishTerminalReportSet(
+          terminalContext.outputDir,
+          [],
+          buildPreflightSummary(terminalContext.candidateTree),
+        );
+      } catch {
+        // Terminal publication is best-effort because an existing destination must never be replaced.
       }
     }
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    if (terminalWriteError !== undefined) {
-      process.stderr.write(
-        `terminal report write failed: ${safeErrorMessage(terminalWriteError)}\n`,
-      );
-    }
+    process.stderr.write("Release candidate matrix failed.\n");
     process.exitCode = 1;
   });
 }

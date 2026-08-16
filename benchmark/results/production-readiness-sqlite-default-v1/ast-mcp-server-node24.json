@@ -1,0 +1,1355 @@
+{
+  "command": {
+    "argv": [
+      "benchmark:production-readiness",
+      "--node-bin",
+      "[node-bin]",
+      "--expected-node",
+      "24",
+      "--project",
+      "[project]",
+      "--workload",
+      "[workload]",
+      "--iterations",
+      "20",
+      "--restarts",
+      "3",
+      "--output",
+      "[output]",
+      "--cache-root",
+      "[cache-root]",
+      "--candidate-tree",
+      "d8defeb72e11091e562e820b69132c949533b218"
+    ],
+    "raw_report_sha256": "efa973ef5c1c1c10343dff1476de0e6a9a8acb9f5af2f02863b0d88d4a7c045c"
+  },
+  "deterministic_fixture": {
+    "gates": {
+      "mutation_applied": true,
+      "mutation_exact_postimage": true,
+      "mutation_no_cache_side_effect": true,
+      "mutation_replay": true,
+      "mutation_rollback_original_bytes": true,
+      "persistence_changed_only_rebuild": true,
+      "persistence_config_invalidation": true,
+      "persistence_corruption_compiler_result": true,
+      "persistence_corruption_fallback_counted": true,
+      "persistence_corruption_recovered": true,
+      "persistence_corruption_recovered_in_session": true,
+      "persistence_disabled_rollback": true,
+      "persistence_initial_canary_ready": true,
+      "persistence_write_failure_compiler_result": true,
+      "persistence_write_failure_fallback_counted": true,
+      "persistence_write_failure_recovered": true,
+      "resources_cache_growth_bounded": true,
+      "resources_cache_manifest_stable": true,
+      "resources_exact_manual_gc_count": true,
+      "resources_exact_measured_count": true,
+      "resources_exact_warmup_count": true,
+      "resources_final_restart_ready": true,
+      "resources_rss_growth_bounded": true,
+      "runtime_active_cancellation": true,
+      "runtime_disabled_no_cache": true,
+      "runtime_public_cancellation": true,
+      "runtime_queue_drained": true,
+      "runtime_queue_saturation": true,
+      "runtime_queued_cancellation": true,
+      "runtime_session_capacity": true
+    },
+    "mutation": {
+      "failure_outcome": "INTERNAL_ERROR",
+      "gates": {
+        "applied": true,
+        "exact_postimage": true,
+        "no_cache_side_effect": true,
+        "replay": true,
+        "rollback_original_bytes": true
+      },
+      "originals_restored": true
+    },
+    "persistence": {
+      "cache": {
+        "files": [
+          {
+            "bytes": 20480,
+            "file": "symbol-index-cf472e777c473dd931a990f65471b2f00da87a89f73ef172f04ad277497d99bf.sqlite"
+          },
+          {
+            "bytes": 7,
+            "file": "symbol-index-cf472e777c473dd931a990f65471b2f00da87a89f73ef172f04ad277497d99bf.sqlite.corrupt-2433230-1786750111999"
+          }
+        ],
+        "total_bytes": 20487
+      },
+      "changed_file": {
+        "accepted_entries": 2,
+        "backend": "sqlite",
+        "cache_hits": 1,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "rebuild",
+        "loaded_entries": 2,
+        "migration_count": 0,
+        "operation": "rebuild",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 1,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 1,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "config_invalidation": {
+        "accepted_entries": 2,
+        "backend": "sqlite",
+        "cache_hits": 1,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "rebuild",
+        "loaded_entries": 2,
+        "migration_count": 0,
+        "operation": "rebuild",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 2,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 0,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "corruption_compiler_baseline_sha256": "66465eb9e4050f74ae8fecda3aa766b2b12dbc1d85dcf55ad9a136555d522e59",
+      "corruption_fallback": {
+        "accepted_entries": 0,
+        "backend": "sqlite",
+        "cache_hits": 0,
+        "cache_misses": 1,
+        "corruption_count": 1,
+        "fallback_count": 1,
+        "last_error": null,
+        "last_operation": "rebuild",
+        "loaded_entries": 0,
+        "migration_count": 0,
+        "operation": "rebuild",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 2,
+        "rejected_entries": 1,
+        "removed_files": 0,
+        "reused_files": 0,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "corruption_recovery": {
+        "accepted_entries": 4,
+        "backend": "sqlite",
+        "cache_hits": 2,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "hit",
+        "loaded_entries": 4,
+        "migration_count": 0,
+        "operation": "hit",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 4,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "corruption_result_sha256": "66465eb9e4050f74ae8fecda3aa766b2b12dbc1d85dcf55ad9a136555d522e59",
+      "gates": {
+        "changed_only_rebuild": true,
+        "config_invalidation": true,
+        "corruption_compiler_result": true,
+        "corruption_fallback_counted": true,
+        "corruption_recovered": true,
+        "corruption_recovered_in_session": true,
+        "disabled_rollback": true,
+        "initial_canary_ready": true,
+        "write_failure_compiler_result": true,
+        "write_failure_fallback_counted": true,
+        "write_failure_recovered": true
+      },
+      "initial": {
+        "accepted_entries": 0,
+        "backend": "sqlite",
+        "cache_hits": 0,
+        "cache_misses": 1,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "rebuild",
+        "loaded_entries": 0,
+        "migration_count": 0,
+        "operation": "rebuild",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 2,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 0,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "rollback": {
+        "accepted_entries": 0,
+        "backend": "memory",
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "disabled",
+        "loaded_entries": 0,
+        "migration_count": 0,
+        "operation": "disabled",
+        "policy": "disabled",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 0,
+        "state": "disabled",
+        "write_failure_count": 0
+      },
+      "write_failure_compiler_baseline_sha256": "66465eb9e4050f74ae8fecda3aa766b2b12dbc1d85dcf55ad9a136555d522e59",
+      "write_failure_fallback": {
+        "accepted_entries": 4,
+        "backend": "sqlite",
+        "cache_hits": 2,
+        "cache_misses": 1,
+        "corruption_count": 0,
+        "fallback_count": 1,
+        "last_error": null,
+        "last_operation": "rebuild",
+        "loaded_entries": 4,
+        "migration_count": 0,
+        "operation": "rebuild",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 3,
+        "rejected_entries": 1,
+        "removed_files": 0,
+        "reused_files": 1,
+        "state": "ready",
+        "write_failure_count": 1
+      },
+      "write_failure_recovery": {
+        "accepted_entries": 4,
+        "backend": "sqlite",
+        "cache_hits": 2,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "hit",
+        "loaded_entries": 4,
+        "migration_count": 0,
+        "operation": "hit",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 4,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "write_failure_result_sha256": "66465eb9e4050f74ae8fecda3aa766b2b12dbc1d85dcf55ad9a136555d522e59"
+    },
+    "resources": {
+      "cache_allowed_growth_bytes": 1048576,
+      "final_index_observability": {
+        "accepted_entries": 4,
+        "backend": "sqlite",
+        "cache_hits": 2,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "hit",
+        "loaded_entries": 4,
+        "migration_count": 0,
+        "operation": "hit",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 4,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "final_restart_cache": {
+        "files": [
+          {
+            "bytes": 20480,
+            "file": "symbol-index-589cde1b88fc04e309366873f9bbf722aea847f0ecb07251c1881664a9606bc4.sqlite"
+          }
+        ],
+        "total_bytes": 20480
+      },
+      "first_complete_cache": {
+        "files": [
+          {
+            "bytes": 20480,
+            "file": "symbol-index-589cde1b88fc04e309366873f9bbf722aea847f0ecb07251c1881664a9606bc4.sqlite"
+          }
+        ],
+        "total_bytes": 20480
+      },
+      "gates": {
+        "cache_growth_bounded": true,
+        "cache_manifest_stable": true,
+        "exact_manual_gc_count": true,
+        "exact_measured_count": true,
+        "exact_warmup_count": true,
+        "final_restart_ready": true,
+        "rss_growth_bounded": true
+      },
+      "initial_index_observability": {
+        "accepted_entries": 120,
+        "backend": "sqlite",
+        "cache_hits": 60,
+        "cache_misses": 1,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "hit",
+        "loaded_entries": 120,
+        "migration_count": 0,
+        "operation": "hit",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 2,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 120,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "latency_samples_ms": [
+        2.575,
+        5.3,
+        5.598,
+        4.204,
+        5.5,
+        3.4,
+        5.202,
+        5.741,
+        5.57,
+        5.211,
+        5.165,
+        5.777,
+        4.814,
+        4.934,
+        4.364,
+        4.889,
+        4.072,
+        4.505,
+        4.729,
+        4.099,
+        5.059,
+        4.084,
+        4.234,
+        5.349,
+        5.15,
+        4.922,
+        5.234,
+        4.144,
+        5.036,
+        4.393,
+        4.248,
+        5.038,
+        4.942,
+        4.584,
+        4.945,
+        5.104,
+        4.303,
+        4.344,
+        4.97,
+        4.956,
+        5.211,
+        4.394,
+        5.167,
+        4.298,
+        3.958,
+        4.381,
+        4.89,
+        4.721,
+        4.724,
+        4.899
+      ],
+      "manual_gc_count": 50,
+      "measured_count": 50,
+      "restarts": [
+        {
+          "duration_ms": 198.999,
+          "index_observability": {
+            "accepted_entries": 4,
+            "backend": "sqlite",
+            "cache_hits": 2,
+            "cache_misses": 0,
+            "corruption_count": 0,
+            "fallback_count": 0,
+            "last_error": null,
+            "last_operation": "hit",
+            "loaded_entries": 4,
+            "migration_count": 0,
+            "operation": "hit",
+            "policy": "canary",
+            "policy_reason": "default",
+            "rebuilt_files": 0,
+            "rejected_entries": 0,
+            "removed_files": 0,
+            "reused_files": 4,
+            "state": "ready",
+            "write_failure_count": 0
+          },
+          "peak_rss_bytes": 237563904,
+          "restart": 1,
+          "sample_count": 18
+        },
+        {
+          "duration_ms": 199.536,
+          "index_observability": {
+            "accepted_entries": 4,
+            "backend": "sqlite",
+            "cache_hits": 2,
+            "cache_misses": 0,
+            "corruption_count": 0,
+            "fallback_count": 0,
+            "last_error": null,
+            "last_operation": "hit",
+            "loaded_entries": 4,
+            "migration_count": 0,
+            "operation": "hit",
+            "policy": "canary",
+            "policy_reason": "default",
+            "rebuilt_files": 0,
+            "rejected_entries": 0,
+            "removed_files": 0,
+            "reused_files": 4,
+            "state": "ready",
+            "write_failure_count": 0
+          },
+          "peak_rss_bytes": 239333376,
+          "restart": 2,
+          "sample_count": 18
+        },
+        {
+          "duration_ms": 196.09,
+          "index_observability": {
+            "accepted_entries": 4,
+            "backend": "sqlite",
+            "cache_hits": 2,
+            "cache_misses": 0,
+            "corruption_count": 0,
+            "fallback_count": 0,
+            "last_error": null,
+            "last_operation": "hit",
+            "loaded_entries": 4,
+            "migration_count": 0,
+            "operation": "hit",
+            "policy": "canary",
+            "policy_reason": "default",
+            "rebuilt_files": 0,
+            "rejected_entries": 0,
+            "removed_files": 0,
+            "reused_files": 4,
+            "state": "ready",
+            "write_failure_count": 0
+          },
+          "peak_rss_bytes": 238444544,
+          "restart": 3,
+          "sample_count": 18
+        }
+      ],
+      "rss_allowed_growth_bytes": 47652044.800000004,
+      "rss_final_five_median_bytes": 238522368,
+      "rss_first_five_median_bytes": 238260224,
+      "rss_samples_bytes": [
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238260224,
+        238391296,
+        238391296,
+        238391296,
+        238391296,
+        238391296,
+        238522368,
+        238522368,
+        238522368,
+        238522368,
+        238522368,
+        238522368,
+        238522368,
+        238522368,
+        238522368,
+        238522368
+      ],
+      "warmup_count": 10
+    },
+    "runtime": {
+      "cache_created": false,
+      "gates": {
+        "active_cancellation": true,
+        "disabled_no_cache": true,
+        "public_cancellation": true,
+        "queue_drained": true,
+        "queue_saturation": true,
+        "queued_cancellation": true,
+        "session_capacity": true
+      },
+      "operation_queue": {
+        "active_operations": 0,
+        "admission": "open",
+        "cancelled_operations": 2,
+        "deadline_exceeded_operations": 0,
+        "last_outcome": "cancelled",
+        "max_execution_ms": 13,
+        "max_queue_wait_ms": 3,
+        "queue_capacity": 1,
+        "queue_timeout_operations": 0,
+        "queued_operations": 0,
+        "rejected_operations": 1,
+        "state": "idle"
+      },
+      "outcomes": {
+        "active_cancellation": "protocol_cancelled",
+        "overflow": "PROJECT_QUEUE_FULL",
+        "public_cancellation": "REQUEST_CANCELLED",
+        "queued_cancellation": "protocol_cancelled",
+        "session_capacity": "PROJECT_CAPACITY_EXCEEDED"
+      }
+    }
+  },
+  "gates": {
+    "default_enabled": true,
+    "explicit_canary": true,
+    "explicit_disabled": true,
+    "git_authority": true,
+    "mutation_applied": true,
+    "mutation_exact_postimage": true,
+    "mutation_no_cache_side_effect": true,
+    "mutation_replay": true,
+    "mutation_rollback_original_bytes": true,
+    "package_repository_immutable": true,
+    "package_tree_identity": true,
+    "persistence_changed_only_rebuild": true,
+    "persistence_config_invalidation": true,
+    "persistence_corruption_compiler_result": true,
+    "persistence_corruption_fallback_counted": true,
+    "persistence_corruption_recovered": true,
+    "persistence_corruption_recovered_in_session": true,
+    "persistence_disabled_rollback": true,
+    "persistence_initial_canary_ready": true,
+    "persistence_write_failure_compiler_result": true,
+    "persistence_write_failure_fallback_counted": true,
+    "persistence_write_failure_recovered": true,
+    "policy_rollback_memory_only": true,
+    "repository_immutable": true,
+    "resources_cache_growth_bounded": true,
+    "resources_cache_manifest_stable": true,
+    "resources_exact_manual_gc_count": true,
+    "resources_exact_measured_count": true,
+    "resources_exact_warmup_count": true,
+    "resources_final_restart_ready": true,
+    "resources_rss_growth_bounded": true,
+    "restart_count": true,
+    "restart_reuse": true,
+    "runtime_active_cancellation": true,
+    "runtime_disabled_no_cache": true,
+    "runtime_identity": true,
+    "runtime_public_cancellation": true,
+    "runtime_queue_drained": true,
+    "runtime_queue_saturation": true,
+    "runtime_queued_cancellation": true,
+    "runtime_session_capacity": true,
+    "semantic_parity": true
+  },
+  "generated_at": "2026-08-14T23:28:39.440Z",
+  "identity": {
+    "git": {
+      "binary": "[trusted-git]",
+      "environment_keys": [
+        "GIT_ATTR_SOURCE",
+        "GIT_CONFIG",
+        "GIT_CONFIG_COUNT",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_KEY_0",
+        "GIT_CONFIG_KEY_1",
+        "GIT_CONFIG_KEY_10",
+        "GIT_CONFIG_KEY_11",
+        "GIT_CONFIG_KEY_2",
+        "GIT_CONFIG_KEY_3",
+        "GIT_CONFIG_KEY_4",
+        "GIT_CONFIG_KEY_5",
+        "GIT_CONFIG_KEY_6",
+        "GIT_CONFIG_KEY_7",
+        "GIT_CONFIG_KEY_8",
+        "GIT_CONFIG_KEY_9",
+        "GIT_CONFIG_NOSYSTEM",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_CONFIG_VALUE_0",
+        "GIT_CONFIG_VALUE_1",
+        "GIT_CONFIG_VALUE_10",
+        "GIT_CONFIG_VALUE_11",
+        "GIT_CONFIG_VALUE_2",
+        "GIT_CONFIG_VALUE_3",
+        "GIT_CONFIG_VALUE_4",
+        "GIT_CONFIG_VALUE_5",
+        "GIT_CONFIG_VALUE_6",
+        "GIT_CONFIG_VALUE_7",
+        "GIT_CONFIG_VALUE_8",
+        "GIT_CONFIG_VALUE_9",
+        "GIT_PAGER",
+        "GIT_TERMINAL_PROMPT",
+        "GIT_WORK_TREE",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "PAGER",
+        "PATH",
+        "XDG_CONFIG_HOME"
+      ],
+      "realpath": "[trusted-git]",
+      "sha256": "5516c9f362c29376ab9a499a33082f9f611941d8c75930c880e30ad109e39c9a",
+      "version": "git version 2.53.0"
+    },
+    "harness": {
+      "sha256": "b3bfcdf12fff03afb5719f4b775e238f5cbaae7f54de55b1407f2a78dae84259"
+    },
+    "os": {
+      "arch": "x64",
+      "platform": "linux",
+      "release": "7.0.0-29-generic"
+    },
+    "package": {
+      "commit": "79b047de0ff89e5ef4999c6d6c9e68e6efbc5067",
+      "head_tree": "d8defeb72e11091e562e820b69132c949533b218",
+      "name": "ast-mcp-server",
+      "status": {
+        "bytes": 0,
+        "dirty": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "tree": "d8defeb72e11091e562e820b69132c949533b218",
+      "version": "0.8.1"
+    },
+    "project": {
+      "alias": "[ast-mcp-server]",
+      "commit": "79b047de0ff89e5ef4999c6d6c9e68e6efbc5067",
+      "head_tree": "d8defeb72e11091e562e820b69132c949533b218",
+      "status": {
+        "bytes": 0,
+        "dirty": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "tree": "d8defeb72e11091e562e820b69132c949533b218"
+    },
+    "runtime": {
+      "binary_sha256": "b2959781cc5a74c357ffa02367efa8a0330cbb1c9cb347732fdfaaaca381cbcd",
+      "expected": "24",
+      "observed": "v24.16.0"
+    },
+    "workload": {
+      "call_count": 5,
+      "call_ids": [
+        "list-src",
+        "search-create-server",
+        "search-project-broad",
+        "explore-create-server",
+        "impact-create-server"
+      ],
+      "measurement_call_id": "search-create-server",
+      "schema_version": 1,
+      "sha256": "3df98ab9d4c241279d6a269c93e6e50cd8e227ada81112523d06fcd91a7f2cad",
+      "source_file_count": 65
+    }
+  },
+  "overall_pass": true,
+  "parameters": {
+    "iterations": 20,
+    "node_options": [],
+    "real_repository_measurements_are_observational": true,
+    "restarts": 3
+  },
+  "real_repository": {
+    "default_enabled": {
+      "cold": {
+        "calls": [
+          {
+            "duration_ms": 791.012,
+            "id": "list-src",
+            "result_sha256": "e1dba7f1ef97b7d621871ccc41e4f1ed1ebd725c71b0eca2aa1df2df96e5e302"
+          },
+          {
+            "duration_ms": 94.25,
+            "id": "search-create-server",
+            "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+          },
+          {
+            "duration_ms": 123.685,
+            "id": "search-project-broad",
+            "result_sha256": "a12dd9171fd5524d061755de10470780dc99971f87d5997d98ebe66438fcb756"
+          },
+          {
+            "duration_ms": 31.014,
+            "id": "explore-create-server",
+            "result_sha256": "c80d8521633d71637680e1e94e633bcb5dc856758b10750bbe96dd866555f7e9"
+          },
+          {
+            "duration_ms": 1958.102,
+            "id": "impact-create-server",
+            "result_sha256": "8159892fed6be3f437e4ee97c6ae51006e3f9629f06749ca1b3e74c9d55be07d"
+          }
+        ],
+        "iteration": 0,
+        "peak_rss_bytes": 608415744,
+        "sample_count": 222,
+        "total_duration_ms": 3002.078
+      },
+      "final_cache": {
+        "files": [
+          {
+            "bytes": 741376,
+            "file": "symbol-index-a72d7d69aaecabc597a37560c965ba57e67d68982d1009c59a6bf55ce3aba1c1.sqlite"
+          }
+        ],
+        "total_bytes": 741376
+      },
+      "final_index_observability": {
+        "accepted_entries": 390,
+        "backend": "sqlite",
+        "cache_hits": 6,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "hit",
+        "loaded_entries": 390,
+        "migration_count": 0,
+        "operation": "hit",
+        "policy": "enabled",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 390,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "first_complete_cache": {
+        "files": [
+          {
+            "bytes": 741376,
+            "file": "symbol-index-a72d7d69aaecabc597a37560c965ba57e67d68982d1009c59a6bf55ce3aba1c1.sqlite"
+          }
+        ],
+        "total_bytes": 741376
+      },
+      "initial_index_observability": {
+        "accepted_entries": 1625,
+        "backend": "sqlite",
+        "cache_hits": 25,
+        "cache_misses": 1,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "hit",
+        "loaded_entries": 1625,
+        "migration_count": 0,
+        "operation": "hit",
+        "policy": "enabled",
+        "policy_reason": "default",
+        "rebuilt_files": 65,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 1625,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "operation_queue": {
+        "active_operations": 1,
+        "admission": "open",
+        "cancelled_operations": 0,
+        "deadline_exceeded_operations": 0,
+        "last_outcome": "succeeded",
+        "max_execution_ms": 1885,
+        "max_queue_wait_ms": 0,
+        "queue_capacity": 32,
+        "queue_timeout_operations": 0,
+        "queued_operations": 0,
+        "rejected_operations": 0,
+        "state": "running"
+      },
+      "policy_variable": "absent",
+      "restarts": [
+        {
+          "calls": [
+            {
+              "duration_ms": 698.763,
+              "id": "list-src",
+              "result_sha256": "e1dba7f1ef97b7d621871ccc41e4f1ed1ebd725c71b0eca2aa1df2df96e5e302"
+            },
+            {
+              "duration_ms": 131.096,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            },
+            {
+              "duration_ms": 124.098,
+              "id": "search-project-broad",
+              "result_sha256": "a12dd9171fd5524d061755de10470780dc99971f87d5997d98ebe66438fcb756"
+            },
+            {
+              "duration_ms": 27.497,
+              "id": "explore-create-server",
+              "result_sha256": "c80d8521633d71637680e1e94e633bcb5dc856758b10750bbe96dd866555f7e9"
+            },
+            {
+              "duration_ms": 1915.946,
+              "id": "impact-create-server",
+              "result_sha256": "8159892fed6be3f437e4ee97c6ae51006e3f9629f06749ca1b3e74c9d55be07d"
+            }
+          ],
+          "index_observability": {
+            "accepted_entries": 390,
+            "backend": "sqlite",
+            "cache_hits": 6,
+            "cache_misses": 0,
+            "corruption_count": 0,
+            "fallback_count": 0,
+            "last_error": null,
+            "last_operation": "hit",
+            "loaded_entries": 390,
+            "migration_count": 0,
+            "operation": "hit",
+            "policy": "enabled",
+            "policy_reason": "default",
+            "rebuilt_files": 0,
+            "rejected_entries": 0,
+            "removed_files": 0,
+            "reused_files": 390,
+            "state": "ready",
+            "write_failure_count": 0
+          },
+          "iteration": 1,
+          "peak_rss_bytes": 587755520,
+          "restart": 1,
+          "sample_count": 134,
+          "total_duration_ms": 2901.777
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 619.038,
+              "id": "list-src",
+              "result_sha256": "e1dba7f1ef97b7d621871ccc41e4f1ed1ebd725c71b0eca2aa1df2df96e5e302"
+            },
+            {
+              "duration_ms": 108.703,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            },
+            {
+              "duration_ms": 123.629,
+              "id": "search-project-broad",
+              "result_sha256": "a12dd9171fd5524d061755de10470780dc99971f87d5997d98ebe66438fcb756"
+            },
+            {
+              "duration_ms": 27.499,
+              "id": "explore-create-server",
+              "result_sha256": "c80d8521633d71637680e1e94e633bcb5dc856758b10750bbe96dd866555f7e9"
+            },
+            {
+              "duration_ms": 1870.053,
+              "id": "impact-create-server",
+              "result_sha256": "8159892fed6be3f437e4ee97c6ae51006e3f9629f06749ca1b3e74c9d55be07d"
+            }
+          ],
+          "index_observability": {
+            "accepted_entries": 390,
+            "backend": "sqlite",
+            "cache_hits": 6,
+            "cache_misses": 0,
+            "corruption_count": 0,
+            "fallback_count": 0,
+            "last_error": null,
+            "last_operation": "hit",
+            "loaded_entries": 390,
+            "migration_count": 0,
+            "operation": "hit",
+            "policy": "enabled",
+            "policy_reason": "default",
+            "rebuilt_files": 0,
+            "rejected_entries": 0,
+            "removed_files": 0,
+            "reused_files": 390,
+            "state": "ready",
+            "write_failure_count": 0
+          },
+          "iteration": 2,
+          "peak_rss_bytes": 586022912,
+          "restart": 2,
+          "sample_count": 128,
+          "total_duration_ms": 2752.816
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 629.562,
+              "id": "list-src",
+              "result_sha256": "e1dba7f1ef97b7d621871ccc41e4f1ed1ebd725c71b0eca2aa1df2df96e5e302"
+            },
+            {
+              "duration_ms": 105.071,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            },
+            {
+              "duration_ms": 119.061,
+              "id": "search-project-broad",
+              "result_sha256": "a12dd9171fd5524d061755de10470780dc99971f87d5997d98ebe66438fcb756"
+            },
+            {
+              "duration_ms": 30.443,
+              "id": "explore-create-server",
+              "result_sha256": "c80d8521633d71637680e1e94e633bcb5dc856758b10750bbe96dd866555f7e9"
+            },
+            {
+              "duration_ms": 1889.173,
+              "id": "impact-create-server",
+              "result_sha256": "8159892fed6be3f437e4ee97c6ae51006e3f9629f06749ca1b3e74c9d55be07d"
+            }
+          ],
+          "index_observability": {
+            "accepted_entries": 390,
+            "backend": "sqlite",
+            "cache_hits": 6,
+            "cache_misses": 0,
+            "corruption_count": 0,
+            "fallback_count": 0,
+            "last_error": null,
+            "last_operation": "hit",
+            "loaded_entries": 390,
+            "migration_count": 0,
+            "operation": "hit",
+            "policy": "enabled",
+            "policy_reason": "default",
+            "rebuilt_files": 0,
+            "rejected_entries": 0,
+            "removed_files": 0,
+            "reused_files": 390,
+            "state": "ready",
+            "write_failure_count": 0
+          },
+          "iteration": 3,
+          "peak_rss_bytes": 566226944,
+          "restart": 3,
+          "sample_count": 129,
+          "total_duration_ms": 2777.267
+        }
+      ],
+      "root_source": "xdg",
+      "warm": [
+        {
+          "calls": [
+            {
+              "duration_ms": 87.45,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 1,
+          "total_duration_ms": 88.038
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 86.469,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 2,
+          "total_duration_ms": 87.412
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 86.373,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 3,
+          "total_duration_ms": 86.732
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 87.336,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 4,
+          "total_duration_ms": 88.345
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 84.807,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 5,
+          "total_duration_ms": 85.161
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 85.702,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 6,
+          "total_duration_ms": 86.374
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 85.452,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 7,
+          "total_duration_ms": 86.045
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 85.817,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 8,
+          "total_duration_ms": 86.831
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 85.093,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 9,
+          "total_duration_ms": 85.859
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 85.549,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 10,
+          "total_duration_ms": 86.259
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 86.106,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 11,
+          "total_duration_ms": 86.847
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 84.934,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 12,
+          "total_duration_ms": 85.694
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 86.9,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 13,
+          "total_duration_ms": 87.386
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 85.97,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 14,
+          "total_duration_ms": 86.004
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 84.7,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 15,
+          "total_duration_ms": 85.364
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 85.195,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 16,
+          "total_duration_ms": 86.24
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 84.562,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 17,
+          "total_duration_ms": 85.293
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 85.094,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 18,
+          "total_duration_ms": 86.154
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 84.918,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 19,
+          "total_duration_ms": 84.951
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 85.992,
+              "id": "search-create-server",
+              "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+            }
+          ],
+          "iteration": 20,
+          "total_duration_ms": 86.969
+        }
+      ]
+    },
+    "disabled_baseline": {
+      "cache_created": false,
+      "index_observability": {
+        "accepted_entries": 0,
+        "backend": "memory",
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "disabled",
+        "loaded_entries": 0,
+        "migration_count": 0,
+        "operation": "disabled",
+        "policy": "disabled",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 0,
+        "state": "disabled",
+        "write_failure_count": 0
+      },
+      "operation_queue": {
+        "active_operations": 1,
+        "admission": "open",
+        "cancelled_operations": 0,
+        "deadline_exceeded_operations": 0,
+        "last_outcome": "succeeded",
+        "max_execution_ms": 1928,
+        "max_queue_wait_ms": 0,
+        "queue_capacity": 32,
+        "queue_timeout_operations": 0,
+        "queued_operations": 0,
+        "rejected_operations": 0,
+        "state": "running"
+      },
+      "peak_rss_bytes": 609984512,
+      "policy_variable": "disabled",
+      "run": {
+        "calls": [
+          {
+            "duration_ms": 786.88,
+            "id": "list-src",
+            "result_sha256": "e1dba7f1ef97b7d621871ccc41e4f1ed1ebd725c71b0eca2aa1df2df96e5e302"
+          },
+          {
+            "duration_ms": 66.94,
+            "id": "search-create-server",
+            "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+          },
+          {
+            "duration_ms": 98.496,
+            "id": "search-project-broad",
+            "result_sha256": "a12dd9171fd5524d061755de10470780dc99971f87d5997d98ebe66438fcb756"
+          },
+          {
+            "duration_ms": 18.939,
+            "id": "explore-create-server",
+            "result_sha256": "c80d8521633d71637680e1e94e633bcb5dc856758b10750bbe96dd866555f7e9"
+          },
+          {
+            "duration_ms": 1931.998,
+            "id": "impact-create-server",
+            "result_sha256": "8159892fed6be3f437e4ee97c6ae51006e3f9629f06749ca1b3e74c9d55be07d"
+          }
+        ],
+        "iteration": 0,
+        "total_duration_ms": 2907.015
+      },
+      "sample_count": 134
+    },
+    "rollback": {
+      "cache_unchanged": true,
+      "index_observability": {
+        "accepted_entries": 0,
+        "backend": "memory",
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "disabled",
+        "loaded_entries": 0,
+        "migration_count": 0,
+        "operation": "disabled",
+        "policy": "disabled",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 0,
+        "state": "disabled",
+        "write_failure_count": 0
+      },
+      "peak_rss_bytes": 604372992,
+      "run": {
+        "calls": [
+          {
+            "duration_ms": 776.123,
+            "id": "list-src",
+            "result_sha256": "e1dba7f1ef97b7d621871ccc41e4f1ed1ebd725c71b0eca2aa1df2df96e5e302"
+          },
+          {
+            "duration_ms": 66.722,
+            "id": "search-create-server",
+            "result_sha256": "46f3759d933e8975ffffef15443266e2ebe707821874efe14b3779970379b739"
+          },
+          {
+            "duration_ms": 98.634,
+            "id": "search-project-broad",
+            "result_sha256": "a12dd9171fd5524d061755de10470780dc99971f87d5997d98ebe66438fcb756"
+          },
+          {
+            "duration_ms": 18.306,
+            "id": "explore-create-server",
+            "result_sha256": "c80d8521633d71637680e1e94e633bcb5dc856758b10750bbe96dd866555f7e9"
+          },
+          {
+            "duration_ms": 1944.846,
+            "id": "impact-create-server",
+            "result_sha256": "8159892fed6be3f437e4ee97c6ae51006e3f9629f06749ca1b3e74c9d55be07d"
+          }
+        ],
+        "iteration": 0,
+        "total_duration_ms": 2908.014
+      },
+      "sample_count": 131
+    },
+    "semantic_mismatches": [],
+    "source_file_count": 65
+  },
+  "schema_version": 2,
+  "status": "pass"
+}

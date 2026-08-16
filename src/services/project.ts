@@ -117,8 +117,13 @@ function getProjectRuntimePolicy(): RuntimePolicy {
 }
 
 function closePersistentSymbolIndex(session: ProjectSession): void {
-  session.persistentSymbolIndex?.close();
+  const persistentSymbolIndex = session.persistentSymbolIndex;
   session.persistentSymbolIndex = undefined;
+  try {
+    persistentSymbolIndex?.close();
+  } catch {
+    // Detachment is authoritative; a stale SQLite store must not survive cleanup failure.
+  }
 }
 
 function symbolIndexFailureOperation(reason: string): SymbolIndexRuntimeObservability["operation"] {
@@ -216,7 +221,12 @@ async function ensureSessionSymbolIndex(
       symbolIndexObservability: createInitialSymbolIndexRuntimeObservability(policy),
     };
   }
-  if (policy.backend === "memory") return;
+  if (policy.backend === "memory") {
+    if (policy.mode === "enabled" || policy.mode === "canary") {
+      fallbackToMemory(session, policy.reason);
+    }
+    return;
+  }
   if (session.persistentSymbolIndex) return;
 
   const cachePath = symbolIndexCachePath(policy, session.context.status.project);

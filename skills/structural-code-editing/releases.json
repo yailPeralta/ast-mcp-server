@@ -2,8 +2,8 @@
   "schema_version": 1,
   "algorithm": "sha256",
   "current": {
-    "version": "4.2.0",
-    "sha256": "43a07546fcc8417b5e937881e20d4bb87e57bba0bce1ae0c5bb58d75a6f75870"
+    "version": "4.3.0",
+    "sha256": "c72cc85f442f97c0bacd2eee5eb24a2d4e26fb276c2f594671c29e07c11b7ad0"
   },
   "predecessors": [
     {
@@ -45,6 +45,11 @@
       "version": "4.2.0",
       "sha256": "b072ccf68ebd50a825dc9fdbdaaf35cdbf7045ae5fb9a9d7a412dc7b702ee7a0",
       "npm_versions": ["0.8.0"]
+    },
+    {
+      "version": "4.2.0",
+      "sha256": "43a07546fcc8417b5e937881e20d4bb87e57bba0bce1ae0c5bb58d75a6f75870",
+      "npm_versions": ["0.8.1"]
     }
   ]
 }

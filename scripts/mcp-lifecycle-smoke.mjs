@@ -362,6 +362,7 @@ async function spawnFixture(scenario, extraEnvironment = {}) {
       ...process.env,
       AST_LIFECYCLE_SCENARIO: scenario,
       AST_SHUTDOWN_DRAIN_TIMEOUT_MS: "100",
+      AST_SYMBOL_INDEX_PERSISTENCE: "disabled",
       ...extraEnvironment,
     },
     stdio: ["pipe", "pipe", "pipe", "ipc"],
@@ -654,7 +655,7 @@ async function runLifecycleMatrix() {
     const mutationProjectRoot = await createProjectFixture(root, "-mutation");
     const mixedProjectRoot = await createProjectFixture(root, "-mixed");
     const cacheRoot = path.join(root, "cache");
-    await mkdir(cacheRoot, { recursive: true });
+    await mkdir(cacheRoot, { recursive: true, mode: 0o700 });
 
     await exerciseCleanTrigger("stdin_eof");
     await exerciseCleanTrigger("SIGINT");

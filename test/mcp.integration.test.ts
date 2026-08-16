@@ -1,4 +1,6 @@
 import { decode } from "@toon-format/toon";
+import { readdir } from "node:fs/promises";
+import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -176,9 +178,66 @@ export function formatValue(value: number): string { return String(value); }
     expect(serialized).not.toContain(hostileCredential);
   });
 
-  it("exposes the reserved enabled policy reason through MCP status", async () => {
-    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "enabled");
-    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", `${fixture.root}/.symbol-index-cache`);
+  it.each([
+    { label: "absent default", policy: undefined, expectedPolicy: "enabled" },
+    { label: "explicit enabled", policy: "enabled", expectedPolicy: "enabled" },
+    { label: "explicit canary", policy: "canary", expectedPolicy: "canary" },
+  ])(
+    "exposes $label SQLite readiness and restart hit without paths",
+    async ({ policy, expectedPolicy }) => {
+      const xdgCacheHome = path.join(fixture.root, ".xdg-cache");
+      const isolatedHome = path.join(fixture.root, ".home");
+      const explicitRoot = path.join(fixture.root, ".symbol-index-cache");
+      vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", policy);
+      vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", policy === undefined ? undefined : explicitRoot);
+      vi.stubEnv("XDG_CACHE_HOME", xdgCacheHome);
+      vi.stubEnv("HOME", isolatedHome);
+
+      const first = structured(
+        await client.callTool({
+          name: "ast_get_project_status",
+          arguments: { project_root: fixture.root },
+        }),
+      );
+      expect(first).toMatchObject({
+        index: { state: "ready" },
+        index_observability: {
+          policy: expectedPolicy,
+          policy_reason: "default",
+          backend: "sqlite",
+          state: "ready",
+          operation: "rebuild",
+          last_operation: "rebuild",
+          fallback_count: 0,
+        },
+      });
+      expect(JSON.stringify(first)).not.toContain(fixture.root);
+
+      clearProjectSessions();
+      const reopened = structured(
+        await client.callTool({
+          name: "ast_get_project_status",
+          arguments: { project_root: fixture.root },
+        }),
+      );
+      expect(reopened).toMatchObject({
+        index_observability: {
+          policy: expectedPolicy,
+          backend: "sqlite",
+          state: "ready",
+          operation: "hit",
+          last_operation: "hit",
+          fallback_count: 0,
+        },
+      });
+      expect(JSON.stringify(reopened)).not.toContain(fixture.root);
+    },
+  );
+
+  it("exposes explicit disabled rollback without creating a cache root", async () => {
+    const cacheRoot = path.join(fixture.root, ".symbol-index-cache");
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "disabled");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", cacheRoot);
 
     const status = structured(
       await client.callTool({
@@ -186,14 +245,46 @@ export function formatValue(value: number): string { return String(value); }
         arguments: { project_root: fixture.root },
       }),
     );
+
     expect(status).toMatchObject({
       index: { state: "disabled" },
       index_observability: {
         policy: "disabled",
-        policy_reason: "enabled_not_released",
+        policy_reason: "default",
         backend: "memory",
+        state: "disabled",
       },
     });
+    await expect(readdir(cacheRoot)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("exposes enabled root failure as bounded memory fallback", async () => {
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", undefined);
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", "relative-cache");
+
+    const status = structured(
+      await client.callTool({
+        name: "ast_get_project_status",
+        arguments: { project_root: fixture.root },
+      }),
+    );
+
+    expect(status).toMatchObject({
+      index: { state: "failed" },
+      index_observability: {
+        policy: "enabled",
+        policy_reason: "cache_root_invalid",
+        backend: "memory",
+        state: "failed",
+        operation: "fallback",
+        fallback_count: expect.any(Number),
+        last_error: "cache_root_invalid",
+      },
+    });
+    const observability = status.index_observability as { fallback_count: number };
+    expect(observability.fallback_count).toEqual(expect.any(Number));
+    expect(observability.fallback_count).toBeGreaterThan(0);
+    expect(JSON.stringify(status)).not.toContain(fixture.root);
   });
 
   it("propagates MCP cancellation to a queued project operation and unlinks it", async () => {

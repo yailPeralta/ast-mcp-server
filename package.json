@@ -40,7 +40,7 @@
     "docs/support.md"
   ],
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.13.0"
   },
   "resolutions": {
     "hono": "4.12.34",
@@ -56,6 +56,7 @@
     "test:cli": "yarn build && node scripts/cli-smoke.mjs",
     "test:errors": "yarn build && node scripts/public-error-smoke.mjs",
     "test:package": "node scripts/package-smoke.mjs",
+    "test:local-registry": "node scripts/local-registry-consumer-smoke.mjs",
     "test:installed-agents": "yarn build && node scripts/installed-agent-guidance-smoke.mjs",
     "test:agent-fixtures": "node scripts/admit-agent-fixtures.mjs --check",
     "test:release-candidate": "node scripts/release-candidate-matrix.mjs",

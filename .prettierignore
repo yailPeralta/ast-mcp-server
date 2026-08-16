@@ -4,3 +4,8 @@ node_modules
 package-lock.json
 openspec/archive
 benchmark/results/production-readiness/*.json
+benchmark/results/production-readiness-sqlite-default-v1/*.json
+benchmark/results/production-readiness-sqlite-default-v2/*.json
+benchmark/results/production-readiness-sqlite-default-v3/*.json
+benchmark/results/production-readiness-sqlite-default-v4/*.json
+benchmark/results/production-readiness-sqlite-default-v5/*.json

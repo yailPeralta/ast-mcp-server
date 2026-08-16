@@ -708,9 +708,11 @@ describe("workflow policy check", () => {
 
   it("keeps the exact Node matrix and complete ordered CI release gates", async () => {
     const documents = await loadWorkflowDocuments();
+    expect(documents["ci.yml"]).not.toContain("--experimental-sqlite");
+    expect(documents["ci.yml"]).not.toMatch(/^ {4}env:/mu);
     const matrixDrift = {
       ...documents,
-      "ci.yml": replaceRequired(documents["ci.yml"], 'node: ["22.5.0", "24"]', 'node: ["24"]'),
+      "ci.yml": replaceRequired(documents["ci.yml"], 'node: ["22.13.0", "24"]', 'node: ["24"]'),
     };
     expect(() => validateWorkflowPolicyDocuments(matrixDrift)).toThrow(/Node matrix/u);
 
@@ -718,8 +720,8 @@ describe("workflow policy check", () => {
       ...documents,
       "ci.yml": replaceRequired(
         documents["ci.yml"],
-        '        node: ["22.5.0", "24"]',
-        '        # node: ["22.5.0", "24"]\n        node: ["24"]',
+        '        node: ["22.13.0", "24"]',
+        '        # node: ["22.13.0", "24"]\n        node: ["24"]',
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(commentedMatrixDecoy)).toThrow(/Node matrix/u);
@@ -783,24 +785,24 @@ describe("workflow policy check", () => {
     };
     expect(() => validateWorkflowPolicyDocuments(skippedJob)).toThrow(/exact reviewed keys/u);
 
-    const poisonedEnvironment = {
+    const unreviewedJobEnvironment = {
       ...documents,
       "ci.yml": replaceRequired(
         documents["ci.yml"],
-        "    env:\n",
-        "    env:\n      PATH: ./untrusted-bin\n",
+        "    runs-on: ubuntu-24.04\n",
+        "    runs-on: ubuntu-24.04\n    env:\n      PATH: ./untrusted-bin\n",
       ),
     };
-    expect(() => validateWorkflowPolicyDocuments(poisonedEnvironment)).toThrow(
-      /reviewed Node floor option/u,
+    expect(() => validateWorkflowPolicyDocuments(unreviewedJobEnvironment)).toThrow(
+      /exact reviewed keys|environment/u,
     );
 
     const excludedFloor = {
       ...documents,
       "ci.yml": replaceRequired(
         documents["ci.yml"],
-        '        node: ["22.5.0", "24"]\n',
-        '        node: ["22.5.0", "24"]\n        exclude:\n          - node: "22.5.0"\n',
+        '        node: ["22.13.0", "24"]\n',
+        '        node: ["22.13.0", "24"]\n        exclude:\n          - node: "22.13.0"\n',
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(excludedFloor)).toThrow(/gate-bypass control/u);

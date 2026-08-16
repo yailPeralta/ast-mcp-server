@@ -1,5 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
-import { link, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  link,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
@@ -140,8 +150,20 @@ export async function applyOpenCodeConfigPlan(plan: OpenCodeConfigPlan): Promise
   const directory = path.dirname(plan.filePath);
   await mkdir(directory, { recursive: true });
   const temporary = path.join(directory, `.${path.basename(plan.filePath)}.${randomUUID()}.tmp`);
-  await writeFile(temporary, plan.content, { encoding: "utf8", flag: "wx", mode: plan.mode });
   try {
+    let handle: Awaited<ReturnType<typeof open>> | undefined;
+    try {
+      handle = await open(temporary, "wx", plan.mode);
+      await handle.writeFile(plan.content, { encoding: "utf8" });
+      await handle.chmod(plan.mode);
+      await handle.sync();
+      const staged = await handle.stat();
+      if ((staged.mode & 0o777) !== plan.mode) {
+        throw new Error("OpenCode configuration mode could not be preserved.");
+      }
+    } finally {
+      await handle?.close();
+    }
     if (!plan.beforeExists) {
       await link(temporary, plan.filePath);
       await rm(temporary);

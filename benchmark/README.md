@@ -135,9 +135,9 @@ The latest deterministic-fixture run on Node.js v24.16.0 recorded:
 
 That run indexed one file, returned one warm match, returned one compiler-fallback match, and kept both existing workflow gates green. These values are local measurements on a tiny fixture, not production capacity claims.
 
-## Symbol-index persistence evidence (disabled)
+## Historical symbol-index adapter evidence
 
-`scripts/benchmark-index-storage.mjs` evaluates disposable memory, JSON-file and native SQLite adapters behind the existing `SymbolIndexStore` boundary. It does not change the production backend, install a persistence dependency, download a runtime or write a tracked benchmark result.
+`scripts/benchmark-index-storage.mjs` records the disposable adapter study that preceded productive integration. Its Node 22.5 commands and experimental flag are historical evidence for that candidate phase; they do not govern the current package floor or default policy. The script evaluates memory, JSON-file and native SQLite adapters behind `SymbolIndexStore` without installing a runtime or selecting production authority.
 
 The report covers:
 
@@ -183,7 +183,7 @@ Node 24 can run the same command without `NODE_OPTIONS`. The configured runtime 
 
 ## Productive symbol-index integration
 
-`scripts/benchmark-symbol-index-integration.mjs` exercises the production adapter and project lifecycle over a deterministic temporary TypeScript fixture. It builds the current tree, keeps persistence disabled by default, enables only an explicit canary process, and verifies rollback to memory-only.
+`scripts/benchmark-symbol-index-integration.mjs` exercises the production adapter and project lifecycle over a deterministic temporary TypeScript fixture. It builds the current tree, verifies default-enabled SQLite across process restart, keeps explicit canary coverage, and proves immediate `disabled` rollback to memory-only without modifying the cache.
 
 Run the same fixture under both declared runtimes:
 
@@ -191,30 +191,30 @@ Run the same fixture under both declared runtimes:
 yarn benchmark:index-integration \
   --output /tmp/ast-symbol-index-integration-final-node24.json
 
-PATH=<node-22.5-bin-directory>:$PATH \
-NODE_OPTIONS=--experimental-sqlite \
+PATH=<node-22.13-bin-directory>:$PATH \
+NODE_OPTIONS= \
 yarn benchmark:index-integration \
-  --output /tmp/ast-symbol-index-integration-final-node22.5.json
+  --output /tmp/ast-symbol-index-integration-final-node22.13.json
 ```
 
 The command fails unless all integration gates pass:
 
-- disabled default and explicit canary persistence;
+- default-enabled persistence, restart reuse, explicit canary persistence and disabled rollback;
 - changed-file-only incremental rebuild;
 - corruption quarantine, schema-v2 checksum recovery, self-consistent forged-projection quarantine with canonical compiler results, and immediate memory rollback;
 - unsupported capability and invalid path classification;
-- reserved `enabled` policy failing closed to memory-only with public `enabled_not_released` status;
+- missing-capability, invalid-root and storage failures retaining the requested policy while falling back observably to memory;
 - injected read and migration failures;
 - non-contention transaction-COMMIT failure with rollback/reopen preservation and same-operation memory/compiler fallback;
 - writer-contention and flush-checkpoint failures.
 
-The 2026-08-07 second-remediation frozen-tree runs passed all 15 gates on Node.js v24.16.0 and v22.5.0. The script exits non-zero if any gate is false. Node 22.5 requires the experimental SQLite flag; the adapter uses bounded SQL pages because that runtime does not expose `StatementSync.iterate()`. Durations in the reports are local observations over a tiny synthetic fixture, not latency or capacity SLAs. Reports use placeholders for project/cache roots and contain no credentials or host paths.
+The 2026-08-07 Node.js v22.5.0/24 runs remain historical evidence for the earlier canary-only tree. The current script exits non-zero unless its default-enabled matrix passes under exact Node.js v22.13.0 and Node.js 24 without `--experimental-sqlite`. Durations are local observations over a tiny synthetic fixture, not latency or capacity SLAs. Reports use placeholders for project/cache roots and contain no credentials or host paths.
 
 ## Local production-readiness matrix
 
-`scripts/canary-local-mcp.mjs` exercises one immutable real-repository cohort and separate disposable failure/mutation fixtures under the exact selected Node binary. The checked matrix covers this repository and `x-scraper` under Node.js v22.5.0 and v24.16.0, with 20 warm reads and 3 unchanged restarts per report.
+`scripts/canary-local-mcp.mjs` exercises one immutable real-repository cohort and separate disposable failure/mutation fixtures under the exact selected Node binary. The active report schema uses default-enabled SQLite for the real cold/warm/restart cohort, explicit `disabled` baseline/rollback and explicit `canary` failure fixtures. Active runs accept exact Node.js v22.13.0 or major 24 with no SQLite flag; the freezer alone retains a historical parser for the older v22.5.0 report set.
 
-The four checked reports under `benchmark/results/production-readiness/` passed 40/40 retained gates each. They establish:
+The four checked reports under `benchmark/results/production-readiness/` are immutable historical package-0.6.0 evidence. They passed 40/40 retained gates each under Node.js v22.5.0/24 and establish for that tree:
 
 - exact compiler-result parity with no semantic mismatches across disabled, cold canary, warm, restart, and memory-only rollback runs;
 - byte-identical source/config status and worktree identity for both real repositories;
@@ -226,7 +226,7 @@ The four checked reports under `benchmark/results/production-readiness/` passed 
 
 The real-repository latency and peak-RSS values retained in those reports are observations from one machine and cohort. They are not release gates, capacity guarantees, or service-level objectives. Only the deterministic fixture's preregistered RSS/cache thresholds determine resource PASS/FAIL.
 
-Raw reports must be written as new direct children of physical `/tmp`. After all four runs pass against unchanged clean authorities, publish checked evidence exactly once with the closed `benchmark:freeze-production-readiness` report-set command. The freezer validates all identities and gates again and atomically exposes the complete fixed four-file directory; it does not support per-report publication or replacement of existing checked evidence.
+New active-schema reports are not reattributed to or frozen over that historical set. Exact-tree verification writes fresh raw reports as new direct children of physical `/tmp`; checked publication remains a separate no-replace transition and is not part of default-backend implementation.
 
 Linux x64 with GNU coreutils `mv --update=none-fail --no-copy --no-target-directory` is the supported evidence-publication platform. Other Linux architectures or systems without that primitive, macOS, and Windows remain unverified. See [the support policy](../docs/support.md) for the product boundary.
 

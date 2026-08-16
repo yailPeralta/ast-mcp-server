@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -15,27 +15,47 @@ if (outputIndex !== -1 && !outputPath) throw new Error("--output requires a path
 
 const root = await mkdtemp(path.join(os.tmpdir(), "ast-symbol-index-integration-"));
 const cacheRoot = path.join(root, ".cache");
+const defaultXdgCacheHome = path.join(root, ".xdg-cache");
+const defaultCacheRoot = path.join(defaultXdgCacheHome, "ast-mcp-server", "symbol-index");
+const enabledCacheRoot = path.join(root, ".enabled-cache");
+const disabledCacheRoot = path.join(root, ".disabled-cache");
 const previousPersistence = process.env.AST_SYMBOL_INDEX_PERSISTENCE;
 const previousCacheRoot = process.env.AST_SYMBOL_INDEX_CACHE_ROOT;
+const previousXdgCacheHome = process.env.XDG_CACHE_HOME;
 
 function restoreEnvironment() {
   if (previousPersistence === undefined) delete process.env.AST_SYMBOL_INDEX_PERSISTENCE;
   else process.env.AST_SYMBOL_INDEX_PERSISTENCE = previousPersistence;
   if (previousCacheRoot === undefined) delete process.env.AST_SYMBOL_INDEX_CACHE_ROOT;
   else process.env.AST_SYMBOL_INDEX_CACHE_ROOT = previousCacheRoot;
+  if (previousXdgCacheHome === undefined) delete process.env.XDG_CACHE_HOME;
+  else process.env.XDG_CACHE_HOME = previousXdgCacheHome;
 }
 
-async function activeCacheFiles() {
+async function activeCacheFiles(selectedCacheRoot = cacheRoot) {
   try {
-    return (await readdir(cacheRoot)).filter((file) => file.endsWith(".sqlite"));
+    return (await readdir(selectedCacheRoot)).filter((file) => file.endsWith(".sqlite"));
   } catch (error) {
     if (error?.code === "ENOENT") return [];
     throw error;
   }
 }
 
-async function projectCacheFiles() {
-  return (await activeCacheFiles()).filter((file) => file.startsWith("symbol-index-"));
+async function projectCacheFiles(selectedCacheRoot = cacheRoot) {
+  return (await activeCacheFiles(selectedCacheRoot)).filter((file) =>
+    file.startsWith("symbol-index-"),
+  );
+}
+
+async function projectCacheDigests(selectedCacheRoot) {
+  const files = await projectCacheFiles(selectedCacheRoot);
+  return Promise.all(
+    files.map(async (file) =>
+      createHash("sha256")
+        .update(await readFile(path.join(selectedCacheRoot, file)))
+        .digest("hex"),
+    ),
+  );
 }
 
 async function timed(operation) {
@@ -90,21 +110,116 @@ const { SYMBOL_INDEX_SCHEMA_VERSION } = await import(
 const { readSymbolIndexPersistencePolicy } = await import(
   new URL("../dist/services/symbol-index-policy.js", import.meta.url)
 );
+const { clearSymbolIndexCache, inspectSymbolIndexCache } = await import(
+  new URL("../dist/services/symbol-index-cache.js", import.meta.url)
+);
 const { DatabaseSync } = await import("node:sqlite");
 
 const measurements = {};
 const failureInjection = {};
+let changedFileRebuiltDelta;
+let cacheLifecycle;
 try {
-  process.env.AST_SYMBOL_INDEX_CACHE_ROOT = cacheRoot;
+  delete process.env.AST_SYMBOL_INDEX_PERSISTENCE;
+  delete process.env.AST_SYMBOL_INDEX_CACHE_ROOT;
+  process.env.XDG_CACHE_HOME = defaultXdgCacheHome;
+  const defaultMiss = await timed(() => getProjectStatus(root));
+  measurements.default_miss = defaultMiss;
+  expectStatus(defaultMiss.value, { indexed_count: 2 });
+  assert.equal(defaultMiss.value.index_observability.policy, "enabled");
+  assert.equal(defaultMiss.value.index_observability.backend, "sqlite");
+  assert.equal(defaultMiss.value.index_observability.operation, "rebuild");
+  assert.equal((await projectCacheFiles(defaultCacheRoot)).length, 1);
+
+  invalidateProject(root);
+  const defaultHit = await timed(() => getProjectStatus(root));
+  measurements.default_hit = defaultHit;
+  assert.equal(defaultHit.value.index_observability.policy, "enabled");
+  assert.equal(defaultHit.value.index_observability.backend, "sqlite");
+  assert.equal(defaultHit.value.index_observability.operation, "hit");
+  assert.equal(defaultHit.value.index_observability.fallback_count, 0);
+  const defaultDigestsBeforeRollback = await projectCacheDigests(defaultCacheRoot);
+
   process.env.AST_SYMBOL_INDEX_PERSISTENCE = "disabled";
+  process.env.AST_SYMBOL_INDEX_CACHE_ROOT = defaultCacheRoot;
+  invalidateProject(root);
+  const defaultRollback = await timed(() => getProjectStatus(root));
+  measurements.default_rollback = defaultRollback;
+  assert.equal(defaultRollback.value.index_observability.policy, "disabled");
+  assert.equal(defaultRollback.value.index_observability.backend, "memory");
+  assert.deepEqual(await projectCacheDigests(defaultCacheRoot), defaultDigestsBeforeRollback);
+
+  const defaultDatabaseName = (await projectCacheFiles(defaultCacheRoot))[0];
+  assert.ok(defaultDatabaseName);
+  const [defaultRootMetadata, defaultDatabaseMetadata] = await Promise.all([
+    lstat(defaultCacheRoot),
+    lstat(path.join(defaultCacheRoot, defaultDatabaseName)),
+  ]);
+  assert.equal(defaultRootMetadata.mode & 0o777, 0o700);
+  assert.equal(defaultDatabaseMetadata.mode & 0o777, 0o600);
+  if (typeof process.getuid === "function") {
+    assert.equal(defaultRootMetadata.uid, process.getuid());
+    assert.equal(defaultDatabaseMetadata.uid, process.getuid());
+  }
+  const unknownCacheFile = path.join(defaultCacheRoot, "operator-note.txt");
+  await writeFile(unknownCacheFile, "preserve\n", "utf8");
+  const cacheOptions = {
+    environment: {
+      AST_SYMBOL_INDEX_PERSISTENCE: "enabled",
+      AST_SYMBOL_INDEX_CACHE_ROOT: defaultCacheRoot,
+    },
+  };
+  const cacheInspection = await inspectSymbolIndexCache(cacheOptions);
+  assert.equal(cacheInspection.state, "ready");
+  assert.equal(cacheInspection.active_database_count, 1);
+  assert.equal(cacheInspection.unrecognized_regular_file_count, 1);
+  assert.equal(cacheInspection.unsafe_entry_count, 0);
+  const cacheClear = await clearSymbolIndexCache(cacheOptions);
+  assert.equal(cacheClear.state, "cleared");
+  assert.equal(cacheClear.deleted_active_database_count, 1);
+  assert.equal(cacheClear.unrecognized_regular_file_count, 1);
+  assert.equal(cacheClear.not_removed_artifact_count, 0);
+  assert.equal(await readFile(unknownCacheFile, "utf8"), "preserve\n");
+  const cacheAfterClear = await inspectSymbolIndexCache(cacheOptions);
+  assert.equal(cacheAfterClear.active_database_count, 0);
+  assert.equal(cacheAfterClear.unrecognized_regular_file_count, 1);
+  cacheLifecycle = {
+    private_root: (defaultRootMetadata.mode & 0o777) === 0o700,
+    private_database: (defaultDatabaseMetadata.mode & 0o777) === 0o600,
+    inspect_ready: cacheInspection.state === "ready",
+    clear_recognized_only:
+      cacheClear.deleted_active_database_count === 1 &&
+      cacheAfterClear.active_database_count === 0 &&
+      cacheAfterClear.unrecognized_regular_file_count === 1,
+  };
+
+  process.env.AST_SYMBOL_INDEX_CACHE_ROOT = disabledCacheRoot;
+  invalidateProject(root);
   const disabled = await timed(() => getProjectStatus(root));
   measurements.disabled = disabled;
   expectStatus(disabled.value, { indexed_count: 0 });
   assert.equal(disabled.value.index_observability.policy, "disabled");
   assert.equal(disabled.value.index_observability.backend, "memory");
-  assert.deepEqual(await projectCacheFiles(), []);
+  assert.deepEqual(await projectCacheFiles(disabledCacheRoot), []);
+
+  const enabledPolicy = readSymbolIndexPersistencePolicy({
+    AST_SYMBOL_INDEX_PERSISTENCE: "enabled",
+    AST_SYMBOL_INDEX_CACHE_ROOT: enabledCacheRoot,
+  });
+  assert.equal(enabledPolicy.backend, "sqlite");
+  assert.equal(enabledPolicy.reason, "default");
+  process.env.AST_SYMBOL_INDEX_PERSISTENCE = "enabled";
+  process.env.AST_SYMBOL_INDEX_CACHE_ROOT = enabledCacheRoot;
+  invalidateProject(root);
+  const enabledStatus = await timed(() => getProjectStatus(root));
+  measurements.enabled = enabledStatus;
+  assert.equal(enabledStatus.value.index_observability.policy, "enabled");
+  assert.equal(enabledStatus.value.index_observability.backend, "sqlite");
+  assert.equal(enabledStatus.value.index_observability.state, "ready");
+  assert.equal((await projectCacheFiles(enabledCacheRoot)).length, 1);
 
   process.env.AST_SYMBOL_INDEX_PERSISTENCE = "canary";
+  process.env.AST_SYMBOL_INDEX_CACHE_ROOT = cacheRoot;
   invalidateProject(root);
   const canaryMiss = await timed(() => getProjectStatus(root));
   measurements.canary_miss = canaryMiss;
@@ -131,21 +246,6 @@ try {
   });
   failureInjection.unsupported_capability = unsupportedCapability;
   assert.equal(unsupportedCapability.value.code, "capability_unavailable");
-
-  const enabledPolicy = readSymbolIndexPersistencePolicy({
-    AST_SYMBOL_INDEX_PERSISTENCE: "enabled",
-    AST_SYMBOL_INDEX_CACHE_ROOT: cacheRoot,
-  });
-  assert.equal(enabledPolicy.backend, "memory");
-  assert.equal(enabledPolicy.reason, "enabled_not_released");
-  process.env.AST_SYMBOL_INDEX_PERSISTENCE = "enabled";
-  invalidateProject(root);
-  const enabledStatus = await timed(() => getProjectStatus(root));
-  measurements.enabled_fail_closed = enabledStatus;
-  assert.equal(enabledStatus.value.index_observability.backend, "memory");
-  assert.equal(enabledStatus.value.index_observability.policy_reason, "enabled_not_released");
-  process.env.AST_SYMBOL_INDEX_PERSISTENCE = "canary";
-  invalidateProject(root);
 
   let injectReadFailure = false;
   class ReadFailureDatabase {
@@ -385,10 +485,14 @@ try {
   assert.equal(contention.value.code, "contention");
   assert.equal(flushFailure.value.code, "contention");
 
+  const beforeChangedFile = await getProjectStatus(root);
   await writeFile(path.join(root, "src", "first.ts"), "export const first = 3;\n");
   const changedFile = await timed(() => getProjectStatus(root));
   measurements.changed_file = changedFile;
-  assert.equal(changedFile.value.index_observability.rebuilt_files, 1);
+  changedFileRebuiltDelta =
+    changedFile.value.index_observability.rebuilt_files -
+    beforeChangedFile.index_observability.rebuilt_files;
+  assert.equal(changedFileRebuiltDelta, 1);
   assert.equal(changedFile.value.index_observability.reused_files >= 1, true);
 
   const originalRefresh = SQLiteSymbolIndexStore.prototype.refresh;
@@ -544,7 +648,7 @@ try {
     node_version: process.version,
     project_root: "[deterministic-fixture]",
     cache_root: "[temporary-cache-root]",
-    policy_default: "disabled",
+    policy_default: "enabled",
     scenarios: Object.fromEntries(
       Object.entries(measurements).map(([name, measurement]) => [
         name,
@@ -564,11 +668,30 @@ try {
         { duration_ms: measurement.duration_ms, ...measurement.value },
       ]),
     ),
+    cache_lifecycle: cacheLifecycle,
     gates: {
-      default_disabled: measurements.disabled.value.index_observability.backend === "memory",
+      default_enabled_persisted:
+        measurements.default_miss.value.index_observability.policy === "enabled" &&
+        measurements.default_miss.value.index_observability.backend === "sqlite",
+      default_restart_hit:
+        measurements.default_hit.value.index_observability.operation === "hit" &&
+        measurements.default_hit.value.index_observability.fallback_count === 0,
+      default_rollback_untouched:
+        measurements.default_rollback.value.index_observability.backend === "memory" &&
+        measurements.default_rollback.value.index_observability.policy === "disabled",
+      default_private_cache:
+        cacheLifecycle.private_root === true && cacheLifecycle.private_database === true,
+      cache_inspect_clear: cacheLifecycle.inspect_ready && cacheLifecycle.clear_recognized_only,
+      explicit_disabled:
+        measurements.disabled.value.index_observability.backend === "memory" &&
+        measurements.disabled.value.index_observability.policy === "disabled",
+      enabled_persisted:
+        enabledPolicy.backend === "sqlite" &&
+        enabledPolicy.reason === "default" &&
+        measurements.enabled.value.index_observability.backend === "sqlite" &&
+        measurements.enabled.value.index_observability.policy === "enabled",
       canary_persisted: measurements.canary_miss.value.index_observability.backend === "sqlite",
-      incremental_changed_file:
-        measurements.changed_file.value.index_observability.rebuilt_files === 1,
+      incremental_changed_file: changedFileRebuiltDelta === 1,
       corruption_quarantined:
         measurements.corruption_fallback.value.index_observability.state === "failed",
       corruption_recovered:
@@ -578,12 +701,6 @@ try {
       rollback_memory_only: measurements.rollback.value.index_observability.backend === "memory",
       unsupported_capability:
         failureInjection.unsupported_capability.value.code === "capability_unavailable",
-      enabled_fails_closed:
-        enabledPolicy.backend === "memory" &&
-        enabledPolicy.reason === "enabled_not_released" &&
-        measurements.enabled_fail_closed.value.index_observability.backend === "memory" &&
-        measurements.enabled_fail_closed.value.index_observability.policy_reason ===
-          "enabled_not_released",
       read_failure: failureInjection.read_failure.value.code === "read_failed",
       invalid_path: failureInjection.invalid_path.value.code === "invalid_path",
       migration_failure: failureInjection.migration_failure.value.code === "migration_failed",

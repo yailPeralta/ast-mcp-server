@@ -650,6 +650,7 @@ if (process.argv[2] === "debug" && process.argv[3] === "config") {
       const guidancePath = path.join(claudeRoot, "CLAUDE.md");
       await mkdir(claudeRoot);
       await writeFile(guidancePath, "before\n");
+      await chmod(guidancePath, 0o640);
       const skillPlan = await planBundledSkillInstallation({
         target: [],
         scope: "user",

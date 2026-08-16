@@ -1,0 +1,1353 @@
+{
+  "command": {
+    "argv": [
+      "benchmark:production-readiness",
+      "--node-bin",
+      "[node-bin]",
+      "--expected-node",
+      "24",
+      "--project",
+      "[project]",
+      "--workload",
+      "[workload]",
+      "--iterations",
+      "20",
+      "--restarts",
+      "3",
+      "--output",
+      "[output]",
+      "--candidate-tree",
+      "b213f5b15bbc6d6889ca96f67517f86968a0da31"
+    ],
+    "raw_report_sha256": "e0389a21431870d037dd0f57879039ab8b2f8431ad85e24235d0daa379b24865"
+  },
+  "deterministic_fixture": {
+    "gates": {
+      "mutation_applied": true,
+      "mutation_exact_postimage": true,
+      "mutation_no_cache_side_effect": true,
+      "mutation_replay": true,
+      "mutation_rollback_original_bytes": true,
+      "persistence_changed_only_rebuild": true,
+      "persistence_config_invalidation": true,
+      "persistence_corruption_compiler_result": true,
+      "persistence_corruption_fallback_counted": true,
+      "persistence_corruption_recovered": true,
+      "persistence_corruption_recovered_in_session": true,
+      "persistence_disabled_rollback": true,
+      "persistence_initial_canary_ready": true,
+      "persistence_write_failure_compiler_result": true,
+      "persistence_write_failure_fallback_counted": true,
+      "persistence_write_failure_recovered": true,
+      "resources_cache_growth_bounded": true,
+      "resources_cache_manifest_stable": true,
+      "resources_exact_manual_gc_count": true,
+      "resources_exact_measured_count": true,
+      "resources_exact_warmup_count": true,
+      "resources_final_restart_ready": true,
+      "resources_rss_growth_bounded": true,
+      "runtime_active_cancellation": true,
+      "runtime_disabled_no_cache": true,
+      "runtime_public_cancellation": true,
+      "runtime_queue_drained": true,
+      "runtime_queue_saturation": true,
+      "runtime_queued_cancellation": true,
+      "runtime_session_capacity": true
+    },
+    "mutation": {
+      "failure_outcome": "INTERNAL_ERROR",
+      "gates": {
+        "applied": true,
+        "exact_postimage": true,
+        "no_cache_side_effect": true,
+        "replay": true,
+        "rollback_original_bytes": true
+      },
+      "originals_restored": true
+    },
+    "persistence": {
+      "cache": {
+        "files": [
+          {
+            "bytes": 20480,
+            "file": "symbol-index-374c1688119a286a6e4a114a059a0d7b775cddd6619663565641ba0b0b7a23fc.sqlite"
+          },
+          {
+            "bytes": 7,
+            "file": "symbol-index-374c1688119a286a6e4a114a059a0d7b775cddd6619663565641ba0b0b7a23fc.sqlite.corrupt-79201-1786822466398"
+          }
+        ],
+        "total_bytes": 20487
+      },
+      "changed_file": {
+        "accepted_entries": 2,
+        "backend": "sqlite",
+        "cache_hits": 1,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "rebuild",
+        "loaded_entries": 2,
+        "migration_count": 0,
+        "operation": "rebuild",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 1,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 1,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "config_invalidation": {
+        "accepted_entries": 2,
+        "backend": "sqlite",
+        "cache_hits": 1,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "rebuild",
+        "loaded_entries": 2,
+        "migration_count": 0,
+        "operation": "rebuild",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 2,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 0,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "corruption_compiler_baseline_sha256": "66465eb9e4050f74ae8fecda3aa766b2b12dbc1d85dcf55ad9a136555d522e59",
+      "corruption_fallback": {
+        "accepted_entries": 0,
+        "backend": "sqlite",
+        "cache_hits": 0,
+        "cache_misses": 1,
+        "corruption_count": 1,
+        "fallback_count": 1,
+        "last_error": null,
+        "last_operation": "rebuild",
+        "loaded_entries": 0,
+        "migration_count": 0,
+        "operation": "rebuild",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 2,
+        "rejected_entries": 1,
+        "removed_files": 0,
+        "reused_files": 0,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "corruption_recovery": {
+        "accepted_entries": 4,
+        "backend": "sqlite",
+        "cache_hits": 2,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "hit",
+        "loaded_entries": 4,
+        "migration_count": 0,
+        "operation": "hit",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 4,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "corruption_result_sha256": "66465eb9e4050f74ae8fecda3aa766b2b12dbc1d85dcf55ad9a136555d522e59",
+      "gates": {
+        "changed_only_rebuild": true,
+        "config_invalidation": true,
+        "corruption_compiler_result": true,
+        "corruption_fallback_counted": true,
+        "corruption_recovered": true,
+        "corruption_recovered_in_session": true,
+        "disabled_rollback": true,
+        "initial_canary_ready": true,
+        "write_failure_compiler_result": true,
+        "write_failure_fallback_counted": true,
+        "write_failure_recovered": true
+      },
+      "initial": {
+        "accepted_entries": 0,
+        "backend": "sqlite",
+        "cache_hits": 0,
+        "cache_misses": 1,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "rebuild",
+        "loaded_entries": 0,
+        "migration_count": 0,
+        "operation": "rebuild",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 2,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 0,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "rollback": {
+        "accepted_entries": 0,
+        "backend": "memory",
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "disabled",
+        "loaded_entries": 0,
+        "migration_count": 0,
+        "operation": "disabled",
+        "policy": "disabled",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 0,
+        "state": "disabled",
+        "write_failure_count": 0
+      },
+      "write_failure_compiler_baseline_sha256": "66465eb9e4050f74ae8fecda3aa766b2b12dbc1d85dcf55ad9a136555d522e59",
+      "write_failure_fallback": {
+        "accepted_entries": 4,
+        "backend": "sqlite",
+        "cache_hits": 2,
+        "cache_misses": 1,
+        "corruption_count": 0,
+        "fallback_count": 1,
+        "last_error": null,
+        "last_operation": "rebuild",
+        "loaded_entries": 4,
+        "migration_count": 0,
+        "operation": "rebuild",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 3,
+        "rejected_entries": 1,
+        "removed_files": 0,
+        "reused_files": 1,
+        "state": "ready",
+        "write_failure_count": 1
+      },
+      "write_failure_recovery": {
+        "accepted_entries": 4,
+        "backend": "sqlite",
+        "cache_hits": 2,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "hit",
+        "loaded_entries": 4,
+        "migration_count": 0,
+        "operation": "hit",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 4,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "write_failure_result_sha256": "66465eb9e4050f74ae8fecda3aa766b2b12dbc1d85dcf55ad9a136555d522e59"
+    },
+    "resources": {
+      "cache_allowed_growth_bytes": 1048576,
+      "final_index_observability": {
+        "accepted_entries": 4,
+        "backend": "sqlite",
+        "cache_hits": 2,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "hit",
+        "loaded_entries": 4,
+        "migration_count": 0,
+        "operation": "hit",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 4,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "final_restart_cache": {
+        "files": [
+          {
+            "bytes": 20480,
+            "file": "symbol-index-51be04c1d6654dd2d214fb0111589048b8477d272f6e118814fe1f53e09bf088.sqlite"
+          }
+        ],
+        "total_bytes": 20480
+      },
+      "first_complete_cache": {
+        "files": [
+          {
+            "bytes": 20480,
+            "file": "symbol-index-51be04c1d6654dd2d214fb0111589048b8477d272f6e118814fe1f53e09bf088.sqlite"
+          }
+        ],
+        "total_bytes": 20480
+      },
+      "gates": {
+        "cache_growth_bounded": true,
+        "cache_manifest_stable": true,
+        "exact_manual_gc_count": true,
+        "exact_measured_count": true,
+        "exact_warmup_count": true,
+        "final_restart_ready": true,
+        "rss_growth_bounded": true
+      },
+      "initial_index_observability": {
+        "accepted_entries": 120,
+        "backend": "sqlite",
+        "cache_hits": 60,
+        "cache_misses": 1,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "hit",
+        "loaded_entries": 120,
+        "migration_count": 0,
+        "operation": "hit",
+        "policy": "canary",
+        "policy_reason": "default",
+        "rebuilt_files": 2,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 120,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "latency_samples_ms": [
+        3.28,
+        6.399,
+        4.274,
+        3.938,
+        4.181,
+        5.008,
+        3.797,
+        4.482,
+        5.241,
+        4.594,
+        4.042,
+        6.719,
+        4.75,
+        5.417,
+        6.602,
+        4.165,
+        3.5,
+        4.278,
+        3.863,
+        4.202,
+        5.879,
+        4.87,
+        3.629,
+        5.779,
+        4.02,
+        4.664,
+        3.896,
+        3.632,
+        6.253,
+        4.111,
+        4.028,
+        3.32,
+        5.244,
+        3.943,
+        4.473,
+        4.605,
+        3.901,
+        4.292,
+        4.27,
+        4.619,
+        4.609,
+        4.691,
+        3.885,
+        3.926,
+        3.869,
+        5.437,
+        3.534,
+        4.841,
+        4.388,
+        3.896
+      ],
+      "manual_gc_count": 50,
+      "measured_count": 50,
+      "restarts": [
+        {
+          "duration_ms": 262.383,
+          "index_observability": {
+            "accepted_entries": 4,
+            "backend": "sqlite",
+            "cache_hits": 2,
+            "cache_misses": 0,
+            "corruption_count": 0,
+            "fallback_count": 0,
+            "last_error": null,
+            "last_operation": "hit",
+            "loaded_entries": 4,
+            "migration_count": 0,
+            "operation": "hit",
+            "policy": "canary",
+            "policy_reason": "default",
+            "rebuilt_files": 0,
+            "rejected_entries": 0,
+            "removed_files": 0,
+            "reused_files": 4,
+            "state": "ready",
+            "write_failure_count": 0
+          },
+          "peak_rss_bytes": 240418816,
+          "restart": 1,
+          "sample_count": 23
+        },
+        {
+          "duration_ms": 260.657,
+          "index_observability": {
+            "accepted_entries": 4,
+            "backend": "sqlite",
+            "cache_hits": 2,
+            "cache_misses": 0,
+            "corruption_count": 0,
+            "fallback_count": 0,
+            "last_error": null,
+            "last_operation": "hit",
+            "loaded_entries": 4,
+            "migration_count": 0,
+            "operation": "hit",
+            "policy": "canary",
+            "policy_reason": "default",
+            "rebuilt_files": 0,
+            "rejected_entries": 0,
+            "removed_files": 0,
+            "reused_files": 4,
+            "state": "ready",
+            "write_failure_count": 0
+          },
+          "peak_rss_bytes": 243494912,
+          "restart": 2,
+          "sample_count": 23
+        },
+        {
+          "duration_ms": 262.107,
+          "index_observability": {
+            "accepted_entries": 4,
+            "backend": "sqlite",
+            "cache_hits": 2,
+            "cache_misses": 0,
+            "corruption_count": 0,
+            "fallback_count": 0,
+            "last_error": null,
+            "last_operation": "hit",
+            "loaded_entries": 4,
+            "migration_count": 0,
+            "operation": "hit",
+            "policy": "canary",
+            "policy_reason": "default",
+            "rebuilt_files": 0,
+            "rejected_entries": 0,
+            "removed_files": 0,
+            "reused_files": 4,
+            "state": "ready",
+            "write_failure_count": 0
+          },
+          "peak_rss_bytes": 239493120,
+          "restart": 3,
+          "sample_count": 23
+        }
+      ],
+      "rss_allowed_growth_bytes": 46551859.2,
+      "rss_final_five_median_bytes": 233414656,
+      "rss_first_five_median_bytes": 232759296,
+      "rss_samples_bytes": [
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232759296,
+        232890368,
+        232890368,
+        232890368,
+        232890368,
+        233021440,
+        233021440,
+        233152512,
+        233152512,
+        233152512,
+        233152512,
+        233152512,
+        233152512,
+        233152512,
+        233152512,
+        233152512,
+        233152512,
+        233283584,
+        233414656,
+        233414656,
+        233414656,
+        233414656,
+        233414656
+      ],
+      "warmup_count": 10
+    },
+    "runtime": {
+      "cache_created": false,
+      "gates": {
+        "active_cancellation": true,
+        "disabled_no_cache": true,
+        "public_cancellation": true,
+        "queue_drained": true,
+        "queue_saturation": true,
+        "queued_cancellation": true,
+        "session_capacity": true
+      },
+      "operation_queue": {
+        "active_operations": 0,
+        "admission": "open",
+        "cancelled_operations": 2,
+        "deadline_exceeded_operations": 0,
+        "last_outcome": "cancelled",
+        "max_execution_ms": 19,
+        "max_queue_wait_ms": 6,
+        "queue_capacity": 1,
+        "queue_timeout_operations": 0,
+        "queued_operations": 0,
+        "rejected_operations": 1,
+        "state": "idle"
+      },
+      "outcomes": {
+        "active_cancellation": "protocol_cancelled",
+        "overflow": "PROJECT_QUEUE_FULL",
+        "public_cancellation": "REQUEST_CANCELLED",
+        "queued_cancellation": "protocol_cancelled",
+        "session_capacity": "PROJECT_CAPACITY_EXCEEDED"
+      }
+    }
+  },
+  "gates": {
+    "default_enabled": true,
+    "explicit_canary": true,
+    "explicit_disabled": true,
+    "git_authority": true,
+    "mutation_applied": true,
+    "mutation_exact_postimage": true,
+    "mutation_no_cache_side_effect": true,
+    "mutation_replay": true,
+    "mutation_rollback_original_bytes": true,
+    "package_repository_immutable": true,
+    "package_tree_identity": true,
+    "persistence_changed_only_rebuild": true,
+    "persistence_config_invalidation": true,
+    "persistence_corruption_compiler_result": true,
+    "persistence_corruption_fallback_counted": true,
+    "persistence_corruption_recovered": true,
+    "persistence_corruption_recovered_in_session": true,
+    "persistence_disabled_rollback": true,
+    "persistence_initial_canary_ready": true,
+    "persistence_write_failure_compiler_result": true,
+    "persistence_write_failure_fallback_counted": true,
+    "persistence_write_failure_recovered": true,
+    "policy_rollback_memory_only": true,
+    "repository_immutable": true,
+    "resources_cache_growth_bounded": true,
+    "resources_cache_manifest_stable": true,
+    "resources_exact_manual_gc_count": true,
+    "resources_exact_measured_count": true,
+    "resources_exact_warmup_count": true,
+    "resources_final_restart_ready": true,
+    "resources_rss_growth_bounded": true,
+    "restart_count": true,
+    "restart_reuse": true,
+    "runtime_active_cancellation": true,
+    "runtime_disabled_no_cache": true,
+    "runtime_identity": true,
+    "runtime_public_cancellation": true,
+    "runtime_queue_drained": true,
+    "runtime_queue_saturation": true,
+    "runtime_queued_cancellation": true,
+    "runtime_session_capacity": true,
+    "semantic_parity": true
+  },
+  "generated_at": "2026-08-15T19:34:35.870Z",
+  "identity": {
+    "git": {
+      "binary": "[trusted-git]",
+      "environment_keys": [
+        "GIT_ATTR_SOURCE",
+        "GIT_CONFIG",
+        "GIT_CONFIG_COUNT",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_KEY_0",
+        "GIT_CONFIG_KEY_1",
+        "GIT_CONFIG_KEY_10",
+        "GIT_CONFIG_KEY_11",
+        "GIT_CONFIG_KEY_2",
+        "GIT_CONFIG_KEY_3",
+        "GIT_CONFIG_KEY_4",
+        "GIT_CONFIG_KEY_5",
+        "GIT_CONFIG_KEY_6",
+        "GIT_CONFIG_KEY_7",
+        "GIT_CONFIG_KEY_8",
+        "GIT_CONFIG_KEY_9",
+        "GIT_CONFIG_NOSYSTEM",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_CONFIG_VALUE_0",
+        "GIT_CONFIG_VALUE_1",
+        "GIT_CONFIG_VALUE_10",
+        "GIT_CONFIG_VALUE_11",
+        "GIT_CONFIG_VALUE_2",
+        "GIT_CONFIG_VALUE_3",
+        "GIT_CONFIG_VALUE_4",
+        "GIT_CONFIG_VALUE_5",
+        "GIT_CONFIG_VALUE_6",
+        "GIT_CONFIG_VALUE_7",
+        "GIT_CONFIG_VALUE_8",
+        "GIT_CONFIG_VALUE_9",
+        "GIT_PAGER",
+        "GIT_TERMINAL_PROMPT",
+        "GIT_WORK_TREE",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "PAGER",
+        "PATH",
+        "XDG_CONFIG_HOME"
+      ],
+      "realpath": "[trusted-git]",
+      "sha256": "5516c9f362c29376ab9a499a33082f9f611941d8c75930c880e30ad109e39c9a",
+      "version": "git version 2.53.0"
+    },
+    "harness": {
+      "sha256": "04e90a03f20b9391e6aae643ff05e59a793d1c9bd751e57439a608ee848afdd5"
+    },
+    "os": {
+      "arch": "x64",
+      "platform": "linux",
+      "release": "7.0.0-29-generic"
+    },
+    "package": {
+      "commit": "8f5489e0a066659fa903b2ad2cc69be00eaa48ec",
+      "head_tree": "b213f5b15bbc6d6889ca96f67517f86968a0da31",
+      "name": "ast-mcp-server",
+      "status": {
+        "bytes": 0,
+        "dirty": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "tree": "b213f5b15bbc6d6889ca96f67517f86968a0da31",
+      "version": "0.8.1"
+    },
+    "project": {
+      "alias": "[x-scraper]",
+      "commit": "a86fffb15ad21912a87583c2d498f813c47aa27e",
+      "head_tree": "9c359690b58867e01750905b76b1c0cca3ad15a2",
+      "status": {
+        "bytes": 0,
+        "dirty": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "tree": "9c359690b58867e01750905b76b1c0cca3ad15a2"
+    },
+    "runtime": {
+      "binary_sha256": "b2959781cc5a74c357ffa02367efa8a0330cbb1c9cb347732fdfaaaca381cbcd",
+      "expected": "24",
+      "observed": "v24.16.0"
+    },
+    "workload": {
+      "call_count": 5,
+      "call_ids": [
+        "list-sniper",
+        "search-market-resolver",
+        "search-service-broad",
+        "explore-market-resolver",
+        "impact-market-resolver"
+      ],
+      "measurement_call_id": "search-market-resolver",
+      "schema_version": 1,
+      "sha256": "f1190b254ab2fc9ddb6cbe6be7a5d842814a2858dbe8629941cb927a8aada42a",
+      "source_file_count": 1458
+    }
+  },
+  "overall_pass": true,
+  "parameters": {
+    "iterations": 20,
+    "node_options": [],
+    "real_repository_measurements_are_observational": true,
+    "restarts": 3
+  },
+  "real_repository": {
+    "default_enabled": {
+      "cold": {
+        "calls": [
+          {
+            "duration_ms": 7018.384,
+            "id": "list-sniper",
+            "result_sha256": "273f9e3a95d65670af01dea6aca840d58b91cfc110bfac30e7f7d54af16b1fd6"
+          },
+          {
+            "duration_ms": 1399.887,
+            "id": "search-market-resolver",
+            "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+          },
+          {
+            "duration_ms": 1377.053,
+            "id": "search-service-broad",
+            "result_sha256": "6cbfd7743a5f59589ddefcc80afb5e8d3dff9843d378d261daca65798a164614"
+          },
+          {
+            "duration_ms": 990.458,
+            "id": "explore-market-resolver",
+            "result_sha256": "3362b2757769884cd6440182538a9be875912fcda47193f08247010b38856160"
+          },
+          {
+            "duration_ms": 3889.312,
+            "id": "impact-market-resolver",
+            "result_sha256": "c6ddae56bacc9c93306ff2d1d47ee847f53ebf7d5417dc9a73057b57afb0071b"
+          }
+        ],
+        "iteration": 0,
+        "peak_rss_bytes": 1543073792,
+        "sample_count": 1741,
+        "total_duration_ms": 14676.783
+      },
+      "final_cache": {
+        "files": [
+          {
+            "bytes": 7729152,
+            "file": "symbol-index-a8ecdf32531cba58f9d96851bb8b88d253efe71104a74c504a197309e37b1fe1.sqlite"
+          }
+        ],
+        "total_bytes": 7729152
+      },
+      "final_index_observability": {
+        "accepted_entries": 8748,
+        "backend": "sqlite",
+        "cache_hits": 6,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "hit",
+        "loaded_entries": 8748,
+        "migration_count": 0,
+        "operation": "hit",
+        "policy": "enabled",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 8748,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "first_complete_cache": {
+        "files": [
+          {
+            "bytes": 7729152,
+            "file": "symbol-index-a8ecdf32531cba58f9d96851bb8b88d253efe71104a74c504a197309e37b1fe1.sqlite"
+          }
+        ],
+        "total_bytes": 7729152
+      },
+      "initial_index_observability": {
+        "accepted_entries": 36450,
+        "backend": "sqlite",
+        "cache_hits": 25,
+        "cache_misses": 1,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "hit",
+        "loaded_entries": 36450,
+        "migration_count": 0,
+        "operation": "hit",
+        "policy": "enabled",
+        "policy_reason": "default",
+        "rebuilt_files": 1458,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 36450,
+        "state": "ready",
+        "write_failure_count": 0
+      },
+      "operation_queue": {
+        "active_operations": 1,
+        "admission": "open",
+        "cancelled_operations": 0,
+        "deadline_exceeded_operations": 0,
+        "last_outcome": "succeeded",
+        "max_execution_ms": 4127,
+        "max_queue_wait_ms": 0,
+        "queue_capacity": 32,
+        "queue_timeout_operations": 0,
+        "queued_operations": 0,
+        "rejected_operations": 0,
+        "state": "running"
+      },
+      "policy_variable": "absent",
+      "restarts": [
+        {
+          "calls": [
+            {
+              "duration_ms": 4847.849,
+              "id": "list-sniper",
+              "result_sha256": "273f9e3a95d65670af01dea6aca840d58b91cfc110bfac30e7f7d54af16b1fd6"
+            },
+            {
+              "duration_ms": 1287.516,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            },
+            {
+              "duration_ms": 1309.618,
+              "id": "search-service-broad",
+              "result_sha256": "6cbfd7743a5f59589ddefcc80afb5e8d3dff9843d378d261daca65798a164614"
+            },
+            {
+              "duration_ms": 820.089,
+              "id": "explore-market-resolver",
+              "result_sha256": "3362b2757769884cd6440182538a9be875912fcda47193f08247010b38856160"
+            },
+            {
+              "duration_ms": 3904.834,
+              "id": "impact-market-resolver",
+              "result_sha256": "c6ddae56bacc9c93306ff2d1d47ee847f53ebf7d5417dc9a73057b57afb0071b"
+            }
+          ],
+          "index_observability": {
+            "accepted_entries": 8748,
+            "backend": "sqlite",
+            "cache_hits": 6,
+            "cache_misses": 0,
+            "corruption_count": 0,
+            "fallback_count": 0,
+            "last_error": null,
+            "last_operation": "hit",
+            "loaded_entries": 8748,
+            "migration_count": 0,
+            "operation": "hit",
+            "policy": "enabled",
+            "policy_reason": "default",
+            "rebuilt_files": 0,
+            "rejected_entries": 0,
+            "removed_files": 0,
+            "reused_files": 8748,
+            "state": "ready",
+            "write_failure_count": 0
+          },
+          "iteration": 1,
+          "peak_rss_bytes": 1321861120,
+          "restart": 1,
+          "sample_count": 543,
+          "total_duration_ms": 12171.902
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 4889.659,
+              "id": "list-sniper",
+              "result_sha256": "273f9e3a95d65670af01dea6aca840d58b91cfc110bfac30e7f7d54af16b1fd6"
+            },
+            {
+              "duration_ms": 1186.614,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            },
+            {
+              "duration_ms": 1186.489,
+              "id": "search-service-broad",
+              "result_sha256": "6cbfd7743a5f59589ddefcc80afb5e8d3dff9843d378d261daca65798a164614"
+            },
+            {
+              "duration_ms": 805.479,
+              "id": "explore-market-resolver",
+              "result_sha256": "3362b2757769884cd6440182538a9be875912fcda47193f08247010b38856160"
+            },
+            {
+              "duration_ms": 3747.632,
+              "id": "impact-market-resolver",
+              "result_sha256": "c6ddae56bacc9c93306ff2d1d47ee847f53ebf7d5417dc9a73057b57afb0071b"
+            }
+          ],
+          "index_observability": {
+            "accepted_entries": 8748,
+            "backend": "sqlite",
+            "cache_hits": 6,
+            "cache_misses": 0,
+            "corruption_count": 0,
+            "fallback_count": 0,
+            "last_error": null,
+            "last_operation": "hit",
+            "loaded_entries": 8748,
+            "migration_count": 0,
+            "operation": "hit",
+            "policy": "enabled",
+            "policy_reason": "default",
+            "rebuilt_files": 0,
+            "rejected_entries": 0,
+            "removed_files": 0,
+            "reused_files": 8748,
+            "state": "ready",
+            "write_failure_count": 0
+          },
+          "iteration": 2,
+          "peak_rss_bytes": 1420619776,
+          "restart": 2,
+          "sample_count": 530,
+          "total_duration_ms": 11817.386
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 4646.868,
+              "id": "list-sniper",
+              "result_sha256": "273f9e3a95d65670af01dea6aca840d58b91cfc110bfac30e7f7d54af16b1fd6"
+            },
+            {
+              "duration_ms": 1200.14,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            },
+            {
+              "duration_ms": 1207.769,
+              "id": "search-service-broad",
+              "result_sha256": "6cbfd7743a5f59589ddefcc80afb5e8d3dff9843d378d261daca65798a164614"
+            },
+            {
+              "duration_ms": 826.877,
+              "id": "explore-market-resolver",
+              "result_sha256": "3362b2757769884cd6440182538a9be875912fcda47193f08247010b38856160"
+            },
+            {
+              "duration_ms": 4130.394,
+              "id": "impact-market-resolver",
+              "result_sha256": "c6ddae56bacc9c93306ff2d1d47ee847f53ebf7d5417dc9a73057b57afb0071b"
+            }
+          ],
+          "index_observability": {
+            "accepted_entries": 8748,
+            "backend": "sqlite",
+            "cache_hits": 6,
+            "cache_misses": 0,
+            "corruption_count": 0,
+            "fallback_count": 0,
+            "last_error": null,
+            "last_operation": "hit",
+            "loaded_entries": 8748,
+            "migration_count": 0,
+            "operation": "hit",
+            "policy": "enabled",
+            "policy_reason": "default",
+            "rebuilt_files": 0,
+            "rejected_entries": 0,
+            "removed_files": 0,
+            "reused_files": 8748,
+            "state": "ready",
+            "write_failure_count": 0
+          },
+          "iteration": 3,
+          "peak_rss_bytes": 1302962176,
+          "restart": 3,
+          "sample_count": 536,
+          "total_duration_ms": 12013.917
+        }
+      ],
+      "root_source": "xdg",
+      "warm": [
+        {
+          "calls": [
+            {
+              "duration_ms": 1341.731,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 1,
+          "total_duration_ms": 1341.991
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1326.89,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 2,
+          "total_duration_ms": 1327.139
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1284.203,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 3,
+          "total_duration_ms": 1284.528
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1457.631,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 4,
+          "total_duration_ms": 1457.844
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1325.668,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 5,
+          "total_duration_ms": 1325.962
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1358.686,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 6,
+          "total_duration_ms": 1358.984
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1412.539,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 7,
+          "total_duration_ms": 1412.816
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1359.393,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 8,
+          "total_duration_ms": 1359.598
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1312.065,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 9,
+          "total_duration_ms": 1312.288
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1277.75,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 10,
+          "total_duration_ms": 1277.971
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1414.682,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 11,
+          "total_duration_ms": 1415.034
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1327.268,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 12,
+          "total_duration_ms": 1327.529
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1325.32,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 13,
+          "total_duration_ms": 1325.545
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1366.584,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 14,
+          "total_duration_ms": 1366.861
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1338.151,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 15,
+          "total_duration_ms": 1338.504
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1460.197,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 16,
+          "total_duration_ms": 1460.52
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1361.849,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 17,
+          "total_duration_ms": 1362.081
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1315.688,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 18,
+          "total_duration_ms": 1315.927
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1324.047,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 19,
+          "total_duration_ms": 1324.443
+        },
+        {
+          "calls": [
+            {
+              "duration_ms": 1288.947,
+              "id": "search-market-resolver",
+              "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+            }
+          ],
+          "iteration": 20,
+          "total_duration_ms": 1289.218
+        }
+      ]
+    },
+    "disabled_baseline": {
+      "cache_created": false,
+      "index_observability": {
+        "accepted_entries": 0,
+        "backend": "memory",
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "disabled",
+        "loaded_entries": 0,
+        "migration_count": 0,
+        "operation": "disabled",
+        "policy": "disabled",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 0,
+        "state": "disabled",
+        "write_failure_count": 0
+      },
+      "operation_queue": {
+        "active_operations": 1,
+        "admission": "open",
+        "cancelled_operations": 0,
+        "deadline_exceeded_operations": 0,
+        "last_outcome": "succeeded",
+        "max_execution_ms": 3655,
+        "max_queue_wait_ms": 0,
+        "queue_capacity": 32,
+        "queue_timeout_operations": 0,
+        "queued_operations": 0,
+        "rejected_operations": 0,
+        "state": "running"
+      },
+      "peak_rss_bytes": 1331957760,
+      "policy_variable": "disabled",
+      "run": {
+        "calls": [
+          {
+            "duration_ms": 7091.24,
+            "id": "list-sniper",
+            "result_sha256": "273f9e3a95d65670af01dea6aca840d58b91cfc110bfac30e7f7d54af16b1fd6"
+          },
+          {
+            "duration_ms": 910.267,
+            "id": "search-market-resolver",
+            "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+          },
+          {
+            "duration_ms": 955.886,
+            "id": "search-service-broad",
+            "result_sha256": "6cbfd7743a5f59589ddefcc80afb5e8d3dff9843d378d261daca65798a164614"
+          },
+          {
+            "duration_ms": 733.719,
+            "id": "explore-market-resolver",
+            "result_sha256": "3362b2757769884cd6440182538a9be875912fcda47193f08247010b38856160"
+          },
+          {
+            "duration_ms": 3657.899,
+            "id": "impact-market-resolver",
+            "result_sha256": "c6ddae56bacc9c93306ff2d1d47ee847f53ebf7d5417dc9a73057b57afb0071b"
+          }
+        ],
+        "iteration": 0,
+        "total_duration_ms": 13351.377
+      },
+      "sample_count": 604
+    },
+    "rollback": {
+      "cache_unchanged": true,
+      "index_observability": {
+        "accepted_entries": 0,
+        "backend": "memory",
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "corruption_count": 0,
+        "fallback_count": 0,
+        "last_error": null,
+        "last_operation": "disabled",
+        "loaded_entries": 0,
+        "migration_count": 0,
+        "operation": "disabled",
+        "policy": "disabled",
+        "policy_reason": "default",
+        "rebuilt_files": 0,
+        "rejected_entries": 0,
+        "removed_files": 0,
+        "reused_files": 0,
+        "state": "disabled",
+        "write_failure_count": 0
+      },
+      "peak_rss_bytes": 1331798016,
+      "run": {
+        "calls": [
+          {
+            "duration_ms": 6955.004,
+            "id": "list-sniper",
+            "result_sha256": "273f9e3a95d65670af01dea6aca840d58b91cfc110bfac30e7f7d54af16b1fd6"
+          },
+          {
+            "duration_ms": 875.066,
+            "id": "search-market-resolver",
+            "result_sha256": "5d43c9f764f1dcc6b1f71efe47dd2ff43c1b122677902b527e7eaa84664e05fa"
+          },
+          {
+            "duration_ms": 911.571,
+            "id": "search-service-broad",
+            "result_sha256": "6cbfd7743a5f59589ddefcc80afb5e8d3dff9843d378d261daca65798a164614"
+          },
+          {
+            "duration_ms": 697.212,
+            "id": "explore-market-resolver",
+            "result_sha256": "3362b2757769884cd6440182538a9be875912fcda47193f08247010b38856160"
+          },
+          {
+            "duration_ms": 3751.638,
+            "id": "impact-market-resolver",
+            "result_sha256": "c6ddae56bacc9c93306ff2d1d47ee847f53ebf7d5417dc9a73057b57afb0071b"
+          }
+        ],
+        "iteration": 0,
+        "total_duration_ms": 13192.179
+      },
+      "sample_count": 582
+    },
+    "semantic_mismatches": [],
+    "source_file_count": 1458
+  },
+  "schema_version": 2,
+  "status": "pass"
+}

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -274,29 +274,39 @@ describe("project sessions", () => {
     }
   });
 
-  it("opens SQLite only for explicit canary opt-in and rolls back to memory", async () => {
+  it("persists by default, hits after reopen, and rolls back without touching cache bytes", async () => {
     const fixture = await createProjectFixture({
       "src/value.ts": "export const value = 1;\n",
     });
     fixtures.push(fixture);
-    const cacheRoot = path.join(fixture.root, ".symbol-index-cache");
-    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
-    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", cacheRoot);
+    const xdgCacheHome = path.join(fixture.root, ".xdg-cache");
+    const isolatedHome = path.join(fixture.root, ".home");
+    const cacheRoot = path.join(xdgCacheHome, "ast-mcp-server", "symbol-index");
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", undefined);
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", undefined);
+    vi.stubEnv("XDG_CACHE_HOME", xdgCacheHome);
+    vi.stubEnv("HOME", isolatedHome);
 
     const first = await withProject(fixture.root, async (context) => ({
       backend: context.symbolIndexBackend,
+      observability: context.symbolIndexObservability,
       entries: await context.symbolIndex.load(context.status.project, SYMBOL_INDEX_SCHEMA_VERSION),
     }));
     expect(first.backend).toBe("sqlite");
+    expect(first.observability).toMatchObject({
+      operation: "rebuild",
+      last_operation: "rebuild",
+      fallback_count: 0,
+    });
     expect(first.entries).toHaveLength(1);
-    expect(await readdir(cacheRoot)).toContainEqual(
-      expect.stringMatching(/^symbol-index-.*\.sqlite$/),
-    );
+    const [databaseName] = await readdir(cacheRoot);
+    expect(databaseName).toMatch(/^symbol-index-.*\.sqlite$/);
+    const databasePath = path.join(cacheRoot, databaseName!);
     await expect(getProjectStatus(fixture.root)).resolves.toMatchObject({
       index: { state: "ready" },
       indexed_count: 1,
       index_observability: {
-        policy: "canary",
+        policy: "enabled",
         policy_reason: "default",
         backend: "sqlite",
         state: "ready",
@@ -305,12 +315,14 @@ describe("project sessions", () => {
         loaded_entries: 1,
         accepted_entries: 1,
         rejected_entries: 0,
+        fallback_count: 0,
         migration_count: 0,
         corruption_count: 0,
         write_failure_count: 0,
         last_successful_persistence_at: expect.stringMatching(/Z$/),
       },
     });
+    const persistedBytes = await readFile(databasePath);
 
     invalidateProject(fixture.root);
     const reopened = await withProject(
@@ -318,6 +330,16 @@ describe("project sessions", () => {
       ({ symbolIndexBackend }) => symbolIndexBackend,
     );
     expect(reopened).toBe("sqlite");
+    await expect(getProjectStatus(fixture.root)).resolves.toMatchObject({
+      index_observability: {
+        policy: "enabled",
+        backend: "sqlite",
+        state: "ready",
+        operation: "hit",
+        last_operation: "hit",
+        fallback_count: 0,
+      },
+    });
 
     vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "disabled");
     invalidateProject(fixture.root);
@@ -343,6 +365,66 @@ describe("project sessions", () => {
         last_successful_persistence_at: null,
       },
     });
+    expect(await readFile(databasePath)).toEqual(persistedBytes);
+  });
+
+  it("retains explicit canary compatibility", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    const cacheRoot = path.join(fixture.root, ".symbol-index-cache");
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", cacheRoot);
+
+    const backend = await withProject(fixture.root, ({ symbolIndexBackend }) => symbolIndexBackend);
+
+    expect(backend).toBe("sqlite");
+    expect(await readdir(cacheRoot)).toContainEqual(
+      expect.stringMatching(/^symbol-index-.*\.sqlite$/),
+    );
+    await expect(getProjectStatus(fixture.root)).resolves.toMatchObject({
+      index_observability: {
+        policy: "canary",
+        backend: "sqlite",
+        state: "ready",
+        fallback_count: 0,
+      },
+    });
+  });
+
+  it("keeps canonical memory results and records enabled root-policy fallback", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", undefined);
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", "relative-cache");
+
+    const result = await withProject(fixture.root, async (context) => ({
+      backend: context.symbolIndexBackend,
+      entries: await context.symbolIndex.load(context.status.project, SYMBOL_INDEX_SCHEMA_VERSION),
+    }));
+
+    expect(result.backend).toBe("memory");
+    expect(result.entries).toHaveLength(1);
+    const status = await getProjectStatus(fixture.root);
+    expect(status).toMatchObject({
+      index: { state: "failed" },
+      indexed_count: 0,
+      index_observability: {
+        policy: "enabled",
+        policy_reason: "cache_root_invalid",
+        backend: "memory",
+        state: "failed",
+        operation: "fallback",
+        last_operation: "fallback",
+        fallback_count: expect.any(Number),
+        last_error: "cache_root_invalid",
+        last_successful_persistence_at: null,
+      },
+    });
+    expect(status.index_observability.fallback_count).toBeGreaterThan(0);
   });
 
   it("keeps SQLite ready when an ASCII file filter matches a Unicode case fold", async () => {
@@ -388,7 +470,7 @@ describe("project sessions", () => {
     });
   });
 
-  it("exposes the reserved enabled fail-closed reason through project status", async () => {
+  it("opens SQLite for explicit enabled policy", async () => {
     const fixture = await createProjectFixture({
       "src/value.ts": "export const value = 1;\n",
     });
@@ -398,14 +480,17 @@ describe("project sessions", () => {
     vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", cacheRoot);
 
     await expect(getProjectStatus(fixture.root)).resolves.toMatchObject({
-      index: { state: "disabled" },
+      index: { state: "ready" },
       index_observability: {
-        policy: "disabled",
-        policy_reason: "enabled_not_released",
-        backend: "memory",
+        policy: "enabled",
+        policy_reason: "default",
+        backend: "sqlite",
+        state: "ready",
       },
     });
-    await expect(readdir(cacheRoot)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(cacheRoot)).toContainEqual(
+      expect.stringMatching(/^symbol-index-.*\.sqlite$/),
+    );
   });
 
   it("falls back to compiler search and marks the session failed on an indexed query error", async () => {
@@ -733,6 +818,85 @@ describe("project sessions", () => {
     });
   });
 
+  it("detaches stale SQLite authority before a failing close during disabled rollback", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", path.join(fixture.root, ".symbol-index-cache"));
+    await withProject(fixture.root, () => undefined);
+
+    const close = vi.spyOn(SQLiteSymbolIndexStore.prototype, "close").mockImplementation(() => {
+      throw new Error("injected close failure");
+    });
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "disabled");
+    let effective;
+    try {
+      effective = await withProject(fixture.root, (context) => ({
+        backend: context.symbolIndexBackend,
+        ready: context.symbolIndexReady,
+        observability: context.symbolIndexObservability,
+      }));
+    } finally {
+      close.mockRestore();
+    }
+
+    expect(effective).toMatchObject({
+      backend: "memory",
+      ready: true,
+      observability: {
+        policy: "disabled",
+        backend: "memory",
+        state: "disabled",
+      },
+    });
+  });
+
+  it("rebuilds compiler context without retaining stale SQLite after a failing close", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", path.join(fixture.root, ".symbol-index-cache"));
+    await withProject(fixture.root, () => undefined);
+    await writeFile(
+      path.join(fixture.root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: { strict: true, noUnusedLocals: true },
+        include: ["src/**/*.ts"],
+      }),
+    );
+
+    const close = vi.spyOn(SQLiteSymbolIndexStore.prototype, "close").mockImplementation(() => {
+      throw new Error("injected close failure");
+    });
+    let effective;
+    try {
+      effective = await withProject(fixture.root, async (context) => ({
+        backend: context.symbolIndexBackend,
+        operation: context.symbolIndexObservability.operation,
+        entries: await context.symbolIndex.load(
+          context.status.project,
+          SYMBOL_INDEX_SCHEMA_VERSION,
+        ),
+      }));
+    } finally {
+      close.mockRestore();
+    }
+
+    expect(effective).toMatchObject({
+      backend: "sqlite",
+      operation: "rebuild",
+      entries: [
+        expect.objectContaining({
+          symbols: expect.arrayContaining([expect.objectContaining({ name: "value" })]),
+        }),
+      ],
+    });
+  });
+
   it("quarantines an omitted persisted projection and preserves compiler symbols", async () => {
     const fixture = await createProjectFixture({
       "src/value.ts": "export const value = 1;\n",
@@ -945,7 +1109,7 @@ describe("project sessions", () => {
     const cacheRoot = path.join(fixture.root, ".symbol-index-cache");
     vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
     vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", cacheRoot);
-    await mkdir(cacheRoot, { recursive: true });
+    await mkdir(cacheRoot, { recursive: true, mode: 0o700 });
     const identity = createFreshProject(fixture.root).status.project;
     const cachePath = symbolIndexCachePath(readSymbolIndexPersistencePolicy(), identity);
     await writeFile(cachePath!, "corrupt");

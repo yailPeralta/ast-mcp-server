@@ -38,7 +38,8 @@ const repositoryRoot = path.resolve(path.dirname(scriptPath), "..");
 const packageMetadata = createRequire(import.meta.url)("../package.json");
 const serverPath = path.join(repositoryRoot, "dist/index.js");
 const FIXTURE_SERVER_MODE = "fixture-server";
-const REPORT_SCHEMA_VERSION = 1;
+const ACTIVE_REPORT_SCHEMA_VERSION = 2;
+const FROZEN_REPORT_SCHEMA_VERSION = ACTIVE_REPORT_SCHEMA_VERSION;
 const WORKLOAD_SCHEMA_VERSION = 1;
 const REQUIRED_ITERATIONS = 20;
 const REQUIRED_RESTARTS = 3;
@@ -57,39 +58,42 @@ const EMPTY_GIT_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const TRUSTED_GIT_EVIDENCE_ALIAS = "[trusted-git]";
 const activeMcpProcesses = new Set();
 const FROZEN_REPORT_RESULTS_DIRECTORY = "benchmark/results";
-const FROZEN_REPORT_DIRECTORY_NAME = "production-readiness";
+const FROZEN_REPORT_DIRECTORY_NAME = "production-readiness-sqlite-default-v5";
 const FROZEN_REPORT_SET_MEMBERS = Object.freeze([
   Object.freeze({
     inputKey: "astNode24",
     option: "--ast-node24",
     fileName: "ast-mcp-server-node24.json",
-    relativePath: "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+    relativePath:
+      "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
     alias: "[ast-mcp-server]",
     runtime: "24",
   }),
   Object.freeze({
-    inputKey: "astNode22_5",
-    option: "--ast-node22.5",
-    fileName: "ast-mcp-server-node22.5.json",
-    relativePath: "benchmark/results/production-readiness/ast-mcp-server-node22.5.json",
+    inputKey: "astNode22_13",
+    option: "--ast-node22.13",
+    fileName: "ast-mcp-server-node22.13.json",
+    relativePath:
+      "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node22.13.json",
     alias: "[ast-mcp-server]",
-    runtime: "22.5.0",
+    runtime: "22.13.0",
   }),
   Object.freeze({
     inputKey: "xScraperNode24",
     option: "--x-scraper-node24",
     fileName: "x-scraper-node24.json",
-    relativePath: "benchmark/results/production-readiness/x-scraper-node24.json",
+    relativePath: "benchmark/results/production-readiness-sqlite-default-v5/x-scraper-node24.json",
     alias: "[x-scraper]",
     runtime: "24",
   }),
   Object.freeze({
-    inputKey: "xScraperNode22_5",
-    option: "--x-scraper-node22.5",
-    fileName: "x-scraper-node22.5.json",
-    relativePath: "benchmark/results/production-readiness/x-scraper-node22.5.json",
+    inputKey: "xScraperNode22_13",
+    option: "--x-scraper-node22.13",
+    fileName: "x-scraper-node22.13.json",
+    relativePath:
+      "benchmark/results/production-readiness-sqlite-default-v5/x-scraper-node22.13.json",
     alias: "[x-scraper]",
-    runtime: "22.5.0",
+    runtime: "22.13.0",
   }),
 ]);
 const FROZEN_REPORT_MEMBERS_BY_OPTION = Object.freeze(
@@ -571,7 +575,7 @@ async function publishAtomicDirectorySet({
       fail("Atomic directory staging escaped its pinned results parent.");
     }
     for (const file of preparedFiles) {
-      await writeExclusiveSyncedAt(stageHandle, file.name, file.bytes, 0o644);
+      await writeExclusiveSyncedAt(stageHandle, file.name, file.bytes, 0o600);
     }
     await beforeVisibility?.({
       stageDirectory,
@@ -691,7 +695,7 @@ function validateXScraperRoot(value) {
   return value;
 }
 
-export function parseCanaryArguments(argv) {
+export function parseCanaryArguments(argv, { allowHistoricalRuntime = false } = {}) {
   const mode = argv[0];
   if (mode !== "run" && mode !== "freeze-report-set") {
     fail("Expected subcommand run or freeze-report-set.");
@@ -764,8 +768,15 @@ export function parseCanaryArguments(argv) {
   if (!options.nodeBin || !path.isAbsolute(options.nodeBin)) {
     fail("--node-bin must be an absolute executable path.");
   }
-  if (options.expectedNode !== "22.5.0" && options.expectedNode !== "24") {
-    fail("--expected-node must be 22.5.0 or 24.");
+  const allowedExpectedNodes = allowHistoricalRuntime
+    ? new Set(["22.5.0", "22.13.0", "24"])
+    : new Set(["22.13.0", "24"]);
+  if (!allowedExpectedNodes.has(options.expectedNode)) {
+    fail(
+      allowHistoricalRuntime
+        ? "--expected-node must be historical 22.5.0, active 22.13.0, or 24."
+        : "--expected-node must be active 22.13.0 or 24.",
+    );
   }
   if (!options.projectRoot || !path.isAbsolute(options.projectRoot)) {
     fail("--project must be an absolute path.");
@@ -788,11 +799,16 @@ export function parseCanaryArguments(argv) {
   if (options.candidateTree && !/^[0-9a-f]{40}$/.test(options.candidateTree)) {
     fail("--candidate-tree must be a lowercase 40-character Git tree hash.");
   }
-  if (options.nodeOptions.some((value) => value !== "--experimental-sqlite")) {
-    fail("Only --experimental-sqlite is accepted as a canary Node option.");
-  }
-  if (options.expectedNode === "22.5.0" && !options.nodeOptions.includes("--experimental-sqlite")) {
-    fail("Node 22.5.0 canary runs require --experimental-sqlite.");
+  if (options.expectedNode === "22.5.0") {
+    if (
+      !allowHistoricalRuntime ||
+      options.nodeOptions.length !== 1 ||
+      options.nodeOptions[0] !== "--experimental-sqlite"
+    ) {
+      fail("Historical Node 22.5.0 report verification requires --experimental-sqlite.");
+    }
+  } else if (options.nodeOptions.length !== 0) {
+    fail("Active Node 22.13.0 and 24 canary runs forbid Node options.");
   }
   const resolvedOutput = path.resolve(options.outputPath);
   if (path.dirname(resolvedOutput) !== PHYSICAL_TMP_ROOT) {
@@ -815,11 +831,14 @@ export function parseCanaryArguments(argv) {
 }
 
 export function assertExpectedNodeVersion(expected, observed) {
-  if (expected !== "22.5.0" && expected !== "24") {
-    fail("Expected Node contract must be 22.5.0 or 24.");
+  if (expected !== "22.5.0" && expected !== "22.13.0" && expected !== "24") {
+    fail("Expected Node contract must be historical 22.5.0, active 22.13.0, or 24.");
   }
   if (expected === "22.5.0" && observed !== "v22.5.0") {
     fail(`Expected exact Node v22.5.0, observed ${String(observed)}.`);
+  }
+  if (expected === "22.13.0" && observed !== "v22.13.0") {
+    fail(`Expected exact Node v22.13.0, observed ${String(observed)}.`);
   }
   if (expected === "24" && !/^v24\./.test(String(observed))) {
     fail(`Expected a v24 Node runtime, observed ${String(observed)}.`);
@@ -1368,7 +1387,9 @@ function validateFreezeReport(report, destination, rawSha256) {
     ],
     "Canary report",
   );
-  if (value.schema_version !== REPORT_SCHEMA_VERSION) fail("Unsupported canary report schema.");
+  if (value.schema_version !== FROZEN_REPORT_SCHEMA_VERSION) {
+    fail("Unsupported frozen canary report schema.");
+  }
   if (value.status !== "pass" || value.overall_pass !== true) {
     fail("freeze-report-set requires every member to be an overall PASS report.");
   }
@@ -1505,14 +1526,20 @@ function validateFreezeReport(report, destination, rawSha256) {
 
   const realRepository = assertExactKeys(
     value.real_repository,
-    ["canary", "disabled", "rollback", "semantic_mismatches", "source_file_count"],
+    [
+      "default_enabled",
+      "disabled_baseline",
+      "rollback",
+      "semantic_mismatches",
+      "source_file_count",
+    ],
     "Canary real_repository",
   );
   if (realRepository.source_file_count !== workload.source_file_count) {
     fail("Canary source-file count does not match workload identity.");
   }
-  const disabled = assertExactKeys(
-    realRepository.disabled,
+  const disabledBaseline = assertExactKeys(
+    realRepository.disabled_baseline,
     [
       "cache_created",
       "index_observability",
@@ -1522,10 +1549,10 @@ function validateFreezeReport(report, destination, rawSha256) {
       "run",
       "sample_count",
     ],
-    "Canary disabled evidence",
+    "Canary disabled baseline evidence",
   );
-  const canary = assertExactKeys(
-    realRepository.canary,
+  const defaultEnabled = assertExactKeys(
+    realRepository.default_enabled,
     [
       "cold",
       "final_cache",
@@ -1533,10 +1560,12 @@ function validateFreezeReport(report, destination, rawSha256) {
       "first_complete_cache",
       "initial_index_observability",
       "operation_queue",
+      "policy_variable",
       "restarts",
+      "root_source",
       "warm",
     ],
-    "Canary enabled evidence",
+    "Canary default-enabled evidence",
   );
   const rollback = assertExactKeys(
     realRepository.rollback,
@@ -1544,16 +1573,21 @@ function validateFreezeReport(report, destination, rawSha256) {
     "Canary rollback evidence",
   );
   if (
-    disabled.cache_created !== false ||
-    disabled.policy_variable !== "absent" ||
+    disabledBaseline.cache_created !== false ||
+    disabledBaseline.policy_variable !== "disabled" ||
+    defaultEnabled.policy_variable !== "absent" ||
+    defaultEnabled.root_source !== "xdg" ||
     rollback.cache_unchanged !== true
   ) {
     fail("Canary disabled/rollback cache evidence is invalid.");
   }
-  if (!Array.isArray(canary.warm) || canary.warm.length !== REQUIRED_ITERATIONS) {
+  if (!Array.isArray(defaultEnabled.warm) || defaultEnabled.warm.length !== REQUIRED_ITERATIONS) {
     fail("Canary warm latency evidence is incomplete.");
   }
-  if (!Array.isArray(canary.restarts) || canary.restarts.length !== REQUIRED_RESTARTS) {
+  if (
+    !Array.isArray(defaultEnabled.restarts) ||
+    defaultEnabled.restarts.length !== REQUIRED_RESTARTS
+  ) {
     fail("Canary restart evidence is incomplete.");
   }
   if (
@@ -1562,8 +1596,8 @@ function validateFreezeReport(report, destination, rawSha256) {
   ) {
     fail("Canary semantic parity evidence is not clean.");
   }
-  const disabledRun = assertRunEvidence(disabled.run, "Canary disabled run");
-  assertRssEvidence(disabled, "Canary disabled process");
+  const disabledRun = assertRunEvidence(disabledBaseline.run, "Canary disabled baseline run");
+  assertRssEvidence(disabledBaseline, "Canary disabled baseline process");
   const baselineHashes = assertRunSequence(
     disabledRun,
     0,
@@ -1571,9 +1605,9 @@ function validateFreezeReport(report, destination, rawSha256) {
     undefined,
     "Canary disabled run",
   );
-  const coldRun = assertRunWithRss(canary.cold, [], "Canary cold run");
+  const coldRun = assertRunWithRss(defaultEnabled.cold, [], "Canary default cold run");
   assertRunSequence(coldRun, 0, workload.call_ids, baselineHashes, "Canary cold run");
-  for (const [index, warm] of canary.warm.entries()) {
+  for (const [index, warm] of defaultEnabled.warm.entries()) {
     const run = assertRunEvidence(warm, `Canary warm run ${index}`);
     assertRunSequence(
       run,
@@ -1583,7 +1617,7 @@ function validateFreezeReport(report, destination, rawSha256) {
       `Canary warm run ${index}`,
     );
   }
-  for (const [index, restart] of canary.restarts.entries()) {
+  for (const [index, restart] of defaultEnabled.restarts.entries()) {
     const item = assertRunWithRss(
       restart,
       ["index_observability", "restart"],
@@ -1602,24 +1636,30 @@ function validateFreezeReport(report, destination, rawSha256) {
   const rollbackRun = assertRunEvidence(rollback.run, "Canary rollback run");
   assertRunSequence(rollbackRun, 0, workload.call_ids, baselineHashes, "Canary rollback run");
   assertRssEvidence(rollback, "Canary rollback process");
-  assertCacheEvidence(canary.first_complete_cache, "Canary first cache");
-  assertCacheEvidence(canary.final_cache, "Canary final cache");
-  assertIndexCounters(disabled.index_observability, "Canary disabled counters");
-  assertIndexCounters(canary.initial_index_observability, "Canary initial enabled counters");
-  assertIndexCounters(canary.final_index_observability, "Canary enabled counters");
+  assertCacheEvidence(defaultEnabled.first_complete_cache, "Canary first default cache");
+  assertCacheEvidence(defaultEnabled.final_cache, "Canary final default cache");
+  assertIndexCounters(disabledBaseline.index_observability, "Canary disabled baseline counters");
+  assertIndexCounters(
+    defaultEnabled.initial_index_observability,
+    "Canary initial default-enabled counters",
+  );
+  assertIndexCounters(
+    defaultEnabled.final_index_observability,
+    "Canary final default-enabled counters",
+  );
   assertIndexCounters(rollback.index_observability, "Canary rollback counters");
-  assertQueueEvidence(disabled.operation_queue, "Canary disabled queue");
-  assertQueueEvidence(canary.operation_queue, "Canary enabled queue");
+  assertQueueEvidence(disabledBaseline.operation_queue, "Canary disabled baseline queue");
+  assertQueueEvidence(defaultEnabled.operation_queue, "Canary default-enabled queue");
   if (
-    disabled.index_observability.policy !== "disabled" ||
-    disabled.index_observability.policy_reason !== "default" ||
-    disabled.index_observability.backend !== "memory" ||
-    disabled.index_observability.operation !== "disabled" ||
-    disabled.index_observability.last_operation !== "disabled" ||
-    !hasHealthyPersistentIndex(canary.initial_index_observability, false) ||
-    !hasHealthyPersistentIndex(canary.final_index_observability, true) ||
-    !canary.restarts.every((restart) =>
-      hasHealthyPersistentIndex(restart.index_observability, true),
+    disabledBaseline.index_observability.policy !== "disabled" ||
+    disabledBaseline.index_observability.policy_reason !== "default" ||
+    disabledBaseline.index_observability.backend !== "memory" ||
+    disabledBaseline.index_observability.operation !== "disabled" ||
+    disabledBaseline.index_observability.last_operation !== "disabled" ||
+    !hasHealthyPersistentIndex(defaultEnabled.initial_index_observability, false, "enabled") ||
+    !hasHealthyPersistentIndex(defaultEnabled.final_index_observability, true, "enabled") ||
+    !defaultEnabled.restarts.every((restart) =>
+      hasHealthyPersistentIndex(restart.index_observability, true, "enabled"),
     ) ||
     rollback.index_observability.policy !== "disabled" ||
     rollback.index_observability.backend !== "memory" ||
@@ -1882,7 +1922,8 @@ function validateFreezeReport(report, destination, rawSha256) {
     "package_tree_identity",
     "repository_immutable",
     "package_repository_immutable",
-    "disabled_default",
+    "explicit_disabled",
+    "default_enabled",
     "explicit_canary",
     "semantic_parity",
     "restart_count",
@@ -2930,6 +2971,14 @@ function projectEnvironment(policy, cacheRoot, extra = {}) {
   };
 }
 
+function defaultProjectEnvironment(xdgCacheHome, extra = {}) {
+  return {
+    XDG_CACHE_HOME: xdgCacheHome,
+    ...extra,
+    AST_OPERATION_DEADLINE_MS: String(CANARY_OPERATION_DEADLINE_MS),
+  };
+}
+
 async function runWorkload(
   client,
   projectRoot,
@@ -3019,15 +3068,23 @@ function indexObservability(status) {
   );
 }
 
-function hasHealthyPersistentIndex(observation, requireLoaded) {
+function hasHealthyPersistentIndex(observation, requireLoaded, expectedPolicy = "canary") {
+  const coldRebuild =
+    observation.operation === "rebuild" &&
+    observation.cache_misses > 0 &&
+    observation.rebuilt_files > 0;
+  const loadedHit =
+    observation.operation === "hit" &&
+    observation.accepted_entries > 0 &&
+    observation.reused_files > 0 &&
+    observation.loaded_entries > 0 &&
+    observation.cache_hits > 0;
   return (
-    observation.policy === "canary" &&
+    observation.policy === expectedPolicy &&
     observation.policy_reason === "default" &&
     observation.backend === "sqlite" &&
     observation.state === "ready" &&
-    observation.accepted_entries > 0 &&
-    observation.reused_files > 0 &&
-    (!requireLoaded || (observation.loaded_entries > 0 && observation.cache_hits > 0)) &&
+    (requireLoaded ? loadedHit : coldRebuild || loadedHit) &&
     observation.fallback_count === 0 &&
     observation.corruption_count === 0 &&
     observation.write_failure_count === 0
@@ -3049,17 +3106,16 @@ async function closeClient(client) {
 }
 
 async function executeRealRepository(options, workload, cacheRoot) {
-  const disabledCacheRoot = path.join(
-    path.dirname(cacheRoot),
-    `${path.basename(cacheRoot)}-disabled`,
-  );
+  const disabledCacheRoot = path.join(cacheRoot, "disabled-must-not-exist");
+  const defaultCacheHome = path.join(cacheRoot, "default-xdg-cache");
+  const defaultCacheRoot = path.join(defaultCacheHome, "ast-mcp-server", "symbol-index");
   await removeTree(disabledCacheRoot);
   const mismatches = [];
 
   const disabledClient = await spawnMcp({
     nodeBin: options.nodeBin,
     nodeOptions: options.nodeOptions,
-    environment: projectEnvironment(undefined, disabledCacheRoot),
+    environment: projectEnvironment("disabled", disabledCacheRoot),
   });
   const disabledRun = await runWorkload(disabledClient, options.projectRoot, workload, 0);
   const observedSourceFileCount = await sourceFileCount(disabledClient, options.projectRoot);
@@ -3069,44 +3125,44 @@ async function executeRealRepository(options, workload, cacheRoot) {
   );
   const disabledRss = await closeClient(disabledClient);
   const disabledCacheCreated = await pathExists(disabledCacheRoot);
-  emitProgress("real_disabled_complete");
+  emitProgress("real_disabled_baseline_complete");
 
-  const canaryClient = await spawnMcp({
+  const defaultClient = await spawnMcp({
     nodeBin: options.nodeBin,
     nodeOptions: options.nodeOptions,
-    environment: projectEnvironment("canary", cacheRoot),
+    environment: defaultProjectEnvironment(defaultCacheHome),
   });
-  const coldRun = await runWorkload(canaryClient, options.projectRoot, workload, 0);
-  mismatches.push(...parityMismatches(disabledRun.canonical, coldRun.canonical, "canary_cold"));
+  const coldRun = await runWorkload(defaultClient, options.projectRoot, workload, 0);
+  mismatches.push(...parityMismatches(disabledRun.canonical, coldRun.canonical, "default_cold"));
   const warmRuns = [];
   const measurementCall = workload.calls.find((call) => call.id === workload.measurement_call_id);
   const measurementBaseline = {
     [workload.measurement_call_id]: disabledRun.canonical[workload.measurement_call_id],
   };
   for (let iteration = 1; iteration <= options.iterations; iteration += 1) {
-    const run = await runWorkload(canaryClient, options.projectRoot, workload, iteration, [
+    const run = await runWorkload(defaultClient, options.projectRoot, workload, iteration, [
       measurementCall,
     ]);
     mismatches.push(
-      ...parityMismatches(measurementBaseline, run.canonical, `canary_warm_${iteration}`),
+      ...parityMismatches(measurementBaseline, run.canonical, `default_warm_${iteration}`),
     );
     warmRuns.push(run);
   }
-  const canaryStatus = structuredToolResult(
-    await canaryClient.callTool("ast_get_project_status", { project_root: options.projectRoot }),
+  const defaultStatus = structuredToolResult(
+    await defaultClient.callTool("ast_get_project_status", { project_root: options.projectRoot }),
     "ast_get_project_status",
   );
-  const canaryRss = await closeClient(canaryClient);
-  const firstCache = await inspectCacheTree(cacheRoot);
-  emitProgress("real_canary_warm_complete");
+  const defaultRss = await closeClient(defaultClient);
+  const firstCache = await inspectCacheTree(defaultCacheRoot);
+  emitProgress("real_default_warm_complete");
 
   const restartRuns = [];
-  let finalStatus = canaryStatus;
+  let finalStatus = defaultStatus;
   for (let restart = 1; restart <= options.restarts; restart += 1) {
     const restartClient = await spawnMcp({
       nodeBin: options.nodeBin,
       nodeOptions: options.nodeOptions,
-      environment: projectEnvironment("canary", cacheRoot),
+      environment: defaultProjectEnvironment(defaultCacheHome),
     });
     const run = await runWorkload(restartClient, options.projectRoot, workload, restart);
     mismatches.push(
@@ -3125,13 +3181,13 @@ async function executeRealRepository(options, workload, cacheRoot) {
     });
     emitProgress(`real_restart_${restart}_complete`);
   }
-  const finalCache = await inspectCacheTree(cacheRoot);
+  const finalCache = await inspectCacheTree(defaultCacheRoot);
 
   const rollbackCacheBefore = canonicalJson(firstCache === undefined ? {} : finalCache);
   const rollbackClient = await spawnMcp({
     nodeBin: options.nodeBin,
     nodeOptions: options.nodeOptions,
-    environment: projectEnvironment("disabled", cacheRoot),
+    environment: projectEnvironment("disabled", defaultCacheRoot),
   });
   const rollbackRun = await runWorkload(rollbackClient, options.projectRoot, workload, 0);
   mismatches.push(
@@ -3142,26 +3198,28 @@ async function executeRealRepository(options, workload, cacheRoot) {
     "ast_get_project_status",
   );
   const rollbackRss = await closeClient(rollbackClient);
-  const rollbackCacheAfter = canonicalJson(await inspectCacheTree(cacheRoot));
+  const rollbackCacheAfter = canonicalJson(await inspectCacheTree(defaultCacheRoot));
   emitProgress("real_rollback_complete");
 
   return {
     source_file_count: observedSourceFileCount,
-    disabled: {
+    disabled_baseline: {
       run: withoutCanonical(disabledRun),
       ...disabledRss,
-      policy_variable: "absent",
+      policy_variable: "disabled",
       cache_created: disabledCacheCreated,
       index_observability: indexObservability(disabledStatus),
       operation_queue: queueObservability(disabledStatus),
     },
-    canary: {
-      cold: { ...withoutCanonical(coldRun), ...canaryRss },
+    default_enabled: {
+      cold: { ...withoutCanonical(coldRun), ...defaultRss },
       warm: warmRuns.map(withoutCanonical),
       first_complete_cache: firstCache,
       final_cache: finalCache,
       restarts: restartRuns,
-      initial_index_observability: indexObservability(canaryStatus),
+      policy_variable: "absent",
+      root_source: "xdg",
+      initial_index_observability: indexObservability(defaultStatus),
       final_index_observability: indexObservability(finalStatus),
       operation_queue: queueObservability(finalStatus),
     },
@@ -3776,7 +3834,12 @@ async function validateRuntimeBinary(options) {
   if (!binaryStat.isFile()) fail("--node-bin is not a regular file.");
   await access(options.nodeBin, fsConstants.X_OK);
   const canonicalBinary = await realpath(options.nodeBin);
-  const authorityName = options.expectedNode === "22.5.0" ? "AST_NODE_22_BIN" : "AST_NODE_24_BIN";
+  const authorityName =
+    options.expectedNode === "22.5.0"
+      ? "AST_NODE_22_BIN"
+      : options.expectedNode === "22.13.0"
+        ? "AST_NODE_22_13_BIN"
+        : "AST_NODE_24_BIN";
   const authorityValue = process.env[authorityName];
   if (!authorityValue || !path.isAbsolute(authorityValue)) {
     fail(`${authorityName} must identify the selected release-evidence runtime.`);
@@ -3976,20 +4039,25 @@ async function executeCanary(options) {
       package_repository_immutable:
         packageStatusBefore.equals(packageStatusAfter) &&
         packageCandidateTreeAfter === packageCandidateTree,
-      disabled_default:
-        realRepository.disabled.cache_created === false &&
-        realRepository.disabled.policy_variable === "absent" &&
-        realRepository.disabled.index_observability.backend === "memory" &&
-        realRepository.disabled.index_observability.policy === "disabled" &&
-        realRepository.disabled.index_observability.policy_reason === "default",
-      explicit_canary: hasHealthyPersistentIndex(
-        realRepository.canary.initial_index_observability,
-        false,
-      ),
+      explicit_disabled:
+        realRepository.disabled_baseline.cache_created === false &&
+        realRepository.disabled_baseline.policy_variable === "disabled" &&
+        realRepository.disabled_baseline.index_observability.backend === "memory" &&
+        realRepository.disabled_baseline.index_observability.policy === "disabled" &&
+        realRepository.disabled_baseline.index_observability.policy_reason === "default",
+      default_enabled:
+        realRepository.default_enabled.policy_variable === "absent" &&
+        realRepository.default_enabled.root_source === "xdg" &&
+        hasHealthyPersistentIndex(
+          realRepository.default_enabled.initial_index_observability,
+          false,
+          "enabled",
+        ),
+      explicit_canary: hasHealthyPersistentIndex(fixture.persistence.initial, false, "canary"),
       semantic_parity: realRepository.semantic_mismatches.length === 0,
-      restart_count: realRepository.canary.restarts.length === REQUIRED_RESTARTS,
-      restart_reuse: realRepository.canary.restarts.every((restart) =>
-        hasHealthyPersistentIndex(restart.index_observability, true),
+      restart_count: realRepository.default_enabled.restarts.length === REQUIRED_RESTARTS,
+      restart_reuse: realRepository.default_enabled.restarts.every((restart) =>
+        hasHealthyPersistentIndex(restart.index_observability, true, "enabled"),
       ),
       policy_rollback_memory_only:
         realRepository.rollback.index_observability.backend === "memory" &&
@@ -3999,7 +4067,7 @@ async function executeCanary(options) {
     };
     const overallPass = Object.values(gates).every((gate) => gate === true);
     const report = {
-      schema_version: REPORT_SCHEMA_VERSION,
+      schema_version: ACTIVE_REPORT_SCHEMA_VERSION,
       generated_at: new Date().toISOString(),
       status: overallPass ? "pass" : "fail",
       command: { argv: options.reportArgv, exact_argv: options.exactArgv },
@@ -4054,6 +4122,13 @@ async function executeCanary(options) {
       path.isAbsolute(argument) ? "[path]" : argument,
     );
     assertNoSensitiveText(canonicalJson(sanitizedRawReport), "Generated canary report");
+    if (overallPass) {
+      validateFreezeReport(
+        report,
+        { alias: workload.project_alias, runtime: options.expectedNode },
+        "0".repeat(64),
+      );
+    }
     const outputDirectory = await openAnchoredDirectory(
       PHYSICAL_TMP_ROOT,
       path.dirname(options.outputPath),

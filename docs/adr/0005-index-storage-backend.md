@@ -1,10 +1,10 @@
 # ADR 0005: Keep the symbol index memory-only until the runtime matrix is proven
 
-- Status: Superseded in part by ADR 0008 and ADR 0009
+- Status: Superseded by ADR 0011; intermediate runtime/canary decisions recorded by ADR 0008 and ADR 0009
 - Date: 2026-08-06
 - Decision owners: ast-mcp-server maintainers
 
-> Supersession note: ADR 0008 raises the package floor to Node.js `>=22.5.0`, and ADR 0009 later authorizes native SQLite only for the explicit canary policy while preserving memory-only default/rollback. This ADR records why persistence remained memory-only at this decision point; ADR 0009 defines the current backend policy.
+> Supersession note: ADR 0008 raised the package floor to Node.js `>=22.5.0`, ADR 0009 later authorized native SQLite only for explicit canary use, and ADR 0011 now governs the current `>=22.13.0` default-SQLite policy with explicit memory rollback. This ADR records why persistence remained memory-only at its decision point.
 
 ## Decision
 

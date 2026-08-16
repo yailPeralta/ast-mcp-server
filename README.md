@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/yailPeralta/ast-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/yailPeralta/ast-mcp-server/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/ast-mcp-server.svg)](https://www.npmjs.com/package/ast-mcp-server)
-[![Node.js 22.5+](https://img.shields.io/badge/Node.js-22.5%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node.js 22.13+](https://img.shields.io/badge/Node.js-22.13%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 
 `ast-mcp-server` gives coding agents compact, type-aware access to TypeScript and JavaScript projects. It uses the real compiler project model through `ts-morph`, so declarations, references, rename locations, and diagnostics come from the AST instead of text-search guesses.
@@ -76,17 +76,26 @@ The included batch benchmark records a 50% reduction in model round-trips and a 
 
 ## Requirements
 
-- Node.js 22.5.0 or newer
+- Node.js 22.13.0 or newer
 - Corepack with Yarn 4.15.0 (pinned by `packageManager`)
 - A target project with a `tsconfig.json`
 
 ## Supported environment and trust boundary
 
-The package engine floor remains Node.js `>=22.5.0`. The v0.8.1 release matrix covers Linux x64 under exact Node.js 22.5.0 and the current Node.js 24 line, including managed setup-file publication. That mutation additionally requires GNU coreutils 9.7 `mv` supporting `--update=none-fail`, `--exchange`, `--no-copy`, and `--no-target-directory`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, and `O_DIRECTORY`/`O_NOFOLLOW`. Other Linux architectures or systems without those filesystem primitives, macOS, and Windows remain unverified until equivalent exact-tree gates pass.
+The current `Unreleased` engine floor is Node.js `>=22.13.0`; its local evidence matrix uses exact Node.js 22.13.0 and the current Node.js 24 line. Published v0.8.1 retains its immutable historical Node.js 22.5.0/24 evidence. Managed setup-file publication additionally requires GNU coreutils 9.7 `mv` supporting `--update=none-fail`, `--exchange`, `--no-copy`, and `--no-target-directory`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, and `O_DIRECTORY`/`O_NOFOLLOW`. Other Linux architectures or systems without those filesystem primitives, macOS, and Windows remain unverified.
 
 This is a local stdio server. It runs with the invoking user's filesystem permissions, and clients may request any `project_root` that user can access. It does not provide HTTP authentication, sandboxing, tenant isolation, or a remote-service security boundary. Remote, untrusted, and multi-tenant operation is unsupported.
 
-Symbol-index persistence remains disabled by default. `AST_SYMBOL_INDEX_PERSISTENCE=canary` additionally requires an explicit absolute `AST_SYMBOL_INDEX_CACHE_ROOT`; the reserved `enabled` mode fails closed to memory-only with `enabled_not_released`.
+In the current `Unreleased` line, an absent `AST_SYMBOL_INDEX_PERSISTENCE` or explicit `enabled` selects the private SQLite symbol-index cache. `disabled` is the immediate memory-only rollback. `canary` requires an explicit absolute normalized `AST_SYMBOL_INDEX_CACHE_ROOT`. Invalid policy or storage fails closed to compiler-authoritative memory reads with bounded path-free status.
+
+The default cache root is selected from `AST_SYMBOL_INDEX_CACHE_ROOT`, then `XDG_CACHE_HOME`, then `HOME`. Inspect or clear only derived cache artifacts through the bounded CLI:
+
+```bash
+ast-tool cache inspect
+ast-tool cache clear --yes
+```
+
+Clear requires exact confirmation, refuses unsafe or active SQLite artifacts, and preserves unknown regular files. No automatic cache GC is enabled.
 
 See [Support policy](docs/support.md) for the complete platform, runtime, persistence, and operational contract. Report security issues through [SECURITY.md](SECURITY.md).
 

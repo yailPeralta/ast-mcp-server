@@ -1,7 +1,7 @@
 ---
 name: structural-code-editing
 description: Leer, navegar y editar proyectos TypeScript/JavaScript mediante el resolver real del compilador y operaciones AST preparadas, revisadas y vinculadas por hash.
-version: "4.2.0"
+version: "4.3.0"
 author: "yail"
 license: "ISC"
 metadata:
@@ -46,11 +46,11 @@ El setup falla cerrado ante un registro `ast` conflictivo. No eliminar ni reempl
 
 ## Runtime, soporte y errores
 
-El paquete requiere Node.js `>=22.5.0`. La matriz de release de v0.8.1 cubre Linux x64 con Node.js 22.5.0 y la línea actual de Node.js 24, incluida la publicación de archivos gestionados por setup. Esa mutación requiere además GNU coreutils 9.7 `mv` con `--update=none-fail`, `--exchange`, `--no-copy` y `--no-target-directory`, GNU coreutils `ln -L -T`, y procfs en `/proc/self/fd` con `O_DIRECTORY`/`O_NOFOLLOW`. Otras arquitecturas Linux, sistemas sin esos primitivos, macOS y Windows están sin verificar.
+El árbol actual `Unreleased` requiere Node.js `>=22.13.0` y se verifica con Node.js exacto 22.13.0 y la línea actual de Node.js 24. La versión publicada v0.8.1 conserva su matriz inmutable 22.5.0/24. La publicación de archivos gestionados por setup requiere además GNU coreutils 9.7 `mv` con `--update=none-fail`, `--exchange`, `--no-copy` y `--no-target-directory`, GNU coreutils `ln -L -T`, y procfs en `/proc/self/fd` con `O_DIRECTORY`/`O_NOFOLLOW`. Otras arquitecturas Linux, sistemas sin esos primitivos, macOS y Windows están sin verificar.
 
 El transporte soportado es stdio local bajo los permisos filesystem del usuario que invoca el proceso. No asumir autenticación HTTP, sandbox, aislamiento entre tenants ni una frontera segura para clientes remotos o no confiables.
 
-La persistencia del índice está deshabilitada por default. El modo `canary` requiere `AST_SYMBOL_INDEX_PERSISTENCE=canary` y un `AST_SYMBOL_INDEX_CACHE_ROOT` absoluto y aislado; `enabled` sigue sin publicarse y falla cerrado a memoria con `enabled_not_released`.
+La persistencia del índice usa SQLite por default cuando `AST_SYMBOL_INDEX_PERSISTENCE` está ausente o vale `enabled`. El rollback inmediato es `AST_SYMBOL_INDEX_PERSISTENCE=disabled`; ese modo selecciona memoria antes de consultar HOME, XDG o un root explícito. `canary` conserva el requisito de `AST_SYMBOL_INDEX_CACHE_ROOT` absoluto, normalizado y aislado. Los fallos de policy o storage conservan la policy solicitada, cambian el backend efectivo a memoria y exponen una razón acotada sin paths. Administrar sólo artefactos derivados mediante `ast-tool cache inspect` y `ast-tool cache clear --yes`; no eliminar el árbol manualmente ni asumir GC automático.
 
 Los errores públicos de las tools MCP usan un vocabulario cerrado dentro de `{ "error": { "code", "message", "correlation_id" } }`, con `isError: true`. Conservar el `correlation_id` al reportar un fallo; no pedir ni exponer stacks, paths absolutos, source, cache, argumentos crudos, environment ni credenciales para diagnosticarlo. Los errores del comando local `setup` pueden incluir un path destino acotado para permitir inspeccionar una escritura incierta o pendiente, pero no argumentos, environment, credenciales ni output crudo del proveedor.
 

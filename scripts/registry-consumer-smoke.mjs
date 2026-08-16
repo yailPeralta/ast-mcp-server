@@ -200,7 +200,7 @@ function normalizedRegistryMetadata(versionDocument, packageDocument, version, s
     versionObject.name !== PACKAGE_NAME ||
     versionObject.version !== version ||
     versionObject.gitHead !== sha ||
-    engines.node !== ">=22.5.0" ||
+    engines.node !== ">=22.13.0" ||
     typeof dist.integrity !== "string" ||
     !SRI_PATTERN.test(dist.integrity) ||
     dist.tarball !== expectedTarball ||
@@ -217,7 +217,7 @@ function normalizedRegistryMetadata(versionDocument, packageDocument, version, s
     name: PACKAGE_NAME,
     version,
     gitHead: sha,
-    engines: { node: ">=22.5.0" },
+    engines: { node: ">=22.13.0" },
     dist: {
       integrity: dist.integrity,
       tarball: expectedTarball,
@@ -412,7 +412,7 @@ async function verifySetupIdempotency(consumerRoot, installedPackageRoot) {
     claudeSkill !== packagedSkill ||
     hermesSkill !== packagedSkill ||
     packagedGuidance.includes("ast-tool:structural-code-editing guidance") ||
-    JSON.parse(packagedReleases).current?.version !== "4.2.0"
+    JSON.parse(packagedReleases).current?.version !== "4.3.0"
   ) {
     fail("installed setup did not preserve all bundled managed assets.");
   }
@@ -747,12 +747,85 @@ async function runInner(
   expectedVersion,
 ) {
   const { decode } = await import("@toon-format/toon");
-  const defaultCacheRoot = path.join(childTemp, "default-index-cache");
+  const defaultXdgCacheHome = path.join(childTemp, "default-xdg-cache");
+  const defaultCacheRoot = path.join(defaultXdgCacheHome, "ast-mcp-server", "symbol-index");
+  const disabledRoot = path.join(childTemp, "disabled-index-cache");
+  const mutationOnlyXdgCacheHome = path.join(childTemp, "mutation-only-xdg-cache");
+  const mutationOnlyRoot = path.join(mutationOnlyXdgCacheHome, "ast-mcp-server", "symbol-index");
+  await Promise.all([
+    mkdir(defaultXdgCacheHome, { mode: 0o700 }),
+    mkdir(mutationOnlyXdgCacheHome, { mode: 0o700 }),
+  ]);
   if (await pathExists(defaultCacheRoot)) fail("default cache root exists before MCP startup.");
   const baseEnvironment = {
     ...minimalChildEnvironment(childHome, childTemp),
-    AST_SYMBOL_INDEX_CACHE_ROOT: defaultCacheRoot,
+    XDG_CACHE_HOME: defaultXdgCacheHome,
   };
+
+  const mutationOnlyConnection = await connectClient(
+    projectRoot,
+    {
+      ...minimalChildEnvironment(childHome, childTemp),
+      XDG_CACHE_HOME: mutationOnlyXdgCacheHome,
+    },
+    serverEntry,
+  );
+  try {
+    const prepared = structured(
+      await mutationOnlyConnection.client.callTool({
+        name: "ast_rename_symbol",
+        arguments: {
+          project_root: projectRoot,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          new_name: "mutationOnlyValue",
+          dry_run: true,
+          allow_new_errors: false,
+        },
+      }),
+      "mutation-only default preparation",
+    );
+    assertPrepared(prepared, "rename_symbol", ["src/use.ts", "src/value.ts"]);
+  } finally {
+    await mutationOnlyConnection.client.close();
+    await mutationOnlyConnection.transport.close().catch(() => {});
+  }
+  if (await pathExists(mutationOnlyRoot)) {
+    fail("mutation-only default process created the symbol-index cache root.");
+  }
+
+  const warmupConnection = await connectClient(projectRoot, baseEnvironment, serverEntry);
+  try {
+    const warmupStatus = structured(
+      await warmupConnection.client.callTool({
+        name: "ast_get_project_status",
+        arguments: { project_root: projectRoot },
+      }),
+      "default warmup project status",
+    );
+    const warmupObservability = object(
+      warmupStatus.index_observability,
+      "default warmup index observability",
+    );
+    if (
+      warmupObservability.policy !== "enabled" ||
+      warmupObservability.policy_reason !== "default" ||
+      warmupObservability.backend !== "sqlite" ||
+      warmupObservability.state !== "ready" ||
+      warmupObservability.operation !== "rebuild" ||
+      warmupObservability.fallback_count !== 0 ||
+      warmupStatus.index?.state !== "ready" ||
+      warmupStatus.indexed_count < 1 ||
+      JSON.stringify(warmupStatus).includes(childHome) ||
+      JSON.stringify(warmupStatus).includes(childTemp)
+    ) {
+      fail("absent-policy default did not rebuild a ready private SQLite index.");
+    }
+  } finally {
+    await warmupConnection.client.close();
+    await warmupConnection.transport.close().catch(() => {});
+  }
+
   const defaultConnection = await connectClient(projectRoot, baseEnvironment, serverEntry);
   try {
     if (defaultConnection.client.getServerVersion()?.version !== expectedVersion) {
@@ -772,17 +845,20 @@ async function runInner(
     );
     const observability = object(status.index_observability, "default index observability");
     if (
-      observability.policy !== "disabled" ||
+      observability.policy !== "enabled" ||
       observability.policy_reason !== "default" ||
-      observability.backend !== "memory" ||
-      observability.state !== "disabled" ||
-      observability.operation !== "disabled" ||
-      observability.last_operation !== "disabled" ||
-      observability.last_successful_persistence_at !== null ||
-      status.index?.state !== "disabled" ||
-      status.indexed_count !== 0
+      observability.backend !== "sqlite" ||
+      observability.state !== "ready" ||
+      observability.operation !== "hit" ||
+      observability.last_operation !== "hit" ||
+      observability.fallback_count !== 0 ||
+      typeof observability.last_successful_persistence_at !== "string" ||
+      status.index?.state !== "ready" ||
+      status.indexed_count < 1 ||
+      JSON.stringify(status).includes(childHome) ||
+      JSON.stringify(status).includes(childTemp)
     ) {
-      fail("default no-cache mode did not remain disabled in memory.");
+      fail("default restart did not reuse the ready SQLite index.");
     }
     const sourceRead = structured(
       await defaultConnection.client.callTool({
@@ -927,8 +1003,65 @@ async function runInner(
     await defaultConnection.client.close();
     await defaultConnection.transport.close().catch(() => {});
   }
-  if (await pathExists(defaultCacheRoot)) {
-    fail("default disabled persistence created or accessed its configured cache root.");
+  const defaultEntries = await readdir(defaultCacheRoot, { withFileTypes: true });
+  const defaultDatabases = defaultEntries.filter(
+    (entry) => entry.isFile() && /^symbol-index-[0-9a-f]{64}\.sqlite$/u.test(entry.name),
+  );
+  if (defaultEntries.some((entry) => entry.isSymbolicLink()) || defaultDatabases.length !== 1) {
+    fail("default persistence did not retain one physical SQLite index artifact.");
+  }
+  const defaultRootMetadata = await lstat(defaultCacheRoot);
+  const defaultDatabaseMetadata = await lstat(
+    path.join(defaultCacheRoot, defaultDatabases[0].name),
+  );
+  if (
+    !defaultRootMetadata.isDirectory() ||
+    !defaultDatabaseMetadata.isFile() ||
+    defaultDatabaseMetadata.isSymbolicLink() ||
+    defaultDatabaseMetadata.nlink !== 1 ||
+    defaultDatabaseMetadata.size < 1 ||
+    (process.platform === "linux" &&
+      ((defaultRootMetadata.mode & 0o077) !== 0 || (defaultDatabaseMetadata.mode & 0o077) !== 0))
+  ) {
+    fail("default SQLite index artifact is not private package-owned storage.");
+  }
+
+  const disabledConnection = await connectClient(
+    projectRoot,
+    {
+      ...minimalChildEnvironment(childHome, childTemp),
+      AST_SYMBOL_INDEX_PERSISTENCE: "disabled",
+      AST_SYMBOL_INDEX_CACHE_ROOT: disabledRoot,
+    },
+    serverEntry,
+  );
+  try {
+    const disabledStatus = structured(
+      await disabledConnection.client.callTool({
+        name: "ast_get_project_status",
+        arguments: { project_root: projectRoot },
+      }),
+      "disabled project status",
+    );
+    const disabledObservability = object(
+      disabledStatus.index_observability,
+      "disabled index observability",
+    );
+    if (
+      disabledObservability.policy !== "disabled" ||
+      disabledObservability.backend !== "memory" ||
+      disabledObservability.state !== "disabled" ||
+      disabledStatus.index?.state !== "disabled" ||
+      disabledStatus.indexed_count !== 0
+    ) {
+      fail("explicit disabled rollback did not remain memory-only.");
+    }
+  } finally {
+    await disabledConnection.client.close();
+    await disabledConnection.transport.close().catch(() => {});
+  }
+  if (await pathExists(disabledRoot)) {
+    fail("explicit disabled rollback created its configured cache root.");
   }
 
   const canaryEnvironment = {
@@ -965,7 +1098,18 @@ async function runInner(
       !Number.isSafeInteger(status.indexed_count) ||
       status.indexed_count < 1
     ) {
-      fail("explicit supported canary mode did not use a ready SQLite index.");
+      fail(
+        `explicit supported canary mode did not use a ready SQLite index: ${JSON.stringify({
+          policy: observability.policy,
+          policy_reason: observability.policy_reason,
+          backend: observability.backend,
+          state: observability.state,
+          operation: observability.operation,
+          last_operation: observability.last_operation,
+          fallback_count: observability.fallback_count,
+          last_error: observability.last_error,
+        })}`,
+      );
     }
   } finally {
     await canaryConnection.client.close();
@@ -998,7 +1142,11 @@ async function runInner(
     exact_tool_inventory: true,
     json_read: true,
     toon_read: true,
-    default_no_cache: true,
+    default_sqlite_rebuild: true,
+    default_restart_hit: true,
+    default_private_cache: true,
+    explicit_disabled_no_cache: true,
+    mutation_only_default_no_cache: true,
     explicit_canary: true,
     rename_prepare_preview_apply_replay: true,
     replace_prepare_preview_apply_replay: true,
@@ -1079,7 +1227,7 @@ async function runOuter(options) {
     if (
       installedMetadata.name !== PACKAGE_NAME ||
       installedMetadata.version !== options.version ||
-      installedMetadata.engines?.node !== ">=22.5.0"
+      installedMetadata.engines?.node !== ">=22.13.0"
     ) {
       fail("clean consumer did not install the exact package version.");
     }

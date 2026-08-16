@@ -1,14 +1,14 @@
 /// <reference types="node" />
 
-export type CanaryRuntimeSelector = "22.5.0" | "24";
+export type CanaryRuntimeSelector = "22.5.0" | "22.13.0" | "24";
 export type CanaryReportSetInputKey =
-  "astNode24" | "astNode22_5" | "xScraperNode24" | "xScraperNode22_5";
+  "astNode24" | "astNode22_13" | "xScraperNode24" | "xScraperNode22_13";
 
 export interface CanaryReportSetInputs {
   readonly astNode24: string;
-  readonly astNode22_5: string;
+  readonly astNode22_13: string;
   readonly xScraperNode24: string;
-  readonly xScraperNode22_5: string;
+  readonly xScraperNode22_13: string;
 }
 
 export interface ParsedCanaryRunArguments {
@@ -54,12 +54,16 @@ export type CanonicalCanaryReport = Readonly<Record<string, unknown>>;
 
 export interface CanaryReportSet {
   readonly astNode24: CanonicalCanaryReport;
-  readonly astNode22_5: CanonicalCanaryReport;
+  readonly astNode22_13: CanonicalCanaryReport;
   readonly xScraperNode24: CanonicalCanaryReport;
-  readonly xScraperNode22_5: CanonicalCanaryReport;
+  readonly xScraperNode22_13: CanonicalCanaryReport;
 }
 
-export function parseCanaryArguments(argv: readonly string[]): ParsedCanaryArguments;
+export function parseCanaryArguments(
+  argv: readonly string[],
+  options?: Readonly<{ allowHistoricalRuntime?: boolean }>,
+): ParsedCanaryArguments;
+
 export function assertExpectedNodeVersion(expected: string, observed: string): void;
 export function validateWorkloadManifest(value: unknown): CanaryWorkloadManifest;
 export function canonicalizeToolResult<T>(value: T): T;

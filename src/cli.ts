@@ -8,6 +8,11 @@ import { MAX_BATCH_INPUT_BYTES, isPrepareBatchTool } from "./batch/schema.js";
 import { CliOutputError, serializeCliSuccess, type CliOutputFormat } from "./cli-output.js";
 import { applyPersistedOperation, persistOperationPlan } from "./services/operation-plan-file.js";
 import {
+  clearSymbolIndexCache,
+  inspectSymbolIndexCache,
+  SymbolIndexCacheError,
+} from "./services/symbol-index-cache.js";
+import {
   AgentSetupError,
   detectInstalledAgents,
   resolveServerEntryPath,
@@ -57,6 +62,8 @@ function usage(): string {
     "  ast-tool run <pipeline.json|-> [--output-format json|toon]",
     "  ast-tool validate <pipeline.json|->",
     "  ast-tool apply <plan.astplan> --plan-hash <sha256>",
+    "  ast-tool cache inspect",
+    "  ast-tool cache clear --yes",
     "  ast-tool install-skill [claude|hermes|all] [--scope user|project] [--project-root <path>] [--force]",
     "  ast-tool setup [--agents claude,hermes|all --yes] [--force-skill]",
   ].join("\n");
@@ -316,6 +323,40 @@ export async function runCli(args: string[]): Promise<unknown> {
         "EXECUTION_ERROR",
         1,
         command,
+        undefined,
+        { cause: error },
+      );
+    }
+  }
+
+  if (command === "cache") {
+    const [subcommand, ...cacheArgs] = commandArgs;
+    const cacheCommand = subcommand ? `cache ${subcommand}` : "cache";
+    const inspectRequested = subcommand === "inspect" && cacheArgs.length === 0;
+    const clearRequested =
+      subcommand === "clear" && cacheArgs.length === 1 && cacheArgs[0] === "--yes";
+    if (!inspectRequested && !clearRequested) {
+      throw new CliError(usage(), "USAGE", 2, cacheCommand);
+    }
+    try {
+      return inspectRequested ? await inspectSymbolIndexCache() : await clearSymbolIndexCache();
+    } catch (error) {
+      if (error instanceof SymbolIndexCacheError) {
+        throw new CliError(
+          error.message,
+          error.code,
+          1,
+          cacheCommand,
+          undefined,
+          { cause: error },
+          error.details,
+        );
+      }
+      throw new CliError(
+        "Cache command failed without exposing host details.",
+        "CACHE_ERROR",
+        1,
+        cacheCommand,
         undefined,
         { cause: error },
       );

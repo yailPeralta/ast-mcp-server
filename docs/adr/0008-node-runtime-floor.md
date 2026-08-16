@@ -1,10 +1,10 @@
 # ADR 0008: Raise the minimum Node.js runtime to 22.5.0
 
-- Status: Accepted; persistence clauses superseded by ADR 0009
+- Status: Accepted historically; runtime floor superseded by ADR 0011
 - Date: 2026-08-06
 - Decision owners: ast-mcp-server maintainers
 
-> Persistence amendment: ADR 0009 later authorizes native SQLite only for the explicit canary policy while preserving memory-only default/rollback. Persistence statements below describe this ADR's decision point; ADR 0009 defines the current backend policy.
+> Supersession note: this ADR records the 2026-08-06 transition from Node 20 to Node 22.5. ADR 0009 later selected the explicit SQLite canary, and ADR 0011 raises the current development-line floor to `>=22.13.0` while promoting SQLite to the default derived backend. The decision and evidence below remain historical.
 
 ## Decision
 

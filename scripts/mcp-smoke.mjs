@@ -16,10 +16,22 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const packageVersion = createRequire(import.meta.url)("../package.json").version;
 const serverPath = path.join(repositoryRoot, "dist/index.js");
 const fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "ast-mcp-stdio-"));
+const runtimeRoot = await mkdtemp(path.join(os.tmpdir(), "ast-mcp-stdio-runtime-"));
+const serverHome = path.join(runtimeRoot, "home");
+const serverCacheHome = path.join(runtimeRoot, "xdg-cache");
+await Promise.all([mkdir(serverHome, { mode: 0o700 }), mkdir(serverCacheHome, { mode: 0o700 })]);
+const serverEnvironment = {
+  ...process.env,
+  HOME: serverHome,
+  XDG_CACHE_HOME: serverCacheHome,
+};
+delete serverEnvironment.AST_SYMBOL_INDEX_PERSISTENCE;
+delete serverEnvironment.AST_SYMBOL_INDEX_CACHE_ROOT;
 const client = new Client({ name: "ast-mcp-stdio-smoke", version: "1.0.0" });
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [serverPath],
+  env: serverEnvironment,
   stderr: "pipe",
 });
 const stderrLines = [];
@@ -66,6 +78,8 @@ async function nextToolFailureEvent() {
 
 try {
   await mkdir(path.join(fixtureRoot, "src"), { recursive: true });
+  await mkdir(serverEnvironment.HOME, { recursive: true });
+  await mkdir(serverEnvironment.XDG_CACHE_HOME, { recursive: true });
   await writeFile(
     path.join(fixtureRoot, "tsconfig.json"),
     JSON.stringify({ compilerOptions: { strict: true, target: "ES2022" }, include: ["src/**/*"] }),
@@ -125,7 +139,14 @@ try {
   if (
     statusResult.isError === true ||
     status?.state !== "fresh" ||
-    status?.indexed_count !== 0 ||
+    status?.indexed_count !== 1 ||
+    status?.index_observability?.policy !== "enabled" ||
+    status?.index_observability?.policy_reason !== "default" ||
+    status?.index_observability?.backend !== "sqlite" ||
+    status?.index_observability?.state !== "ready" ||
+    !["rebuild", "hit"].includes(status?.index_observability?.operation) ||
+    status?.index_observability?.accepted_entries !== 1 ||
+    status?.index_observability?.fallback_count !== 0 ||
     status?.operation_queue?.state !== "running"
   ) {
     throw new Error(`Unexpected ast_get_project_status response: ${JSON.stringify(statusResult)}`);
@@ -238,9 +259,10 @@ try {
   }
 
   process.stdout.write(
-    `${JSON.stringify({ status: "ok", transport: "stdio", tool_count: names.length, fixture_files: files.length, toon_output: true, hostile_error: true, stderr_correlation: true })}\n`,
+    `${JSON.stringify({ status: "ok", transport: "stdio", tool_count: names.length, fixture_files: files.length, default_sqlite: true, toon_output: true, hostile_error: true, stderr_correlation: true })}\n`,
   );
 } finally {
   await client.close().catch(() => undefined);
   await rm(fixtureRoot, { recursive: true, force: true });
+  await rm(runtimeRoot, { recursive: true, force: true });
 }

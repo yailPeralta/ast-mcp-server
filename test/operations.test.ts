@@ -1,6 +1,7 @@
-import { access, readFile, symlink, unlink, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyOperation,
   clearOperationsForTests,
@@ -26,12 +27,33 @@ import { createRequestContext } from "../src/services/request-context.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
 const fixtures: ProjectFixture[] = [];
+const mutationEnvironmentRoots: string[] = [];
+
+beforeEach(async () => {
+  const environmentRoot = await mkdtemp(path.join(os.tmpdir(), "ast-operation-env-"));
+  mutationEnvironmentRoots.push(environmentRoot);
+  vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", undefined);
+  vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", undefined);
+  vi.stubEnv("HOME", path.join(environmentRoot, "home"));
+  vi.stubEnv("XDG_CACHE_HOME", path.join(environmentRoot, "xdg"));
+});
 
 afterEach(async () => {
   clearOperationsForTests();
   clearProjectSessions();
-  vi.unstubAllEnvs();
-  await Promise.all(fixtures.splice(0).map((fixture) => fixture.cleanup()));
+  const environmentRoots = mutationEnvironmentRoots.splice(0);
+  try {
+    for (const environmentRoot of environmentRoots) {
+      const cacheRoot = path.join(environmentRoot, "xdg", "ast-mcp-server", "symbol-index");
+      await expect(access(cacheRoot)).rejects.toMatchObject({ code: "ENOENT" });
+    }
+  } finally {
+    vi.unstubAllEnvs();
+    await Promise.all([
+      ...fixtures.splice(0).map((fixture) => fixture.cleanup()),
+      ...environmentRoots.map((root) => rm(root, { recursive: true, force: true })),
+    ]);
+  }
 });
 
 async function renameFixture(): Promise<ProjectFixture> {
@@ -74,6 +96,11 @@ function scaffoldSpec() {
 describe("prepared structural operations", () => {
   it("prepares exact multi-file rename edits and applies them idempotently", async () => {
     const fixture = await renameFixture();
+    const xdgCacheHome = path.join(fixture.root, ".xdg-cache");
+    const cacheRoot = path.join(xdgCacheHome, "ast-mcp-server", "symbol-index");
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", undefined);
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", undefined);
+    vi.stubEnv("XDG_CACHE_HOME", xdgCacheHome);
     const prepared = await prepareRename({
       projectRoot: fixture.root,
       filePath: "src/value.ts",
@@ -90,6 +117,7 @@ describe("prepared structural operations", () => {
     ]);
     expect(prepared.preview).toContain("renderValue");
     expect(await fixture.read("src/value.ts")).toContain("formatValue");
+    await expect(access(cacheRoot)).rejects.toMatchObject({ code: "ENOENT" });
 
     const applied = await applyOperation(prepared.operation_id, prepared.plan_hash);
     expect(applied.idempotent_replay).toBe(false);
@@ -99,9 +127,11 @@ describe("prepared structural operations", () => {
       session_count: 0,
       active_sessions: 0,
     });
+    await expect(access(cacheRoot)).rejects.toMatchObject({ code: "ENOENT" });
 
     const replay = await applyOperation(prepared.operation_id, prepared.plan_hash);
     expect(replay.idempotent_replay).toBe(true);
+    await expect(access(cacheRoot)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("removes every prepared-operation kind when cancellation wins after retention", async () => {

@@ -1,11 +1,13 @@
 # ADR 0009: Select native SQLite for explicit symbol-index canary
 
-- Status: accepted
+- Status: Accepted historically; default-policy clause superseded by ADR 0011
 - Date: 2026-08-07
 - Decision type: evidence gate
 - Scope: symbol-index persistence candidates
 
 ## Decision
+
+> Historical decision point: ADR 0011 preserves the three-state policy and compiler-authority boundary but supersedes the memory-default and reserved-`enabled` clauses below for the current `Unreleased` line.
 
 Select native `node:sqlite` as an explicit canary backend for the derived symbol index. The default remains `AST_SYMBOL_INDEX_PERSISTENCE=disabled`, which uses `InMemorySymbolIndex` and does not open or create a SQLite cache. Canary requires both:
 
@@ -42,6 +44,8 @@ The digest on persisted rows proves byte integrity only. Every indexed query sti
 ## Rollback
 
 Set `AST_SYMBOL_INDEX_PERSISTENCE=disabled` or remove the variable, then invalidate/reopen the project session or restart the process. The reopened session uses memory only and does not open existing SQLite files. Cache files may remain on disk for later inspection; they are not semantic authority.
+
+Under ADR 0011, only explicit `disabled` is rollback; removing the variable now selects default `enabled`.
 
 ## Promotion criteria
 

@@ -581,8 +581,8 @@ export function validateRegistryReadback(metadata, expectedVersion, expectedSha)
     releaseFailure("registry gitHead does not match the exact release SHA.");
   }
   const engines = requirePlainObject(object.engines, "registry package engines");
-  if (engines.node !== ">=22.5.0") {
-    releaseFailure("registry package engines.node must be exactly >=22.5.0.");
+  if (engines.node !== ">=22.13.0") {
+    releaseFailure("registry package engines.node must be exactly >=22.13.0.");
   }
   const dist = requirePlainObject(object.dist, "registry dist metadata");
   const integrity = requireString(dist.integrity, "registry integrity");
@@ -613,7 +613,7 @@ export function validateRegistryReadback(metadata, expectedVersion, expectedSha)
     package_name: PACKAGE_NAME,
     version,
     git_head: sha,
-    engines_node: ">=22.5.0",
+    engines_node: ">=22.13.0",
     integrity,
     tarball,
     attestation_url: attestationUrl,

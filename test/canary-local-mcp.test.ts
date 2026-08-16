@@ -9,6 +9,7 @@ import {
   readdir,
   rename,
   rm,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -40,43 +41,92 @@ const reportSetMembers = [
     inputKey: "astNode24",
     option: "--ast-node24",
     fileName: "ast-mcp-server-node24.json",
-    relativePath: "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+    relativePath:
+      "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
     alias: "[ast-mcp-server]",
     runtime: "24",
   },
   {
-    inputKey: "astNode22_5",
-    option: "--ast-node22.5",
-    fileName: "ast-mcp-server-node22.5.json",
-    relativePath: "benchmark/results/production-readiness/ast-mcp-server-node22.5.json",
+    inputKey: "astNode22_13",
+    option: "--ast-node22.13",
+    fileName: "ast-mcp-server-node22.13.json",
+    relativePath:
+      "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node22.13.json",
     alias: "[ast-mcp-server]",
-    runtime: "22.5.0",
+    runtime: "22.13.0",
   },
   {
     inputKey: "xScraperNode24",
     option: "--x-scraper-node24",
     fileName: "x-scraper-node24.json",
-    relativePath: "benchmark/results/production-readiness/x-scraper-node24.json",
+    relativePath: "benchmark/results/production-readiness-sqlite-default-v5/x-scraper-node24.json",
     alias: "[x-scraper]",
     runtime: "24",
   },
   {
-    inputKey: "xScraperNode22_5",
-    option: "--x-scraper-node22.5",
-    fileName: "x-scraper-node22.5.json",
-    relativePath: "benchmark/results/production-readiness/x-scraper-node22.5.json",
+    inputKey: "xScraperNode22_13",
+    option: "--x-scraper-node22.13",
+    fileName: "x-scraper-node22.13.json",
+    relativePath:
+      "benchmark/results/production-readiness-sqlite-default-v5/x-scraper-node22.13.json",
     alias: "[x-scraper]",
-    runtime: "22.5.0",
+    runtime: "22.13.0",
   },
 ] as const;
 
 const reportSetInputs = {
   astNode24: "/tmp/ast-mcp-server-node24.raw.json",
-  astNode22_5: "/tmp/ast-mcp-server-node22.5.raw.json",
+  astNode22_13: "/tmp/ast-mcp-server-node22.13.raw.json",
   xScraperNode24: "/tmp/x-scraper-node24.raw.json",
-  xScraperNode22_5: "/tmp/x-scraper-node22.5.raw.json",
+  xScraperNode22_13: "/tmp/x-scraper-node22.13.raw.json",
 } as const;
 const xScraperAuthorityRoot = path.join(os.tmpdir(), "ast-canary-x-scraper-root");
+
+const healthyObservation = {
+  policy: "canary",
+  policy_reason: "default",
+  backend: "sqlite",
+  state: "ready",
+  fallback_count: 0,
+  corruption_count: 0,
+  write_failure_count: 0,
+};
+
+describe("persistent-index health", () => {
+  it("accepts a cold rebuild without pretending it was a loaded hit", () => {
+    const rebuild = {
+      ...healthyObservation,
+      operation: "rebuild",
+      cache_misses: 1,
+      rebuilt_files: 2,
+      accepted_entries: 0,
+      reused_files: 0,
+      loaded_entries: 0,
+      cache_hits: 0,
+    };
+
+    expect(privateCanaryInternals.hasHealthyPersistentIndex(rebuild, false)).toBe(true);
+    expect(privateCanaryInternals.hasHealthyPersistentIndex(rebuild, true)).toBe(false);
+  });
+
+  it("requires loaded and reused entries for a restart hit", () => {
+    expect(
+      privateCanaryInternals.hasHealthyPersistentIndex(
+        {
+          ...healthyObservation,
+          operation: "hit",
+          cache_misses: 0,
+          rebuilt_files: 0,
+          accepted_entries: 4,
+          reused_files: 2,
+          loaded_entries: 4,
+          cache_hits: 1,
+        },
+        true,
+      ),
+    ).toBe(true);
+  });
+});
 
 async function temporaryDirectory(prefix: string): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), prefix));
@@ -125,6 +175,11 @@ type PrivateCanaryInternals = {
     rawSha256: string,
   ) => Record<string, any>;
   readonly jsonValuesEqual: (left: unknown, right: unknown) => boolean;
+  readonly hasHealthyPersistentIndex: (
+    observation: Readonly<Record<string, unknown>>,
+    requireLoaded: boolean,
+    expectedPolicy?: string,
+  ) => boolean;
   readonly assertPreparedCanaryReportSet: (preparedReports: readonly PreparedReport[]) => unknown;
 };
 
@@ -152,12 +207,12 @@ function loadPrivateCanaryInternals(): Promise<PrivateCanaryInternals> {
       "utf8",
     );
     expect(productionSource).not.toMatch(
-      /^export\s+(?:(?:async\s+)?function|const)\s+(?:publishAtomicDirectorySet|canonicalizeCanaryReport|assertPreparedCanaryReportSet|projectEnvironment|currentWorktreeTreeAttempt|CANARY_OPERATION_DEADLINE_MS|MCP_REQUEST_TIMEOUT_MS)\b/m,
+      /^export\s+(?:(?:async\s+)?function|const)\s+(?:publishAtomicDirectorySet|canonicalizeCanaryReport|hasHealthyPersistentIndex|assertPreparedCanaryReportSet|projectEnvironment|currentWorktreeTreeAttempt|CANARY_OPERATION_DEADLINE_MS|MCP_REQUEST_TIMEOUT_MS)\b/m,
     );
     const testModulePath = path.join(scriptsDirectory, "canary-local-mcp.private-test.mjs");
     await writeFile(
       testModulePath,
-      `${productionSource}\nexport {\n  publishAtomicDirectorySet as __testOnlyPublishAtomicDirectorySet,\n  canonicalizeCanaryReport as __testOnlyCanonicalizeCanaryReport,\n  jsonValuesEqual as __testOnlyJsonValuesEqual,\n  assertPreparedCanaryReportSet as __testOnlyAssertPreparedCanaryReportSet,\n  projectEnvironment as __testOnlyProjectEnvironment,\n  currentWorktreeTreeAttempt as __testOnlyCurrentWorktreeTreeAttempt,\n  currentWorktreeTree as __testOnlyCurrentWorktreeTree,\n  CANARY_OPERATION_DEADLINE_MS as __testOnlyCanaryOperationDeadlineMs,\n  MCP_REQUEST_TIMEOUT_MS as __testOnlyMcpRequestTimeoutMs,\n};\n`,
+      `${productionSource}\nexport {\n  publishAtomicDirectorySet as __testOnlyPublishAtomicDirectorySet,\n  canonicalizeCanaryReport as __testOnlyCanonicalizeCanaryReport,\n  jsonValuesEqual as __testOnlyJsonValuesEqual,\n  hasHealthyPersistentIndex as __testOnlyHasHealthyPersistentIndex,\n  assertPreparedCanaryReportSet as __testOnlyAssertPreparedCanaryReportSet,\n  projectEnvironment as __testOnlyProjectEnvironment,\n  currentWorktreeTreeAttempt as __testOnlyCurrentWorktreeTreeAttempt,\n  currentWorktreeTree as __testOnlyCurrentWorktreeTree,\n  CANARY_OPERATION_DEADLINE_MS as __testOnlyCanaryOperationDeadlineMs,\n  MCP_REQUEST_TIMEOUT_MS as __testOnlyMcpRequestTimeoutMs,\n};\n`,
       "utf8",
     );
     const testModule = await import(`${pathToFileURL(testModulePath).href}?id=${randomUUID()}`);
@@ -165,6 +220,7 @@ function loadPrivateCanaryInternals(): Promise<PrivateCanaryInternals> {
       "__testOnlyPublishAtomicDirectorySet",
       "__testOnlyCanonicalizeCanaryReport",
       "__testOnlyJsonValuesEqual",
+      "__testOnlyHasHealthyPersistentIndex",
       "__testOnlyAssertPreparedCanaryReportSet",
       "__testOnlyProjectEnvironment",
       "__testOnlyCurrentWorktreeTreeAttempt",
@@ -181,6 +237,8 @@ function loadPrivateCanaryInternals(): Promise<PrivateCanaryInternals> {
         testModule.__testOnlyCanonicalizeCanaryReport as PrivateCanaryInternals["canonicalizeCanaryReport"],
       jsonValuesEqual:
         testModule.__testOnlyJsonValuesEqual as PrivateCanaryInternals["jsonValuesEqual"],
+      hasHealthyPersistentIndex:
+        testModule.__testOnlyHasHealthyPersistentIndex as PrivateCanaryInternals["hasHealthyPersistentIndex"],
       assertPreparedCanaryReportSet:
         testModule.__testOnlyAssertPreparedCanaryReportSet as PrivateCanaryInternals["assertPreparedCanaryReportSet"],
       projectEnvironment:
@@ -249,6 +307,7 @@ function passingReport() {
     last_error: null,
   };
   const cleanCounters = { ...counters, fallback_count: 0, corruption_count: 0 };
+  const defaultEnabledCounters = { ...cleanCounters, policy: "enabled" };
   const writeFailureCounters = {
     ...cleanCounters,
     backend: "sqlite",
@@ -314,7 +373,8 @@ function passingReport() {
     package_tree_identity: true,
     repository_immutable: true,
     package_repository_immutable: true,
-    disabled_default: true,
+    explicit_disabled: true,
+    default_enabled: true,
     explicit_canary: true,
     semantic_parity: true,
     restart_count: true,
@@ -353,7 +413,7 @@ function passingReport() {
     "/tmp/ast-mcp-server-node24.raw.json",
   ];
   return {
-    schema_version: 1,
+    schema_version: 2,
     generated_at: "2026-08-08T00:00:00.000Z",
     status: "pass",
     command: {
@@ -419,11 +479,11 @@ function passingReport() {
     },
     real_repository: {
       source_file_count: 42,
-      disabled: {
+      disabled_baseline: {
         run: run(0),
         peak_rss_bytes: 1024,
         sample_count: 1,
-        policy_variable: "absent",
+        policy_variable: "disabled",
         cache_created: false,
         index_observability: {
           ...cleanCounters,
@@ -439,18 +499,20 @@ function passingReport() {
         },
         operation_queue: queue,
       },
-      canary: {
+      default_enabled: {
         cold: runWithRss(0),
         warm: Array.from({ length: 20 }, (_, iteration) => run(iteration + 1, ["search-exact"])),
         restarts: Array.from({ length: 3 }, (_, restart) => ({
           restart: restart + 1,
           ...runWithRss(restart + 1),
-          index_observability: cleanCounters,
+          index_observability: defaultEnabledCounters,
         })),
         first_complete_cache: cache,
         final_cache: cache,
-        initial_index_observability: cleanCounters,
-        final_index_observability: cleanCounters,
+        policy_variable: "absent",
+        root_source: "xdg",
+        initial_index_observability: defaultEnabledCounters,
+        final_index_observability: defaultEnabledCounters,
         operation_queue: queue,
       },
       rollback: {
@@ -551,7 +613,7 @@ type ReportSetMember = {
   readonly fileName: string;
   readonly relativePath: string;
   readonly alias: string;
-  readonly runtime: "22.5.0" | "24";
+  readonly runtime: "22.13.0" | "24";
 };
 
 type PreparedReport = {
@@ -565,7 +627,7 @@ function passingReportForMember(member: (typeof reportSetMembers)[number]) {
   const report = passingReport();
   report.identity.project.alias = member.alias;
   report.identity.runtime.expected = member.runtime;
-  report.identity.runtime.observed = member.runtime === "24" ? "v24.16.0" : "v22.5.0";
+  report.identity.runtime.observed = member.runtime === "24" ? "v24.16.0" : "v22.13.0";
   const expectedNodeIndex = report.command.argv.indexOf("--expected-node");
   report.command.argv[expectedNodeIndex + 1] = member.runtime;
   report.command.exact_argv[expectedNodeIndex + 1] = member.runtime;
@@ -602,7 +664,7 @@ async function publishTemporaryPreparedSet(
   return publishAtomicDirectorySet({
     anchorRoot: resultsDirectory,
     resultsDirectory,
-    finalDirectoryName: "production-readiness",
+    finalDirectoryName: "production-readiness-sqlite-default-v5",
     files: prepared.map(({ member, output }) => ({ name: member.fileName, bytes: output })),
     beforeVisibility,
   });
@@ -617,7 +679,22 @@ afterEach(async () => {
   ]);
 });
 
-describe("production-readiness canary contract", () => {
+describe("production-readiness-sqlite-default-v5 canary contract", () => {
+  it("excludes canonical checked-report bytes from repository formatting", async () => {
+    const ignoredPaths = (await readFile(path.join(repositoryRoot, ".prettierignore"), "utf8"))
+      .split("\n")
+      .filter(Boolean);
+    expect(ignoredPaths).toContain(
+      "benchmark/results/production-readiness-sqlite-default-v1/*.json",
+    );
+    expect(ignoredPaths).toContain(
+      "benchmark/results/production-readiness-sqlite-default-v2/*.json",
+    );
+    expect(ignoredPaths).toContain(
+      "benchmark/results/production-readiness-sqlite-default-v5/*.json",
+    );
+  });
+
   it("requires the exact production argument contract and aliases path-bearing command values", () => {
     const root = path.join(os.tmpdir(), "ast-canary-contract");
     const validArguments = [
@@ -625,8 +702,7 @@ describe("production-readiness canary contract", () => {
       "--node-bin",
       path.join(root, "node"),
       "--expected-node",
-      "22.5.0",
-      "--node-option=--experimental-sqlite",
+      "22.13.0",
       "--project",
       path.join(root, "project"),
       "--workload",
@@ -644,10 +720,10 @@ describe("production-readiness canary contract", () => {
     if (parsed.mode !== "run") throw new Error("Expected parsed run arguments.");
     expect(parsed).toMatchObject({
       mode: "run",
-      expectedNode: "22.5.0",
+      expectedNode: "22.13.0",
       iterations: 20,
       restarts: 3,
-      nodeOptions: ["--experimental-sqlite"],
+      nodeOptions: [],
     });
     expect(parsed.reportArgv).toContain("[node-bin]");
     expect(parsed.reportArgv).toContain("[project]");
@@ -676,7 +752,30 @@ describe("production-readiness canary contract", () => {
     ).toThrow(/node.*absolute|iterations.*20/i);
     const invalidExpectedNode = [...validArguments];
     invalidExpectedNode[invalidExpectedNode.indexOf("--expected-node") + 1] = "23";
-    expect(() => parseCanaryArguments(invalidExpectedNode)).toThrow(/22\.5\.0.*24/);
+    expect(() => parseCanaryArguments(invalidExpectedNode)).toThrow(/22\.13\.0.*24/);
+
+    const historicalArguments = [...validArguments];
+    historicalArguments[historicalArguments.indexOf("--expected-node") + 1] = "22.5.0";
+    historicalArguments.splice(
+      historicalArguments.indexOf("--project"),
+      0,
+      "--node-option=--experimental-sqlite",
+    );
+    expect(() => parseCanaryArguments(historicalArguments)).toThrow(/active 22\.13\.0 or 24/);
+    expect(
+      parseCanaryArguments(historicalArguments, { allowHistoricalRuntime: true }),
+    ).toMatchObject({
+      expectedNode: "22.5.0",
+      nodeOptions: ["--experimental-sqlite"],
+    });
+
+    const activeWithNodeOption = [...validArguments];
+    activeWithNodeOption.splice(
+      activeWithNodeOption.indexOf("--project"),
+      0,
+      "--node-option=--experimental-sqlite",
+    );
+    expect(() => parseCanaryArguments(activeWithNodeOption)).toThrow(/forbid Node options/);
     expect(() =>
       parseCanaryArguments([...validArguments, "--output", "/tmp/duplicate.raw.json"]),
     ).toThrow(/duplicate.*--output/i);
@@ -689,12 +788,12 @@ describe("production-readiness canary contract", () => {
       xScraperAuthorityRoot,
       "--ast-node24",
       reportSetInputs.astNode24,
-      "--ast-node22.5",
-      reportSetInputs.astNode22_5,
+      "--ast-node22.13",
+      reportSetInputs.astNode22_13,
       "--x-scraper-node24",
       reportSetInputs.xScraperNode24,
-      "--x-scraper-node22.5",
-      reportSetInputs.xScraperNode22_5,
+      "--x-scraper-node22.13",
+      reportSetInputs.xScraperNode22_13,
     ];
     const parsed = parseCanaryArguments(validArguments);
 
@@ -984,11 +1083,11 @@ describe("production-readiness canary contract", () => {
     const rawHash = "8".repeat(64);
     const frozen = canonicalizeCanaryReport(
       passingReport(),
-      "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+      "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
       rawHash,
     );
     expect(frozen).toMatchObject({
-      schema_version: 1,
+      schema_version: 2,
       status: "pass",
       overall_pass: true,
       command: { raw_report_sha256: rawHash },
@@ -1000,7 +1099,7 @@ describe("production-readiness canary contract", () => {
     expect(() =>
       canonicalizeCanaryReport(
         forgedGit,
-        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
         rawHash,
       ),
     ).toThrow(/Git authority/i);
@@ -1009,7 +1108,7 @@ describe("production-readiness canary contract", () => {
     expect(() =>
       canonicalizeCanaryReport(
         failed,
-        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
         rawHash,
       ),
     ).toThrow(/overall PASS/i);
@@ -1018,7 +1117,7 @@ describe("production-readiness canary contract", () => {
     expect(() =>
       canonicalizeCanaryReport(
         unknown,
-        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
         rawHash,
       ),
     ).toThrow(/must contain exactly/i);
@@ -1026,7 +1125,7 @@ describe("production-readiness canary contract", () => {
     expect(() =>
       canonicalizeCanaryReport(
         passingReport(),
-        "benchmark/results/production-readiness/x-scraper-node24.json",
+        "benchmark/results/production-readiness-sqlite-default-v5/x-scraper-node24.json",
         rawHash,
       ),
     ).toThrow(/does not match.*destination/i);
@@ -1037,7 +1136,7 @@ describe("production-readiness canary contract", () => {
     expect(() =>
       canonicalizeCanaryReport(
         leaking,
-        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
         rawHash,
       ),
     ).toThrow(/sensitive|absolute/i);
@@ -1048,7 +1147,7 @@ describe("production-readiness canary contract", () => {
     expect(() =>
       canonicalizeCanaryReport(
         credential,
-        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
         rawHash,
       ),
     ).toThrow(/sensitive|credential/i);
@@ -1064,18 +1163,18 @@ describe("production-readiness canary contract", () => {
       expect(() =>
         canonicalizeCanaryReport(
           hostile,
-          "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+          "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
           rawHash,
         ),
       ).toThrow(/sensitive|credential|absolute/i);
     }
 
     const parityMismatch = passingReport();
-    parityMismatch.real_repository.canary.cold.calls[0].result_sha256 = "6".repeat(64);
+    parityMismatch.real_repository.default_enabled.cold.calls[0].result_sha256 = "6".repeat(64);
     expect(() =>
       canonicalizeCanaryReport(
         parityMismatch,
-        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
         rawHash,
       ),
     ).toThrow(/compiler-authoritative parity/i);
@@ -1085,7 +1184,7 @@ describe("production-readiness canary contract", () => {
     expect(() =>
       canonicalizeCanaryReport(
         fallbackMismatch,
-        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
         rawHash,
       ),
     ).toThrow(/persistence fallback\/recovery counters are incomplete/i);
@@ -1095,7 +1194,7 @@ describe("production-readiness canary contract", () => {
     expect(() =>
       canonicalizeCanaryReport(
         mismatchedSourceCount,
-        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
         rawHash,
       ),
     ).toThrow(/source-file count/i);
@@ -1141,7 +1240,7 @@ describe("production-readiness canary contract", () => {
       expect(() =>
         canonicalizeCanaryReport(
           report,
-          "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+          "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
           "8".repeat(64),
         ),
       ).toThrow(/queue|runtime|integer|operation count/i);
@@ -1152,13 +1251,13 @@ describe("production-readiness canary contract", () => {
     expect(
       privateCanaryInternals.canonicalizeCanaryReport(
         passingReport(),
-        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
         "8".repeat(64),
       ),
     ).toEqual(
       canonicalizeCanaryReport(
         passingReport(),
-        "benchmark/results/production-readiness/ast-mcp-server-node24.json",
+        "benchmark/results/production-readiness-sqlite-default-v5/ast-mcp-server-node24.json",
         "8".repeat(64),
       ),
     );
@@ -1252,26 +1351,26 @@ describe("production-readiness canary contract", () => {
         expect(await readdir(stageDirectory)).toEqual(
           reportSetMembers.map((member) => member.fileName).sort(),
         );
-        expect(await readdir(resultsRoot)).not.toContain("production-readiness");
+        expect(await readdir(resultsRoot)).not.toContain("production-readiness-sqlite-default-v5");
       },
     );
 
     expect(observedBeforeVisibility).toBe(true);
-    expect(await readdir(resultsRoot)).toEqual(["production-readiness"]);
-    const finalDirectory = path.join(resultsRoot, "production-readiness");
+    expect(await readdir(resultsRoot)).toEqual(["production-readiness-sqlite-default-v5"]);
+    const finalDirectory = path.join(resultsRoot, "production-readiness-sqlite-default-v5");
     expect((await readdir(finalDirectory)).sort()).toEqual(
       reportSetMembers.map((member) => member.fileName).sort(),
     );
     for (const candidate of prepared) {
-      await expect(
-        readFile(path.join(finalDirectory, candidate.member.fileName), "utf8"),
-      ).resolves.toBe(candidate.output);
+      const publishedPath = path.join(finalDirectory, candidate.member.fileName);
+      await expect(readFile(publishedPath, "utf8")).resolves.toBe(candidate.output);
+      expect((await stat(publishedPath)).mode & 0o777).toBe(0o600);
     }
   });
 
   it("never overwrites final evidence and cleans owned staging and lock on failure", async () => {
     const existingRoot = await temporaryDirectory("ast-canary-existing-results-");
-    const finalDirectory = path.join(existingRoot, "production-readiness");
+    const finalDirectory = path.join(existingRoot, "production-readiness-sqlite-default-v5");
     const sentinel = path.join(finalDirectory, "sentinel.txt");
     await mkdir(finalDirectory);
     await writeFile(sentinel, "keep", "utf8");
@@ -1280,16 +1379,16 @@ describe("production-readiness canary contract", () => {
       /already exists|refusing to overwrite/i,
     );
     await expect(readFile(sentinel, "utf8")).resolves.toBe("keep");
-    expect(await readdir(existingRoot)).toEqual(["production-readiness"]);
+    expect(await readdir(existingRoot)).toEqual(["production-readiness-sqlite-default-v5"]);
 
     const racingRoot = await temporaryDirectory("ast-canary-racing-results-");
-    const racingFinalDirectory = path.join(racingRoot, "production-readiness");
+    const racingFinalDirectory = path.join(racingRoot, "production-readiness-sqlite-default-v5");
     await expect(
       publishTemporaryPreparedSet(preparedReportSet(), racingRoot, async () => {
         await mkdir(racingFinalDirectory);
       }),
     ).rejects.toThrow(/atomic no-replace publication failed/i);
-    expect(await readdir(racingRoot)).toEqual(["production-readiness"]);
+    expect(await readdir(racingRoot)).toEqual(["production-readiness-sqlite-default-v5"]);
     expect(await readdir(racingFinalDirectory)).toEqual([]);
 
     const failingRoot = await temporaryDirectory("ast-canary-failing-results-");
@@ -1330,7 +1429,10 @@ describe("production-readiness canary contract", () => {
     expect(await readdir(replacedRoot)).toEqual([path.basename(replacementStageDirectory)]);
 
     const replacedLockRoot = await temporaryDirectory("ast-canary-replaced-lock-");
-    const lockDirectory = path.join(replacedLockRoot, ".production-readiness.lock");
+    const lockDirectory = path.join(
+      replacedLockRoot,
+      ".production-readiness-sqlite-default-v5.lock",
+    );
     const displacedLockDirectory = `${lockDirectory}.displaced`;
     await expect(
       publishTemporaryPreparedSet(preparedReportSet(), replacedLockRoot, async () => {
@@ -1344,12 +1446,14 @@ describe("production-readiness canary contract", () => {
       readFile(path.join(lockDirectory, "replacement-sentinel.txt"), "utf8"),
     ).resolves.toBe("keep");
     await expect(readdir(displacedLockDirectory)).rejects.toMatchObject({ code: "ENOENT" });
-    expect(await readdir(replacedLockRoot)).toEqual([".production-readiness.lock"]);
+    expect(await readdir(replacedLockRoot)).toEqual([
+      ".production-readiness-sqlite-default-v5.lock",
+    ]);
   });
 
   it("does not reverse committed publication when owned post-commit cleanup fails", async () => {
     const resultsRoot = await temporaryDirectory("ast-canary-committed-results-");
-    const lockDirectory = path.join(resultsRoot, ".production-readiness.lock");
+    const lockDirectory = path.join(resultsRoot, ".production-readiness-sqlite-default-v5.lock");
 
     await expect(
       publishTemporaryPreparedSet(preparedReportSet(), resultsRoot, async () => {
@@ -1357,10 +1461,12 @@ describe("production-readiness canary contract", () => {
         await chmod(lockDirectory, 0o000);
       }),
     ).resolves.toBeUndefined();
-    await expect(readdir(path.join(resultsRoot, "production-readiness"))).resolves.toHaveLength(4);
-    expect(await readdir(resultsRoot)).toContain(".production-readiness.lock");
+    await expect(
+      readdir(path.join(resultsRoot, "production-readiness-sqlite-default-v5")),
+    ).resolves.toHaveLength(4);
+    expect(await readdir(resultsRoot)).toContain(".production-readiness-sqlite-default-v5.lock");
 
-    if ((await readdir(resultsRoot)).includes(".production-readiness.lock")) {
+    if ((await readdir(resultsRoot)).includes(".production-readiness-sqlite-default-v5.lock")) {
       await chmod(lockDirectory, 0o700);
       await rm(lockDirectory, { recursive: true });
     }
@@ -1372,9 +1478,9 @@ describe("production-readiness canary contract", () => {
       freezeCanaryReportSet(
         {
           astNode24: duplicatePath,
-          astNode22_5: duplicatePath,
+          astNode22_13: duplicatePath,
           xScraperNode24: directTemporaryPath("x-canary-node24"),
-          xScraperNode22_5: directTemporaryPath("x-canary-node22"),
+          xScraperNode22_13: directTemporaryPath("x-canary-node22"),
         },
         xScraperAuthorityRoot,
       ),
@@ -1382,23 +1488,23 @@ describe("production-readiness canary contract", () => {
 
     const hardLinkedInputs = {
       astNode24: directTemporaryPath("ast-canary-hardlink-source"),
-      astNode22_5: directTemporaryPath("ast-canary-hardlink-alias"),
+      astNode22_13: directTemporaryPath("ast-canary-hardlink-alias"),
       xScraperNode24: directTemporaryPath("x-canary-hardlink-node24"),
-      xScraperNode22_5: directTemporaryPath("x-canary-hardlink-node22"),
+      xScraperNode22_13: directTemporaryPath("x-canary-hardlink-node22"),
     };
     await writeFile(hardLinkedInputs.astNode24, "{}", "utf8");
-    await link(hardLinkedInputs.astNode24, hardLinkedInputs.astNode22_5);
+    await link(hardLinkedInputs.astNode24, hardLinkedInputs.astNode22_13);
     await writeFile(hardLinkedInputs.xScraperNode24, "{}", "utf8");
-    await writeFile(hardLinkedInputs.xScraperNode22_5, "{}", "utf8");
+    await writeFile(hardLinkedInputs.xScraperNode22_13, "{}", "utf8");
     await expect(freezeCanaryReportSet(hardLinkedInputs, xScraperAuthorityRoot)).rejects.toThrow(
       /hard-linked|aliased/i,
     );
 
     const hiddenHardLinkInputs = {
       astNode24: directTemporaryPath("ast-canary-hidden-hardlink-source"),
-      astNode22_5: directTemporaryPath("ast-canary-hidden-hardlink-node22"),
+      astNode22_13: directTemporaryPath("ast-canary-hidden-hardlink-node22"),
       xScraperNode24: directTemporaryPath("x-canary-hidden-hardlink-node24"),
-      xScraperNode22_5: directTemporaryPath("x-canary-hidden-hardlink-node22"),
+      xScraperNode22_13: directTemporaryPath("x-canary-hidden-hardlink-node22"),
     };
     const hiddenAlias = directTemporaryPath("ast-canary-hidden-hardlink-alias");
     await Promise.all(
@@ -1411,14 +1517,14 @@ describe("production-readiness canary contract", () => {
 
     const symbolicInputs = {
       astNode24: directTemporaryPath("ast-canary-symbolic"),
-      astNode22_5: directTemporaryPath("ast-canary-symbol-target"),
+      astNode22_13: directTemporaryPath("ast-canary-symbol-target"),
       xScraperNode24: directTemporaryPath("x-canary-symbol-node24"),
-      xScraperNode22_5: directTemporaryPath("x-canary-symbol-node22"),
+      xScraperNode22_13: directTemporaryPath("x-canary-symbol-node22"),
     };
-    await writeFile(symbolicInputs.astNode22_5, "{}", "utf8");
-    await symlink(symbolicInputs.astNode22_5, symbolicInputs.astNode24);
+    await writeFile(symbolicInputs.astNode22_13, "{}", "utf8");
+    await symlink(symbolicInputs.astNode22_13, symbolicInputs.astNode24);
     await writeFile(symbolicInputs.xScraperNode24, "{}", "utf8");
-    await writeFile(symbolicInputs.xScraperNode22_5, "{}", "utf8");
+    await writeFile(symbolicInputs.xScraperNode22_13, "{}", "utf8");
     await expect(freezeCanaryReportSet(symbolicInputs, xScraperAuthorityRoot)).rejects.toThrow(
       /symbolic|non-regular/i,
     );

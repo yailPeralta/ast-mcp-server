@@ -6,9 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added bounded `ast-tool cache inspect` and confirmation-gated `ast-tool cache clear --yes`; both avoid host paths, reject unsafe trees, preserve unknown files, and perform no automatic garbage collection.
+
+### Changed
+
+- Native SQLite is now the requested symbol-index backend when `AST_SYMBOL_INDEX_PERSISTENCE` is absent or `enabled`; explicit `disabled` remains the immediate memory-only rollback, and `canary` still requires an explicit safe root.
+- The current development-line engine floor and lower evidence lane are Node.js `>=22.13.0` and exact `v22.13.0` respectively; Node.js 24 remains governed by major, and active harnesses no longer use `--experimental-sqlite`.
+- Default persistence resolves through an explicit override, XDG cache home, then HOME, while invalid explicit overrides fail closed instead of being hidden by another root.
+- Integration, package, CLI and consumer harnesses now exercise default SQLite, restart reuse, explicit rollback, mutation-only cache isolation and private artifacts.
+
 ### Fixed
 
 - Promotion now tolerates bounded npm dist-tag propagation lag while revalidating package version, `gitHead`, integrity, provenance, and the complete `next`/`latest` state on every readback.
+
+### Security
+
+- Package-created cache directories use `0700`; SQLite main, WAL, SHM and quarantine artifacts use `0600` on supported Linux, with no-follow, ownership, link-count and device/inode validation around database open, quarantine and cleanup.
 
 ## [0.8.1] — published to `latest` and `next`, registry verified (2026-08-14)
 

@@ -1,7 +1,17 @@
 #!/usr/bin/env node
 
 import { execFile, spawn } from "node:child_process";
-import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  copyFile,
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -21,6 +31,7 @@ const fakeClaudeState = path.join(fixtureRoot, "fake-claude-state.json");
 const fakeHermesState = path.join(fixtureRoot, "fake-hermes-state.json");
 const sharedAgentsHome = path.join(fixtureRoot, "home");
 const openCodeConfig = path.join(fixtureRoot, "opencode.json");
+const cacheRoot = path.join(fixtureRoot, "symbol-index-cache");
 const environment = {
   ...process.env,
   PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
@@ -35,15 +46,36 @@ const environment = {
   FAKE_COPILOT_STATE: path.join(fixtureRoot, "fake-copilot-state.json"),
   HOME: sharedAgentsHome,
   OPENCODE_CONFIG: openCodeConfig,
+  AST_SYMBOL_INDEX_PERSISTENCE: "disabled",
+};
+const cacheEnvironment = {
+  ...environment,
+  AST_SYMBOL_INDEX_PERSISTENCE: "enabled",
+  AST_SYMBOL_INDEX_CACHE_ROOT: cacheRoot,
 };
 
-async function invoke(args) {
+function isExpectedNode2213SQLiteWarning(stderr) {
+  return (
+    process.versions.node === "22.13.0" &&
+    /^\(node:\d+\) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)$/u.test(
+      stderr.trimEnd(),
+    )
+  );
+}
+
+async function invoke(
+  args,
+  invocationEnvironment = environment,
+  allowNode2213SQLiteWarning = false,
+) {
   const { stdout, stderr } = await executeFile(process.execPath, [cliPath, ...args], {
     cwd: repositoryRoot,
-    env: environment,
+    env: invocationEnvironment,
     maxBuffer: 12 * 1024 * 1024,
   });
-  if (stderr !== "") throw new Error(`Expected empty stderr, received: ${stderr}`);
+  if (stderr !== "" && !(allowNode2213SQLiteWarning && isExpectedNode2213SQLiteWarning(stderr))) {
+    throw new Error(`Expected empty stderr, received: ${stderr}`);
+  }
   return JSON.parse(stdout);
 }
 
@@ -57,11 +89,11 @@ async function invokeRaw(args) {
   return stdout.trimEnd();
 }
 
-async function invokeFailure(args) {
+async function invokeFailure(args, invocationEnvironment = environment) {
   try {
     await executeFile(process.execPath, [cliPath, ...args], {
       cwd: repositoryRoot,
-      env: environment,
+      env: invocationEnvironment,
       maxBuffer: 12 * 1024 * 1024,
     });
     throw new Error(`CLI unexpectedly succeeded: ${args.join(" ")}`);
@@ -178,6 +210,93 @@ try {
     path.join(fixtureRoot, "src/use.ts"),
     'import { formatValue } from "./value.js";\nexport const result = formatValue(42);\n',
   );
+
+  await mkdir(cacheRoot, { mode: 0o700 });
+  const cacheKey = "a".repeat(64);
+  const orphanSidecarKey = "b".repeat(64);
+  const cacheDatabasePath = path.join(cacheRoot, `symbol-index-${cacheKey}.sqlite`);
+  const cacheWalPath = path.join(cacheRoot, `symbol-index-${orphanSidecarKey}.sqlite-wal`);
+  const cacheUnknownPath = path.join(cacheRoot, "operator-notes.txt");
+  const { DatabaseSync } = await import("node:sqlite");
+  const cacheDatabase = new DatabaseSync(cacheDatabasePath);
+  cacheDatabase.exec("CREATE TABLE smoke (value TEXT)");
+  cacheDatabase.close();
+  await writeFile(cacheWalPath, "derived wal", "utf8");
+  await writeFile(cacheUnknownPath, "preserve me", "utf8");
+
+  const cacheInspection = await invoke(["cache", "inspect"], cacheEnvironment);
+  if (
+    cacheInspection.command !== "cache inspect" ||
+    cacheInspection.state !== "ready" ||
+    cacheInspection.active_database_count !== 1 ||
+    cacheInspection.sidecar_count !== 1 ||
+    cacheInspection.unrecognized_regular_file_count !== 1 ||
+    JSON.stringify(cacheInspection).includes(fixtureRoot)
+  ) {
+    throw new Error(`Unexpected cache inspection: ${JSON.stringify(cacheInspection)}`);
+  }
+
+  for (const invalidArgs of [
+    ["cache", "clear"],
+    ["cache", "clear", "--yes", "--yes"],
+    ["cache", "inspect", "extra"],
+  ]) {
+    const failed = await invokeFailure(invalidArgs, cacheEnvironment);
+    const error = JSON.parse(failed.stderr);
+    if (
+      failed.code !== 2 ||
+      failed.stdout !== "" ||
+      error.code !== "USAGE" ||
+      failed.stderr.includes(fixtureRoot)
+    ) {
+      throw new Error(`Unexpected cache confirmation failure: ${JSON.stringify(failed)}`);
+    }
+  }
+
+  const cacheClear = await invoke(["cache", "clear", "--yes"], cacheEnvironment, true);
+  if (
+    cacheClear.command !== "cache clear" ||
+    cacheClear.state !== "cleared" ||
+    cacheClear.deleted_active_database_count !== 1 ||
+    cacheClear.deleted_sidecar_count !== 1 ||
+    cacheClear.unrecognized_regular_file_count !== 1 ||
+    JSON.stringify(cacheClear).includes(fixtureRoot)
+  ) {
+    throw new Error(`Unexpected cache clear result: ${JSON.stringify(cacheClear)}`);
+  }
+  await access(cacheDatabasePath).then(
+    () => {
+      throw new Error("Cache clear left the recognized database in place.");
+    },
+    (error) => {
+      if (error?.code !== "ENOENT") throw error;
+    },
+  );
+  if ((await readFile(cacheUnknownPath, "utf8")) !== "preserve me") {
+    throw new Error("Cache clear modified an unrecognized regular file.");
+  }
+  const cacheAfterClear = await invoke(["cache", "inspect"], cacheEnvironment);
+  if (
+    cacheAfterClear.active_database_count !== 0 ||
+    cacheAfterClear.sidecar_count !== 0 ||
+    cacheAfterClear.unrecognized_regular_file_count !== 1
+  ) {
+    throw new Error(`Unexpected post-clear cache inspection: ${JSON.stringify(cacheAfterClear)}`);
+  }
+  const unsafeCachePath = path.join(cacheRoot, `symbol-index-${"c".repeat(64)}.sqlite`);
+  await symlink(cacheUnknownPath, unsafeCachePath);
+  const unsafeCacheFailure = await invokeFailure(["cache", "clear", "--yes"], cacheEnvironment);
+  const unsafeCacheError = JSON.parse(unsafeCacheFailure.stderr);
+  if (
+    unsafeCacheFailure.code !== 1 ||
+    unsafeCacheFailure.stdout !== "" ||
+    unsafeCacheError.code !== "CACHE_UNSAFE" ||
+    unsafeCacheError.details?.removed_artifact_count !== 0 ||
+    unsafeCacheFailure.stderr.includes(fixtureRoot) ||
+    (await readFile(cacheUnknownPath, "utf8")) !== "preserve me"
+  ) {
+    throw new Error(`Unexpected unsafe-cache failure: ${JSON.stringify(unsafeCacheFailure)}`);
+  }
 
   const readPipelineFile = path.join(fixtureRoot, "read-pipeline.json");
   await writeFile(
@@ -531,7 +650,7 @@ try {
   }
 
   process.stdout.write(
-    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, toon_output: true, persisted_apply: true, lock_contention: true, replay: true, skill_installation: true, agent_setup: true })}\n`,
+    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, toon_output: true, persisted_apply: true, lock_contention: true, replay: true, skill_installation: true, agent_setup: true, cache_inspect: true, cache_clear: true, cache_confirmation: true, cache_unknown_preserved: true, cache_redacted_failure: true })}\n`,
   );
 } finally {
   await rm(fixtureRoot, { recursive: true, force: true });

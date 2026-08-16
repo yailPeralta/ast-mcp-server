@@ -1,5 +1,18 @@
 import { createHash } from "node:crypto";
-import { access, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { realpathSync, rmSync, symlinkSync } from "node:fs";
+import {
+  access,
+  chmod,
+  link,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,13 +28,28 @@ import {
 import {
   openSQLiteSymbolIndexStore,
   quarantineSQLiteSymbolIndexFile,
-  type SQLiteSymbolIndexStore,
+  SQLiteSymbolIndexStore,
 } from "../src/services/symbol-index-sqlite.js";
 
 const project = {
   project_id: "project_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   config_id: "config_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 };
+
+const itOnLinux = process.platform === "linux" ? it : it.skip;
+
+function permissionBits(mode: number): number {
+  return mode & 0o777;
+}
+
+async function withUmask<T>(mask: number, operation: () => Promise<T>): Promise<T> {
+  const previous = process.umask(mask);
+  try {
+    return await operation();
+  } finally {
+    process.umask(previous);
+  }
+}
 
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -389,6 +417,25 @@ describe("SQLite symbol index store", () => {
     });
   });
 
+  it("rejects corrupt bytes at the constructor boundary without rewriting them", async () => {
+    const databasePath = path.join(root, "constructor-corrupt.sqlite");
+    const originalBytes = Buffer.from("not a sqlite cache sentinel", "utf8");
+    await writeFile(databasePath, originalBytes);
+    const { DatabaseSync } = await import("node:sqlite");
+
+    let failure: unknown;
+    try {
+      store = new SQLiteSymbolIndexStore(databasePath, DatabaseSync);
+    } catch (error) {
+      failure = error;
+    }
+    store?.close();
+    store = undefined;
+
+    expect(failure).toMatchObject({ code: "corrupt_storage" });
+    expect(await readFile(databasePath)).toEqual(originalBytes);
+  });
+
   it("checks SQLite capability before creating cache directories", async () => {
     const databasePath = path.join(root, "missing", "nested", "index.sqlite");
 
@@ -397,6 +444,148 @@ describe("SQLite symbol index store", () => {
     ).rejects.toMatchObject({ code: "capability_unavailable" });
     await expect(access(path.join(root, "missing"))).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  itOnLinux("opens the prepared database inode through a live descriptor", async () => {
+    const databasePath = path.join(root, "descriptor-bound.sqlite");
+    const { DatabaseSync } = await import("node:sqlite");
+    let constructorPath: string | undefined;
+    let resolvedAtOpen: string | undefined;
+
+    class DescriptorProbeDatabase {
+      constructor(filePath: string) {
+        constructorPath = filePath;
+        resolvedAtOpen = realpathSync(filePath);
+        return new DatabaseSync(filePath);
+      }
+    }
+
+    store = await openSQLiteSymbolIndexStore(databasePath, {
+      DatabaseSync: DescriptorProbeDatabase as never,
+    });
+
+    expect(constructorPath).toMatch(/^\/proc\/self\/fd\/[0-9]+$/u);
+    expect(resolvedAtOpen).toBe(databasePath);
+  });
+
+  itOnLinux(
+    "classifies descriptor-open capability failure without relabeling storage",
+    async () => {
+      const databasePath = path.join(root, "descriptor-capability.sqlite");
+      class UnavailableDescriptorDatabase {
+        constructor() {
+          throw Object.assign(new Error("unable to open database file"), {
+            code: "ERR_SQLITE_ERROR",
+          });
+        }
+      }
+
+      await expect(
+        openSQLiteSymbolIndexStore(databasePath, {
+          DatabaseSync: UnavailableDescriptorDatabase as never,
+        }),
+      ).rejects.toMatchObject({ code: "capability_unavailable" });
+    },
+  );
+
+  itOnLinux("rejects a writable non-sticky ancestor before creating its suffix", async () => {
+    const writableAncestor = path.join(root, "shared");
+    const packageDirectory = path.join(writableAncestor, "private", "nested");
+    await mkdir(writableAncestor, { mode: 0o777 });
+    await chmod(writableAncestor, 0o777);
+
+    await expect(
+      openSQLiteSymbolIndexStore(path.join(packageDirectory, "index.sqlite")),
+    ).rejects.toMatchObject({ code: "invalid_path" });
+    await expect(access(path.join(writableAncestor, "private"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(permissionBits((await stat(writableAncestor)).mode)).toBe(0o777);
+  });
+
+  itOnLinux(
+    "creates missing directory suffixes as owner-only without chmod-modifying existing parents",
+    async () => {
+      const existingParent = path.join(root, "existing");
+      await mkdir(existingParent, { mode: 0o751 });
+      await chmod(existingParent, 0o751);
+      const parentMode = permissionBits((await stat(existingParent)).mode);
+      const firstSuffix = path.join(existingParent, "private");
+      const secondSuffix = path.join(firstSuffix, "nested");
+
+      await withUmask(0, async () => {
+        store = await openSQLiteSymbolIndexStore(path.join(secondSuffix, "index.sqlite"));
+      });
+
+      expect(permissionBits((await stat(existingParent)).mode)).toBe(parentMode);
+      expect(permissionBits((await stat(firstSuffix)).mode)).toBe(0o700);
+      expect(permissionBits((await stat(secondSuffix)).mode)).toBe(0o700);
+    },
+  );
+
+  itOnLinux("normalizes package-created directories under a restrictive umask", async () => {
+    const existingParent = path.join(root, "existing");
+    await mkdir(existingParent, { mode: 0o751 });
+    await chmod(existingParent, 0o751);
+    const parentMode = permissionBits((await stat(existingParent)).mode);
+    const firstSuffix = path.join(existingParent, "private");
+    const secondSuffix = path.join(firstSuffix, "nested");
+
+    await withUmask(0o777, async () => {
+      store = await openSQLiteSymbolIndexStore(path.join(secondSuffix, "index.sqlite"));
+    });
+
+    expect(permissionBits((await stat(existingParent)).mode)).toBe(parentMode);
+    expect(permissionBits((await stat(firstSuffix)).mode)).toBe(0o700);
+    expect(permissionBits((await stat(secondSuffix)).mode)).toBe(0o700);
+  });
+
+  itOnLinux("creates the main database owner-only under a permissive umask", async () => {
+    const databasePath = path.join(root, "private-main.sqlite");
+
+    await withUmask(0, async () => {
+      store = await openSQLiteSymbolIndexStore(databasePath);
+    });
+
+    expect(permissionBits((await stat(databasePath)).mode)).toBe(0o600);
+  });
+
+  itOnLinux("keeps produced WAL and SHM sidecars owner-only while open", async () => {
+    const databasePath = path.join(root, "private-sidecars.sqlite");
+
+    await withUmask(0, async () => {
+      store = await openSQLiteSymbolIndexStore(databasePath);
+      await store.upsert(entry("src/value.ts", "value"));
+    });
+
+    const sidecarModes: number[] = [];
+    for (const suffix of ["-wal", "-shm"]) {
+      try {
+        sidecarModes.push(permissionBits((await stat(`${databasePath}${suffix}`)).mode));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
+    expect(sidecarModes.length).toBeGreaterThan(0);
+    expect(sidecarModes).toEqual(sidecarModes.map(() => 0o600));
+  });
+
+  itOnLinux(
+    "tightens a compatible existing canary only after accepting its unique file",
+    async () => {
+      const databasePath = path.join(root, "existing-canary.sqlite");
+      const value = entry("src/value.ts", "value");
+      store = await openSQLiteSymbolIndexStore(databasePath);
+      await store.upsert(value);
+      store.close();
+      store = undefined;
+      await chmod(databasePath, 0o644);
+
+      store = await openSQLiteSymbolIndexStore(databasePath);
+
+      await expect(store.load(project, SYMBOL_INDEX_SCHEMA_VERSION)).resolves.toEqual([value]);
+      expect(permissionBits((await stat(databasePath)).mode)).toBe(0o600);
+    },
+  );
 
   it("rejects a symlinked database target outside the declared cache file", async () => {
     const targetPath = path.join(root, "target.sqlite");
@@ -423,6 +612,89 @@ describe("SQLite symbol index store", () => {
     ).rejects.toMatchObject({ code: "invalid_path" });
     await expect(access(path.join(outside, "created"))).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  it("rejects a non-directory ancestor without changing its bytes", async () => {
+    const fileAncestor = path.join(root, "file-ancestor");
+    const sentinel = Buffer.from("outside sentinel", "utf8");
+    await writeFile(fileAncestor, sentinel);
+
+    await expect(
+      openSQLiteSymbolIndexStore(path.join(fileAncestor, "created", "index.sqlite")),
+    ).rejects.toMatchObject({ code: "invalid_path" });
+    expect(await readFile(fileAncestor)).toEqual(sentinel);
+  });
+
+  itOnLinux("rejects a hard-linked target before chmod or database writes", async () => {
+    const databasePath = path.join(root, "hard-linked.sqlite");
+    const outsidePath = path.join(root, "outside-sentinel.sqlite");
+    const { DatabaseSync } = await import("node:sqlite");
+    const outside = new DatabaseSync(outsidePath);
+    outside.exec(
+      "CREATE TABLE sentinel (value TEXT NOT NULL); INSERT INTO sentinel VALUES ('safe')",
+    );
+    outside.close();
+    await chmod(outsidePath, 0o644);
+    await link(outsidePath, databasePath);
+    const beforeBytes = await readFile(outsidePath);
+    const beforeMode = permissionBits((await stat(outsidePath)).mode);
+
+    await expect(openSQLiteSymbolIndexStore(databasePath)).rejects.toMatchObject({
+      code: "invalid_path",
+    });
+    expect(await readFile(outsidePath)).toEqual(beforeBytes);
+    expect(permissionBits((await stat(outsidePath)).mode)).toBe(beforeMode);
+  });
+
+  itOnLinux(
+    "rejects a target swap before initialization without writing the outside sentinel",
+    async () => {
+      const databasePath = path.join(root, "raced.sqlite");
+      const outsidePath = path.join(root, "race-sentinel.sqlite");
+      const { DatabaseSync } = await import("node:sqlite");
+      const outside = new DatabaseSync(outsidePath);
+      outside.exec(
+        "CREATE TABLE sentinel (value TEXT NOT NULL); INSERT INTO sentinel VALUES ('safe')",
+      );
+      outside.close();
+      const beforeBytes = await readFile(outsidePath);
+
+      class TargetSwapDatabase {
+        private readonly database: InstanceType<typeof DatabaseSync>;
+
+        constructor() {
+          rmSync(databasePath, { force: true });
+          symlinkSync(outsidePath, databasePath);
+          this.database = new DatabaseSync(outsidePath);
+        }
+
+        exec(sql: string): void {
+          this.database.exec(sql);
+        }
+
+        prepare(sql: string) {
+          return this.database.prepare(sql);
+        }
+
+        close(): void {
+          this.database.close();
+        }
+      }
+
+      let failure: unknown;
+      try {
+        store = await openSQLiteSymbolIndexStore(databasePath, {
+          DatabaseSync: TargetSwapDatabase as never,
+        });
+      } catch (error) {
+        failure = error;
+      }
+      store?.close();
+      store = undefined;
+
+      expect(failure).toMatchObject({ code: "invalid_path" });
+      expect(await readFile(outsidePath)).toEqual(beforeBytes);
+    },
+  );
 
   it("rejects a symbol projection whose payload no longer matches its checksum", async () => {
     const databasePath = path.join(root, "forged.sqlite");
@@ -456,6 +728,57 @@ describe("SQLite symbol index store", () => {
     await expect(rm(databasePath)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(rm(`${databasePath}-wal`)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(rm(`${databasePath}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  itOnLinux.each([
+    ["wal", "symlink"],
+    ["shm", "symlink"],
+    ["wal", "hardlink"],
+    ["shm", "hardlink"],
+  ] as const)(
+    "rejects an unsafe %s %s before renaming the main database",
+    async (sidecar, unsafeType) => {
+      const databasePath = path.join(root, `unsafe-${sidecar}-${unsafeType}.sqlite`);
+      store = await openSQLiteSymbolIndexStore(databasePath);
+      await store.upsert(entry("src/value.ts", "value"));
+      store.close();
+      store = undefined;
+      const originalDatabase = await readFile(databasePath);
+      const outsideRoot = await mkdtemp(path.join(os.tmpdir(), "ast-sqlite-sidecar-outside-"));
+      try {
+        const outside = path.join(outsideRoot, "sentinel");
+        const outsideBytes = Buffer.from("outside sentinel bytes", "utf8");
+        const sidecarPath = `${databasePath}-${sidecar}`;
+        await rm(sidecarPath, { force: true });
+        await writeFile(outside, outsideBytes);
+        if (unsafeType === "symlink") await symlink(outside, sidecarPath);
+        else await link(outside, sidecarPath);
+
+        await expect(quarantineSQLiteSymbolIndexFile(databasePath)).rejects.toMatchObject({
+          code: "invalid_path",
+        });
+
+        await expect(readFile(databasePath)).resolves.toEqual(originalDatabase);
+        await expect(readFile(outside)).resolves.toEqual(outsideBytes);
+        expect((await readdir(root)).some((name) => name.includes(".sqlite.corrupt-"))).toBe(false);
+      } finally {
+        await rm(outsideRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  itOnLinux("tightens a quarantined database to owner-only mode", async () => {
+    const databasePath = path.join(root, "private-quarantine.sqlite");
+    store = await openSQLiteSymbolIndexStore(databasePath);
+    await store.upsert(entry("src/value.ts", "value"));
+    store.close();
+    store = undefined;
+    await chmod(databasePath, 0o666);
+
+    const quarantined = await quarantineSQLiteSymbolIndexFile(databasePath);
+
+    expect(quarantined).not.toBeNull();
+    expect(permissionBits((await stat(quarantined!)).mode)).toBe(0o600);
   });
 
   it("rolls back a non-contention COMMIT failure and preserves prior state after reopen", async () => {

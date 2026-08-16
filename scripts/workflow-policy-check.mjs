@@ -488,11 +488,7 @@ function validateCiWorkflow(lines, jobs, actions) {
   if (jobs.length !== 1 || jobs[0].name !== "quality") {
     policyFailure("ci.yml must contain only the quality job.");
   }
-  validateExactJobKeys(
-    jobs[0],
-    ["runs-on", "timeout-minutes", "strategy", "env", "steps"],
-    "ci.yml",
-  );
+  validateExactJobKeys(jobs[0], ["runs-on", "timeout-minutes", "strategy", "steps"], "ci.yml");
   validateExactNestedKeys(jobs[0], "strategy", 4, ["fail-fast", "matrix"], "ci.yml");
   validateExactNestedKeys(jobs[0], "matrix", 6, ["node"], "ci.yml");
   const onIndex = requireTopLevelKey(lines, "on", "ci.yml");
@@ -506,8 +502,8 @@ function validateCiWorkflow(lines, jobs, actions) {
   ) {
     policyFailure("ci.yml trigger blocks cannot add branch, path, type or event filters.");
   }
-  if (lines.filter((line) => line === '        node: ["22.5.0", "24"]').length !== 1) {
-    policyFailure("ci.yml must retain the exact Node matrix 22.5.0 and 24.");
+  if (lines.filter((line) => line === '        node: ["22.13.0", "24"]').length !== 1) {
+    policyFailure("ci.yml must retain the exact Node matrix 22.13.0 and 24.");
   }
   if (lines.filter((line) => line === "      fail-fast: false").length !== 1) {
     policyFailure("ci.yml must keep fail-fast disabled for complete matrix evidence.");
@@ -518,19 +514,8 @@ function validateCiWorkflow(lines, jobs, actions) {
   if (lines.some((line) => line.trim().startsWith("if:"))) {
     policyFailure("ci.yml cannot conditionally skip its quality job or gate steps.");
   }
-  const envIndexes = lines
-    .map((line, index) => (line.trim() === "env:" ? index : -1))
-    .filter((index) => index >= 0);
-  if (envIndexes.length !== 1 || lineIndent(lines[envIndexes[0]]) !== 4) {
-    policyFailure("ci.yml must define exactly one job-scoped environment block.");
-  }
-  const environment = mappingEntries(lines, envIndexes[0], 4, "ci.yml quality environment");
-  if (
-    environment.size !== 1 ||
-    environment.get("NODE_OPTIONS") !==
-      "${{ matrix.node == '22.5.0' && '--experimental-sqlite' || '' }}"
-  ) {
-    policyFailure("ci.yml environment must contain only the reviewed Node floor option.");
+  if (lines.some((line) => line.trim() === "env:")) {
+    policyFailure("ci.yml cannot inject workflow, job or step environment values.");
   }
   const commands = extractRunCommands(jobs[0]);
   if (JSON.stringify(commands) !== JSON.stringify(CI_RELEASE_GATES)) {

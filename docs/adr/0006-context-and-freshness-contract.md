@@ -1,6 +1,6 @@
 # ADR 0006: Make read context and freshness explicit
 
-- Status: Accepted
+- Status: Accepted; persistence wording amended by ADR 0011
 - Date: 2026-08-06
 - Decision owners: ast-mcp-server maintainers
 
@@ -15,7 +15,7 @@ The same problem appears at two different scopes:
 
 The design must also preserve bounded responses. A record, byte, traversal, invocation or serialization limit is a correctness signal: omitted evidence must be visible instead of being represented as absence.
 
-The contract must not expose absolute project identity, credentials, environment values or unbounded error text. It must work when the watcher fails, when a synchronous refresh is required, and while the symbol index remains memory-only.
+The contract must not expose absolute project identity, credentials, environment values or unbounded error text. It must work when the watcher fails, when a synchronous refresh is required, and whether the derived symbol index is using the default SQLite backend or explicit memory rollback.
 
 ## Decision
 
@@ -33,7 +33,7 @@ The per-project `withProject()` queue remains the serialization boundary for com
 
 Read tools expose freshness together with completeness, unresolved items, budgets and truncation where their result shape can be partial. A truncated result carries a machine-readable reason; it is never treated as a complete negative result. `ast_get_impact` fails closed when exact relationships are not fresh. `ast_explore` preserves degraded/stale metadata and incomplete evidence for the caller to handle.
 
-The symbol index is a derived accelerator. It does not change this contract or become a read/mutation authority. The current production backend is memory-only; missing, stale or mismatched index evidence falls back to compiler-backed synchronization or remains unavailable.
+The symbol index is a derived accelerator. It does not change this contract or become a read/mutation authority. ADR 0011 selects SQLite by default, but missing, stale, mismatched or failed index evidence still falls back to compiler-backed memory synchronization or remains explicitly unavailable.
 
 Status projections are JSON-safe and bounded. They redact absolute paths, credentials, authorization values and unbounded provider/error text before returning data to an MCP client.
 
@@ -46,7 +46,7 @@ Status projections are JSON-safe and bounded. They redact absolute paths, creden
 - Watcher failure fails closed without making exact reads permanently unavailable when bounded synchronous recovery is possible.
 - Budgets and truncation become part of the evidence contract, preventing partial responses from masquerading as complete results.
 - Read/index evolution remains independent from the reviewed mutation protocol.
-- The contract is compatible with the current memory-only index and a future derived backend.
+- The contract is compatible with default SQLite, explicit memory rollback and later replaceable derived backends.
 
 ### Negative
 
@@ -75,7 +75,7 @@ Rejected for bounded exact reads. The synchronous fallback can recover exact sou
 
 ### Make a persistent index the freshness source
 
-Rejected. The index is derived and currently memory-only. Persistence requires separate runtime, packaging, restart, migration and corruption evidence and cannot replace compiler synchronization.
+Rejected. Persistence does not make the index authoritative. ADR 0011 supplies the separate runtime, packaging, restart, migration, corruption and rollback decision; compiler synchronization remains the only freshness authority.
 
 ## Verification
 

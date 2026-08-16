@@ -1,5 +1,15 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, open, realpath, rename, rm } from "node:fs/promises";
+import {
+  closeSync,
+  constants,
+  fchmodSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  realpathSync,
+  type Stats,
+} from "node:fs";
+import { chmod, lstat, mkdir, open, realpath, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import type { ProjectIdentity } from "./project-status.js";
@@ -30,8 +40,34 @@ import {
 const SQLITE_HEADER = Buffer.from("SQLite format 3\u0000", "utf8");
 const DEFAULT_BUSY_TIMEOUT_MS = 1_000;
 const SQLITE_READ_PAGE_SIZE = 32;
+const OWNER_ONLY_DIRECTORY_MODE = 0o700;
+const OWNER_ONLY_FILE_MODE = 0o600;
+const STICKY_DIRECTORY_MODE = 0o1000;
+const GROUP_OR_OTHER_WRITE_MODE = 0o022;
+const GROUP_OR_OTHER_ACCESS_MODE = 0o077;
+const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
+const LINUX_O_PATH = 0o10000000;
+const SUPPORTS_OWNER_ONLY_MODES =
+  process.platform === "linux" && typeof process.getuid === "function";
+const SUPPORTS_DESCRIPTOR_BOUND_OPEN = process.platform === "linux";
+
+type ArtifactIdentity = Pick<Stats, "dev" | "ino">;
+
+interface PreparedDatabaseArtifact {
+  readonly descriptor: number;
+  readonly identity: ArtifactIdentity;
+  readonly openPath: string;
+}
 
 type DatabaseSyncConstructor = new (filePath: string) => DatabaseSync;
+
+function isDescriptorOpenCapabilityFailure(error: unknown): boolean {
+  if (!SUPPORTS_DESCRIPTOR_BOUND_OPEN) return false;
+  const code = (error as NodeJS.ErrnoException | undefined)?.code ?? "";
+  if (["ENOENT", "ENOTDIR", "EACCES", "EPERM"].includes(code)) return true;
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return code === "ERR_SQLITE_ERROR" && message.includes("unable to open database file");
+}
 
 type SqliteRow = {
   project_id: unknown;
@@ -160,12 +196,249 @@ function assertSafeDatabasePath(filePath: string): string {
   return normalized;
 }
 
+function assertTrustedDirectoryStats(stats: Stats, packageOwned: boolean): void {
+  if (!SUPPORTS_OWNER_ONLY_MODES) return;
+  const currentUid = process.getuid!();
+  const mode = stats.mode & 0o7777;
+  if (stats.uid !== currentUid && stats.uid !== 0) {
+    throw new SymbolIndexStorageError(
+      "invalid_path",
+      "SQLite cache directory ancestry is not owned by a trusted principal.",
+    );
+  }
+  if (packageOwned) {
+    if (stats.uid !== currentUid || (mode & GROUP_OR_OTHER_ACCESS_MODE) !== 0) {
+      throw new SymbolIndexStorageError(
+        "invalid_path",
+        "SQLite cache directory is not private to the invoking owner.",
+      );
+    }
+    return;
+  }
+  if ((mode & GROUP_OR_OTHER_WRITE_MODE) !== 0 && (mode & STICKY_DIRECTORY_MODE) === 0) {
+    throw new SymbolIndexStorageError(
+      "invalid_path",
+      "SQLite cache directory ancestry is writable by an untrusted principal.",
+    );
+  }
+}
+
+function assertTrustedCanonicalDirectoryChain(directoryPath: string): void {
+  const parsed = path.parse(directoryPath);
+  const segments = path.relative(parsed.root, directoryPath).split(path.sep).filter(Boolean);
+  let current = parsed.root;
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    const stats = lstatSync(current);
+    if (stats.isSymbolicLink() || !stats.isDirectory()) {
+      throw new SymbolIndexStorageError(
+        "invalid_path",
+        "SQLite cache directory contains a non-canonical ancestor.",
+      );
+    }
+    assertTrustedDirectoryStats(stats, current === directoryPath);
+  }
+  if (realpathSync(directoryPath) !== directoryPath) {
+    throw new SymbolIndexStorageError(
+      "invalid_path",
+      "SQLite cache directory resolves outside its canonical path.",
+    );
+  }
+}
+
+function sameArtifactIdentity(stats: ArtifactIdentity, expected: ArtifactIdentity): boolean {
+  return stats.dev === expected.dev && stats.ino === expected.ino;
+}
+
+function assertPrivateArtifactStats(stats: Stats, message: string): void {
+  if (!stats.isFile() || stats.nlink !== 1) {
+    throw new SymbolIndexStorageError("invalid_path", message);
+  }
+  if (SUPPORTS_OWNER_ONLY_MODES && stats.uid !== process.getuid!()) {
+    throw new SymbolIndexStorageError("invalid_path", message);
+  }
+}
+
+function assertPreparedArtifactIdentity(filePath: string, expected: ArtifactIdentity): void {
+  let stats: Stats;
+  try {
+    stats = lstatSync(filePath);
+    if (
+      stats.isSymbolicLink() ||
+      !sameArtifactIdentity(stats, expected) ||
+      realpathSync(filePath) !== filePath
+    ) {
+      throw new SymbolIndexStorageError(
+        "invalid_path",
+        "SQLite cache artifact identity changed before use.",
+      );
+    }
+    assertPrivateArtifactStats(stats, "SQLite cache artifact is not a unique owned regular file.");
+    if (SUPPORTS_OWNER_ONLY_MODES && (stats.mode & 0o777) !== OWNER_ONLY_FILE_MODE) {
+      throw new SymbolIndexStorageError("invalid_path", "SQLite cache artifact is not owner-only.");
+    }
+  } catch (error) {
+    if (error instanceof SymbolIndexStorageError) throw error;
+    throw wrapStorageError(error, "read_failed", "SQLite cache artifact could not be verified.");
+  }
+}
+
+function prepareExistingPrivateArtifact(filePath: string): ArtifactIdentity | null {
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(filePath, constants.O_RDWR | NO_FOLLOW);
+    const before = fstatSync(descriptor);
+    assertPrivateArtifactStats(before, "SQLite cache artifact is not a unique owned regular file.");
+    if (realpathSync(filePath) !== filePath) {
+      throw new SymbolIndexStorageError(
+        "invalid_path",
+        "SQLite cache artifact resolves outside its canonical path.",
+      );
+    }
+    if (SUPPORTS_OWNER_ONLY_MODES) fchmodSync(descriptor, OWNER_ONLY_FILE_MODE);
+    const after = fstatSync(descriptor);
+    if (!sameArtifactIdentity(before, after)) {
+      throw new SymbolIndexStorageError(
+        "invalid_path",
+        "SQLite cache artifact identity changed while securing it.",
+      );
+    }
+    assertPrivateArtifactStats(after, "SQLite cache artifact changed while securing it.");
+    const identity = { dev: after.dev, ino: after.ino };
+    assertPreparedArtifactIdentity(filePath, identity);
+    return identity;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+    if (error instanceof SymbolIndexStorageError) throw error;
+    if ((error as NodeJS.ErrnoException)?.code === "ELOOP") {
+      throw new SymbolIndexStorageError(
+        "invalid_path",
+        "SQLite cache artifact must not be a symbolic link.",
+        error,
+      );
+    }
+    throw wrapStorageError(error, "write_failed", "SQLite cache artifact could not be secured.");
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
+function preparePrivateDatabaseArtifact(filePath: string): PreparedDatabaseArtifact {
+  let descriptor: number | undefined;
+  try {
+    try {
+      descriptor = openSync(filePath, constants.O_RDWR | NO_FOLLOW);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      descriptor = openSync(
+        filePath,
+        constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | NO_FOLLOW,
+        OWNER_ONLY_FILE_MODE,
+      );
+    }
+    const before = fstatSync(descriptor);
+    assertPrivateArtifactStats(before, "SQLite cache artifact is not a unique owned regular file.");
+    if (realpathSync(filePath) !== filePath) {
+      throw new SymbolIndexStorageError(
+        "invalid_path",
+        "SQLite cache artifact resolves outside its canonical path.",
+      );
+    }
+    if (SUPPORTS_OWNER_ONLY_MODES) fchmodSync(descriptor, OWNER_ONLY_FILE_MODE);
+    const after = fstatSync(descriptor);
+    if (!sameArtifactIdentity(before, after)) {
+      throw new SymbolIndexStorageError(
+        "invalid_path",
+        "SQLite cache artifact identity changed while securing it.",
+      );
+    }
+    assertPrivateArtifactStats(after, "SQLite cache artifact changed while securing it.");
+    const identity = { dev: after.dev, ino: after.ino };
+    assertPreparedArtifactIdentity(filePath, identity);
+    const openPath = SUPPORTS_DESCRIPTOR_BOUND_OPEN ? `/proc/self/fd/${descriptor}` : filePath;
+    if (SUPPORTS_DESCRIPTOR_BOUND_OPEN) {
+      let descriptorTarget: string;
+      try {
+        descriptorTarget = realpathSync(openPath);
+      } catch (error) {
+        throw new SymbolIndexStorageError(
+          "capability_unavailable",
+          "SQLite cache descriptor binding is unavailable on this Linux runtime.",
+          error,
+        );
+      }
+      if (descriptorTarget !== filePath) {
+        throw new SymbolIndexStorageError(
+          "capability_unavailable",
+          "SQLite cache descriptor binding is unavailable on this Linux runtime.",
+        );
+      }
+    }
+    const prepared = { descriptor, identity, openPath };
+    descriptor = undefined;
+    return prepared;
+  } catch (error) {
+    if (error instanceof SymbolIndexStorageError) throw error;
+    if (["EEXIST", "ELOOP"].includes((error as NodeJS.ErrnoException)?.code ?? "")) {
+      throw new SymbolIndexStorageError(
+        "invalid_path",
+        "SQLite cache artifact changed while it was being prepared.",
+        error,
+      );
+    }
+    throw wrapStorageError(error, "write_failed", "SQLite cache artifact could not be prepared.");
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
+async function normalizeCreatedDirectory(directoryPath: string): Promise<void> {
+  if (!SUPPORTS_OWNER_ONLY_MODES) return;
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(directoryPath, LINUX_O_PATH | (constants.O_DIRECTORY ?? 0) | NO_FOLLOW);
+    const opened = await handle.stat();
+    if (!opened.isDirectory()) {
+      throw new SymbolIndexStorageError(
+        "invalid_path",
+        "SQLite cache directory contains a non-canonical ancestor.",
+      );
+    }
+    await chmod(`/proc/self/fd/${handle.fd}`, OWNER_ONLY_DIRECTORY_MODE);
+    const [hardened, named, physicalPath] = await Promise.all([
+      handle.stat(),
+      lstat(directoryPath),
+      realpath(directoryPath),
+    ]);
+    if (
+      !sameArtifactIdentity(hardened, opened) ||
+      !sameArtifactIdentity(named, opened) ||
+      named.isSymbolicLink() ||
+      !named.isDirectory() ||
+      physicalPath !== directoryPath ||
+      (hardened.mode & 0o777) !== OWNER_ONLY_DIRECTORY_MODE ||
+      (named.mode & 0o777) !== OWNER_ONLY_DIRECTORY_MODE
+    ) {
+      throw new SymbolIndexStorageError(
+        "invalid_path",
+        "SQLite cache directory changed while it was secured.",
+      );
+    }
+  } catch (error) {
+    if (error instanceof SymbolIndexStorageError) throw error;
+    throw wrapStorageError(error, "write_failed", "SQLite cache directory could not be secured.");
+  } finally {
+    await handle?.close();
+  }
+}
+
 async function ensureCanonicalDirectory(directoryPath: string): Promise<void> {
   const parsed = path.parse(directoryPath);
   const segments = path.relative(parsed.root, directoryPath).split(path.sep).filter(Boolean);
   let current = parsed.root;
   for (const segment of segments) {
     current = path.join(current, segment);
+    let created = false;
     let stats;
     try {
       stats = await lstat(current);
@@ -178,7 +451,8 @@ async function ensureCanonicalDirectory(directoryPath: string): Promise<void> {
         );
       }
       try {
-        await mkdir(current);
+        await mkdir(current, { mode: OWNER_ONLY_DIRECTORY_MODE });
+        created = true;
       } catch (mkdirError) {
         if ((mkdirError as NodeJS.ErrnoException).code !== "EEXIST") {
           throw wrapStorageError(
@@ -188,6 +462,7 @@ async function ensureCanonicalDirectory(directoryPath: string): Promise<void> {
           );
         }
       }
+      if (created) await normalizeCreatedDirectory(current);
       stats = await lstat(current);
     }
     if (stats.isSymbolicLink() || !stats.isDirectory()) {
@@ -196,6 +471,7 @@ async function ensureCanonicalDirectory(directoryPath: string): Promise<void> {
         "SQLite cache directory contains a non-canonical ancestor.",
       );
     }
+    assertTrustedDirectoryStats(stats, created || current === directoryPath);
   }
   if ((await realpath(directoryPath)) !== directoryPath) {
     throw new SymbolIndexStorageError(
@@ -433,6 +709,19 @@ export async function openSQLiteSymbolIndexStore(
 
 export async function quarantineSQLiteSymbolIndexFile(filePath: string): Promise<string | null> {
   const safePath = assertSafeDatabasePath(filePath);
+  const databaseIdentity = prepareExistingPrivateArtifact(safePath);
+  if (!databaseIdentity) return null;
+  const sidecars = ["wal", "shm"].map((suffix) => {
+    const sidecarPath = `${safePath}-${suffix}`;
+    return {
+      path: sidecarPath,
+      identity: prepareExistingPrivateArtifact(sidecarPath),
+    };
+  });
+  assertPreparedArtifactIdentity(safePath, databaseIdentity);
+  for (const sidecar of sidecars) {
+    if (sidecar.identity) assertPreparedArtifactIdentity(sidecar.path, sidecar.identity);
+  }
   const quarantinePath = `${safePath}.corrupt-${process.pid}-${Date.now()}`;
   try {
     await rename(safePath, quarantinePath);
@@ -440,10 +729,12 @@ export async function quarantineSQLiteSymbolIndexFile(filePath: string): Promise
     if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return null;
     throw wrapStorageError(error, "write_failed", "SQLite cache quarantine failed.");
   }
-  await Promise.all([
-    rm(`${safePath}-wal`, { force: true }),
-    rm(`${safePath}-shm`, { force: true }),
-  ]);
+  assertPreparedArtifactIdentity(quarantinePath, databaseIdentity);
+  for (const sidecar of sidecars) {
+    if (!sidecar.identity) continue;
+    assertPreparedArtifactIdentity(sidecar.path, sidecar.identity);
+    await rm(sidecar.path);
+  }
   return quarantinePath;
 }
 
@@ -459,13 +750,46 @@ export class SQLiteSymbolIndexStore implements SymbolIndexStore {
     busyTimeoutMs = DEFAULT_BUSY_TIMEOUT_MS,
   ) {
     this.filePath = assertSafeDatabasePath(filePath);
+    assertTrustedCanonicalDirectoryChain(path.dirname(this.filePath));
     this.busyTimeoutMs =
       Number.isInteger(busyTimeoutMs) && busyTimeoutMs > 0
         ? busyTimeoutMs
         : DEFAULT_BUSY_TIMEOUT_MS;
-    this.db = new DatabaseSync(this.filePath);
+    const preparedDatabase = preparePrivateDatabaseArtifact(this.filePath);
+    prepareExistingPrivateArtifact(`${this.filePath}-wal`);
+    prepareExistingPrivateArtifact(`${this.filePath}-shm`);
     try {
+      this.db = new DatabaseSync(preparedDatabase.openPath);
+    } catch (error) {
+      closeSync(preparedDatabase.descriptor);
+      if (isDescriptorOpenCapabilityFailure(error)) {
+        throw new SymbolIndexStorageError(
+          "capability_unavailable",
+          "SQLite cache descriptor binding is unavailable on this Linux runtime.",
+          error,
+        );
+      }
+      throw error;
+    }
+    try {
+      closeSync(preparedDatabase.descriptor);
+    } catch (error) {
+      this.db.close();
+      this.db = null;
+      throw wrapStorageError(
+        error,
+        "write_failed",
+        "SQLite cache descriptor could not be released safely.",
+      );
+    }
+    try {
+      assertTrustedCanonicalDirectoryChain(path.dirname(this.filePath));
+      assertPreparedArtifactIdentity(this.filePath, preparedDatabase.identity);
       this.initialize();
+      assertTrustedCanonicalDirectoryChain(path.dirname(this.filePath));
+      assertPreparedArtifactIdentity(this.filePath, preparedDatabase.identity);
+      prepareExistingPrivateArtifact(`${this.filePath}-wal`);
+      prepareExistingPrivateArtifact(`${this.filePath}-shm`);
     } catch (error) {
       this.db.close();
       this.db = null;

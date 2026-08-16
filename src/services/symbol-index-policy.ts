@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { homedir } from "node:os";
 import path from "node:path";
 import type { ProjectIdentity } from "./project-status.js";
 
@@ -88,8 +89,15 @@ export function createInitialSymbolIndexRuntimeObservability(
 function disabledPolicy(
   reason: SymbolIndexPersistencePolicy["reason"],
 ): SymbolIndexPersistencePolicy {
+  return memoryPolicy("disabled", reason);
+}
+
+function memoryPolicy(
+  mode: SymbolIndexPersistenceMode,
+  reason: SymbolIndexPersistencePolicy["reason"],
+): SymbolIndexPersistencePolicy {
   return {
-    mode: "disabled",
+    mode,
     backend: "memory",
     cache_root: null,
     busy_timeout_ms: DEFAULT_BUSY_TIMEOUT_MS,
@@ -105,20 +113,15 @@ function readBusyTimeout(value: string | undefined): number {
     : DEFAULT_BUSY_TIMEOUT_MS;
 }
 
-export function readSymbolIndexPersistencePolicy(
-  environment: NodeJS.ProcessEnv = process.env,
+function isAbsoluteNormalizedPath(value: string): boolean {
+  return !value.includes("\u0000") && path.isAbsolute(value) && path.normalize(value) === value;
+}
+
+function sqlitePolicy(
+  mode: "canary" | "enabled",
+  cacheRoot: string,
+  environment: NodeJS.ProcessEnv,
 ): SymbolIndexPersistencePolicy {
-  const mode = environment.AST_SYMBOL_INDEX_PERSISTENCE ?? "disabled";
-  if (mode === "disabled") return disabledPolicy("default");
-  if (mode === "enabled") return disabledPolicy("enabled_not_released");
-  if (mode !== "canary") return disabledPolicy("invalid_mode");
-
-  const cacheRoot = environment.AST_SYMBOL_INDEX_CACHE_ROOT;
-  if (!cacheRoot) return disabledPolicy("cache_root_missing");
-  if (!path.isAbsolute(cacheRoot) || path.normalize(cacheRoot) !== cacheRoot) {
-    return disabledPolicy("cache_root_invalid");
-  }
-
   return {
     mode,
     backend: "sqlite",
@@ -126,6 +129,57 @@ export function readSymbolIndexPersistencePolicy(
     busy_timeout_ms: readBusyTimeout(environment.AST_SYMBOL_INDEX_BUSY_TIMEOUT_MS),
     reason: "default",
   };
+}
+
+export function readSymbolIndexPersistencePolicy(
+  environment: NodeJS.ProcessEnv = process.env,
+  resolveHomeDirectory: () => string = homedir,
+): SymbolIndexPersistencePolicy {
+  const mode = environment.AST_SYMBOL_INDEX_PERSISTENCE ?? "enabled";
+  if (mode === "disabled") return disabledPolicy("default");
+  if (mode !== "canary" && mode !== "enabled") return disabledPolicy("invalid_mode");
+
+  const explicitCacheRoot = environment.AST_SYMBOL_INDEX_CACHE_ROOT;
+  if (mode === "canary") {
+    if (!explicitCacheRoot) return memoryPolicy(mode, "cache_root_missing");
+    if (!isAbsoluteNormalizedPath(explicitCacheRoot)) {
+      return memoryPolicy(mode, "cache_root_invalid");
+    }
+    return sqlitePolicy(mode, explicitCacheRoot, environment);
+  }
+
+  if (explicitCacheRoot !== undefined) {
+    if (!isAbsoluteNormalizedPath(explicitCacheRoot)) {
+      return memoryPolicy(mode, "cache_root_invalid");
+    }
+    return sqlitePolicy(mode, explicitCacheRoot, environment);
+  }
+
+  const xdgCacheHome = environment.XDG_CACHE_HOME;
+  if (xdgCacheHome && isAbsoluteNormalizedPath(xdgCacheHome)) {
+    return sqlitePolicy(
+      mode,
+      path.join(xdgCacheHome, "ast-mcp-server", "symbol-index"),
+      environment,
+    );
+  }
+
+  let homeDirectory: string;
+  try {
+    homeDirectory = resolveHomeDirectory();
+  } catch {
+    return memoryPolicy(mode, "cache_root_missing");
+  }
+  if (!homeDirectory) return memoryPolicy(mode, "cache_root_missing");
+  if (!isAbsoluteNormalizedPath(homeDirectory)) {
+    return memoryPolicy(mode, "cache_root_invalid");
+  }
+
+  return sqlitePolicy(
+    mode,
+    path.join(homeDirectory, ".cache", "ast-mcp-server", "symbol-index"),
+    environment,
+  );
 }
 
 export function symbolIndexPolicyKey(policy: SymbolIndexPersistencePolicy): string {

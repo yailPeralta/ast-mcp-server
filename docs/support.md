@@ -6,14 +6,15 @@ This document defines the supported platform, runtime, persistence, and operatio
 
 | Environment                                                                   | Status      | Contract                                                                                      |
 | ----------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------- |
-| Linux x64 with required GNU coreutils and procfs, Node.js 22.5.0              | Supported   | v0.8.1 exact release matrix for MCP/CLI/package, lifecycle, mutation, and managed setup.      |
-| Linux x64 with required GNU coreutils and procfs, current Node.js 24 line     | Supported   | v0.8.1 exact release matrix for MCP/CLI/package, lifecycle, mutation, and managed setup.      |
+| Linux x64 with required GNU coreutils and procfs, Node.js 22.5.0              | Published   | Immutable v0.8.1 release matrix; not the runtime floor of the current development tree.       |
+| Linux x64 with required GNU coreutils and procfs, exact Node.js 22.13.0       | Supported   | Current `Unreleased` package, persistence, MCP/CLI/package, lifecycle and mutation matrix.    |
+| Linux x64 with required GNU coreutils and procfs, current Node.js 24 line     | Supported   | Published v0.8.1 and current `Unreleased` matrices, each bound to its own package/tree bytes. |
 | Other Linux architectures or systems without the required filesystem features | Unverified  | Not supported until equivalent architecture, mutation, and filesystem-publication gates pass. |
 | macOS                                                                         | Unverified  | Not supported until equivalent filesystem, process, package, mutation, and canary gates pass. |
 | Windows                                                                       | Unverified  | Not supported until equivalent filesystem, process, package, mutation, and canary gates pass. |
 | Remote, untrusted, or multi-tenant service use                                | Unsupported | No network authentication, sandbox, or tenant-isolation boundary is provided.                 |
 
-The package engine floor is Node.js `>=22.5.0`. The v0.8.1 release matrix exercises exact Node.js 22.5.0 and the current Node.js 24 line on Linux, including managed setup-file publication; a future version satisfying the engine range is not automatically a verified release target.
+The current `Unreleased` package engine floor is Node.js `>=22.13.0`; its local matrix executes exact Node.js 22.13.0 and the governed Node.js 24 major. Published v0.8.1 retains its immutable `>=22.5.0` metadata and exact Node.js 22.5.0/24 release evidence. A future runtime satisfying an engine range is not automatically a verified release target.
 
 The checked-evidence freezer requires GNU coreutils 9.7 `mv` with `--update=none-fail`, `--no-copy`, and `--no-target-directory`. Managed setup-file mutation additionally requires that same `mv` with `--exchange`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, `O_DIRECTORY`, and `O_NOFOLLOW`. It fails closed when any verified Linux primitive is unavailable. Equivalent publication, exchange, descriptor-link, and descriptor-relative mutation semantics have not been verified on other operating systems or architectures.
 
@@ -33,9 +34,16 @@ Operation locks coordinate cooperating same-user processes. They do not stop edi
 
 ## Symbol-index persistence
 
-The supported default is memory-only indexing. When `AST_SYMBOL_INDEX_PERSISTENCE` is absent, persistence remains disabled and no persistent cache is created.
+Published v0.8.1 remains memory-default. In the current `Unreleased` line, absence and explicit `enabled` select native SQLite; operators requiring no persistent index state must set `disabled` explicitly:
 
-The only candidate-authorized opt-in persistence policy is `canary`; it is not enabled by default in v0.8.1:
+```bash
+AST_SYMBOL_INDEX_PERSISTENCE=disabled \
+ast-mcp-server
+```
+
+`disabled` selects memory before consulting HOME, XDG or a cache-root override and does not open existing SQLite files. Removing the variable is not rollback in the current line.
+
+Default `enabled` resolves a root from a valid explicit `AST_SYMBOL_INDEX_CACHE_ROOT`, then `${XDG_CACHE_HOME}/ast-mcp-server/symbol-index`, then `${HOME}/.cache/ast-mcp-server/symbol-index`. A present invalid override fails closed; it is not ignored in favor of XDG/HOME. `canary` still requires an explicit absolute normalized root:
 
 ```bash
 AST_SYMBOL_INDEX_PERSISTENCE=canary \
@@ -43,9 +51,16 @@ AST_SYMBOL_INDEX_CACHE_ROOT=/absolute/isolated/cache/root \
 ast-mcp-server
 ```
 
-The cache root must be explicit and absolute. Use a dedicated local directory with permissions appropriate for the invoking user. Node.js 22.5.0 additionally requires `--experimental-sqlite` for this canary path.
+On supported Linux x64, package-created cache directories are `0700`; SQLite main, WAL, SHM and quarantine files are `0600`. The implementation does not chmod pre-existing external parents and fails closed on symbolic, non-regular, multiply linked, wrong-owner, escaped or identity-substituted artifacts. SQLite remains derived data; compiler and synchronized source state remain authority.
 
-`AST_SYMBOL_INDEX_PERSISTENCE=enabled` is reserved and intentionally fails closed to memory-only with `policy_reason: "enabled_not_released"`. Unknown values and invalid/missing canary cache roots also fail closed. Canary evidence authorizes the opt-in capability; it does not authorize global or default activation.
+Inspect or remove only canonical derived artifacts through:
+
+```bash
+ast-tool cache inspect
+ast-tool cache clear --yes
+```
+
+Both commands are bounded and path-free. Clear preflights the tree, refuses unsafe or active SQLite artifacts, rechecks identity before unlink and preserves unknown regular files/directories. There is no automatic garbage collection in this development line.
 
 ## Production-readiness acceptance
 
@@ -74,7 +89,7 @@ Before reporting a compatibility problem, capture:
 - exact `node --version` output and Node binary path;
 - package version;
 - MCP client and transport configuration;
-- whether persistence is disabled or running in explicit canary mode;
+- the requested persistence policy and effective backend (`enabled`, `canary`, or `disabled`; SQLite or memory);
 - the bounded public error code and correlation identifier, if present.
 
 Do not attach source code, absolute project paths, cache contents, credentials, tokens, or private configuration unless they have been intentionally sanitized. Report suspected vulnerabilities through [SECURITY.md](../SECURITY.md), not a public issue.
