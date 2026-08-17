@@ -93,6 +93,18 @@ function requireSha(value) {
   return value;
 }
 
+export async function preparePrivateCanaryRoot(canaryRoot) {
+  await mkdir(canaryRoot, { recursive: true, mode: 0o700 });
+  const created = await lstat(canaryRoot);
+  if (!created.isDirectory() || created.isSymbolicLink()) {
+    fail("harness-owned canary root must be a physical directory.");
+  }
+  await chmod(canaryRoot, 0o700);
+  if (((await lstat(canaryRoot)).mode & 0o777) !== 0o700) {
+    fail("harness-owned canary root must be owner-private.");
+  }
+}
+
 function requireRegistry(value) {
   if (value !== OFFICIAL_REGISTRY) fail(`--registry must be exactly ${OFFICIAL_REGISTRY}.`);
   return value;
@@ -1183,7 +1195,7 @@ async function runOuter(options) {
     await Promise.all([
       mkdir(consumerHome, { recursive: true }),
       mkdir(consumerTemp, { recursive: true }),
-      mkdir(canaryRoot, { recursive: true }),
+      preparePrivateCanaryRoot(canaryRoot),
       createFixture(projectRoot),
       writeFile(
         path.join(consumerRoot, "package.json"),

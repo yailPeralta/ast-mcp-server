@@ -6,7 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.9.0] — local release candidate, pending release (2026-08-16)
+## [0.9.1] — local release candidate, pending release (2026-08-16)
+
+### Fixed
+
+- Public-registry verification now creates and normalizes its harness-owned explicit canary cache root to owner-private `0700`, independent of the runner umask, before exercising the package's fail-closed SQLite storage boundary.
+
+### Release status
+
+- This local recovery candidate is pending exact-tree CI and the repository's separately authorized delivery sequence. It has not been published to npm, assigned to `next` or `latest`, tagged in Git, or released on GitHub; registry and GitHub readbacks remain authoritative.
+
+## [0.9.0] — published to `next`, verification failed, not promoted (2026-08-16)
 
 ### Added
 
@@ -29,7 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release status
 
-- This local candidate is pending exact-tree CI and the repository's separately authorized delivery sequence. It has not been published to npm, assigned to `next` or `latest`, tagged in Git, or released on GitHub; registry and GitHub readbacks remain authoritative.
+- npm published these immutable bytes under `next` with provenance and the expected Git commit. Public-consumer verification stopped because its harness created the explicit canary cache root without guaranteeing owner-private permissions; the package correctly failed closed. Version `0.9.0` was never promoted to `latest`, tagged in Git, or released on GitHub.
 
 ## [0.8.1] — published to `latest` and `next`, registry verified (2026-08-14)
 

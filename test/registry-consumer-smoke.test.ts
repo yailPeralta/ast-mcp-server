@@ -1,4 +1,4 @@
-import { chmod, copyFile, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   createFakeAgents,
+  preparePrivateCanaryRoot,
   preparePreviewApplyReplay,
 } from "../scripts/registry-consumer-smoke.mjs";
 import { detectInstalledAgents } from "../src/services/agent-setup.js";
@@ -110,6 +111,19 @@ describe("registry consumer mutation evidence", () => {
     await Promise.all(
       temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
     );
+  });
+
+  it("normalizes the harness-owned canary root under a permissive umask", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "ast-mcp-registry-canary-mode-"));
+    temporaryRoots.push(root);
+    const canaryRoot = path.join(root, "canary-cache");
+    const previousUmask = process.umask(0o000);
+    try {
+      await preparePrivateCanaryRoot(canaryRoot);
+      expect((await lstat(canaryRoot)).mode & 0o777).toBe(0o700);
+    } finally {
+      process.umask(previousUmask);
+    }
   });
 
   it("reproduces symlink identity collapse and preserves physical copy identities", async () => {

@@ -82,11 +82,11 @@ The included batch benchmark records a 50% reduction in model round-trips and a 
 
 ## Supported environment and trust boundary
 
-The local `0.9.0` release candidate requires Node.js `>=22.13.0`; its evidence matrix targets exact Node.js 22.13.0 and the current Node.js 24 line. Published v0.8.1 retains its immutable historical Node.js 22.5.0/24 evidence. Managed setup-file publication additionally requires GNU coreutils 9.7 `mv` supporting `--update=none-fail`, `--exchange`, `--no-copy`, and `--no-target-directory`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, and `O_DIRECTORY`/`O_NOFOLLOW`. Other Linux architectures or systems without those filesystem primitives, macOS, and Windows remain unverified.
+The local `0.9.1` release candidate requires Node.js `>=22.13.0`; its evidence matrix targets exact Node.js 22.13.0 and the current Node.js 24 line. Published v0.8.1 retains its immutable historical Node.js 22.5.0/24 evidence. Managed setup-file publication additionally requires GNU coreutils 9.7 `mv` supporting `--update=none-fail`, `--exchange`, `--no-copy`, and `--no-target-directory`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, and `O_DIRECTORY`/`O_NOFOLLOW`. Other Linux architectures or systems without those filesystem primitives, macOS, and Windows remain unverified.
 
 This is a local stdio server. It runs with the invoking user's filesystem permissions, and clients may request any `project_root` that user can access. It does not provide HTTP authentication, sandboxing, tenant isolation, or a remote-service security boundary. Remote, untrusted, and multi-tenant operation is unsupported.
 
-In the local `0.9.0` release candidate, an absent `AST_SYMBOL_INDEX_PERSISTENCE` or explicit `enabled` selects the private SQLite symbol-index cache. `disabled` is the immediate memory-only rollback. `canary` requires an explicit absolute normalized `AST_SYMBOL_INDEX_CACHE_ROOT`. Invalid policy or storage fails closed to compiler-authoritative memory reads with bounded path-free status.
+In the local `0.9.1` release candidate, an absent `AST_SYMBOL_INDEX_PERSISTENCE` or explicit `enabled` selects the private SQLite symbol-index cache. `disabled` is the immediate memory-only rollback. `canary` requires an explicit absolute normalized `AST_SYMBOL_INDEX_CACHE_ROOT`. Invalid policy or storage fails closed to compiler-authoritative memory reads with bounded path-free status.
 
 The default cache root is selected from `AST_SYMBOL_INDEX_CACHE_ROOT`, then `XDG_CACHE_HOME`, then `HOME`. Inspect or clear only derived cache artifacts through the bounded CLI:
 
