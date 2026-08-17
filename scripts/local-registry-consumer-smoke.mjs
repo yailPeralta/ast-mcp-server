@@ -943,10 +943,13 @@ async function run(options) {
       await verifySetupIdempotency(consumerRoot, installedRoot, environment, authorities);
 
       const copiedRunner = path.join(consumerRoot, "registry-consumer-smoke.mjs");
-      await copyFile(
-        path.join(repositoryRoot, "scripts", "registry-consumer-smoke.mjs"),
-        copiedRunner,
-      );
+      await Promise.all([
+        copyFile(path.join(repositoryRoot, "scripts", "registry-consumer-smoke.mjs"), copiedRunner),
+        copyFile(
+          path.join(repositoryRoot, "scripts", "registry-consumer-gates.mjs"),
+          path.join(consumerRoot, "registry-consumer-gates.mjs"),
+        ),
+      ]);
       const inner = await execute(
         authorities.node.file,
         [

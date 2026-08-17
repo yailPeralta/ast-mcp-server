@@ -6,7 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.9.1] — local release candidate, pending release (2026-08-16)
+## [0.9.2] — local release candidate, pending release (2026-08-16)
+
+### Fixed
+
+- Public-registry verification now derives both the consumer report and the release-preflight exact-key validator from one canonical SQLite-default gate contract, preventing duplicated fixtures from masking producer/validator drift while preserving fail-closed rejection of missing or unexpected gates.
+
+### Release status
+
+- This local recovery candidate is pending exact-tree CI and the repository's separately authorized delivery sequence. It has not been published to npm, assigned to `next` or `latest`, tagged in Git, or released on GitHub; registry and GitHub readbacks remain authoritative.
+
+## [0.9.1] — published to `next`, verification failed, not promoted (2026-08-16)
 
 ### Fixed
 
@@ -14,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release status
 
-- This local recovery candidate is pending exact-tree CI and the repository's separately authorized delivery sequence. It has not been published to npm, assigned to `next` or `latest`, tagged in Git, or released on GitHub; registry and GitHub readbacks remain authoritative.
+- npm published these immutable bytes under `next` with provenance and the expected Git commit. The public registry consumer passed every package, provenance, SQLite, mutation, and setup gate, including the corrected owner-private canary root; final release preflight then rejected the report because its duplicated exact-key schema still described the earlier memory-default gate set. Version `0.9.1` was never promoted to `latest`, tagged in Git, or released on GitHub.
 
 ## [0.9.0] — published to `next`, verification failed, not promoted (2026-08-16)
 

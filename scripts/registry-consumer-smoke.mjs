@@ -21,9 +21,12 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { applyPatch } from "diff";
 
+import { createPassedRegistryConsumerGates } from "./registry-consumer-gates.mjs";
+
 const execFileAsync = promisify(execFile);
 const scriptPath = fileURLToPath(import.meta.url);
 const scriptDirectory = path.dirname(scriptPath);
+const gateContractPath = path.join(scriptDirectory, "registry-consumer-gates.mjs");
 const repositoryRoot = path.resolve(scriptDirectory, "..");
 const PACKAGE_NAME = "ast-mcp-server";
 const OFFICIAL_REGISTRY = "https://registry.npmjs.org";
@@ -1144,28 +1147,7 @@ async function runInner(
     fail("explicit canary SQLite index artifact is empty or not a unique regular file.");
   }
 
-  return {
-    lifecycle_scripts_disabled: true,
-    package_metadata: true,
-    tarball_integrity: true,
-    audit_signatures: true,
-    consumer_audit: true,
-    stdio_handshake: true,
-    exact_tool_inventory: true,
-    json_read: true,
-    toon_read: true,
-    default_sqlite_rebuild: true,
-    default_restart_hit: true,
-    default_private_cache: true,
-    explicit_disabled_no_cache: true,
-    mutation_only_default_no_cache: true,
-    explicit_canary: true,
-    rename_prepare_preview_apply_replay: true,
-    replace_prepare_preview_apply_replay: true,
-    scaffold_prepare_preview_apply_replay: true,
-    stale_conflict_fail_closed: true,
-    setup_idempotency: true,
-  };
+  return createPassedRegistryConsumerGates();
 }
 
 async function runOuter(options) {
@@ -1290,7 +1272,10 @@ async function runOuter(options) {
 
     await verifySetupIdempotency(consumerRoot, installedPackageRoot);
     const copiedRunner = path.join(consumerRoot, "registry-consumer-smoke.mjs");
-    await copyFile(scriptPath, copiedRunner);
+    await Promise.all([
+      copyFile(scriptPath, copiedRunner),
+      copyFile(gateContractPath, path.join(consumerRoot, "registry-consumer-gates.mjs")),
+    ]);
     const inner = await execute(
       process.execPath,
       [

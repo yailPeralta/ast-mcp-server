@@ -9,6 +9,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { REGISTRY_CONSUMER_GATE_NAMES } from "./registry-consumer-gates.mjs";
+
 const execFileAsync = promisify(execFile);
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PACKAGE_NAME = "ast-mcp-server";
@@ -97,25 +99,6 @@ const REQUIRED_PACK_FILES = Object.freeze([
   "skills/structural-code-editing/guidance.md",
   "skills/structural-code-editing/releases.json",
 ]);
-const CONSUMER_GATES = Object.freeze([
-  "lifecycle_scripts_disabled",
-  "package_metadata",
-  "tarball_integrity",
-  "audit_signatures",
-  "consumer_audit",
-  "stdio_handshake",
-  "exact_tool_inventory",
-  "json_read",
-  "toon_read",
-  "default_no_cache",
-  "explicit_canary",
-  "rename_prepare_preview_apply_replay",
-  "replace_prepare_preview_apply_replay",
-  "scaffold_prepare_preview_apply_replay",
-  "stale_conflict_fail_closed",
-  "setup_idempotency",
-]);
-
 export const OFFICIAL_NPM_REGISTRY = "https://registry.npmjs.org";
 export const RELEASE_MODES = Object.freeze(["publish-next", "verify-next", "promote-latest"]);
 export const PUBLISH_AUTHORIZATION_FILE = "publish-authorization.json";
@@ -641,8 +624,12 @@ export function validateConsumerReport(report, expectedVersion, expectedSha) {
   ) {
     releaseFailure("registry consumer identity or status does not match the release.");
   }
-  const gates = requireExactKeys(object.gates, CONSUMER_GATES, "registry consumer gates");
-  for (const gate of CONSUMER_GATES) {
+  const gates = requireExactKeys(
+    object.gates,
+    REGISTRY_CONSUMER_GATE_NAMES,
+    "registry consumer gates",
+  );
+  for (const gate of REGISTRY_CONSUMER_GATE_NAMES) {
     if (gates[gate] !== true) releaseFailure(`consumer gate ${gate} did not pass.`);
   }
   requireJsonValue(object, "registry consumer report");

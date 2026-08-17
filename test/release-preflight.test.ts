@@ -6,6 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { createPassedRegistryConsumerGates } from "../scripts/registry-consumer-gates.mjs";
 import {
   OFFICIAL_NPM_REGISTRY,
   PROMOTION_AUTHORIZATION_FILE,
@@ -90,24 +92,7 @@ function consumerReport(overrides: Record<string, unknown> = {}): Record<string,
     version: RELEASE_VERSION,
     git_head: RELEASE_SHA,
     registry: OFFICIAL_NPM_REGISTRY,
-    gates: {
-      lifecycle_scripts_disabled: true,
-      package_metadata: true,
-      tarball_integrity: true,
-      audit_signatures: true,
-      consumer_audit: true,
-      stdio_handshake: true,
-      exact_tool_inventory: true,
-      json_read: true,
-      toon_read: true,
-      default_no_cache: true,
-      explicit_canary: true,
-      rename_prepare_preview_apply_replay: true,
-      replace_prepare_preview_apply_replay: true,
-      scaffold_prepare_preview_apply_replay: true,
-      stale_conflict_fail_closed: true,
-      setup_idempotency: true,
-    },
+    gates: createPassedRegistryConsumerGates(),
     ...overrides,
   };
 }
@@ -904,7 +889,7 @@ describe("release preflight", () => {
     }
   });
 
-  it("requires every registry-consumer and signature gate", () => {
+  it("validates the shared registry-consumer contract and every signature gate", () => {
     expect(validateConsumerReport(consumerReport(), RELEASE_VERSION, RELEASE_SHA).status).toBe(
       "pass",
     );
@@ -923,6 +908,18 @@ describe("release preflight", () => {
         RELEASE_SHA,
       ),
     ).toThrow(/consumer gate/u);
+    for (const gates of [
+      { ...createPassedRegistryConsumerGates(), unexpected_gate: true },
+      Object.fromEntries(
+        Object.entries(createPassedRegistryConsumerGates()).filter(
+          ([gate]) => gate !== "setup_idempotency",
+        ),
+      ),
+    ]) {
+      expect(() =>
+        validateConsumerReport({ ...consumerReport(), gates }, RELEASE_VERSION, RELEASE_SHA),
+      ).toThrow(/reviewed keys/u);
+    }
     expect(() =>
       validateAuditSignaturesReport({ ...auditReport(), exit_code: 1 }, OFFICIAL_NPM_REGISTRY),
     ).toThrow(/audit signatures/u);
