@@ -24,8 +24,10 @@ import {
 } from "../scripts/local-registry-consumer-smoke.mjs";
 
 const temporaryDirectories: string[] = [];
+const runtimeNodeExecutable = process.execPath;
 
 afterEach(async () => {
+  process.execPath = runtimeNodeExecutable;
   await Promise.all(
     temporaryDirectories
       .splice(0)
@@ -54,9 +56,11 @@ async function javascriptEntry(file: string, version: string, label: string): Pr
 }
 
 async function authorityFixture(root: string) {
+  const sourceNodeExecutable = process.execPath;
   const authorityHome = path.join(root, "authority-home");
   const authorityTemp = path.join(root, "authority-tmp");
   const trustedBin = path.join(root, "trusted-bin");
+  const directNodeBin = path.join(root, "direct-node");
   const transitiveNodeBin = path.join(trustedBin, "node");
   const yarnEntry = path.join(root, "yarn.js");
   const npmEntry = path.join(root, "npm-cli.js");
@@ -69,8 +73,12 @@ async function authorityFixture(root: string) {
     javascriptEntry(yarnEntry, "4.15.0", "trusted-yarn"),
     javascriptEntry(npmEntry, expectedNpm, "trusted-npm"),
   ]);
-  await copyFile(process.execPath, transitiveNodeBin);
-  await chmod(transitiveNodeBin, 0o700);
+  await Promise.all([
+    copyFile(sourceNodeExecutable, directNodeBin),
+    copyFile(sourceNodeExecutable, transitiveNodeBin),
+  ]);
+  await Promise.all([chmod(directNodeBin, 0o700), chmod(transitiveNodeBin, 0o700)]);
+  process.execPath = directNodeBin;
   return {
     roots: { home: authorityHome, temp: authorityTemp },
     options: {
@@ -78,7 +86,7 @@ async function authorityFixture(root: string) {
       yarnEntry,
       npmEntry,
       transitiveNodeBin,
-      expectedNodeSha256: await digest(process.execPath),
+      expectedNodeSha256: await digest(directNodeBin),
       expectedYarnSha256: await digest(yarnEntry),
       expectedNpmSha256: await digest(npmEntry),
     },
@@ -145,6 +153,23 @@ describe("local registry consumer smoke contract", () => {
     expect(() => assertLocalRegistryRuntime("24", "24.16.0", "--inspect")).toThrow(
       /NODE_OPTIONS must be empty/u,
     );
+  });
+
+  it("creates private Node authorities from a group-writable source executable", async () => {
+    const root = await temporaryDirectory("ast-local-registry-node-mode-");
+    const sourceNode = path.join(root, "source-node");
+    const originalExecPath = process.execPath;
+    await copyFile(originalExecPath, sourceNode);
+    await chmod(sourceNode, 0o770);
+    process.execPath = sourceNode;
+    try {
+      const fixture = await authorityFixture(root);
+      await expect(
+        authenticateLocalRegistryAuthorities(fixture.options, fixture.roots),
+      ).resolves.toBeDefined();
+    } finally {
+      process.execPath = originalExecPath;
+    }
   });
 
   it("binds direct and transitive execution independently of hostile PATH entries", async () => {
