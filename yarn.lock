@@ -350,21 +350,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@toon-format/toon@npm:4.1.0":
-  version: 4.1.0
-  resolution: "@toon-format/toon@npm:4.1.0"
-  checksum: 10c0/a7a177deb9fb69cdefb2201a233d8c416b749417ffde92de04fd55ef94f7189342c2af7258736d0e131cf6539c8808950edeb67c3e3097244636a1ce59455916
+"@toon-format/toon@npm:4.1.1":
+  version: 4.1.1
+  resolution: "@toon-format/toon@npm:4.1.1"
+  checksum: 10c0/d107626fabd779fd8c41c8041c6f7cadc56f11c7a023adc50a794dc8bb0852ad52f4140bb1fe0a143b7a3229467e00c51787c303d2f2dd83d700a72e4e4eeedb
   languageName: node
   linkType: hard
 
-"@ts-morph/common@npm:~0.25.0":
-  version: 0.25.0
-  resolution: "@ts-morph/common@npm:0.25.0"
+"@ts-morph/common@npm:~0.29.0":
+  version: 0.29.0
+  resolution: "@ts-morph/common@npm:0.29.0"
   dependencies:
-    minimatch: "npm:^9.0.4"
+    minimatch: "npm:^10.0.1"
     path-browserify: "npm:^1.0.1"
-    tinyglobby: "npm:^0.2.9"
-  checksum: 10c0/c67e66db678e44886e9823e6482834acebfae0ea52ccbfa2af1ca9abfe5a9774dad6e852c8f480909bc196175f17e15454af71d7a41a1c137db09e74f046a830
+    tinyglobby: "npm:^0.2.14"
+  checksum: 10c0/97ab8ca66558b817e5475a8893ee1476ab760a3ac71fa9868413d95ddbaaf909eda81716e3a8d14291cbf449e624af66de81bcddd3ec2e36525728b4edf5e8ee
   languageName: node
   linkType: hard
 
@@ -727,18 +727,18 @@ __metadata:
   dependencies:
     "@eslint/js": "npm:^10.0.1"
     "@modelcontextprotocol/sdk": "npm:^1.12.0"
-    "@toon-format/toon": "npm:4.1.0"
+    "@toon-format/toon": "npm:4.1.1"
     "@types/node": "npm:^22.5.0"
     diff: "npm:^9.0.0"
     eslint: "npm:^10.8.0"
     gpt-tokenizer: "npm:3.4.0"
     jsonc-parser: "npm:^3.3.1"
     prettier: "npm:^3.9.6"
-    ts-morph: "npm:24.0.0"
+    ts-morph: "npm:28.0.0"
     typescript: "npm:^5.6.0"
     typescript-eslint: "npm:^8.65.0"
     vitest: "npm:^4.1.10"
-    zod: "npm:^3.23.8"
+    zod: "npm:^4.4.3"
   bin:
     ast-mcp-server: dist/index.js
     ast-tool: dist/cli.js
@@ -756,13 +756,6 @@ __metadata:
   version: 1.0.0
   resolution: "async-generator-function@npm:1.0.0"
   checksum: 10c0/2c50ef856c543ad500d8d8777d347e3c1ba623b93e99c9263ecc5f965c1b12d2a140e2ab6e43c3d0b85366110696f28114649411cbcd10b452a92a2318394186
-  languageName: node
-  linkType: hard
-
-"balanced-match@npm:^1.0.0":
-  version: 1.0.2
-  resolution: "balanced-match@npm:1.0.2"
-  checksum: 10c0/9308baf0a7e4838a82bbfd11e01b1cb0f0cf2893bc1676c27c2a8c0e70cbae1c59120c3268517a8ae7fb6376b4639ef81ca22582611dbee4ed28df945134aaee
   languageName: node
   linkType: hard
 
@@ -787,15 +780,6 @@ __metadata:
     raw-body: "npm:^3.0.2"
     type-is: "npm:^2.1.0"
   checksum: 10c0/2a8fbbdc471b588338555a3e1a597d1eb0ad0c21cf20fdc3bac5d3f8d9c3a4b19b4163575ab852a43a5dfc0df7770ced5284f979e561f1a24c2f851ce89e695a
-  languageName: node
-  linkType: hard
-
-"brace-expansion@npm:^2.0.2":
-  version: 2.1.4
-  resolution: "brace-expansion@npm:2.1.4"
-  dependencies:
-    balanced-match: "npm:^1.0.0"
-  checksum: 10c0/6c0a0e2573eac1dc565b52b1e1bfbeba39bf1830d106ebbc61ff1eaefcf610e9111cd3baa091addd18e33292135c99e019d3184d966389d85dc958fdcdc1449f
   languageName: node
   linkType: hard
 
@@ -1808,21 +1792,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"minimatch@npm:^10.2.2, minimatch@npm:^10.2.4, minimatch@npm:^10.2.5":
+"minimatch@npm:^10.0.1, minimatch@npm:^10.2.2, minimatch@npm:^10.2.4, minimatch@npm:^10.2.5":
   version: 10.2.6
   resolution: "minimatch@npm:10.2.6"
   dependencies:
     brace-expansion: "npm:^5.0.8"
   checksum: 10c0/4559a836243b98bd4d17ea9f7edae698717c76399eea7be374f3737f33164e4907f19e9726891ddeb122f750a5a7fa80d2ac43e851d6e5984dc4ff42ec127d3a
-  languageName: node
-  linkType: hard
-
-"minimatch@npm:^9.0.4":
-  version: 9.0.9
-  resolution: "minimatch@npm:9.0.9"
-  dependencies:
-    brace-expansion: "npm:^2.0.2"
-  checksum: 10c0/0b6a58530dbb00361745aa6c8cffaba4c90f551afe7c734830bd95fd88ebf469dd7355a027824ea1d09e37181cfeb0a797fb17df60c15ac174303ac110eb7e86
   languageName: node
   linkType: hard
 
@@ -2375,7 +2350,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tinyglobby@npm:^0.2.12, tinyglobby@npm:^0.2.15, tinyglobby@npm:^0.2.17, tinyglobby@npm:^0.2.9":
+"tinyglobby@npm:^0.2.12, tinyglobby@npm:^0.2.14, tinyglobby@npm:^0.2.15, tinyglobby@npm:^0.2.17":
   version: 0.2.17
   resolution: "tinyglobby@npm:0.2.17"
   dependencies:
@@ -2408,13 +2383,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ts-morph@npm:24.0.0":
-  version: 24.0.0
-  resolution: "ts-morph@npm:24.0.0"
+"ts-morph@npm:28.0.0":
+  version: 28.0.0
+  resolution: "ts-morph@npm:28.0.0"
   dependencies:
-    "@ts-morph/common": "npm:~0.25.0"
+    "@ts-morph/common": "npm:~0.29.0"
     code-block-writer: "npm:^13.0.3"
-  checksum: 10c0/2a0813ba428a154966d4038901f6c32457a60870936b23778f2629433257f87d1881fc4ecae7b791a223a88c2edf96aaac9fb0f88bf34d3c652af8c09c4f43bc
+  checksum: 10c0/969570a5e983b4193735fff43878ce7b78787b4860bf3d23f330c86d7de707286969e5a82d486dce333eea27bf9d373a46f9de58a80c0bf86d2a462620563a55
   languageName: node
   linkType: hard
 
@@ -2713,14 +2688,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:^3.23.8":
-  version: 3.25.76
-  resolution: "zod@npm:3.25.76"
-  checksum: 10c0/5718ec35e3c40b600316c5b4c5e4976f7fee68151bc8f8d90ec18a469be9571f072e1bbaace10f1e85cf8892ea12d90821b200e980ab46916a6166a4260a983c
-  languageName: node
-  linkType: hard
-
-"zod@npm:^3.25 || ^4.0":
+"zod@npm:^3.25 || ^4.0, zod@npm:^4.4.3":
   version: 4.4.3
   resolution: "zod@npm:4.4.3"
   checksum: 10c0/7ea31b558e88f9faf44f31dd185e2e1cbf51fed3081787fb96cc2534749b50c0acfc6da7f0922a7353ed092dd358c7d50c28ea96c94d04af64191bd33152eca3
