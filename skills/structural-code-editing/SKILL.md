@@ -73,7 +73,7 @@ Los errores públicos de las tools MCP usan un vocabulario cerrado dentro de `{ 
 
 `ast_get_file` es read-only y solo acepta archivos incluidos por el tsconfig activo. Su modo normal devuelve líneas exactas, paginadas y numeradas desde 1, junto con el hash SHA-256 de los bytes actuales. `symbols_only: true` devuelve selectors y signatures sin cuerpos. `snapshot_state: "fresh"` describe sincronización con el snapshot del compilador, no ausencia de diagnostics; consultar `ast_get_diagnostics` por separado.
 
-`ast_explore` es read-only y no prepara ni aplica operaciones. Sus selectors son directamente reutilizables por las tools primitivas y de mutación. La respuesta declara `freshness`, `completeness`, `truncation`, `unresolved` y `budget`; si el límite de bytes impide incluir todo el contexto, el resultado queda marcado como incompleto.
+`ast_explore` es read-only y no prepara ni aplica operaciones. Sus selectors son directamente reutilizables por las tools primitivas y de mutación. La respuesta admite clusters completos dentro de `max_bytes`, nunca corta source, referencias ni paths, y clasifica lo omitido como `budget`, `incomplete` o `untrusted`. Para un `file_path + symbol_path` exacto, `call_spines` puede pedir paths estáticos de invocación compiler-resolved; no representa stacks de runtime ni relabela referencias genéricas. Ausencia de la opción no ejecuta ese recorrido.
 
 ## Modelo de confianza y freshness
 
@@ -116,6 +116,7 @@ Cuando un pipeline conocido requiere varias llamadas MCP dependientes y el clien
 - Mantener paginación y filtros: batch elimina roundtrips, no vuelve razonable leer un monorepo entero.
 - No generar JavaScript/eval dentro del documento; el contrato es declarativo y limitado.
 - `ast_find_test_candidates` está admitida como lectura: el batch inyecta el `project_root` del pipeline, rechaza conflictos y conserva candidatos completos al paginar. JSON y el TOON final representan el mismo resultado lógico del handler MCP registrado.
+- `ast_explore` también está admitida como lectura mediante el handler MCP registrado. Mantener `max_bytes` y los límites de spines explícitos; los intermediates son JSON y solo el resultado final puede serializarse como TOON.
 
 `ast-tool validate pipeline.json` valida schema, orden de referencias y política sin cargar el proyecto. Límites por defecto: 50 steps, 500 invocaciones, 200 items por foreach, concurrencia 4 (máximo 16), input 1 MiB, 10 MiB por resultado retenido/output y 50 MiB de contexto intermedio acumulado. Los errores del CLI permanecen como JSON en stderr aunque el output exitoso solicitado sea TOON.
 

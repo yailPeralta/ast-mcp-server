@@ -19,11 +19,31 @@
       "source_file": "src/shared.ts",
       "symbol_path": "benchmarkTarget",
       "full_files": ["src/shared.ts", "src/use.ts"],
+      "include_references": true,
       "required_evidence": [
         "export function benchmarkTarget",
         "import { benchmarkTarget }",
         "benchmarkTarget(42)"
       ],
+      "accepted_call_bound": 2
+    },
+    {
+      "id": "exact_static_call_spine",
+      "description": "Return benchmarkTarget source plus its authoritative incoming static call path.",
+      "query": "benchmarkTarget",
+      "source_file": "src/shared.ts",
+      "symbol_path": "benchmarkTarget",
+      "full_files": ["src/shared.ts", "src/use.ts"],
+      "include_references": true,
+      "required_evidence": ["export function benchmarkTarget", "benchmarkTarget(42)"],
+      "required_explore_evidence": ["call_spines", "authority_state", "relationship_ids"],
+      "explore_arguments": {
+        "file_path": "src/shared.ts",
+        "symbol_path": "benchmarkTarget",
+        "detail": "full",
+        "call_spines": { "direction": "incoming" },
+        "max_bytes": 8192
+      },
       "accepted_call_bound": 2
     }
   ]
