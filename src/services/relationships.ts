@@ -1673,6 +1673,117 @@ export function createCompilerRelationshipResolver(
   };
 }
 
+function callLikeExpression(node: Node): Node | undefined {
+  if (Node.isCallExpression(node) || Node.isNewExpression(node)) return node.getExpression();
+  if (Node.isTaggedTemplateExpression(node)) return node.getTag();
+  return undefined;
+}
+
+function unwrapInvocationExpression(node: Node): Node {
+  let current = node;
+  while (
+    Node.isParenthesizedExpression(current) ||
+    Node.isNonNullExpression(current) ||
+    Node.isAsExpression(current) ||
+    Node.isTypeAssertion(current) ||
+    Node.isSatisfiesExpression(current)
+  ) {
+    current = current.getExpression();
+  }
+  return current;
+}
+
+function locatedCallTarget(projectRoot: string, declaration: Node): LocatedSymbol | undefined {
+  if (Node.isParameterDeclaration(declaration) || Node.isMethodSignature(declaration))
+    return undefined;
+  const sourceFile = declaration.getSourceFile();
+  if (!isProjectScopedFile(projectRoot, sourceFile.getFilePath())) return undefined;
+  const targetNode = Node.isConstructorDeclaration(declaration)
+    ? declaration.getFirstAncestorByKind(SyntaxKind.ClassDeclaration)
+    : declaration;
+  if (!targetNode) return undefined;
+  return (
+    collectSymbols(sourceFile).find((symbol) => symbol.node === targetNode) ??
+    containingSymbol(sourceFile, targetNode)
+  );
+}
+
+export function collectCompilerCallRelationships(
+  project: Project,
+  projectRoot: string,
+  freshness: FreshnessMetadata,
+  options: { readonly max_edges?: number; readonly max_work_items?: number } = {},
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+) {
+  const maxEdges = options.max_edges ?? 5_000;
+  const maxWorkItems = options.max_work_items ?? 100_000;
+  if (!Number.isSafeInteger(maxEdges) || maxEdges < 1) {
+    throw new Error("Compiler call max_edges must be a positive safe integer.");
+  }
+  if (!Number.isSafeInteger(maxWorkItems) || maxWorkItems < 1) {
+    throw new Error("Compiler call max_work_items must be a positive safe integer.");
+  }
+
+  const normalizedFreshness = normalizeFreshness(freshness);
+  const checker = project.getTypeChecker();
+  const edges = new Map<string, RelationshipEdge>();
+  let workItems = 0;
+  let workLimitReached = false;
+  for (const sourceFile of project
+    .getSourceFiles()
+    .sort((left, right) => left.getFilePath().localeCompare(right.getFilePath()))) {
+    sourceFile.forEachDescendant((node, traversal) => {
+      requestContext.checkpoint();
+      if (++workItems > maxWorkItems) {
+        workLimitReached = true;
+        traversal.stop();
+        return;
+      }
+      const expression = callLikeExpression(node);
+      if (!expression) return;
+      const invoked = unwrapInvocationExpression(expression);
+      const caller = containingSymbol(sourceFile, node);
+      if (!caller) return;
+      const signature = checker.getResolvedSignature(node as never);
+      const implicitConstructSignatures = Node.isNewExpression(node)
+        ? invoked.getType().getConstructSignatures()
+        : [];
+      if (!signature && implicitConstructSignatures.length !== 1) return;
+      const signatureDeclaration = signature?.getDeclaration();
+      const declarations = declarationsForSymbol(invoked.getSymbol());
+      const targets = new Map<string, LocatedSymbol>();
+      for (const declaration of declarations.length > 0
+        ? declarations
+        : signatureDeclaration
+          ? [signatureDeclaration]
+          : []) {
+        const target = locatedCallTarget(projectRoot, declaration);
+        if (target) targets.set(symbolEndpoint(target, projectRoot).selector, target);
+      }
+      if (targets.size !== 1) return;
+      const target = [...targets.values()][0];
+      const edge = createRelationshipEdge({
+        source: symbolEndpoint(caller, projectRoot),
+        target: symbolEndpoint(target, projectRoot),
+        kind: "call",
+        provenance: "compiler",
+        confidence: "exact",
+        resolution: "resolved",
+        freshness: normalizedFreshness,
+      });
+      edges.set(edge.relationship_id, edge);
+    });
+    if (workLimitReached) break;
+  }
+  const ordered = [...edges.values()].sort((left, right) =>
+    left.relationship_id.localeCompare(right.relationship_id),
+  );
+  return Object.freeze({
+    edges: Object.freeze(ordered.slice(0, maxEdges)),
+    incomplete: workLimitReached || ordered.length > maxEdges,
+  });
+}
+
 export function collectCompilerRelationships(
   project: Project,
   projectRoot: string,

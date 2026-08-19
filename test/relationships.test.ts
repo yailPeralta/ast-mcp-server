@@ -2,6 +2,7 @@ import path from "node:path";
 import { Project } from "ts-morph";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  collectCompilerCallRelationships,
   collectCompilerRelationships,
   createRelationshipEdge,
   type RelationshipEdge,
@@ -191,5 +192,36 @@ describe("compiler-backed relationships", () => {
       ),
     ).toBe(false);
     expect(edges.every((candidate) => candidate.provenance === "compiler")).toBe(true);
+  });
+
+  it("classifies only compiler-resolved call, constructor, and tagged-template sites", async () => {
+    const fixture = await createProjectFixture({
+      "src/targets.ts":
+        "export function target(): void {}\nexport class Box {}\nexport function tag(parts: TemplateStringsArray): string { return parts[0]; }",
+      "src/use.ts":
+        'import { Box, tag, target } from "./targets.js";\ntype Target = typeof target;\nfunction accepts(_callback: () => void): void {}\nexport function caller(dynamic: unknown): void {\n  (((target! as () => void)))();\n  new (Box)();\n  (tag)`value`;\n  const value: Target = target;\n  accepts(target);\n  if (typeof dynamic === "function") dynamic();\n  void value;\n}',
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+
+    const calls = collectCompilerCallRelationships(project, fixture.root, freshness());
+    const callerCalls = calls.edges.filter((edge) => edge.source.symbol_path === "caller");
+    expect(callerCalls.map((edge) => edge.target.symbol_path).sort()).toEqual([
+      "Box",
+      "accepts",
+      "tag",
+      "target",
+    ]);
+    expect(callerCalls.filter((edge) => edge.target.symbol_path === "target")).toHaveLength(1);
+    expect(callerCalls.every((edge) => edge.kind === "call" && edge.compiler_authoritative)).toBe(
+      true,
+    );
+    expect(calls.incomplete).toBe(false);
+
+    const generic = collectCompilerRelationships(project, fixture.root, freshness());
+    expect(generic.map((edge) => `${edge.kind}:${edge.target.symbol_path}`)).toContain(
+      "reference:target",
+    );
+    expect(generic.some((edge) => edge.kind === "call")).toBe(false);
   });
 });
