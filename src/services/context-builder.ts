@@ -1,8 +1,9 @@
-import { Buffer } from "node:buffer";
 import path from "node:path";
 import { Node, type SourceFile } from "ts-morph";
 import { buildFileOutline, nodeSourceWithLocation, type OutlineSymbol } from "./outline.js";
 import { paginate, type Page } from "./pagination.js";
+import { resolveImpactRoot } from "./impact.js";
+import { planCallSpines, type CallSpineDirection, type CallSpineResult } from "./call-spines.js";
 import {
   isCooperativeInterruption,
   NO_REQUEST_CONTEXT,
@@ -15,6 +16,8 @@ import {
   type ProjectContext,
 } from "./project.js";
 import { collectSymbolReferences, type SymbolReferences } from "./references.js";
+import { collectCompilerCallRelationships } from "./relationships.js";
+import { presentExploreClusters, type ExploreOmission } from "./explore-presentation.js";
 import {
   searchProjectSymbolsPage,
   searchProjectSymbolsPageWithIndex,
@@ -28,6 +31,8 @@ export const EXPLORE_DEFAULT_LIMIT = 20;
 export const EXPLORE_DEFAULT_REFERENCE_LIMIT = 20;
 export const EXPLORE_DEFAULT_MAX_BYTES = 64 * 1024;
 export const EXPLORE_MAX_BYTES = 1024 * 1024;
+export const EXPLORE_DEFAULT_OMISSION_DETAIL_LIMIT = 20;
+export const EXPLORE_MAX_OMISSION_DETAIL_LIMIT = 100;
 
 export type ExploreDetail = "selectors" | "summary" | "context" | "full";
 export type ExploreRoute = "query" | "file" | "symbol";
@@ -46,6 +51,13 @@ export interface ExploreRequest {
   readonly limit: number;
   readonly referenceLimit: number;
   readonly maxBytes: number;
+  readonly callSpines?: {
+    readonly direction: CallSpineDirection;
+    readonly maxDepth: number;
+    readonly maxNodes: number;
+    readonly maxEdges: number;
+  };
+  readonly omissionDetailLimit?: number;
 }
 
 export interface ExploreSymbol {
@@ -82,6 +94,8 @@ export interface ExploreResult {
   readonly total: number;
   readonly has_more: boolean;
   readonly next_offset: number | null;
+  readonly omissions: ReturnType<typeof presentExploreClusters>["omissions"];
+  readonly call_spines?: CallSpineResult;
   readonly freshness: {
     readonly state: SnapshotState;
     readonly causes: readonly FreshnessCause[];
@@ -91,6 +105,7 @@ export interface ExploreResult {
     readonly complete: boolean;
     readonly symbols_complete: boolean;
     readonly evidence_complete: boolean;
+    readonly spines_complete?: boolean;
     readonly unresolved: readonly ExploreUnresolvedItem[];
   };
   readonly budget: {
@@ -282,10 +297,6 @@ function projectSymbol(detail: ExploreDetail, record: ProjectSymbolRecord): Expl
   };
 }
 
-function jsonBytes(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify(value), "utf8");
-}
-
 function effectiveExpansion(request: ExploreRequest): { source: boolean; references: boolean } {
   return {
     source: request.includeSource ?? (request.detail === "context" || request.detail === "full"),
@@ -306,6 +317,39 @@ export async function buildExploreContext(
   const expansion = effectiveExpansion(request);
   const unresolved: ExploreUnresolvedItem[] = [];
   const evidence: ExploreEvidence[] = [];
+  let callSpines: CallSpineResult | undefined;
+
+  if (request.callSpines) {
+    if (!request.filePath || !request.symbolPath || routed.route !== "symbol") {
+      throw new Error("Call spines require an exact file_path and symbol_path.");
+    }
+    const freshness = {
+      state: effectiveContext.status.state,
+      causes: effectiveContext.status.causes,
+      checked_at: effectiveContext.status.lastSuccessfulSyncAt,
+    };
+    const root = resolveImpactRoot(
+      effectiveContext.project,
+      effectiveContext.projectRoot,
+      { file_path: request.filePath, symbol_path: request.symbolPath },
+      requestContext,
+    );
+    const projected = collectCompilerCallRelationships(
+      effectiveContext.project,
+      effectiveContext.projectRoot,
+      freshness,
+      { max_edges: request.callSpines.maxEdges },
+      requestContext,
+    );
+    callSpines = planCallSpines(root, projected.edges, {
+      direction: request.callSpines.direction,
+      max_depth: request.callSpines.maxDepth,
+      max_nodes: request.callSpines.maxNodes,
+      max_edges: request.callSpines.maxEdges,
+      discovery_complete: !projected.incomplete,
+      freshness,
+    });
+  }
 
   for (const record of page.items) {
     requestContext.checkpoint();
@@ -355,55 +399,79 @@ export async function buildExploreContext(
   }
 
   const symbols = page.items.map((record) => projectSymbol(request.detail, record));
-  let returnedSymbols = [...symbols];
-  let returnedEvidence = [...evidence];
-  let reason: TruncationReason | null = page.has_more ? "record_limit" : null;
-  let result = createResult(
-    effectiveContext,
-    request,
-    routed.route,
-    routed.file,
-    routed.symbol,
-    returnedSymbols,
-    returnedEvidence,
-    page.total,
-    unresolved,
-    reason,
-  );
-
-  while (
-    jsonBytes(result) > request.maxBytes &&
-    (returnedEvidence.length > 0 || returnedSymbols.length > 0)
-  ) {
-    requestContext.checkpoint();
-    reason = "byte_limit";
-    if (returnedEvidence.length > 0) {
-      returnedEvidence = returnedEvidence.slice(0, -1);
-    } else {
-      returnedSymbols = returnedSymbols.slice(0, -1);
-      const selectors = new Set(returnedSymbols.map((symbol) => symbol.selector));
-      returnedEvidence = returnedEvidence.filter((item) => selectors.has(item.selector));
-    }
-    result = createResult(
+  const initialResult = {
+    ...createResult(
       effectiveContext,
       request,
       routed.route,
       routed.file,
       routed.symbol,
-      returnedSymbols,
-      returnedEvidence,
+      symbols,
+      evidence,
       page.total,
       unresolved,
-      reason,
-    );
-  }
-
-  requestContext.checkpoint();
-  const usedBytes = jsonBytes(result);
-  return {
-    ...result,
-    budget: { ...result.budget, used_bytes: usedBytes },
+      page.has_more ? "record_limit" : null,
+    ),
+    ...(callSpines ? { call_spines: callSpines } : {}),
   };
+  const evidenceBySelector = new Map(evidence.map((item) => [item.selector, item]));
+  const omissions: ExploreOmission[] = unresolved.map((item) => ({
+    subject: item.selector,
+    category: "incomplete",
+    component: item.reason === "source_unresolved" ? "source" : "references",
+    reason: item.reason,
+  }));
+  for (const item of evidence) {
+    if (item.references?.has_more) {
+      omissions.push({
+        subject: item.selector,
+        category: "budget",
+        component: "references",
+        reason: "reference_limit",
+      });
+    }
+  }
+  if (callSpines?.authority_state === "untrusted") {
+    omissions.push({
+      subject: callSpines.root.selector,
+      category: "untrusted",
+      component: "call_spine",
+      reason: "non_exact_evidence",
+    });
+  } else if (callSpines?.authority_state === "incomplete") {
+    omissions.push({
+      subject: callSpines.root.selector,
+      category: "incomplete",
+      component: "call_spine",
+      reason: "call_discovery_incomplete",
+    });
+  }
+  if (callSpines) {
+    for (const reason of callSpines.truncation_reasons) {
+      omissions.push({
+        subject: callSpines.root.selector,
+        category: "budget",
+        component: "call_spine",
+        reason,
+      });
+    }
+  }
+  requestContext.checkpoint();
+  return presentExploreClusters({
+    base: initialResult,
+    clusters: symbols.map((symbol) => ({
+      symbol,
+      evidence: evidenceBySelector.get(symbol.selector),
+    })),
+    offset: request.offset,
+    limit: request.limit,
+    total: page.total,
+    maxBytes: request.maxBytes,
+    omissions,
+    omissionDetailLimit: request.omissionDetailLimit ?? EXPLORE_DEFAULT_OMISSION_DETAIL_LIMIT,
+    spinesComplete: callSpines ? !callSpines.incomplete : undefined,
+    unresolved,
+  });
 }
 
 function createResult(
@@ -417,7 +485,7 @@ function createResult(
   total: number,
   unresolved: readonly ExploreUnresolvedItem[],
   reason: TruncationReason | null,
-): ExploreResult {
+): Omit<ExploreResult, "omissions"> {
   const hasMore = request.offset + symbols.length < total;
   const nextOffset = hasMore ? request.offset + symbols.length : null;
   const expansion = effectiveExpansion(request);
