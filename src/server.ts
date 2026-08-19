@@ -10,6 +10,7 @@ import { PublicOperationalError } from "./services/public-errors.js";
 import type { RuntimeActivityTracker } from "./services/runtime-activity.js";
 import { registerApplyOperation } from "./tools/apply_operation.js";
 import { registerFindReferences } from "./tools/find_references.js";
+import { registerFindTestCandidates } from "./tools/find_test_candidates.js";
 import { registerGetDiagnostics } from "./tools/get_diagnostics.js";
 import { registerGetFile } from "./tools/get_file.js";
 import { registerGetImpact } from "./tools/get_impact.js";
@@ -81,6 +82,7 @@ export function createServer(options: CreateServerOptions = {}): McpServer {
   registerSearchSymbols(server);
   registerFindReferences(server);
   registerGetImpact(server);
+  registerFindTestCandidates(server);
   registerGetDiagnostics(server);
   registerGetFile(server);
   registerRenameSymbol(server);
