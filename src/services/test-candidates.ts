@@ -7,6 +7,7 @@ export const DEFAULT_TEST_DIRECTORIES = Object.freeze(["test", "tests", "__tests
 export const TEST_CANDIDATE_REASONS = Object.freeze([
   "direct_compiler_reference",
   "transitive_compiler_reference",
+  "convention_match",
 ] as const);
 export type TestCandidateReason = (typeof TEST_CANDIDATE_REASONS)[number];
 
@@ -184,7 +185,15 @@ function edgeOrder(left: RelationshipEdge, right: RelationshipEdge): number {
   );
 }
 
-function candidateReason(depth: number): TestCandidateReason {
+function candidateReason(file: string, depth: number): TestCandidateReason {
+  if (
+    !isTestFile(file, {
+      patterns: DEFAULT_TEST_FILE_PATTERNS,
+      directories: DEFAULT_TEST_DIRECTORIES,
+    })
+  ) {
+    return "convention_match";
+  }
   return depth === 1 ? "direct_compiler_reference" : "transitive_compiler_reference";
 }
 
@@ -291,7 +300,7 @@ export function findTestCandidates(
       const depth = candidate.depth;
       return {
         file,
-        reason: candidateReason(depth),
+        reason: candidateReason(file, depth),
         confidence: candidateConfidence(depth),
         evidence: {
           depth,
