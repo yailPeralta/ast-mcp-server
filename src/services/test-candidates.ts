@@ -33,8 +33,8 @@ export interface TestCandidate {
   readonly evidence: TestCandidateEvidence;
 }
 
-const MAX_CONVENTION_ITEMS = 32;
-const MAX_CONVENTION_LENGTH = 256;
+export const MAX_TEST_CANDIDATE_CONVENTION_ITEMS = 32;
+export const MAX_TEST_CANDIDATE_CONVENTION_LENGTH = 256;
 
 function normalizeConventionValues(
   values: readonly string[] | undefined,
@@ -42,16 +42,20 @@ function normalizeConventionValues(
   label: string,
 ): readonly string[] {
   const selected = values ?? defaults;
-  if (!Array.isArray(selected) || selected.length > MAX_CONVENTION_ITEMS) {
-    throw new Error(`${label} must contain at most ${MAX_CONVENTION_ITEMS} entries.`);
+  if (!Array.isArray(selected) || selected.length > MAX_TEST_CANDIDATE_CONVENTION_ITEMS) {
+    throw new Error(
+      `${label} must contain at most ${MAX_TEST_CANDIDATE_CONVENTION_ITEMS} entries.`,
+    );
   }
 
   const normalized = selected.map((value) => {
     if (typeof value !== "string" || value.trim().length === 0) {
       throw new Error(`${label} entries must be non-empty strings.`);
     }
-    if (value.length > MAX_CONVENTION_LENGTH) {
-      throw new Error(`${label} entries must not exceed ${MAX_CONVENTION_LENGTH} characters.`);
+    if (value.length > MAX_TEST_CANDIDATE_CONVENTION_LENGTH) {
+      throw new Error(
+        `${label} entries must not exceed ${MAX_TEST_CANDIDATE_CONVENTION_LENGTH} characters.`,
+      );
     }
     return value.trim().replaceAll("\\", "/");
   });
