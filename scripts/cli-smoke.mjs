@@ -210,6 +210,14 @@ try {
     path.join(fixtureRoot, "src/use.ts"),
     'import { formatValue } from "./value.js";\nexport const result = formatValue(42);\n',
   );
+  await writeFile(
+    path.join(fixtureRoot, "src/value.test.ts"),
+    'import { formatValue } from "./value.js";\nexport const direct = formatValue(1);\n',
+  );
+  await writeFile(
+    path.join(fixtureRoot, "src/transitive.test.ts"),
+    'import { result } from "./use.js";\nexport const transitive = result;\n',
+  );
 
   await mkdir(cacheRoot, { mode: 0o700 });
   const cacheKey = "a".repeat(64);
@@ -339,6 +347,49 @@ try {
   const explicitJson = await invoke(["run", readPipelineFile, "--output-format", "json"]);
   if (explicitJson.invocation_count !== 2 || !explicitJson.result?.text?.includes("formatValue")) {
     throw new Error(`Unexpected explicit JSON output: ${JSON.stringify(explicitJson)}`);
+  }
+
+  const candidatePipelineFile = path.join(fixtureRoot, "candidate-pipeline.json");
+  await writeFile(
+    candidatePipelineFile,
+    JSON.stringify({
+      version: 1,
+      project_root: fixtureRoot,
+      steps: [
+        {
+          id: "candidates",
+          tool: "ast_find_test_candidates",
+          input: {
+            file_path: "src/value.ts",
+            symbol_path: "formatValue",
+            max_depth: 2,
+            offset: 0,
+            limit: 1,
+          },
+        },
+      ],
+      emit: { $ref: "#/steps/candidates" },
+    }),
+  );
+  const candidateJson = await invoke(["run", candidatePipelineFile]);
+  const candidateToon = decode(
+    await invokeRaw(["run", "--output-format", "toon", candidatePipelineFile]),
+  );
+  const logicalCandidateJson = JSON.stringify(candidateJson.result, (key, value) =>
+    key === "checked_at" ? "<timestamp>" : value,
+  );
+  const logicalCandidateToon = JSON.stringify(candidateToon.result, (key, value) =>
+    key === "checked_at" ? "<timestamp>" : value,
+  );
+  if (
+    candidateJson.result?.total !== 2 ||
+    candidateJson.result?.candidates?.[0]?.file !== "src/value.test.ts" ||
+    candidateJson.result?.candidates?.[0]?.evidence?.relationships?.length !== 1 ||
+    logicalCandidateToon !== logicalCandidateJson
+  ) {
+    throw new Error(
+      `Unexpected candidate batch parity: ${JSON.stringify({ candidateJson, candidateToon })}`,
+    );
   }
 
   for (const invalidArgs of [

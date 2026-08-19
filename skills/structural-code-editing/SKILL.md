@@ -1,7 +1,7 @@
 ---
 name: structural-code-editing
 description: Leer, navegar y editar proyectos TypeScript/JavaScript mediante el resolver real del compilador y operaciones AST preparadas, revisadas y vinculadas por hash.
-version: "4.3.0"
+version: "4.4.0"
 author: "yail"
 license: "ISC"
 metadata:
@@ -86,7 +86,7 @@ No tratar toda salida como evidencia equivalente. Cuando una relación expone me
 
 `fresh` significa que la evidencia coincide con el snapshot sincronizado. `pending`, `rebuilding`, `stale` y `degraded` no deben presentarse como evidencia actual. Las respuestas preservan `causes` (`source_change`, `config_change`, `index_failure`, `watcher_failure`, `compiler_rebuild`) y `checked_at`. `ast_get_impact` rechaza relaciones que no estén fresh; `ast_explore` conserva `completeness`, `unresolved`, `budget` y `truncation` para que una lectura parcial no parezca un negativo.
 
-El resolver interno de candidatos de tests solo acepta impacto fresh y exacto, devuelve evidencia de relación directa o transitiva con IDs bounded y no ejecuta tests. Si la relación es stale, está truncada, es ambigua o solo heurística, no genera candidatos.
+`ast_find_test_candidates` resuelve un símbolo exacto, fuerza impacto entrante y solo acepta evidencia fresh, exacta, resuelta y compiler-authoritative. Devuelve candidatos directos, transitivos o por convención con IDs y paths de relación completos; no ejecuta tests. Evidencia stale, truncada, incompleta, ambigua, heurística o no autoritativa falla cerrada. Solo un recorrido completo puede devolver una página vacía marcada `proven_empty`.
 
 Todos los reads son bounded. Respetar `limit`, `reference_limit`, `max_bytes`, y en impacto `max_depth`, `max_nodes` y `max_edges`; revisar siempre `budget` y `truncation` antes de razonar sobre ausencia. Los límites de batch son independientes y también deben mantenerse explícitos.
 
@@ -115,6 +115,7 @@ Cuando un pipeline conocido requiere varias llamadas MCP dependientes y el clien
 - Definir `emit` para que los resultados intermedios no entren al contexto.
 - Mantener paginación y filtros: batch elimina roundtrips, no vuelve razonable leer un monorepo entero.
 - No generar JavaScript/eval dentro del documento; el contrato es declarativo y limitado.
+- `ast_find_test_candidates` está admitida como lectura: el batch inyecta el `project_root` del pipeline, rechaza conflictos y conserva candidatos completos al paginar. JSON y el TOON final representan el mismo resultado lógico del handler MCP registrado.
 
 `ast-tool validate pipeline.json` valida schema, orden de referencias y política sin cargar el proyecto. Límites por defecto: 50 steps, 500 invocaciones, 200 items por foreach, concurrencia 4 (máximo 16), input 1 MiB, 10 MiB por resultado retenido/output y 50 MiB de contexto intermedio acumulado. Los errores del CLI permanecen como JSON en stderr aunque el output exitoso solicitado sea TOON.
 

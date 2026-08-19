@@ -428,7 +428,7 @@ async function verifySetupIdempotency(consumerRoot, installedPackageRoot) {
     claudeSkill !== packagedSkill ||
     hermesSkill !== packagedSkill ||
     packagedGuidance.includes("ast-tool:structural-code-editing guidance") ||
-    JSON.parse(packagedReleases).current?.version !== "4.3.0"
+    JSON.parse(packagedReleases).current?.version !== "4.4.0"
   ) {
     fail("installed setup did not preserve all bundled managed assets.");
   }

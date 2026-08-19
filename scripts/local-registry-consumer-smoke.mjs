@@ -598,7 +598,7 @@ async function verifySetupIdempotency(
     hermesSkill !== packagedSkill ||
     packagedGuidance.includes("ast-tool:structural-code-editing guidance") ||
     object(parseJson(packagedReleases, "packaged skill release manifest"), "release manifest")
-      .current?.version !== "4.3.0"
+      .current?.version !== "4.4.0"
   ) {
     fail("Installed setup did not preserve all bundled managed assets.");
   }
