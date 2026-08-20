@@ -204,7 +204,7 @@ try {
     !installedChangelog.includes(`## [${releaseMetadata.version}]`) ||
     !packagedSkill.includes("name: structural-code-editing") ||
     packagedGuidance.includes("ast-tool:structural-code-editing guidance") ||
-    JSON.parse(packagedReleases).current?.version !== "4.3.0"
+    JSON.parse(packagedReleases).current?.version !== "4.4.0"
   ) {
     throw new Error("installed tarball release metadata is incomplete");
   }

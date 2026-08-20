@@ -25,16 +25,17 @@ Coding agents often fall back to two generic operations: read files as plain tex
 
 This MCP server gives the agent structural code tools in addition to generic file reads and writes. Under the hood, `ts-morph` uses the TypeScript compiler project model, so the server can reason about declarations and references as code rather than undifferentiated text.
 
-| Need                           | Structural operation      | Returned scope                                             |
-| ------------------------------ | ------------------------- | ---------------------------------------------------------- |
-| Read a bounded file            | `ast_get_file`            | Exact selected source lines, hashes, and bounded freshness |
-| Explore bounded context        | `ast_explore`             | Ranked selectors plus optional source and references       |
-| Understand a file              | `ast_get_outline`         | Signatures without implementation bodies                   |
-| Inspect one declaration        | `ast_get_symbol_source`   | Exact source for one function, method, class, or type      |
-| Find usages across the project | `ast_find_references`     | Compiler-resolved reference locations                      |
-| Understand symbol impact       | `ast_get_impact`          | Bounded direct/transitive compiler-backed relationships    |
-| Rename a symbol everywhere     | `ast_rename_symbol`       | A reviewed project-wide rename plan                        |
-| Change one implementation      | `ast_replace_symbol_body` | A body-only plan that preserves the declaration            |
+| Need                           | Structural operation       | Returned scope                                              |
+| ------------------------------ | -------------------------- | ----------------------------------------------------------- |
+| Read a bounded file            | `ast_get_file`             | Exact selected source lines, hashes, and bounded freshness  |
+| Explore bounded context        | `ast_explore`              | Ranked selectors plus optional source and references        |
+| Understand a file              | `ast_get_outline`          | Signatures without implementation bodies                    |
+| Inspect one declaration        | `ast_get_symbol_source`    | Exact source for one function, method, class, or type       |
+| Find usages across the project | `ast_find_references`      | Compiler-resolved reference locations                       |
+| Understand symbol impact       | `ast_get_impact`           | Bounded direct/transitive compiler-backed relationships     |
+| Select affected tests          | `ast_find_test_candidates` | Whole candidate proofs from incoming compiler relationships |
+| Rename a symbol everywhere     | `ast_rename_symbol`        | A reviewed project-wide rename plan                         |
+| Change one implementation      | `ast_replace_symbol_body`  | A body-only plan that preserves the declaration             |
 
 Reads can start with a bounded file slice, a compact outline, or exact source only for the declaration that needs inspection. Mutations are prepared in memory first, compared against baseline diagnostics, and returned as immutable, hash-bound plans. Nothing is written until the caller reviews and explicitly applies the plan.
 
@@ -46,6 +47,7 @@ Reads can start with a bounded file slice, a compact outline, or exact source on
 - Use `ast_get_outline` for a compact body-free view of a known file without source lines.
 - Use `ast_get_symbol_source` when one declaration or implementation is the required evidence.
 - Use `ast_get_impact` when the exact symbol is known and bounded direct/transitive compiler relationships are needed; it is read-only evidence, not a mutation plan.
+- Use `ast_find_test_candidates` when an exact symbol should map to conservative test candidates. It forces incoming compiler traversal, returns complete relationship paths, and never executes tests.
 
 `snapshot_state: "fresh"` means that the returned file bytes match the synchronized compiler snapshot. The separate `freshness` object describes the project/session state and preserves causes such as source changes or watcher failure. Neither field means that the project has zero TypeScript diagnostics; use `ast_get_diagnostics` for compiler errors and warnings.
 
@@ -62,7 +64,7 @@ The server exposes evidence labels instead of collapsing every result into an un
 
 Freshness is orthogonal to TypeScript diagnostics. `fresh` means the evidence matches the synchronized snapshot; `pending`, `rebuilding`, `stale`, or `degraded` means the response must not be presented as current compiler evidence. Read tools expose the state, causes (`source_change`, `config_change`, `index_failure`, `watcher_failure`, or `compiler_rebuild`), and bounded `checked_at` timestamp. `ast_get_impact` refuses non-fresh compiler relationships. `ast_explore` returns the state together with `completeness`, `unresolved`, `budget`, and `truncation` metadata rather than silently dropping evidence.
 
-All reads are budgeted. Callers control pagination and, where applicable, `max_bytes`, `reference_limit`, `max_depth`, `max_nodes`, and `max_edges`; responses report the effective limits and whether a record, byte, depth, edge, invocation, or serialization limit truncated the result. A truncated or unresolved result is incomplete evidence, not an empty negative result. The internal test-candidate resolver follows the same rule: it accepts only fresh, exact compiler-backed impact, emits direct/transitive evidence and bounded relationship IDs, and never executes tests or guesses from filenames alone.
+All reads are budgeted. Callers control pagination and, where applicable, `max_bytes`, `reference_limit`, `max_depth`, `max_nodes`, and `max_edges`; responses report the effective limits and whether a record, byte, depth, edge, invocation, or serialization limit truncated the result. A truncated or unresolved result is incomplete evidence, not an empty negative result. `ast_find_test_candidates` follows the same rule: it accepts only fresh, exact compiler-backed impact, emits direct/transitive evidence and bounded relationship IDs, and never executes tests or guesses from filenames alone. Only a complete authoritative traversal may return `candidates: []` with `proven_empty: true`.
 
 ## Why this helps
 
@@ -298,6 +300,7 @@ Project-scoped tools accept `project_root`, either the project directory or an e
 | `ast_search_symbols`        | Paginated structural symbol discovery                                | No            |
 | `ast_find_references`       | Compiler-resolved references with bounded context                    | No            |
 | `ast_get_impact`            | Bounded incoming/outgoing compiler-backed impact evidence            | No            |
+| `ast_find_test_candidates`  | Paginated affected tests with atomic compiler relationship proofs    | No            |
 | `ast_get_diagnostics`       | Project- or file-scoped TypeScript diagnostics                       | No            |
 | `ast_rename_symbol`         | Prepare a project-wide rename                                        | No            |
 | `ast_replace_symbol_body`   | Prepare a body-only replacement while preserving the signature       | No            |
@@ -356,6 +359,8 @@ Example search-to-source pipeline:
 ```
 
 A `$ref` is an RFC 6901 JSON Pointer rooted at prior step results. References cannot point forward. If `emit` is omitted, only the final step result is returned; intermediate results remain inside the process.
+
+`ast_find_test_candidates` is admitted as a read step. The batch runner injects the pipeline `project_root`, rejects a conflicting step root, and invokes the same registered MCP implementation. Candidate pagination keeps each relationship path whole; final JSON and TOON differ only in serialization, not logical evidence.
 
 ### Bounded foreach
 
