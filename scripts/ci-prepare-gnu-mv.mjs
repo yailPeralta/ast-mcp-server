@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 export const GNU_MV_SOURCE = Object.freeze({
   version: "9.7",
   url: "https://mirrors.kernel.org/gnu/coreutils/coreutils-9.7.tar.xz",
+  fallbackUrl: "https://ftp.gnu.org/gnu/coreutils/coreutils-9.7.tar.xz",
   sha256: "e8bb26ad0293f9b5a1fc43fb42ba970e312c66ce92c1b0b16713d7500db251bf",
   maximumBytes: 8 * 1024 * 1024,
 });
@@ -31,6 +32,12 @@ const systemMvPath = "/usr/bin/mv";
 const commandTimeoutMs = 10 * 60 * 1000;
 const buildTimeoutMs = 25 * 60 * 1000;
 const maximumCapturedBytes = 64 * 1024;
+const maximumDownloadAttemptsPerSource = 2;
+const transientCurlExitCodes = new Set([5, 6, 7, 18, 28, 35, 52, 55, 56, 92]);
+const downloadSources = Object.freeze([
+  Object.freeze({ label: "primary", url: GNU_MV_SOURCE.url }),
+  Object.freeze({ label: "official-gnu", url: GNU_MV_SOURCE.fallbackUrl }),
+]);
 
 function fail(message) {
   throw new Error(`CI GNU mv preparation failed: ${message}`);
@@ -92,8 +99,8 @@ async function readRegularFile(filePath) {
   return readFile(filePath);
 }
 
-async function downloadSource(archivePath) {
-  await runProcess(
+async function runCurlDownload({ archivePath, url }) {
+  return runProcess(
     "/usr/bin/curl",
     [
       "--fail",
@@ -114,14 +121,45 @@ async function downloadSource(archivePath) {
       String(GNU_MV_SOURCE.maximumBytes),
       "--output",
       archivePath,
-      GNU_MV_SOURCE.url,
+      url,
     ],
-    { timeoutMs: 150_000 },
+    { allowFailure: true, capture: true, timeoutMs: 150_000 },
   );
-  const persisted = await readRegularFile(archivePath);
-  if (createHash("sha256").update(persisted).digest("hex") !== GNU_MV_SOURCE.sha256) {
-    fail("persisted GNU source SHA-256 does not match the pin.");
+}
+
+function isTransientDownloadFailure(result) {
+  return (
+    result.signal !== null ||
+    (typeof result.code === "number" && transientCurlExitCodes.has(result.code))
+  );
+}
+
+function downloadFailureSummary(source, attempts, result) {
+  return `${source.label} attempts=${String(attempts)} code=${String(result.code)} signal=${result.signal ?? "none"}`;
+}
+
+export async function acquireGnuMvArchive(archivePath, attemptDownload = runCurlDownload) {
+  const failures = [];
+  for (const source of downloadSources) {
+    let attempts = 0;
+    let lastResult;
+    while (attempts < maximumDownloadAttemptsPerSource) {
+      attempts += 1;
+      await rm(archivePath, { force: true });
+      lastResult = await attemptDownload({ archivePath, label: source.label, url: source.url });
+      if (lastResult.code === 0 && lastResult.signal === null) {
+        const persisted = await readRegularFile(archivePath);
+        if (createHash("sha256").update(persisted).digest("hex") !== GNU_MV_SOURCE.sha256) {
+          fail("persisted GNU source SHA-256 does not match the pin.");
+        }
+        return;
+      }
+      await rm(archivePath, { force: true });
+      if (!isTransientDownloadFailure(lastResult)) break;
+    }
+    failures.push(downloadFailureSummary(source, attempts, lastResult));
   }
+  fail(`all pinned HTTPS sources failed: ${failures.join("; ")}.`);
 }
 
 async function assertFileAbsent(filePath) {
@@ -231,7 +269,7 @@ export async function prepareGnuMv() {
   const buildRoot = await mkdtemp(path.join(runnerTemp, "ast-coreutils-build-"));
   try {
     const archivePath = path.join(buildRoot, `coreutils-${GNU_MV_SOURCE.version}.tar.xz`);
-    await downloadSource(archivePath);
+    await acquireGnuMvArchive(archivePath);
     await runProcess("/usr/bin/tar", ["-xJf", archivePath, "-C", buildRoot]);
     const sourceRoot = path.join(buildRoot, `coreutils-${GNU_MV_SOURCE.version}`);
     const sourceStat = await lstat(sourceRoot);
