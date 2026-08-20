@@ -19,7 +19,7 @@ The explicit final-state handoff is authoritative over intermediate snapshots:
 - Independent strict-TDD verification is persisted in the OpenSpec `verify-report.md` and Engram observation `#1047`.
 - Final verdict: `pass_with_warnings`; blockers `0`; critical findings `0`; requirements `7/7`; scenarios `11/11`; tasks `12/12`.
 - Evidence revision: `sha256:dd8e241a1f3a982dce87ca443057cb78de86967db811c03e1b6184b9232f5ba9`.
-- Verify-report SHA-256: `0ac80a1c9fd24ce2cc69ab293f55d4d449802a22713956fb0bcf54f39cb208f3`; `21019` bytes; OpenSpec and Engram mirrors were identical.
+- Verify-report SHA-256: `344bff627f677b148b3ed39b5df910dedb7778f54959d68cab5f11490be11a93`; `21017` bytes; OpenSpec and Engram mirrors were identical.
 - Focused `33/33`, batch `15/15`, full suite `50 files/718 tests`, format, lint, typecheck, build, exact 16-tool MCP, lifecycle, CLI, errors, and package gates passed.
 - One nonblocking warning remains: three pre-existing AST diagnostic-session TS1470 findings on unchanged `import.meta`; canonical typecheck and build pass.
 - Native attempt settle returned `state: complete`.
