@@ -759,7 +759,10 @@ export function formatValue(value: number): string { return String(value); }
       }),
     );
     expect(custom.candidates).toEqual([
-      expect.objectContaining({ file: "src/checks/value.check.ts" }),
+      expect.objectContaining({
+        file: "src/checks/value.check.ts",
+        reason: "convention_match",
+      }),
     ]);
 
     const empty = structured(

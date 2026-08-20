@@ -149,13 +149,34 @@ describe("test candidate resolver", () => {
 
     expect(
       findTestCandidates(impactFixture({ testFile: "checks/service.fixture.ts" }), conventions),
-    ).toHaveLength(1);
+    ).toEqual([
+      expect.objectContaining({
+        file: "checks/service.fixture.ts",
+        reason: "convention_match",
+      }),
+    ]);
     expect(
       findTestCandidates(impactFixture({ testFile: "fixtures/service.fixture.ts" }), conventions),
     ).toEqual([]);
     expect(
       findTestCandidates(impactFixture({ testFile: "checks/service.check.ts" }), conventions),
-    ).toHaveLength(1);
+    ).toEqual([
+      expect.objectContaining({
+        file: "checks/service.check.ts",
+        reason: "convention_match",
+      }),
+    ]);
+
+    const overlappingConventions: TestCandidateConventions = {
+      test_file_patterns: ["**/*.test.*", "**/*.check.ts"],
+      test_directories: [],
+    };
+    expect(findTestCandidates(impactFixture(), overlappingConventions)[0]?.reason).toBe(
+      "direct_compiler_reference",
+    );
+    expect(
+      findTestCandidates(impactFixture({ intermediate: true }), overlappingConventions)[0]?.reason,
+    ).toBe("transitive_compiler_reference");
   });
 
   it("enforces exported convention count and length bounds", () => {
