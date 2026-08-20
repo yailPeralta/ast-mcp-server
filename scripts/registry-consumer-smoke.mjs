@@ -47,6 +47,7 @@ const EXPECTED_TOOLS = Object.freeze([
   "ast_search_symbols",
   "ast_find_references",
   "ast_get_impact",
+  "ast_find_test_candidates",
   "ast_get_diagnostics",
   "ast_get_file",
   "ast_rename_symbol",
@@ -849,7 +850,7 @@ async function runInner(
     const tools = await defaultConnection.client.listTools();
     const toolNames = tools.tools.map(({ name }) => name);
     if (JSON.stringify(toolNames) !== JSON.stringify(EXPECTED_TOOLS)) {
-      fail("exact 15-tool inventory does not match.");
+      fail("exact 16-tool inventory does not match.");
     }
     const status = structured(
       await defaultConnection.client.callTool({

@@ -50,6 +50,7 @@ const EXPECTED_TOOLS = [
   "ast_get_symbol_source",
   "ast_search_symbols",
   "ast_find_references",
+  "ast_find_test_candidates",
   "ast_get_diagnostics",
   "ast_rename_symbol",
   "ast_replace_symbol_body",

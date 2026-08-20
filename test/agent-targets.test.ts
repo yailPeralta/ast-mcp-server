@@ -82,9 +82,23 @@ describe("agent target registry", () => {
       ],
       context,
     );
+    const legacyHermes = await inspectAgentFixture(
+      "hermes",
+      [
+        { exitCode: 0, stdout: "ast stdio all enabled", stderr: "" },
+        {
+          exitCode: 0,
+          stdout:
+            "ast_list_files ast_get_outline ast_get_symbol_source ast_search_symbols ast_find_references ast_get_diagnostics ast_rename_symbol ast_replace_symbol_body ast_scaffold_class ast_get_operation_preview ast_apply_operation",
+          stderr: "",
+        },
+      ],
+      context,
+    );
 
     expect(codex).toEqual({ status: "current" });
     expect(copilot).toEqual({ status: "current" });
+    expect(legacyHermes).toMatchObject({ status: "conflict" });
     expect(copilotUnknown).toMatchObject({ status: "error", operation: "MCP inspection" });
   });
 
@@ -137,7 +151,7 @@ describe("agent target registry", () => {
     expect(
       hermes.mcp.registrationAccepted({
         exitCode: 0,
-        stdout: "✓ Saved 'ast' (15/15 tools enabled)",
+        stdout: "✓ Saved 'ast' (16/16 tools enabled)",
         stderr: "",
       }),
     ).toBe(true);

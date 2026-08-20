@@ -66,6 +66,32 @@ function publicFailure(result: Awaited<ReturnType<Client["callTool"]>>): {
   return parsed.error;
 }
 
+async function addCandidateFixtures(fixture: ProjectFixture): Promise<void> {
+  const files = {
+    "src/another.test.ts": `import { formatValue } from "./value.js";\nexport const anotherTestValue = formatValue(1);\n`,
+    "src/value.test.ts": `import { formatValue } from "./value.js";\nexport const directTestValue = formatValue(2);\n`,
+    "src/transitive.test.ts": `import { result } from "./use.js";\nexport const transitiveTestValue = result;\n`,
+    "src/checks/value.check.ts": `import { formatValue } from "../value.js";\nexport const customTestValue = formatValue(3);\n`,
+  };
+  await Promise.all(Object.entries(files).map(([file, content]) => fixture.write(file, content)));
+}
+
+function callCandidates(
+  client: Client,
+  fixture: ProjectFixture,
+  argumentsOverride: Record<string, unknown> = {},
+) {
+  return client.callTool({
+    name: "ast_find_test_candidates",
+    arguments: {
+      project_root: fixture.root,
+      file_path: "src/value.ts",
+      symbol_path: "formatValue",
+      ...argumentsOverride,
+    },
+  });
+}
+
 describe("MCP integration", () => {
   let client: Client;
   let server: McpServer;
@@ -405,6 +431,7 @@ export function formatValue(value: number): string { return String(value); }
       "ast_search_symbols",
       "ast_find_references",
       "ast_get_impact",
+      "ast_find_test_candidates",
       "ast_get_diagnostics",
       "ast_get_file",
       "ast_rename_symbol",
@@ -667,6 +694,116 @@ export function formatValue(value: number): string { return String(value); }
     expect(impact).not.toHaveProperty("operation_id");
     expect(impact).not.toHaveProperty("plan_hash");
     expect(impact).not.toHaveProperty("edits");
+  });
+
+  it("finds exact compiler-backed test candidates with bounded trust metadata", async () => {
+    await addCandidateFixtures(fixture);
+    const tools = await client.listTools();
+    const registered = tools.tools.find((tool) => tool.name === "ast_find_test_candidates");
+    expect(registered).toMatchObject({
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    });
+    expect(registered?.inputSchema.properties).toMatchObject({
+      max_depth: { default: 3, maximum: 32 },
+      max_nodes: { default: 100, maximum: 1000 },
+      max_edges: { default: 200, maximum: 5000 },
+      offset: { default: 0 },
+      limit: { default: 100, maximum: 500 },
+    });
+    expect(Object.keys(registered?.inputSchema.properties ?? {})).not.toEqual(
+      expect.arrayContaining(["direction", "relationship_kinds", "impact", "output_format"]),
+    );
+
+    const candidates = structured(await callCandidates(client, fixture));
+    expect(candidates).toMatchObject({
+      backend: "typescript_compiler",
+      compiler_authoritative: true,
+      root: { file: "src/value.ts", symbol_path: "formatValue", selector: "formatValue@2" },
+      direction: "incoming",
+      max_depth: 3,
+      max_nodes: 100,
+      max_edges: 200,
+      incomplete: false,
+      truncation: { truncated: false, reason: null },
+      completeness: { complete: true, proven_empty: false },
+      freshness: { state: "fresh", causes: [], checked_at: expect.any(String) },
+      offset: 0,
+      limit: 100,
+      total: 3,
+      has_more: false,
+      next_offset: null,
+    });
+    const summary = (candidates.candidates as Array<Record<string, unknown>>).map((candidate) => [
+      candidate.file,
+      candidate.reason,
+      (candidate.evidence as { depth: number }).depth,
+    ]);
+    expect(summary).toEqual([
+      ["src/another.test.ts", "direct_compiler_reference", 1],
+      ["src/value.test.ts", "direct_compiler_reference", 1],
+      ["src/transitive.test.ts", "transitive_compiler_reference", 2],
+    ]);
+    expect(candidates).not.toHaveProperty("operation_id");
+    expect(candidates).not.toHaveProperty("plan_hash");
+    expect(candidates).not.toHaveProperty("edits");
+
+    const custom = structured(
+      await callCandidates(client, fixture, {
+        test_file_patterns: ["**/*.check.ts"],
+        test_directories: [],
+      }),
+    );
+    expect(custom.candidates).toEqual([
+      expect.objectContaining({ file: "src/checks/value.check.ts" }),
+    ]);
+
+    const empty = structured(
+      await callCandidates(client, fixture, { symbol_path: "formatValueHelper" }),
+    );
+    expect(empty).toMatchObject({
+      candidates: [],
+      total: 0,
+      completeness: { complete: true, proven_empty: true },
+    });
+  });
+
+  it("fails closed before pagination and keeps candidate proofs atomic", async () => {
+    await addCandidateFixtures(fixture);
+    const incomplete = publicFailure(await callCandidates(client, fixture, { max_nodes: 1 }));
+    expect(incomplete).toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
+
+    const missing = publicFailure(
+      await callCandidates(client, fixture, { symbol_path: "missingSymbol" }),
+    );
+    expect(missing).toMatchObject({ code: "NOT_FOUND" });
+
+    const maximums = structured(
+      await callCandidates(client, fixture, {
+        max_depth: 32,
+        max_nodes: 1000,
+        max_edges: 5000,
+        offset: 2,
+        limit: 1,
+      }),
+    );
+    expect(maximums).toMatchObject({
+      max_depth: 32,
+      max_nodes: 1000,
+      max_edges: 5000,
+      offset: 2,
+      limit: 1,
+      total: 3,
+      candidates: [expect.objectContaining({ file: "src/transitive.test.ts" })],
+    });
+    const proof = (maximums.candidates as Array<{ evidence: Record<string, unknown[]> }>)[0]!
+      .evidence;
+    expect(proof.relationship_ids).toHaveLength(2);
+    expect(proof.relationships).toHaveLength(2);
   });
 
   it("falls back to compiler search when an indexed candidate is stale", async () => {

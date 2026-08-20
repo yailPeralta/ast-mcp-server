@@ -105,12 +105,13 @@ try {
   const listed = await client.listTools();
   const names = listed.tools.map((tool) => tool.name).sort();
   if (
-    names.length !== 15 ||
+    names.length !== 16 ||
     !names.includes("ast_list_files") ||
     !names.includes("ast_get_project_status") ||
     !names.includes("ast_get_file") ||
     !names.includes("ast_explore") ||
     !names.includes("ast_get_impact") ||
+    !names.includes("ast_find_test_candidates") ||
     !names.includes("ast_scaffold_class") ||
     !names.includes("ast_apply_operation")
   ) {
