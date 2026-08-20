@@ -14,6 +14,7 @@ export const PUBLIC_ERROR_CODES = Object.freeze([
   "NOT_FOUND",
   "AMBIGUOUS_TARGET",
   "STALE_WORKSPACE",
+  "INCOMPLETE_EVIDENCE",
   "MUTATION_BLOCKED",
   "CONFLICT",
   "INTERNAL_ERROR",
@@ -39,6 +40,7 @@ const FIXED_PUBLIC_MESSAGES: Readonly<Record<PublicErrorCode, string>> = Object.
   NOT_FOUND: "The requested target was not found.",
   AMBIGUOUS_TARGET: "The requested target is ambiguous.",
   STALE_WORKSPACE: "The workspace changed. Retry the operation.",
+  INCOMPLETE_EVIDENCE: "The required compiler evidence is incomplete.",
   MUTATION_BLOCKED: "The mutation is blocked.",
   CONFLICT: "The operation conflicts with current state.",
   INTERNAL_ERROR: INTERNAL_ERROR_MESSAGE,
@@ -81,6 +83,10 @@ const LEGACY_MESSAGE_RULES: ReadonlyArray<{
       /^(?:Workspace changed\b|Project (?:configuration|source) changed during synchronization\.)/,
   },
   {
+    code: "INCOMPLETE_EVIDENCE",
+    pattern: /^Compiler-backed impact evidence is incomplete\.$/,
+  },
+  {
     code: "CONFLICT",
     pattern:
       /^(?:Conflict:|Plan hash mismatch\b|Persisted plan integrity mismatch\b|Operation id collision\b|Applied receipt conflict\b|Postimage recovery conflict\b|Operation target already exists\b|Another AST apply holds\b)/,
@@ -93,7 +99,7 @@ const LEGACY_MESSAGE_RULES: ReadonlyArray<{
   {
     code: "INVALID_INPUT",
     pattern:
-      /^(?:File path traversal is not allowed\.|Windows absolute paths are not valid on this host\.|Source file resolves outside the configured project root\.|Unsupported (?:UTF-16|non-UTF-8) source encoding\b|Persisted (?:operation|applied operation|prepared operation|project_root|original hash|updated hash|affected_files|diagnostic error delta|blocked status)\b|Scaffold file_path must\b|.{0,1024} is not a valid TypeScript identifier\.|.{0,1024} must (?:be|not)\b|.{0,1024} requires\b|.{0,1024} exceeds \d+ characters\.)/,
+      /^(?:File path traversal is not allowed\.|Windows absolute paths are not valid on this host\.|Source file resolves outside the configured project root\.|Unsupported (?:UTF-16|non-UTF-8) source encoding\b|Persisted (?:operation|applied operation|prepared operation|project_root|original hash|updated hash|affected_files|diagnostic error delta|blocked status)\b|Scaffold file_path must\b|.{0,1024} is not a valid TypeScript identifier\.|.{0,1024} must (?:be|not|contain)\b|.{0,1024} requires\b|.{0,1024} exceeds \d+ characters\.)/,
   },
 ]);
 
