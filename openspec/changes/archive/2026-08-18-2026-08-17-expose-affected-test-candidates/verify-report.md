@@ -16,8 +16,10 @@ build_output_hash: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca49599
 
 # Verification Report
 
-**Change**: `2026-08-17-expose-affected-test-candidates`  
-**Mode**: Strict TDD  
+**Change**: `2026-08-17-expose-affected-test-candidates`
+
+**Mode**: Strict TDD
+
 **Verdict**: **PASS WITH WARNINGS** — all seven requirements and eleven scenarios are compliant. The prior convention-reason blocker is corrected and independently verified.
 
 ## Completeness
