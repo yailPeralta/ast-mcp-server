@@ -9,8 +9,15 @@ import { createProjectFixture, type ProjectFixture } from "./helpers/project-fix
 
 type ExplorePayload = {
   truncation: { truncated: boolean; reason: string | null };
-  completeness: { complete: boolean; symbols_complete: boolean };
+  completeness: { complete: boolean; symbols_complete: boolean; spines_complete?: boolean };
   budget: { max_bytes: number; used_bytes: number };
+  omissions: {
+    counts: Array<{ category: string; component: string; count: number }>;
+    details: Array<{ subject: string; category: string; component: string; reason: string }>;
+    total: number;
+    has_more: boolean;
+  };
+  call_spines?: unknown;
   symbols: unknown[];
   total: number;
   has_more: boolean;
@@ -53,6 +60,40 @@ describe("ast_explore", () => {
     clearProjectSessions();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it("publishes additive call-spine and omission controls without changing defaults", async () => {
+    const result = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: { project_root: fixture.root, query: "targetValue" },
+      }),
+    );
+    expect(result).not.toHaveProperty("call_spines");
+    expect(result.completeness).not.toHaveProperty("spines_complete");
+    expect(result.omissions).toEqual({ counts: [], details: [], total: 0, has_more: false });
+
+    const invalid = await client.callTool({
+      name: "ast_explore",
+      arguments: {
+        project_root: fixture.root,
+        query: "targetValue",
+        call_spines: { direction: "incoming" },
+      },
+    });
+    expect(invalid.isError).toBe(true);
+
+    const overLimit = await client.callTool({
+      name: "ast_explore",
+      arguments: {
+        project_root: fixture.root,
+        file_path: "src/value.ts",
+        symbol_path: "targetValue",
+        call_spines: { max_depth: 33, max_nodes: 1001, max_edges: 5001 },
+        omission_detail_limit: 101,
+      },
+    });
+    expect(overLimit.isError).toBe(true);
   });
 
   it("continues direct and composed query tools across the 10,000-result boundary", async () => {

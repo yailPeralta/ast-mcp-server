@@ -4,9 +4,20 @@ import {
   buildExploreContext,
   EXPLORE_DEFAULT_LIMIT,
   EXPLORE_DEFAULT_MAX_BYTES,
+  EXPLORE_DEFAULT_OMISSION_DETAIL_LIMIT,
   EXPLORE_DEFAULT_REFERENCE_LIMIT,
   EXPLORE_MAX_BYTES,
+  EXPLORE_MAX_OMISSION_DETAIL_LIMIT,
 } from "../services/context-builder.js";
+import {
+  DEFAULT_IMPACT_MAX_DEPTH,
+  DEFAULT_IMPACT_MAX_EDGES,
+  DEFAULT_IMPACT_MAX_NODES,
+  MAX_IMPACT_DEPTH,
+  MAX_IMPACT_EDGES,
+  MAX_IMPACT_NODES,
+} from "../services/impact.js";
+import { EXPLORE_OMISSION_REASONS } from "../services/explore-presentation.js";
 import { createPaginationInputSchema } from "../services/pagination.js";
 import { withProject } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
@@ -16,9 +27,16 @@ import {
   TRUNCATION_REASONS,
 } from "../services/read-contracts.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
+import { RelationshipEndpointSchema } from "./relationship-schema.js";
 
 const ExploreDetailSchema = z.enum(["selectors", "summary", "context", "full"]).default("summary");
 const ReferenceDetailSchema = z.enum(["locations", "context"]).default("locations");
+const CallSpinesInputSchema = z.object({
+  direction: z.enum(["incoming", "outgoing"]).default("outgoing"),
+  max_depth: z.number().int().min(0).max(MAX_IMPACT_DEPTH).default(DEFAULT_IMPACT_MAX_DEPTH),
+  max_nodes: z.number().int().min(1).max(MAX_IMPACT_NODES).default(DEFAULT_IMPACT_MAX_NODES),
+  max_edges: z.number().int().min(1).max(MAX_IMPACT_EDGES).default(DEFAULT_IMPACT_MAX_EDGES),
+});
 
 const ExploreInputSchema = z
   .object({
@@ -63,6 +81,16 @@ const ExploreInputSchema = z
       .max(EXPLORE_MAX_BYTES)
       .default(EXPLORE_DEFAULT_MAX_BYTES)
       .describe("Maximum serialized logical result size in UTF-8 bytes."),
+    call_spines: CallSpinesInputSchema.optional().describe(
+      "Optional compiler-authoritative static call paths for an exact file_path and symbol_path.",
+    ),
+    omission_detail_limit: z
+      .number()
+      .int()
+      .min(0)
+      .max(EXPLORE_MAX_OMISSION_DETAIL_LIMIT)
+      .default(EXPLORE_DEFAULT_OMISSION_DETAIL_LIMIT)
+      .describe("Maximum deterministic omission detail records; exact counts are always retained."),
   })
   .refine((input) => Boolean(input.query || input.file_path), {
     message: "Provide query, file_path, or both file_path and symbol_path.",
@@ -71,6 +99,10 @@ const ExploreInputSchema = z
   .refine((input) => !input.symbol_path || Boolean(input.file_path), {
     message: "symbol_path requires file_path so the exact declaration can be resolved.",
     path: ["symbol_path"],
+  })
+  .refine((input) => !input.call_spines || Boolean(input.file_path && input.symbol_path), {
+    message: "call_spines requires exact file_path and symbol_path inputs.",
+    path: ["call_spines"],
   });
 
 const ExploreSymbolSchema = z.object({
@@ -119,6 +151,39 @@ const ExploreEvidenceSchema = z.object({
     .optional(),
 });
 
+const ExploreOmissionSchema = z.object({
+  subject: z.string(),
+  category: z.enum(["budget", "incomplete", "untrusted"]),
+  component: z.enum(["signature", "source", "references", "call_spine"]),
+  reason: z.enum(EXPLORE_OMISSION_REASONS),
+});
+
+const CallSpinesOutputSchema = z.object({
+  root: RelationshipEndpointSchema,
+  direction: z.enum(["incoming", "outgoing"]),
+  paths: z.array(
+    z.object({
+      endpoint: RelationshipEndpointSchema,
+      endpoints: z.array(RelationshipEndpointSchema),
+      relationship_ids: z.array(z.string()),
+    }),
+  ),
+  visited: z.object({
+    nodes: z.number().int().min(0),
+    edges: z.number().int().min(0),
+    max_depth: z.number().int().min(0),
+  }),
+  budget: z.object({
+    max_depth: z.number().int().min(0),
+    max_nodes: z.number().int().positive(),
+    max_edges: z.number().int().positive(),
+  }),
+  incomplete: z.boolean(),
+  truncation_reasons: z.array(z.enum(["depth_limit", "node_limit", "edge_limit"])),
+  authority_state: z.enum(["authoritative", "incomplete", "untrusted"]),
+  empty_proven: z.boolean(),
+});
+
 const ExploreOutputSchema = z.object({
   route: z.enum(["query", "file", "symbol"]),
   query: z.string().nullable(),
@@ -132,6 +197,19 @@ const ExploreOutputSchema = z.object({
   total: z.number().int().min(0),
   has_more: z.boolean(),
   next_offset: z.number().int().min(0).nullable(),
+  omissions: z.object({
+    counts: z.array(
+      z.object({
+        category: z.enum(["budget", "incomplete", "untrusted"]),
+        component: z.enum(["signature", "source", "references", "call_spine"]),
+        count: z.number().int().positive(),
+      }),
+    ),
+    details: z.array(ExploreOmissionSchema),
+    total: z.number().int().min(0),
+    has_more: z.boolean(),
+  }),
+  call_spines: CallSpinesOutputSchema.optional(),
   freshness: z.object({
     state: z.enum(SNAPSHOT_STATES),
     causes: z.array(z.enum(FRESHNESS_CAUSES)),
@@ -141,6 +219,7 @@ const ExploreOutputSchema = z.object({
     complete: z.boolean(),
     symbols_complete: z.boolean(),
     evidence_complete: z.boolean(),
+    spines_complete: z.boolean().optional(),
     unresolved: z.array(
       z.object({
         selector: z.string(),
@@ -194,6 +273,8 @@ export function registerExplore(server: McpServer): void {
         offset,
         limit,
         max_bytes,
+        call_spines,
+        omission_detail_limit,
       },
       extra,
     ) => {
@@ -218,6 +299,15 @@ export function registerExplore(server: McpServer): void {
                 limit,
                 referenceLimit: reference_limit,
                 maxBytes: max_bytes,
+                callSpines: call_spines
+                  ? {
+                      direction: call_spines.direction,
+                      maxDepth: call_spines.max_depth,
+                      maxNodes: call_spines.max_nodes,
+                      maxEdges: call_spines.max_edges,
+                    }
+                  : undefined,
+                omissionDetailLimit: omission_detail_limit,
               },
               operationContext,
             ),
