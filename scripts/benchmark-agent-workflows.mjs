@@ -163,7 +163,7 @@ async function runWorkflows(client, projectRoot, scenario) {
   );
   if (!symbol) throw new Error(`Primitive workflow did not find ${scenario.symbol_path}.`);
   const primitivePayloads = [search];
-  if (scenario.id === "multi_file_references") {
+  if (scenario.include_references === true) {
     primitivePayloads.push(
       await call("ast_find_references", {
         file_path: symbol.file,
@@ -198,14 +198,19 @@ async function runWorkflows(client, projectRoot, scenario) {
     reference_detail: "context",
     limit: 20,
     reference_limit: 100,
+    ...scenario.explore_arguments,
   });
+  const requiredExploreEvidence = [
+    ...scenario.required_evidence,
+    ...(scenario.required_explore_evidence ?? []),
+  ];
   const exploreResult = {
     model_round_trips: 1,
     tool_invocations: 1,
     duration_ms: performance.now() - exploreStarted,
     payload: measurePayload([explore]),
     evidence_pass:
-      containsEvidence([explore], scenario.required_evidence) &&
+      containsEvidence([explore], requiredExploreEvidence) &&
       explore.completeness?.complete === true,
     call_bound_pass: 1 <= scenario.accepted_call_bound,
     fallback: explore.completeness?.complete === true ? "none" : "incomplete_evidence",
