@@ -12,12 +12,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { countTokens } from "gpt-tokenizer";
 import { format as prettierFormat, resolveConfig as resolvePrettierConfig } from "prettier";
-import { createServer } from "../dist/server.js";
-import { clearProjectSessions, createFreshProject, withProject } from "../dist/services/project.js";
-import { findTestCandidates } from "../dist/services/test-candidates.js";
-import { collectCompilerRelationships } from "../dist/services/relationships.js";
-import { isExactImpactEdge, resolveImpactRoot, traverseImpact } from "../dist/services/impact.js";
-import { searchProjectSymbols, searchProjectSymbolsWithIndex } from "../dist/services/symbols.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultCorpus = path.join(repositoryRoot, "benchmark/context-corpus.json");
@@ -230,7 +224,14 @@ async function runWorkflows(client, projectRoot, scenario) {
   return { full_file: full, primitives: primitive, ast_explore: exploreResult };
 }
 
-async function runIndexLifecycleBenchmark(projectRoot) {
+async function runIndexLifecycleBenchmark(projectRoot, runtime) {
+  const {
+    clearProjectSessions,
+    createFreshProject,
+    searchProjectSymbols,
+    searchProjectSymbolsWithIndex,
+    withProject,
+  } = runtime;
   const sourcePath = path.join(projectRoot, "src/shared.ts");
   const configPath = path.join(projectRoot, "tsconfig.json");
   const originalSource = await readFile(sourcePath, "utf8");
@@ -308,7 +309,15 @@ function equalStringArrays(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-async function runImpactCorpus(impactCorpus) {
+async function runImpactCorpus(impactCorpus, runtime) {
+  const {
+    collectCompilerRelationships,
+    createFreshProject,
+    findTestCandidates,
+    isExactImpactEdge,
+    resolveImpactRoot,
+    traverseImpact,
+  } = runtime;
   if (!Array.isArray(impactCorpus.scenarios) || impactCorpus.scenarios.length === 0) {
     throw new Error("Impact corpus must contain at least one scenario.");
   }
@@ -614,15 +623,37 @@ export async function main(argv = process.argv.slice(2)) {
     throw new Error("Context corpus must contain at least one scenario.");
   }
   const impactCorpus = JSON.parse(await readFile(options.impactCorpus, "utf8"));
+  const [
+    serverModule,
+    projectModule,
+    testCandidatesModule,
+    relationshipsModule,
+    impactModule,
+    symbolsModule,
+  ] = await Promise.all([
+    import("../dist/server.js"),
+    import("../dist/services/project.js"),
+    import("../dist/services/test-candidates.js"),
+    import("../dist/services/relationships.js"),
+    import("../dist/services/impact.js"),
+    import("../dist/services/symbols.js"),
+  ]);
+  const runtime = {
+    ...projectModule,
+    ...testCandidatesModule,
+    ...relationshipsModule,
+    ...impactModule,
+    ...symbolsModule,
+  };
   const projectRoot = await createFixture();
-  const server = createServer();
+  const server = serverModule.createServer();
   const client = new Client({ name: "ast-agent-workflow-benchmark", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
   try {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    const indexLifecycle = await runIndexLifecycleBenchmark(projectRoot);
-    const impactReport = await runImpactCorpus(impactCorpus);
+    const indexLifecycle = await runIndexLifecycleBenchmark(projectRoot, runtime);
+    const impactReport = await runImpactCorpus(impactCorpus, runtime);
     const tools = await client.listTools();
     const scenarios = [];
     for (const scenario of corpus.scenarios) {
