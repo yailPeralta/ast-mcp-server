@@ -419,12 +419,75 @@ describe("project sessions", () => {
         state: "failed",
         operation: "fallback",
         last_operation: "fallback",
-        fallback_count: expect.any(Number),
+        fallback_count: 1,
         last_error: "cache_root_invalid",
         last_successful_persistence_at: null,
       },
     });
-    expect(status.index_observability.fallback_count).toBeGreaterThan(0);
+    expect(status.index_observability.fallback_count).toBe(1);
+  });
+
+  it("keeps capability fallback fresh and reuses one compiler-backed memory index", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", path.join(fixture.root, ".symbol-index-cache"));
+
+    await expect(getProjectStatus(fixture.root)).resolves.toMatchObject({
+      index_observability: { backend: "sqlite", state: "ready" },
+    });
+    const fallback = (await reportSymbolIndexFailure(fixture.root, "capability_unavailable"))!;
+    const memoryIndex = fallback.symbolIndex;
+    expect(fallback).toMatchObject({
+      symbolIndexBackend: "memory",
+      symbolIndexFallbackReason: "capability_unavailable",
+      symbolIndexReady: false,
+      status: {
+        state: "fresh",
+        causes: expect.not.arrayContaining(["index_failure"]),
+        index: { state: "disabled" },
+      },
+      symbolIndexObservability: {
+        backend: "memory",
+        state: "failed",
+        fallback_count: 1,
+        rejected_entries: 1,
+        last_error: "capability_unavailable",
+      },
+    });
+
+    const extractionSpy = vi.spyOn(symbolsModule, "sourceFileIndexSymbols").mockClear();
+    try {
+      const first = await withProject(fixture.root, (context) => ({
+        index: context.symbolIndex,
+        ready: context.symbolIndexReady,
+      }));
+      const second = await withProject(fixture.root, (context) => ({
+        index: context.symbolIndex,
+        ready: context.symbolIndexReady,
+      }));
+
+      expect(first).toEqual({ index: memoryIndex, ready: true });
+      expect(second).toEqual({ index: memoryIndex, ready: true });
+      expect(extractionSpy).toHaveBeenCalledTimes(1);
+      await expect(getProjectStatus(fixture.root)).resolves.toMatchObject({
+        state: "fresh",
+        causes: [],
+        compiler: { state: "ready" },
+        index: { state: "failed" },
+        index_observability: {
+          backend: "memory",
+          state: "failed",
+          fallback_count: 1,
+          rejected_entries: 1,
+          last_error: "capability_unavailable",
+        },
+      });
+    } finally {
+      extractionSpy.mockRestore();
+    }
   });
 
   it("keeps SQLite ready when an ASCII file filter matches a Unicode case fold", async () => {
@@ -529,7 +592,7 @@ describe("project sessions", () => {
     expect(fallbackContext).toMatchObject({
       symbolIndexBackend: "memory",
       symbolIndexReady: false,
-      status: { state: "degraded", causes: expect.arrayContaining(["index_failure"]) },
+      status: { state: "fresh", causes: expect.not.arrayContaining(["index_failure"]) },
       symbolIndexObservability: {
         state: "failed",
         operation: "read_failure",
@@ -694,7 +757,7 @@ describe("project sessions", () => {
     expect(result).toEqual([expect.objectContaining({ selector: "value@1", name: "value" })]);
     expect(fallbackContext).toMatchObject({
       symbolIndexBackend: "memory",
-      status: { state: "degraded", causes: expect.arrayContaining(["index_failure"]) },
+      status: { state: "fresh", causes: expect.not.arrayContaining(["index_failure"]) },
       symbolIndexObservability: {
         operation: "corruption",
         last_error: "corrupt_storage",
@@ -809,7 +872,7 @@ describe("project sessions", () => {
     expect(effective).toMatchObject({
       symbolIndexBackend: "memory",
       symbolIndexReady: false,
-      status: { state: "degraded", causes: expect.arrayContaining(["index_failure"]) },
+      status: { state: "fresh", causes: expect.not.arrayContaining(["index_failure"]) },
       symbolIndexObservability: {
         state: "failed",
         operation: "write_failure",
@@ -1030,7 +1093,7 @@ describe("project sessions", () => {
       expect(effective).toMatchObject({
         backend: "memory",
         ready: true,
-        status: { state: "degraded", causes: expect.arrayContaining(["index_failure"]) },
+        status: { state: "fresh", causes: expect.not.arrayContaining(["index_failure"]) },
         observability: {
           state: "failed",
           operation: "write_failure",
@@ -1115,8 +1178,8 @@ describe("project sessions", () => {
     await writeFile(cachePath!, "corrupt");
 
     await expect(getProjectStatus(fixture.root)).resolves.toMatchObject({
-      state: "degraded",
-      causes: expect.arrayContaining(["index_failure"]),
+      state: "fresh",
+      causes: expect.not.arrayContaining(["index_failure"]),
       index: { state: "failed" },
       index_observability: {
         policy: "canary",
