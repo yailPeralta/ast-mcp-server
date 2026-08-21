@@ -174,7 +174,10 @@ try {
     exploreResult.isError === true ||
     exploreResult.structuredContent?.route !== "query" ||
     exploreResult.structuredContent?.total !== 1 ||
-    exploreResult.structuredContent?.symbols?.[0]?.selector !== "value@1"
+    exploreResult.structuredContent?.symbols?.[0]?.selector !== "value@1" ||
+    exploreResult.structuredContent?.omissions?.total !== 0 ||
+    exploreResult.structuredContent?.budget?.used_bytes >
+      exploreResult.structuredContent?.budget?.max_bytes
   ) {
     throw new Error(`Unexpected ast_explore response: ${JSON.stringify(exploreResult)}`);
   }

@@ -392,6 +392,44 @@ try {
     );
   }
 
+  const explorePipelineFile = path.join(fixtureRoot, "explore-pipeline.json");
+  await writeFile(
+    explorePipelineFile,
+    JSON.stringify({
+      version: 1,
+      project_root: fixtureRoot,
+      steps: [
+        {
+          id: "explore",
+          tool: "ast_explore",
+          input: {
+            file_path: "src/value.ts",
+            symbol_path: "formatValue",
+            call_spines: { direction: "incoming" },
+            max_bytes: 4096,
+          },
+        },
+      ],
+      emit: { $ref: "#/steps/explore" },
+    }),
+  );
+  const exploreJson = await invoke(["run", explorePipelineFile]);
+  const exploreToon = decode(
+    await invokeRaw(["run", "--output-format", "toon", explorePipelineFile]),
+  );
+  const normalizeExplore = (value) =>
+    JSON.stringify(value, (key, item) => (key === "checked_at" ? "<timestamp>" : item));
+  if (
+    exploreJson.result?.route !== "symbol" ||
+    exploreJson.result?.call_spines?.authority_state !== "authoritative" ||
+    exploreJson.result?.omissions?.total !== 0 ||
+    normalizeExplore(exploreToon.result) !== normalizeExplore(exploreJson.result)
+  ) {
+    throw new Error(
+      `Unexpected ast_explore batch parity: ${JSON.stringify({ exploreJson, exploreToon })}`,
+    );
+  }
+
   for (const invalidArgs of [
     ["run", readPipelineFile, "--output-format"],
     ["run", readPipelineFile, "--output-format", "yaml"],

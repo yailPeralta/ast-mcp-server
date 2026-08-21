@@ -310,7 +310,9 @@ Project-scoped tools accept `project_root`, either the project directory or an e
 
 Read results use project-relative paths, deterministic ordering, structured MCP output, and pagination where result sets can grow with the project.
 
-`ast_explore` supports query, exact file, and exact symbol routes. Its default `summary` profile returns bounded reusable selectors; `context` adds selected source and `full` adds compiler references. Every response reports freshness, completeness, truncation, unresolved selectors, record limits, and a serialized byte budget. Use the primitive tools when a single exact operation is clearer or when preparing a mutation.
+`ast_explore` supports query, exact file, and exact symbol routes. Its default `summary` profile returns bounded reusable selectors; `context` adds selected source and `full` adds compiler references. Whole symbol clusters are admitted under the caller's `max_bytes` ceiling, so source, reference records, and call paths are never sliced. `omissions` classifies withheld components as `budget`, `incomplete`, or `untrusted`, and any requested omission keeps completeness false.
+
+Exact `file_path` plus `symbol_path` requests may opt into bounded static `call_spines`. Only fresh, exact, compiler-resolved invocation sites qualify; generic references, dynamic dispatch, and runtime behavior are not inferred. Absence of `call_spines` performs no call traversal. Every response still reports freshness, completeness, truncation, unresolved selectors, record limits, and canonical serialized-byte accounting. Use the primitive tools when a single exact operation is clearer or when preparing a mutation. See [ADR 0013](docs/adr/0013-ast-explore-presentation.md).
 
 Symbol search is relevance-ranked and defaults to at most 20 `summary` records containing `file`, a directly reusable `selector`, `kind`, and body-free `signature`. Request `detail: "selectors"` for routing coordinates only, or `detail: "full", limit: 100` for the v0.4.0 fields/page. References default to `detail: "locations"`; request `detail: "context"` only when the bounded source line is needed.
 
@@ -360,7 +362,7 @@ Example search-to-source pipeline:
 
 A `$ref` is an RFC 6901 JSON Pointer rooted at prior step results. References cannot point forward. If `emit` is omitted, only the final step result is returned; intermediate results remain inside the process.
 
-`ast_find_test_candidates` is admitted as a read step. The batch runner injects the pipeline `project_root`, rejects a conflicting step root, and invokes the same registered MCP implementation. Candidate pagination keeps each relationship path whole; final JSON and TOON differ only in serialization, not logical evidence.
+`ast_find_test_candidates` and `ast_explore` are admitted as read steps. The batch runner injects the pipeline `project_root`, rejects a conflicting step root, and invokes the same registered MCP implementation. Candidate relationship proofs and exploration clusters remain whole; final JSON and TOON differ only in serialization, not logical evidence.
 
 ### Bounded foreach
 
