@@ -19,6 +19,7 @@ import {
 import {
   clearProjectSessions,
   getProjectOperationQueueSnapshot,
+  reportSymbolIndexFailure,
   withProject,
 } from "../src/services/project.js";
 import { createProjectIdentity } from "../src/services/project-status.js";
@@ -313,6 +314,107 @@ export function formatValue(value: number): string { return String(value); }
     expect(observability.fallback_count).toEqual(expect.any(Number));
     expect(observability.fallback_count).toBeGreaterThan(0);
     expect(JSON.stringify(status)).not.toContain(fixture.root);
+  });
+
+  it("keeps compiler reads fresh during stable persistence fallback", async () => {
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", path.join(fixture.root, ".symbol-index-cache"));
+
+    expect(
+      structured(
+        await client.callTool({
+          name: "ast_get_project_status",
+          arguments: { project_root: fixture.root },
+        }),
+      ),
+    ).toMatchObject({ index_observability: { backend: "sqlite", state: "ready" } });
+    await reportSymbolIndexFailure(fixture.root, "capability_unavailable");
+
+    const status = structured(
+      await client.callTool({
+        name: "ast_get_project_status",
+        arguments: { project_root: fixture.root },
+      }),
+    );
+    expect(status).toMatchObject({
+      state: "fresh",
+      causes: [],
+      compiler: { state: "ready" },
+      index: { state: "failed" },
+      index_observability: {
+        backend: "memory",
+        state: "failed",
+        operation: "fallback",
+        last_operation: "fallback",
+        fallback_count: 1,
+        rejected_entries: 1,
+        last_error: "capability_unavailable",
+      },
+    });
+
+    const search = structured(
+      await client.callTool({
+        name: "ast_search_symbols",
+        arguments: {
+          project_root: fixture.root,
+          query: "formatValue",
+          detail: "selectors",
+        },
+      }),
+    );
+    expect(search.symbols).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ file: "src/value.ts", selector: "formatValue@2" }),
+      ]),
+    );
+
+    const references = structured(
+      await client.callTool({
+        name: "ast_find_references",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+        },
+      }),
+    );
+    expect(references.references).toEqual(
+      expect.arrayContaining([expect.objectContaining({ file: "src/use.ts" })]),
+    );
+
+    const impact = structured(
+      await client.callTool({
+        name: "ast_get_impact",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          direction: "incoming",
+          max_depth: 1,
+          max_nodes: 10,
+          max_edges: 10,
+        },
+      }),
+    );
+    expect(impact).toMatchObject({
+      freshness: {
+        state: "fresh",
+        causes: [],
+        checked_at: expect.any(String),
+      },
+    });
+
+    const finalStatus = structured(
+      await client.callTool({
+        name: "ast_get_project_status",
+        arguments: { project_root: fixture.root },
+      }),
+    );
+    expect(finalStatus).toMatchObject({
+      state: "fresh",
+      causes: [],
+      index_observability: { fallback_count: 1 },
+    });
   });
 
   it("propagates MCP cancellation to a queued project operation and unlinks it", async () => {

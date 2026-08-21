@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added deterministic atomic `ast_explore` clusters, categorized omission metadata, opt-in compiler-authoritative call spines, and registered-handler parity across MCP and the batch CLI.
 - Added read-only `ast_find_test_candidates` across MCP and `ast-tool run`, with incoming compiler authority, fail-closed incomplete evidence, whole-candidate pagination, and lossless final JSON/TOON parity.
 
+### Fixed
+
+- SQLite capability fallback now preserves fresh compiler-backed reads while retaining failed memory-backed index observability. Stable capability and invalid-root fallbacks retry only after restart or policy change; transient storage failures continue to recover automatically.
+
 ## [0.9.2] — local release candidate, pending release (2026-08-16)
 
 ### Fixed

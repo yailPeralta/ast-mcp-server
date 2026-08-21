@@ -257,8 +257,8 @@ export function formatValue(value: number): string { return String(value); }
       expect.arrayContaining([expect.objectContaining({ selector: "formatValue@999" })]),
     );
     expect(result.freshness).toMatchObject({
-      state: "degraded",
-      causes: expect.arrayContaining(["index_failure"]),
+      state: "fresh",
+      causes: expect.not.arrayContaining(["index_failure"]),
     });
   });
 });

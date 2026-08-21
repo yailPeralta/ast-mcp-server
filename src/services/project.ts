@@ -145,8 +145,7 @@ function fallbackToMemory(session: ProjectSession, reason: string): void {
   session.context = {
     ...session.context,
     status: transitionProjectStatus(session.context.status, {
-      type: "index_failed",
-      error: boundedReason,
+      type: "index_disabled",
     }),
     symbolIndex: new InMemorySymbolIndex(),
     symbolIndexBackend: "memory",
@@ -220,6 +219,12 @@ async function ensureSessionSymbolIndex(
       symbolIndexReady: false,
       symbolIndexObservability: createInitialSymbolIndexRuntimeObservability(policy),
     };
+  }
+  if (
+    session.context.symbolIndexFallbackReason === "capability_unavailable" ||
+    (session.context.symbolIndexFallbackReason !== null && policy.backend === "memory")
+  ) {
+    return;
   }
   if (policy.backend === "memory") {
     if (policy.mode === "enabled" || policy.mode === "canary") {
