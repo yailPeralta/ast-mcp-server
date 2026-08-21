@@ -58,8 +58,17 @@ The process MUST synchronize compiler state before adopting persisted rows. Any
 capability, path, permission, open, migration, integrity, read, write, flush,
 or close failure MUST install a complete memory/compiler context before cleanup.
 The same operation MUST return canonical compiler evidence, never stale indexed
-success, and status MUST retain `policy=enabled` while reporting effective
-memory, failed state, and bounded failure evidence.
+success. Status MUST retain the requested policy while reporting effective
+memory, failed index observability, and bounded failure evidence; synchronized
+compiler freshness MUST remain independently fresh. Consumers MUST inspect the
+index state or `index_observability`, not infer persistence health from the
+top-level project freshness state.
+
+A process-stable `capability_unavailable` fallback MUST reuse its compiler-backed
+memory index until restart or a persistence-policy change. Invalid-root memory
+policy fallback MUST likewise avoid retrying within an unchanged session. Other
+storage, corruption, migration, read/write, flush, close, and contention failures
+MUST remain eligible for automatic retry and recovery on a later operation.
 
 Mutation-only prepare/apply MUST use scheduler/compiler admission and MUST NOT
 create cache artifacts or alter plan hashes, diagnostics, conflicts, rollback,
@@ -69,7 +78,7 @@ receipts, or replay.
 
 - GIVEN an enabled read with an injected storage or integrity failure
 - WHEN the tool executes
-- THEN it returns compiler-equivalent evidence through memory and bounded degraded status.
+- THEN it returns compiler-equivalent evidence through memory, keeps compiler freshness independent, and exposes the persistence failure through index observability.
 
 ### Requirement: Explicit cache inspection and cleanup
 
