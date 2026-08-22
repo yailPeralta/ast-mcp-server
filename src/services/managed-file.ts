@@ -733,6 +733,50 @@ export async function verifyManagedFilePostimage(
   }
 }
 
+export async function rollbackManagedFilePlan(
+  plan: ManagedFilePlan,
+  preimage: { snapshot: ManagedFileSnapshot; content?: Buffer },
+  context: ManagedFileApplyContext,
+): Promise<void> {
+  await verifyManagedFilePostimage(plan, context);
+  if (preimage.snapshot.exists) {
+    if (preimage.content === undefined) {
+      throw new Error(`Managed file rollback preimage is unavailable: ${plan.path}`);
+    }
+    const current = await captureManagedFileSnapshot(plan.path);
+    await applyManagedFilePlan(
+      {
+        path: plan.path,
+        snapshot: current,
+        postimage: preimage.content,
+        postimageSha256: preimage.snapshot.sha256,
+        status: "updated",
+      },
+      createManagedFileApplyContext(),
+    );
+    return;
+  }
+  const directory = await openBoundDirectory(plan.snapshot.directory, false, context);
+  try {
+    const key = managedFileKey(plan);
+    let expected = context.authenticatedFiles.get(key);
+    if (expected === undefined) {
+      const current = await captureManagedFileSnapshot(plan.path);
+      if (!current.exists || current.sha256 !== plan.postimageSha256) {
+        throw new Error(`Managed installed file rollback postimage is unavailable: ${plan.path}`);
+      }
+      expected = { dev: current.dev, ino: current.ino };
+      context.authenticatedFiles.set(key, expected);
+    }
+    if ((await removePathIfOwned(directory, path.basename(plan.path), expected)) !== "removed") {
+      throw new Error(`Managed installed file could not be rolled back safely: ${plan.path}`);
+    }
+    context.authenticatedFiles.delete(key);
+  } finally {
+    await directory.close();
+  }
+}
+
 export async function applyManagedFilePlan(
   plan: ManagedFilePlan,
   context: ManagedFileApplyContext = createManagedFileApplyContext(),
