@@ -84,6 +84,13 @@ export interface ProjectStatusSnapshot extends ProjectStatusProjection {
   readonly index_observability: SymbolIndexRuntimeObservability;
 }
 
+export interface DiagnosticProjectStatusSnapshot {
+  readonly authority: "registered" | "isolated" | "unavailable";
+  readonly runtime_admission: "open" | "closed";
+  readonly session_capacity: number;
+  readonly status?: ProjectStatusSnapshot;
+}
+
 export interface ProjectSessionRegistrySnapshot {
   readonly session_count: number;
   readonly active_sessions: number;
@@ -430,6 +437,52 @@ function assertProjectRuntimeAdmissionOpen(): void {
   }
 }
 
+function createProjectSession(
+  projectRoot: string,
+  runtimePolicy: RuntimePolicy,
+  symbolIndexPolicy: SymbolIndexPersistencePolicy,
+  requestContext: RequestContext,
+  lastAccessSequence: bigint,
+): ProjectSession {
+  requestContext.checkpoint();
+  const tsConfigFilePath = resolveTsConfigPath(projectRoot);
+  const baseContext = buildProjectContext(tsConfigFilePath);
+  const context: ProjectContext = {
+    ...baseContext,
+    symbolIndexObservability: createInitialSymbolIndexRuntimeObservability(symbolIndexPolicy),
+  };
+  const watchDirectories = selectProjectWatchDirectories(
+    context.projectRoot,
+    context.project.getSourceFiles().map((sourceFile) => sourceFile.getFilePath()),
+  );
+  const owner: { session?: ProjectSession } = {};
+  const watcher = createSessionWatcher(() => owner.session!, context.projectRoot, watchDirectories);
+  const session: ProjectSession = {
+    context,
+    watcher,
+    watchDirectories,
+    configDigest: createConfigSnapshot(tsConfigFilePath).digest,
+    fingerprints: new Map(),
+    compilerStateUntrusted: false,
+    scheduler: new ProjectOperationScheduler({
+      queueCapacity: runtimePolicy.maxQueuedOperationsPerProject,
+      queueWaitTimeoutMs: runtimePolicy.queueWaitTimeoutMs,
+      operationDeadlineMs: runtimePolicy.operationDeadlineMs,
+    }),
+    lastAccessSequence,
+    symbolIndexPolicy,
+  };
+  owner.session = session;
+  watcher.start();
+  if (watcher.snapshot().state === "ready") {
+    session.context = {
+      ...session.context,
+      status: transitionProjectStatus(session.context.status, { type: "watcher_recovered" }),
+    };
+  }
+  return session;
+}
+
 function getOrCreateSession(
   projectRoot: string,
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
@@ -443,43 +496,14 @@ function getOrCreateSession(
   const runtimePolicy = getProjectRuntimePolicy();
   ensureProjectSessionCapacity(runtimePolicy.maxProjectSessions);
   const symbolIndexPolicy = readSymbolIndexPersistencePolicy();
-  requestContext.checkpoint();
-  const baseContext = buildProjectContext(tsConfigFilePath);
-  const context: ProjectContext = {
-    ...baseContext,
-    symbolIndexObservability: createInitialSymbolIndexRuntimeObservability(symbolIndexPolicy),
-  };
-  const watchDirectories = selectProjectWatchDirectories(
-    context.projectRoot,
-    context.project.getSourceFiles().map((sourceFile) => sourceFile.getFilePath()),
-  );
-  const watcher = createSessionWatcher(() => session, context.projectRoot, watchDirectories);
-  const session: ProjectSession = {
-    context,
-    watcher,
-    watchDirectories,
-    configDigest: (() => {
-      requestContext.checkpoint();
-      return createConfigSnapshot(tsConfigFilePath).digest;
-    })(),
-    fingerprints: new Map(),
-    compilerStateUntrusted: false,
-    scheduler: new ProjectOperationScheduler({
-      queueCapacity: runtimePolicy.maxQueuedOperationsPerProject,
-      queueWaitTimeoutMs: runtimePolicy.queueWaitTimeoutMs,
-      operationDeadlineMs: runtimePolicy.operationDeadlineMs,
-    }),
-    lastAccessSequence: nextProjectSessionAccessSequence(),
+  const session = createProjectSession(
+    projectRoot,
+    runtimePolicy,
     symbolIndexPolicy,
-  };
+    requestContext,
+    nextProjectSessionAccessSequence(),
+  );
   projectSessions.set(tsConfigFilePath, session);
-  session.watcher.start();
-  if (session.watcher.snapshot().state === "ready") {
-    session.context = {
-      ...session.context,
-      status: transitionProjectStatus(session.context.status, { type: "watcher_recovered" }),
-    };
-  }
   return session;
 }
 
@@ -867,12 +891,10 @@ export async function withProjectOperation<T>(
   );
 }
 
-export async function getProjectStatus(
-  projectRoot: string,
-  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+function readProjectStatus(
+  session: ProjectSession,
+  requestContext: RequestContext,
 ): Promise<ProjectStatusSnapshot> {
-  requestContext.checkpoint();
-  const session = getOrCreateSession(projectRoot, requestContext);
   return runSessionWithSyncPolicy(
     session,
     async (context, operationContext) => {
@@ -908,6 +930,72 @@ export async function getProjectStatus(
     true,
     requestContext,
   );
+}
+
+function peekSessionStatus(session: ProjectSession): ProjectStatusSnapshot {
+  const context = session.context;
+  return {
+    ...projectStatusToProjection(context.status),
+    index: { state: context.symbolIndexObservability.state },
+    indexed_count: 0,
+    last_successful_index_at: context.symbolIndexObservability.last_successful_persistence_at,
+    index_observability: { ...context.symbolIndexObservability },
+    operation_queue: getQueueStatus(session),
+  };
+}
+
+export function peekRegisteredProjectStatus(
+  projectRoot: string,
+): ProjectStatusSnapshot | undefined {
+  const session = projectSessions.get(resolveTsConfigPath(projectRoot));
+  return session ? peekSessionStatus(session) : undefined;
+}
+
+export async function getProjectStatus(
+  projectRoot: string,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): Promise<ProjectStatusSnapshot> {
+  requestContext.checkpoint();
+  return readProjectStatus(getOrCreateSession(projectRoot, requestContext), requestContext);
+}
+
+export async function getDiagnosticProjectStatus(
+  projectRoot: string,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): Promise<DiagnosticProjectStatusSnapshot> {
+  requestContext.checkpoint();
+  const runtimePolicy = getProjectRuntimePolicy();
+  const registered = peekRegisteredProjectStatus(projectRoot);
+  if (registered)
+    return {
+      authority: "registered",
+      runtime_admission: projectRuntimeAdmission,
+      session_capacity: runtimePolicy.maxProjectSessions,
+      status: registered,
+    };
+  if (projectRuntimeAdmission === "closed")
+    return {
+      authority: "unavailable",
+      runtime_admission: "closed",
+      session_capacity: runtimePolicy.maxProjectSessions,
+    };
+  const session = createProjectSession(
+    projectRoot,
+    runtimePolicy,
+    readSymbolIndexPersistencePolicy({ AST_SYMBOL_INDEX_PERSISTENCE: "disabled" }),
+    requestContext,
+    0n,
+  );
+  try {
+    return {
+      authority: "isolated",
+      runtime_admission: projectRuntimeAdmission,
+      session_capacity: runtimePolicy.maxProjectSessions,
+      status: await readProjectStatus(session, requestContext),
+    };
+  } finally {
+    closeProjectSession(session);
+  }
 }
 
 // Compatibility API for internal scripts. MCP tools should use withProject().
