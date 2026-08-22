@@ -3,16 +3,18 @@ import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import {
-  applyManagedFilePlan,
   canonicalizeFuturePath,
-  captureManagedFileSnapshot,
   createManagedFileApplyContext,
-  hashBytes,
-  verifyManagedFilePostimage,
   type ManagedFileApplyContext,
+  type ManagedFileApplyHooks,
   type ManagedFilePlan,
   type ManagedFileStatus,
 } from "./managed-file.js";
+import {
+  applyManagedBundle,
+  ManagedBundleConflictError,
+  planManagedBundle,
+} from "./managed-bundle.js";
 
 const SKILL_NAME = "structural-code-editing";
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
@@ -66,20 +68,33 @@ const ReleaseRecordSchema = z
     npm_versions: z.array(z.string().min(1)).min(1),
   })
   .strict();
-const SkillReleaseManifestSchema = z
+const SkillFileSchema = z
+  .object({ path: z.string().min(1), sha256: z.string().regex(SHA256_PATTERN) })
+  .strict();
+const BundleReleaseSchema = z
   .object({
-    schema_version: z.literal(1),
-    algorithm: z.literal("sha256"),
-    current: z
-      .object({
-        version: z.string().min(1),
-        sha256: z.string().regex(SHA256_PATTERN),
-      })
-      .strict(),
-    predecessors: z.array(ReleaseRecordSchema),
+    version: z.string().min(1),
+    files: z.array(SkillFileSchema).min(1),
   })
   .strict();
-type SkillReleaseManifest = z.infer<typeof SkillReleaseManifestSchema>;
+const BundleSkillReleaseManifestSchema = z
+  .object({
+    schema_version: z.literal(2),
+    algorithm: z.literal("sha256"),
+    current: BundleReleaseSchema,
+    predecessors: z.array(
+      z.union([
+        ReleaseRecordSchema,
+        BundleReleaseSchema.extend({ npm_versions: z.array(z.string().min(1)).min(1) }),
+      ]),
+    ),
+  })
+  .strict();
+type SkillFile = z.infer<typeof SkillFileSchema>;
+interface SkillReleaseManifest {
+  current: { version: string; files: SkillFile[] };
+  predecessors: Array<{ version: string; files: SkillFile[]; npm_versions: string[] }>;
+}
 
 export class SkillConflictError extends Error {
   constructor(readonly destination: string) {
@@ -181,67 +196,93 @@ async function readReleaseManifest(manifestPath: string): Promise<SkillReleaseMa
       { cause: error },
     );
   }
-  const result = SkillReleaseManifestSchema.safeParse(parsed);
+  const result = BundleSkillReleaseManifestSchema.safeParse(parsed);
   if (!result.success) {
     throw new Error(
       `Skill release manifest is invalid: ${result.error.issues[0]?.message ?? "unknown error"}`,
     );
   }
-  const digests = [
-    result.data.current.sha256,
-    ...result.data.predecessors.map((item) => item.sha256),
-  ];
-  if (new Set(digests).size !== digests.length) {
-    throw new Error("Skill release manifest contains a duplicate digest.");
+  const manifest: SkillReleaseManifest = {
+    current: result.data.current,
+    predecessors: result.data.predecessors.map((item) =>
+      "files" in item
+        ? item
+        : {
+            version: item.version,
+            npm_versions: item.npm_versions,
+            files: [{ path: "SKILL.md", sha256: item.sha256 }],
+          },
+    ),
+  };
+  if (!manifest.current.files.some((file) => file.path === "SKILL.md")) {
+    throw new Error("Skill release manifest current bundle must include SKILL.md.");
   }
   const predecessorVersions = result.data.predecessors.flatMap((item) => item.npm_versions);
   if (new Set(predecessorVersions).size !== predecessorVersions.length) {
     throw new Error("Skill release manifest contains a duplicate npm version provenance entry.");
   }
-  return result.data;
+  return manifest;
 }
 
 export async function planBundledSkillInstallation(
   options: InstallBundledSkillOptions,
 ): Promise<SkillInstallationPlan> {
   const sourcePath = path.resolve(options.sourceSkillPath);
-  const source = await readFile(sourcePath);
-  const sourceDigest = hashBytes(source);
+  const sourceRoot = path.dirname(sourcePath);
+  const canonicalSourceRoot = await realpath(sourceRoot);
   const manifestPath = path.resolve(
-    options.releaseManifestPath ?? path.join(path.dirname(sourcePath), "releases.json"),
+    options.releaseManifestPath ?? path.join(sourceRoot, "releases.json"),
   );
   const manifest = await readReleaseManifest(manifestPath);
-  if (sourceDigest !== manifest.current.sha256) {
-    throw new Error(
-      `Skill release manifest current digest does not match source skill bytes: ${sourcePath}`,
-    );
+  const sources = [];
+  for (const file of manifest.current.files) {
+    const assetPath = path.resolve(sourceRoot, file.path);
+    const assetRealPath = await realpath(assetPath).catch(() => undefined);
+    if (
+      assetRealPath === undefined ||
+      (assetRealPath !== canonicalSourceRoot &&
+        !assetRealPath.startsWith(`${canonicalSourceRoot}${path.sep}`)) ||
+      !(await stat(assetPath)).isFile()
+    ) {
+      throw new Error(
+        `Skill release manifest asset is missing or escapes the bundle: ${file.path}`,
+      );
+    }
+    sources.push({ ...file, content: await readFile(assetPath) });
   }
-  const admittedPredecessors = new Set(manifest.predecessors.map((item) => item.sha256));
   const logical = await destinations(options);
   const filesByPath = new Map<string, ManagedFilePlan>();
+  const statusesByRoot = new Map<string, InstallationStatus>();
 
   for (const item of logical) {
-    if (filesByPath.has(item.path)) continue;
-    const snapshot = await captureManagedFileSnapshot(item.path);
-    let status: InstallationStatus;
-    if (!snapshot.exists) status = "installed";
-    else if (snapshot.sha256 === sourceDigest) status = "unchanged";
-    else if (admittedPredecessors.has(snapshot.sha256) || options.force === true)
-      status = "updated";
-    else throw new SkillConflictError(item.path);
-    filesByPath.set(item.path, {
-      path: item.path,
-      snapshot,
-      postimage: source,
-      postimageSha256: sourceDigest,
-      status,
-    });
+    const destinationRoot = path.dirname(item.path);
+    if (statusesByRoot.has(destinationRoot)) continue;
+    let plan;
+    try {
+      plan = await planManagedBundle({
+        destinationRoot,
+        current: { files: sources },
+        predecessors: manifest.predecessors,
+        force: options.force,
+      });
+    } catch (error) {
+      if (error instanceof ManagedBundleConflictError)
+        throw new SkillConflictError(error.destination);
+      if (error instanceof Error && error.message.startsWith("Managed bundle")) {
+        throw new Error(error.message.replace("Managed bundle", "Skill release manifest"), {
+          cause: error,
+        });
+      }
+      throw error;
+    }
+    statusesByRoot.set(destinationRoot, plan.status);
+    for (const file of plan.files) filesByPath.set(file.path, file);
   }
 
   return {
     installations: logical.map((item) => ({
       ...item,
-      status: filesByPath.get(item.path)!.status,
+      status: statusesByRoot.get(path.dirname(item.path))!,
     })),
     files: [...filesByPath.values()],
   };
@@ -251,19 +292,9 @@ export async function applySkillInstallationPlan(
   plan: SkillInstallationPlan,
   onApplied?: (file: ManagedFilePlan) => void | Promise<void>,
   context: ManagedFileApplyContext = createManagedFileApplyContext(),
+  hooks: ManagedFileApplyHooks = {},
 ): Promise<void> {
-  const authenticated: ManagedFilePlan[] = [];
-  for (const file of plan.files) {
-    for (const current of authenticated) {
-      await verifyManagedFilePostimage(current, context);
-    }
-    await applyManagedFilePlan(file, context);
-    authenticated.push(file);
-    await onApplied?.(file);
-  }
-  for (const current of authenticated) {
-    await verifyManagedFilePostimage(current, context);
-  }
+  await applyManagedBundle(plan, onApplied, context, hooks);
 }
 
 export async function installBundledSkill(

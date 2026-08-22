@@ -6,6 +6,7 @@ import path from "node:path";
 import process from "node:process";
 import { randomUUID } from "node:crypto";
 import {
+  applySkillInstallationPlan,
   planBundledSkillInstallation,
   SkillConflictError,
   type SkillInstallation,
@@ -129,14 +130,23 @@ export async function applyManagedAssetPlans(
   const rollbackFailed: AgentSetupResult["physical_writes"] = [];
   const authenticated: ManagedFilePlan[] = [];
   let activePlan: { file: ManagedFilePlan; asset: "skill" | "guidance" } | undefined;
+  let skillBundleApplying = true;
   try {
     for (const file of [...skillPlan.files, ...guidancePlan.files]) {
       await revalidateManagedFilePlan(file);
     }
-    const plans = [
-      ...skillPlan.files.map((file) => ({ file, asset: "skill" as const })),
-      ...guidancePlan.files.map((file) => ({ file, asset: "guidance" as const })),
-    ];
+    await applySkillInstallationPlan(
+      skillPlan,
+      (file) => {
+        authenticated.push(file);
+        if (file.status !== "unchanged")
+          physicalWrites.push({ path: file.path, asset: "skill", status: file.status });
+      },
+      context,
+      hooks,
+    );
+    skillBundleApplying = false;
+    const plans = guidancePlan.files.map((file) => ({ file, asset: "guidance" as const }));
     for (const { file, asset } of plans) {
       activePlan = { file, asset };
       for (const current of authenticated) {
@@ -154,6 +164,7 @@ export async function applyManagedAssetPlans(
     }
     return physicalWrites;
   } catch (error) {
+    if (skillBundleApplying) physicalWrites.length = 0;
     if (activePlan !== undefined && activePlan.file.status !== "unchanged") {
       const write = {
         path: activePlan.file.path,
