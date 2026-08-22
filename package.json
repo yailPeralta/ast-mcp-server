@@ -89,7 +89,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^22.5.0",
+    "@types/node": "^26.2.0",
     "eslint": "^10.8.0",
     "gpt-tokenizer": "3.4.0",
     "prettier": "^3.9.6",
