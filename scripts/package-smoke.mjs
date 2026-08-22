@@ -48,6 +48,8 @@ const mcpFixtureRoot = path.join(temporaryRoot, "mcp-fixture");
 const mcpXdgCacheHome = path.join(temporaryRoot, "mcp-xdg-cache");
 const mcpTemp = path.join(temporaryRoot, "mcp-tmp");
 const mcpCacheRoot = path.join(mcpXdgCacheHome, "ast-mcp-server", "symbol-index");
+const upgradeTemp = path.join(temporaryRoot, "upgrade-tmp");
+const upgradeHome = path.join(temporaryRoot, "upgrade-home");
 
 function isolatedMcpEnvironment() {
   const environment = {
@@ -127,6 +129,9 @@ async function installFakeAgents() {
 try {
   await mkdir(packageDirectory, { recursive: true });
   await mkdir(consumerDirectory, { recursive: true });
+  await mkdir(upgradeTemp);
+  await mkdir(upgradeHome);
+  await writeFile(path.join(upgradeHome, ".npmrc"), "token=smoke-sentinel\n");
 
   await executeFile(yarnExecutable, ["pack", "--out", archivePath], {
     cwd: repositoryRoot,
@@ -509,6 +514,35 @@ try {
   ) {
     throw new Error(`global tarball install did not expose ast-tool: ${globalInstall.stdout}`);
   }
+  try {
+    await executeFile(globalExecutable, ["upgrade", "--check"], {
+      cwd: temporaryRoot,
+      env: {
+        ...process.env,
+        HOME: upgradeHome,
+        TMPDIR: upgradeTemp,
+        NPM_CONFIG_PREFIX: globalPrefix,
+        NPM_CONFIG_REGISTRY: "http://127.0.0.1:1",
+        NPM_CONFIG_FETCH_RETRIES: "0",
+        NPM_CONFIG_FETCH_TIMEOUT: "1000",
+      },
+    });
+    throw new Error("packed upgrade check unexpectedly reached a registry");
+  } catch (error) {
+    const failure = JSON.parse(error?.stderr ?? "{}");
+    if (
+      failure.code !== "UPGRADE_INSPECTION_FAILED" ||
+      String(error?.stderr).includes(temporaryRoot)
+    ) {
+      throw error;
+    }
+  }
+  if (
+    (await readFile(path.join(upgradeHome, ".npmrc"), "utf8")) !== "token=smoke-sentinel\n" ||
+    (await readdir(upgradeTemp)).some((entry) => entry.startsWith("ast-tool-upgrade-"))
+  ) {
+    throw new Error("packed upgrade check mutated config or retained temporary state");
+  }
 
   console.log(
     JSON.stringify({
@@ -524,6 +558,7 @@ try {
       packed_error: true,
       stderr_correlation: true,
       global_install: true,
+      upgrade_check: true,
       agent_setup: setupSupported,
       installed_targets: firstItems.length,
       idempotent_targets: secondItems.length,

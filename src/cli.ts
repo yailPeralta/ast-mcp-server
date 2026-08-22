@@ -31,6 +31,10 @@ import {
   type AgentId,
   type AgentSelectionRequest,
 } from "./services/setup-wizard.js";
+import { runUpgradeLease, UpgradeCommandError } from "./services/upgrade-command.js";
+import { reconcileUpgrade } from "./services/upgrade-reconcile.js";
+import { createUpgradeRuntime, UpgradeCleanupError } from "./services/upgrade-runtime.js";
+import { UpgradeError } from "./services/upgrade.js";
 
 interface CliFailure {
   status: "error";
@@ -66,6 +70,7 @@ function usage(): string {
     "  ast-tool cache clear --yes",
     "  ast-tool install-skill [claude|hermes|all] [--scope user|project] [--project-root <path>] [--force]",
     "  ast-tool setup [--agents claude,hermes|all --yes] [--force-skill]",
+    "  ast-tool upgrade [--check]",
   ].join("\n");
 }
 
@@ -460,6 +465,47 @@ export async function runCli(args: string[]): Promise<unknown> {
       throw new CliError(
         error instanceof Error ? error.message : String(error),
         "SKILL_INSTALL_ERROR",
+        1,
+        command,
+        undefined,
+        { cause: error },
+      );
+    }
+  }
+
+  if (command === "upgrade") {
+    try {
+      const executable = process.argv[1];
+      if (!executable) throw new Error("missing executable");
+      const lease = await createUpgradeRuntime(executable);
+      return await runUpgradeLease(commandArgs, lease, reconcileUpgrade);
+    } catch (error) {
+      if (error instanceof UpgradeCommandError) {
+        throw new CliError(error.message, "USAGE", 2, command, undefined, { cause: error });
+      }
+      if (error instanceof UpgradeError) {
+        throw new CliError(
+          error.message,
+          error.code,
+          1,
+          command,
+          undefined,
+          { cause: error },
+          {
+            continuation: error.continuation,
+          },
+        );
+      }
+      if (error instanceof UpgradeCleanupError) {
+        throw new CliError(error.message, error.code, 1, command, undefined, undefined, {
+          cleanup: "required",
+          ...(error.primaryCode ? { primary_code: error.primaryCode } : {}),
+          continuation: "ast-tool upgrade --check",
+        });
+      }
+      throw new CliError(
+        "Upgrade failed without exposing host details.",
+        "UPGRADE_ERROR",
         1,
         command,
         undefined,

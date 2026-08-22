@@ -8,6 +8,7 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readdir,
   rm,
   symlink,
   writeFile,
@@ -32,6 +33,7 @@ const fakeHermesState = path.join(fixtureRoot, "fake-hermes-state.json");
 const sharedAgentsHome = path.join(fixtureRoot, "home");
 const openCodeConfig = path.join(fixtureRoot, "opencode.json");
 const cacheRoot = path.join(fixtureRoot, "symbol-index-cache");
+const upgradeTemp = path.join(fixtureRoot, "upgrade-tmp");
 const environment = {
   ...process.env,
   PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
@@ -45,6 +47,7 @@ const environment = {
   FAKE_GEMINI_STATE: path.join(fixtureRoot, "fake-gemini-state.json"),
   FAKE_COPILOT_STATE: path.join(fixtureRoot, "fake-copilot-state.json"),
   HOME: sharedAgentsHome,
+  TMPDIR: upgradeTemp,
   OPENCODE_CONFIG: openCodeConfig,
   AST_SYMBOL_INDEX_PERSISTENCE: "disabled",
 };
@@ -189,6 +192,7 @@ async function installFakeAgents() {
 
 try {
   await installFakeAgents();
+  await mkdir(upgradeTemp);
   await mkdir(path.join(fixtureRoot, "src"), { recursive: true });
   await writeFile(
     path.join(fixtureRoot, "tsconfig.json"),
@@ -738,8 +742,35 @@ try {
     throw new Error(`Unexpected project skill installation: ${JSON.stringify(projectSkill)}`);
   }
 
+  for (const args of [["upgrade"], ["upgrade", "--check"]]) {
+    const failed = await invokeFailure(args);
+    const error = JSON.parse(failed.stderr);
+    if (
+      failed.code !== 1 ||
+      failed.stdout !== "" ||
+      error.code !== "UPGRADE_PROVENANCE_UNSUPPORTED" ||
+      failed.stderr.includes(repositoryRoot) ||
+      failed.stderr.includes(fixtureRoot)
+    ) {
+      throw new Error(`Unexpected source-checkout upgrade result: ${JSON.stringify(failed)}`);
+    }
+  }
+  if ((await readdir(upgradeTemp)).some((entry) => entry.startsWith("ast-tool-upgrade-"))) {
+    throw new Error("Upgrade temporary boundary was not removed");
+  }
+  for (const args of [
+    ["upgrade", "--yes"],
+    ["upgrade", "--unknown"],
+  ]) {
+    const failed = await invokeFailure(args);
+    const error = JSON.parse(failed.stderr);
+    if (failed.code !== 2 || failed.stdout !== "" || error.code !== "USAGE") {
+      throw new Error(`Unexpected upgrade usage result: ${JSON.stringify(failed)}`);
+    }
+  }
+
   process.stdout.write(
-    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, toon_output: true, persisted_apply: true, lock_contention: true, replay: true, skill_installation: true, agent_setup: true, cache_inspect: true, cache_clear: true, cache_confirmation: true, cache_unknown_preserved: true, cache_redacted_failure: true })}\n`,
+    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, toon_output: true, persisted_apply: true, lock_contention: true, replay: true, skill_installation: true, agent_setup: true, upgrade_preflight: true, cache_inspect: true, cache_clear: true, cache_confirmation: true, cache_unknown_preserved: true, cache_redacted_failure: true })}\n`,
   );
 } finally {
   await rm(fixtureRoot, { recursive: true, force: true });
