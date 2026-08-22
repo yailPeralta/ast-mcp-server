@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.10.0] — local release candidate, pending release (2026-08-19)
+
 ### Added
 
 - Added deterministic atomic `ast_explore` clusters, categorized omission metadata, opt-in compiler-authoritative call spines, and registered-handler parity across MCP and the batch CLI.
@@ -15,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Oversized `ast_explore` call-spine aggregates are omitted atomically instead of failing valid requests.
 - SQLite capability fallback now preserves fresh compiler-backed reads while retaining failed memory-backed index observability. Stable capability and invalid-root fallbacks retry only after restart or policy change; transient storage failures continue to recover automatically.
+
+### Release status
+
+- This local candidate is pending its exact-tree release matrix, CI, and the repository's separately authorized delivery sequence. It has not been published to npm, assigned to `next` or `latest`, tagged in Git, or released on GitHub; registry and GitHub readbacks remain authoritative.
 
 ## [0.9.2] — local release candidate, pending release (2026-08-16)
 
