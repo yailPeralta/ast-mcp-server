@@ -40,7 +40,8 @@ export interface UpgradePlan extends UpgradeInspection {
   install_args: string[];
 }
 
-type UpgradeErrorCode = "UPGRADE_PROVENANCE_UNSUPPORTED" | "UPGRADE_INSPECTION_FAILED";
+type UpgradeErrorCode =
+  "UPGRADE_PROVENANCE_UNSUPPORTED" | "UPGRADE_INSPECTION_FAILED" | "UPGRADE_VERIFICATION_FAILED";
 export class UpgradeError extends Error {
   constructor(
     readonly code: UpgradeErrorCode,
@@ -120,8 +121,8 @@ async function proveNpm(runtime: UpgradeRuntime, packageRoot: string): Promise<P
     )
       return;
     const [rootText, prefixText] = await Promise.all([
-      runtime.run(node, [npmCli, "root", "--global"]),
-      runtime.run(node, [npmCli, "prefix", "--global"]),
+      runtime.run(runtime.nodeExecutable, [npmCli, "root", "--global"]),
+      runtime.run(runtime.nodeExecutable, [npmCli, "prefix", "--global"]),
     ]);
     const lexicalRoot = p.resolve(rootText.trim());
     const lexicalPackage = p.join(lexicalRoot, PACKAGE);
@@ -142,7 +143,7 @@ async function proveNpm(runtime: UpgradeRuntime, packageRoot: string): Promise<P
       return;
     return {
       kind: "npm",
-      executable: node,
+      executable: runtime.nodeExecutable,
       args: [npmCli, "install", "--global", `${PACKAGE}@latest`, "--ignore-scripts"],
     };
   } catch {
@@ -200,8 +201,10 @@ export async function planUpgrade(runtime: UpgradeRuntime): Promise<UpgradePlan>
   const root = await canonical(runtime, runtime.packageRoot);
   const current = await readPackage(runtime, root);
   const cli = await canonical(runtime, p.resolve(root, current.cli));
+  const server = await canonical(runtime, p.resolve(root, current.server));
   if (
     !inside(root, cli, runtime.platform) ||
+    !inside(root, server, runtime.platform) ||
     !same(cli, await canonical(runtime, runtime.cliExecutable), runtime.platform)
   ) {
     fail("UPGRADE_PROVENANCE_UNSUPPORTED", "The running CLI does not belong to this package.");
@@ -240,6 +243,57 @@ export async function inspectUpgrade(runtime: UpgradeRuntime): Promise<UpgradeIn
   return {
     version: plan.version,
     status: plan.status,
+    current_version: plan.current_version,
+    latest_version: plan.latest_version,
+    provenance: plan.provenance,
+    update_available: plan.update_available,
+    action: plan.action,
+    restart_required: plan.restart_required,
+  };
+}
+
+export interface UpgradeResult extends Omit<UpgradeInspection, "status"> {
+  status: "current" | "updated";
+  installed_version: string;
+  new_cli: string;
+}
+
+export async function performUpgrade(runtime: UpgradeRuntime): Promise<UpgradeResult> {
+  const planned = await planUpgrade(runtime);
+  if (!planned.update_available) {
+    return {
+      ...inspectionFrom(planned),
+      status: "current",
+      installed_version: planned.current_version,
+      new_cli: planned.cli_executable,
+    };
+  }
+  try {
+    await runtime.run(planned.install_executable, planned.install_args);
+  } catch {
+    fail("UPGRADE_VERIFICATION_FAILED", "Package update command failed.");
+  }
+  let installed: UpgradePlan;
+  try {
+    installed = await planUpgrade(runtime);
+  } catch {
+    fail("UPGRADE_VERIFICATION_FAILED", "Updated package verification failed.");
+  }
+  if (installed.current_version !== installed.latest_version || installed.update_available) {
+    fail("UPGRADE_VERIFICATION_FAILED", "Updated package does not match refreshed latest.");
+  }
+  return {
+    ...inspectionFrom(installed),
+    status: "updated",
+    restart_required: true,
+    installed_version: installed.current_version,
+    new_cli: installed.cli_executable,
+  };
+}
+
+function inspectionFrom(plan: UpgradePlan): Omit<UpgradeInspection, "status"> {
+  return {
+    version: plan.version,
     current_version: plan.current_version,
     latest_version: plan.latest_version,
     provenance: plan.provenance,
