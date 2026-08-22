@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import process from "node:process";
 
 import { ZodError } from "zod";
@@ -35,6 +36,10 @@ import { runUpgradeLease, UpgradeCommandError } from "./services/upgrade-command
 import { reconcileUpgrade } from "./services/upgrade-reconcile.js";
 import { createUpgradeRuntime, UpgradeCleanupError } from "./services/upgrade-runtime.js";
 import { UpgradeError } from "./services/upgrade.js";
+import {
+  CliProjectDiscoveryError,
+  resolveCliBatchProject,
+} from "./services/cli-project-discovery.js";
 
 interface CliFailure {
   status: "error";
@@ -266,10 +271,19 @@ function parseSetupArgs(args: string[]): SetupArgs {
 
 async function parseDocumentForCommand(source: string, command: string) {
   try {
-    return parseBatchDocument(await readBatchInput(source));
+    const input = await readBatchInput(source);
+    return parseBatchDocument(await resolveCliBatchProject(input, process.cwd()));
   } catch (error) {
     if (error instanceof CliError) {
       throw new CliError(error.message, error.code, 2, command, error.stepId, { cause: error });
+    }
+    if (error instanceof CliProjectDiscoveryError) {
+      const relativeSource =
+        source === "-" ? source : path.relative(process.cwd(), path.resolve(source));
+      const shellSource = `'${relativeSource.replaceAll("'", `'\\''`)}'`;
+      throw new CliError(error.message, error.code, 2, command, undefined, undefined, {
+        continuation: `${error.continuation} Then run: ast-tool ${command} ${shellSource}`,
+      });
     }
     const message =
       error instanceof ZodError ? error.issues.map((issue) => issue.message).join("; ") : error;

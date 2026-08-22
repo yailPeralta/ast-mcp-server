@@ -543,6 +543,35 @@ try {
   ) {
     throw new Error("packed upgrade check mutated config or retained temporary state");
   }
+  const jsProject = path.join(temporaryRoot, "packed-js-project");
+  const jsNested = path.join(jsProject, "nested");
+  const jsPipeline = path.join(jsProject, "pipeline.json");
+  await mkdir(path.join(jsProject, "src"), { recursive: true });
+  await mkdir(jsNested);
+  await writeFile(
+    path.join(jsProject, "jsconfig.json"),
+    JSON.stringify({ compilerOptions: { allowJs: true }, include: ["src/**/*.js"] }),
+  );
+  await writeFile(path.join(jsProject, "src", "value.js"), "export function packedJsValue() {}\n");
+  await writeFile(
+    jsPipeline,
+    JSON.stringify({
+      version: 1,
+      steps: [{ id: "search", tool: "ast_search_symbols", input: { query: "packedJsValue" } }],
+      emit: { $ref: "#/steps/search" },
+    }),
+  );
+  const discovered = parseJsonOutput(
+    (
+      await executeFile(globalExecutable, ["run", jsPipeline], {
+        cwd: jsNested,
+        env: { ...process.env, AST_SYMBOL_INDEX_PERSISTENCE: "disabled" },
+      })
+    ).stdout,
+  );
+  if (!discovered.result?.symbols?.some((symbol) => symbol.selector?.includes("packedJsValue"))) {
+    throw new Error(`packed CLI did not discover jsconfig: ${JSON.stringify(discovered)}`);
+  }
 
   console.log(
     JSON.stringify({
@@ -558,6 +587,7 @@ try {
       packed_error: true,
       stderr_correlation: true,
       global_install: true,
+      project_discovery: true,
       upgrade_check: true,
       agent_setup: setupSupported,
       installed_targets: firstItems.length,
