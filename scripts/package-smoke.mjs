@@ -4,6 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import console from "node:console";
 import {
   chmod,
@@ -192,6 +193,17 @@ try {
       "utf8",
     ),
   ]);
+  const packagedManifest = JSON.parse(packagedReleases);
+  const packagedAssets = new Map(
+    await Promise.all(
+      packagedManifest.current.files.map(async (file) => {
+        const content = await readFile(
+          path.join(installedPackageRoot, "skills", "structural-code-editing", file.path),
+        );
+        return [file.path, [content, createHash("sha256").update(content).digest("hex")]];
+      }),
+    ),
+  );
   if (
     releaseMetadata.engines?.node !== ">=22.13.0" ||
     installedMetadata.name !== releaseMetadata.name ||
@@ -204,7 +216,11 @@ try {
     !installedChangelog.includes(`## [${releaseMetadata.version}]`) ||
     !packagedSkill.includes("name: structural-code-editing") ||
     packagedGuidance.includes("ast-tool:structural-code-editing guidance") ||
-    JSON.parse(packagedReleases).current?.version !== "4.4.0"
+    packagedManifest.current?.version !== "4.5.0" ||
+    [...packagedAssets.keys()].sort().join() !== "SKILL.md,references/operations.md" ||
+    packagedManifest.current.files.some(
+      (file) => packagedAssets.get(file.path)?.[1] !== file.sha256,
+    )
   ) {
     throw new Error("installed tarball release metadata is incomplete");
   }
@@ -419,16 +435,22 @@ try {
     throw new Error(`tarball setup was not idempotent: ${second.stdout}`);
   }
 
-  const claudeSkill = await readFile(
-    path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md"),
-    "utf8",
-  );
-  const hermesSkill = await readFile(
-    path.join(hermesRoot, "skills", "software-development", "structural-code-editing", "SKILL.md"),
-    "utf8",
-  );
-  if (!claudeSkill.includes("name: structural-code-editing") || claudeSkill !== hermesSkill) {
-    throw new Error("installed tarball skills do not match");
+  for (const [relative, [expected]] of packagedAssets) {
+    const [claudeAsset, hermesAsset] = await Promise.all([
+      readFile(path.join(claudeRoot, "skills", "structural-code-editing", relative)),
+      readFile(
+        path.join(
+          hermesRoot,
+          "skills",
+          "software-development",
+          "structural-code-editing",
+          relative,
+        ),
+      ),
+    ]);
+    if (!claudeAsset.equals(expected) || !hermesAsset.equals(expected)) {
+      throw new Error(`installed tarball skill asset does not match: ${relative}`);
+    }
   }
   if (setupSupported) {
     const [claudeGuidance, codexGuidance, geminiGuidance] = await Promise.all([

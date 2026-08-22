@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { access, chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { gunzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   applySkillInstallationPlan,
@@ -18,6 +19,24 @@ const sourceSkillPath = path.resolve(
   "structural-code-editing",
   "SKILL.md",
 );
+const bundledSkillRoot = path.dirname(sourceSkillPath);
+
+async function public010Skill(): Promise<string> {
+  const fixture = await readFile(
+    new URL("fixtures/structural-code-editing-0.10.0.md.gz.base64", import.meta.url),
+    "utf8",
+  );
+  return gunzipSync(Buffer.from(fixture, "base64")).toString("utf8");
+}
+
+function officialOptions(root: string) {
+  return {
+    target: "claude" as const,
+    scope: "user" as const,
+    environment: { CLAUDE_CONFIG_DIR: path.join(root, "claude") },
+    homeDirectory: root,
+  };
+}
 
 function installBundledSkill(options: Omit<InstallBundledSkillOptions, "sourceSkillPath">) {
   return installBundledSkillFromSource({ ...options, sourceSkillPath });
@@ -166,6 +185,62 @@ describe("skill installer", () => {
       guidancePath: path.join(skillRoot, "guidance.md"),
       releasesPath: path.join(skillRoot, "releases.json"),
     });
+  });
+
+  it("ships and atomically upgrades the public 0.10.0 skill to the manifested bundle", async () => {
+    const root = await temporaryDirectory();
+    const manifest = JSON.parse(
+      await readFile(path.join(bundledSkillRoot, "releases.json"), "utf8"),
+    );
+    expect(manifest.current.files.map((file: { path: string }) => file.path).sort()).toEqual([
+      "SKILL.md",
+      "references/operations.md",
+    ]);
+    expect(await readFile(path.join(bundledSkillRoot, "references/operations.md"), "utf8")).toMatch(
+      /ast_find_test_candidates.*completeness\.proven_empty.*ast_explore\.call_spines.*empty_proven.*total.*has_more.*next_offset/s,
+    );
+    for (const file of manifest.current.files) {
+      expect(sha256(await readFile(path.join(bundledSkillRoot, file.path), "utf8"))).toBe(
+        file.sha256,
+      );
+    }
+    const predecessor = await public010Skill();
+    expect(manifest.predecessors).toContainEqual(
+      expect.objectContaining({ sha256: sha256(predecessor), npm_versions: ["0.10.0"] }),
+    );
+    const options = officialOptions(root);
+    const skillRoot = path.join(root, "claude", "skills", "structural-code-editing");
+    await mkdir(skillRoot, { recursive: true });
+    await writeFile(path.join(skillRoot, "SKILL.md"), predecessor);
+
+    await expect(installBundledSkill(options)).resolves.toMatchObject({
+      installations: [{ status: "updated" }],
+    });
+    for (const file of manifest.current.files) {
+      await expect(readFile(path.join(skillRoot, file.path), "utf8")).resolves.toBe(
+        await readFile(path.join(bundledSkillRoot, file.path), "utf8"),
+      );
+    }
+    await expect(installBundledSkill(options)).resolves.toMatchObject({
+      installations: [{ status: "unchanged" }],
+      physicalWrites: [],
+    });
+  });
+
+  it("preserves the public 0.10.0 skill when a new bundled reference conflicts", async () => {
+    const root = await temporaryDirectory();
+    const skillRoot = path.join(root, "claude", "skills", "structural-code-editing");
+    const reference = path.join(skillRoot, "references", "operations.md");
+    const predecessor = await public010Skill();
+    await mkdir(path.dirname(reference), { recursive: true });
+    await writeFile(path.join(skillRoot, "SKILL.md"), predecessor);
+    await writeFile(reference, "user-owned reference\n");
+
+    await expect(installBundledSkill(officialOptions(root))).rejects.toThrow(
+      /already exists.*--force/i,
+    );
+    await expect(readFile(path.join(skillRoot, "SKILL.md"), "utf8")).resolves.toBe(predecessor);
+    await expect(readFile(reference, "utf8")).resolves.toBe("user-owned reference\n");
   });
 
   it("updates a registry-proven predecessor without force", async () => {
@@ -435,7 +510,7 @@ describe("skill installer", () => {
       homeDirectory: root,
     });
 
-    expect(result.physicalWrites).toHaveLength(1);
+    expect(result.physicalWrites).toHaveLength(2);
     expect(result.installations.map((item) => item.target)).toEqual([
       "opencode",
       "codex",
@@ -458,7 +533,7 @@ describe("skill installer", () => {
       scope: "user",
       homeDirectory: aliasHome,
     });
-    expect(result.physicalWrites).toHaveLength(1);
+    expect(result.physicalWrites).toHaveLength(2);
     expect(result.installations[0]?.path).toBe(result.installations[1]?.path);
   });
 
