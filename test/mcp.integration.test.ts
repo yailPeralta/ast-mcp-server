@@ -1147,6 +1147,96 @@ export function formatValue(value: number): string { return String(value); }
     });
   });
 
+  it("atomically omits oversized call spines across direct MCP and batch", async () => {
+    const caller = `call${"x".repeat(900)}`;
+    await fixture.write(
+      "src/spine-target.ts",
+      "export function spineTarget(): number { return 1; }\n",
+    );
+    await fixture.write(
+      "src/spine-caller.ts",
+      `import { spineTarget } from "./spine-target.js";\nexport const ${caller} = spineTarget();\n`,
+    );
+    const baseInput = {
+      file_path: "src/spine-target.ts",
+      symbol_path: "spineTarget",
+      max_bytes: 1024,
+    };
+
+    const noSpine = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: { project_root: fixture.root, ...baseInput },
+      }),
+    );
+    expect(noSpine.completeness).toMatchObject({ complete: true });
+
+    const spineInput = { ...baseInput, call_spines: { direction: "incoming" } };
+    const direct = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: { project_root: fixture.root, ...spineInput },
+      }),
+    );
+    expect(direct).not.toHaveProperty("call_spines");
+    expect(direct).toMatchObject({
+      omissions: {
+        counts: [{ category: "budget", component: "call_spine", count: 1 }],
+        details: [
+          {
+            subject: "spineTarget@1",
+            category: "budget",
+            component: "call_spine",
+            reason: "byte_limit",
+          },
+        ],
+        total: 1,
+        has_more: false,
+      },
+      completeness: {
+        complete: false,
+        evidence_complete: false,
+        spines_complete: false,
+      },
+      truncation: { truncated: true, reason: "byte_limit" },
+      budget: { max_bytes: 1024, used_bytes: expect.any(Number) },
+    });
+    const directBytes = Buffer.byteLength(JSON.stringify(direct), "utf8");
+    expect(directBytes).toBe((direct.budget as { used_bytes: number }).used_bytes);
+    expect(directBytes).toBeLessThanOrEqual(1024);
+
+    const ample = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          ...spineInput,
+          max_bytes: 65536,
+        },
+      }),
+    );
+    expect(ample).toMatchObject({
+      call_spines: {
+        paths: [{ endpoint: { selector: `${caller}@2` } }],
+        incomplete: false,
+      },
+      completeness: { complete: true, spines_complete: true },
+    });
+
+    const document = parseBatchDocument({
+      version: 1,
+      project_root: fixture.root,
+      steps: [{ id: "explore", tool: "ast_explore", input: spineInput }],
+      emit: { $ref: "#/steps/explore" },
+    });
+    const batch = await runBatchDocument(document);
+    const normalize = (value: unknown) =>
+      JSON.parse(
+        JSON.stringify(value, (key, item) => (key === "checked_at" ? "<timestamp>" : item)),
+      );
+    expect(normalize(batch.result)).toEqual(normalize(direct));
+  });
+
   it("keeps ast_explore direct, batch, JSON, and TOON results logically equivalent", async () => {
     const input = {
       file_path: "src/value.ts",

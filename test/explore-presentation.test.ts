@@ -16,7 +16,11 @@ const present = (
     symbol: ReturnType<typeof symbol>;
     evidence?: { selector: string; source?: { text: string }; references?: { has_more: boolean } };
   }>,
-  overrides: { maxBytes?: number; omissions?: ExploreOmission[] } = {},
+  overrides: {
+    maxBytes?: number;
+    omissions?: ExploreOmission[];
+    callSpines?: { root: { selector: string }; incomplete: boolean; paths: unknown[] };
+  } = {},
 ) =>
   presentExploreClusters({
     base: { route: "query" as const },
@@ -27,6 +31,7 @@ const present = (
     maxBytes: overrides.maxBytes ?? 4096,
     omissions: overrides.omissions ?? [],
     omissionDetailLimit: 20,
+    callSpines: overrides.callSpines,
   });
 
 describe("explore presentation", () => {
@@ -64,6 +69,47 @@ describe("explore presentation", () => {
       { category: "budget", component: "signature", count: 1 },
       { category: "budget", component: "source", count: 1 },
     ]);
+  });
+
+  it("omits a requested call-spine aggregate atomically when its full JSON cannot fit", () => {
+    const callSpines = {
+      root: { selector: "root" },
+      incomplete: false,
+      paths: [{ relationship_ids: ["edge".repeat(1000)] }],
+    };
+
+    const tight = present([{ symbol: symbol("root") }], { maxBytes: 1024, callSpines });
+
+    expect(tight).not.toHaveProperty("call_spines");
+    expect(tight.omissions).toMatchObject({
+      counts: [{ category: "budget", component: "call_spine", count: 1 }],
+      details: [
+        {
+          subject: "root",
+          category: "budget",
+          component: "call_spine",
+          reason: "byte_limit",
+        },
+      ],
+      total: 1,
+      has_more: false,
+    });
+    expect(tight.completeness).toMatchObject({
+      complete: false,
+      evidence_complete: false,
+      spines_complete: false,
+    });
+    expect(tight.truncation).toEqual({ truncated: true, reason: "byte_limit" });
+    expect(Buffer.byteLength(JSON.stringify(tight), "utf8")).toBe(tight.budget.used_bytes);
+    expect(tight.budget.used_bytes).toBeLessThanOrEqual(1024);
+
+    const ample = present([{ symbol: symbol("root") }], { maxBytes: 8192, callSpines });
+    expect(ample.call_spines).toEqual(callSpines);
+    expect(ample.completeness).toMatchObject({
+      complete: true,
+      evidence_complete: true,
+      spines_complete: true,
+    });
   });
 
   it.each([

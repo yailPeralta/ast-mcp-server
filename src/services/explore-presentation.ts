@@ -36,10 +36,16 @@ interface PresentedEvidence {
   readonly references?: unknown;
 }
 
+interface PresentedCallSpines {
+  readonly root: { readonly selector: string };
+  readonly incomplete: boolean;
+}
+
 interface PresentationInput<
   TBase extends object,
   TSymbol extends PresentedSymbol,
   TEvidence extends PresentedEvidence,
+  TCallSpines extends PresentedCallSpines = PresentedCallSpines,
 > {
   readonly base: TBase;
   readonly clusters: readonly { readonly symbol: TSymbol; readonly evidence?: TEvidence }[];
@@ -49,7 +55,7 @@ interface PresentationInput<
   readonly maxBytes: number;
   readonly omissions: readonly ExploreOmission[];
   readonly omissionDetailLimit: number;
-  readonly spinesComplete?: boolean;
+  readonly callSpines?: TCallSpines;
   readonly unresolved?: readonly unknown[];
 }
 
@@ -110,26 +116,41 @@ export function presentExploreClusters<
   TBase extends object,
   TSymbol extends PresentedSymbol,
   TEvidence extends PresentedEvidence,
->(input: PresentationInput<TBase, TSymbol, TEvidence>) {
+  TCallSpines extends PresentedCallSpines = PresentedCallSpines,
+>(input: PresentationInput<TBase, TSymbol, TEvidence, TCallSpines>) {
   const symbols: TSymbol[] = [];
   const evidence: TEvidence[] = [];
   let omissions = [...input.omissions];
   let consumed = 0;
   let byteLimited = false;
 
-  const build = (detailLimit: number) => {
+  const build = (detailLimit: number, includeCallSpines: boolean) => {
+    const callSpinesOmitted = input.callSpines !== undefined && !includeCallSpines;
+    const effectiveOmissions = callSpinesOmitted
+      ? [
+          ...omissions,
+          {
+            subject: input.callSpines!.root.selector,
+            category: "budget" as const,
+            component: "call_spine" as const,
+            reason: "byte_limit" as const,
+          },
+        ]
+      : omissions;
+    const spinesComplete =
+      input.callSpines === undefined
+        ? undefined
+        : includeCallSpines && !input.callSpines.incomplete;
     const hasMore = input.offset + consumed < input.total;
     const evidenceComplete =
-      omissions.length === 0 &&
+      effectiveOmissions.length === 0 &&
       (input.unresolved?.length ?? 0) === 0 &&
-      input.spinesComplete !== false;
-    const reason: TruncationReason | null = byteLimited
-      ? "byte_limit"
-      : hasMore
-        ? "record_limit"
-        : null;
+      spinesComplete !== false;
+    const reason: TruncationReason | null =
+      byteLimited || callSpinesOmitted ? "byte_limit" : hasMore ? "record_limit" : null;
     const result = {
       ...input.base,
+      ...(includeCallSpines && input.callSpines ? { call_spines: input.callSpines } : {}),
       symbols,
       evidence,
       offset: input.offset,
@@ -137,12 +158,12 @@ export function presentExploreClusters<
       total: input.total,
       has_more: hasMore,
       next_offset: hasMore ? input.offset + consumed : null,
-      omissions: summarize(omissions, detailLimit),
+      omissions: summarize(effectiveOmissions, detailLimit),
       completeness: {
         complete: !hasMore && evidenceComplete,
         symbols_complete: !hasMore,
         evidence_complete: evidenceComplete,
-        ...(input.spinesComplete === undefined ? {} : { spines_complete: input.spinesComplete }),
+        ...(spinesComplete === undefined ? {} : { spines_complete: spinesComplete }),
         unresolved: input.unresolved ?? [],
       },
       budget: {
@@ -168,8 +189,12 @@ export function presentExploreClusters<
 
   const fittingResult = () => {
     for (let detailLimit = input.omissionDetailLimit; detailLimit >= 0; detailLimit -= 1) {
-      const result = build(detailLimit);
-      if (result.budget.used_bytes <= input.maxBytes) return result;
+      if (input.callSpines) {
+        const included = build(detailLimit, true);
+        if (included.budget.used_bytes <= input.maxBytes) return included;
+      }
+      const omitted = build(detailLimit, false);
+      if (omitted.budget.used_bytes <= input.maxBytes) return omitted;
     }
     return null;
   };
