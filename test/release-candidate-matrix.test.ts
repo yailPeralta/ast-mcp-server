@@ -229,7 +229,7 @@ async function createMatrixFixture(
     writeFile(path.join(scriptsDirectory, "workflow-policy-check.mjs"), "process.exitCode = 99;\n"),
     writeFile(
       path.join(repository, "package.json"),
-      options.packageBytes ?? `${JSON.stringify({ name: "matrix-fixture", version: "0.9.2" })}\n`,
+      options.packageBytes ?? `${JSON.stringify({ name: "matrix-fixture", version: "0.10.0" })}\n`,
     ),
   ]);
 
@@ -974,7 +974,7 @@ describe("release candidate matrix", () => {
       expect(summary).toMatchObject({
         schema_version: 1,
         status: "pass",
-        package_version: "0.9.2",
+        package_version: "0.10.0",
         package_manager_node_version: "v24.16.0",
       });
       expect(summary.runtimes).toEqual([
