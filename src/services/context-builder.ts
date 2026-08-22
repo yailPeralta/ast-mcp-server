@@ -399,21 +399,18 @@ export async function buildExploreContext(
   }
 
   const symbols = page.items.map((record) => projectSymbol(request.detail, record));
-  const initialResult = {
-    ...createResult(
-      effectiveContext,
-      request,
-      routed.route,
-      routed.file,
-      routed.symbol,
-      symbols,
-      evidence,
-      page.total,
-      unresolved,
-      page.has_more ? "record_limit" : null,
-    ),
-    ...(callSpines ? { call_spines: callSpines } : {}),
-  };
+  const initialResult = createResult(
+    effectiveContext,
+    request,
+    routed.route,
+    routed.file,
+    routed.symbol,
+    symbols,
+    evidence,
+    page.total,
+    unresolved,
+    page.has_more ? "record_limit" : null,
+  );
   const evidenceBySelector = new Map(evidence.map((item) => [item.selector, item]));
   const omissions: ExploreOmission[] = unresolved.map((item) => ({
     subject: item.selector,
@@ -469,7 +466,7 @@ export async function buildExploreContext(
     maxBytes: request.maxBytes,
     omissions,
     omissionDetailLimit: request.omissionDetailLimit ?? EXPLORE_DEFAULT_OMISSION_DETAIL_LIMIT,
-    spinesComplete: callSpines ? !callSpines.incomplete : undefined,
+    callSpines,
     unresolved,
   });
 }
@@ -485,7 +482,7 @@ function createResult(
   total: number,
   unresolved: readonly ExploreUnresolvedItem[],
   reason: TruncationReason | null,
-): Omit<ExploreResult, "omissions"> {
+): Omit<ExploreResult, "omissions" | "call_spines"> {
   const hasMore = request.offset + symbols.length < total;
   const nextOffset = hasMore ? request.offset + symbols.length : null;
   const expansion = effectiveExpansion(request);

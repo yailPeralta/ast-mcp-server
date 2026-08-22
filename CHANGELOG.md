@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Oversized `ast_explore` call-spine aggregates are omitted atomically instead of failing valid requests.
 - SQLite capability fallback now preserves fresh compiler-backed reads while retaining failed memory-backed index observability. Stable capability and invalid-root fallbacks retry only after restart or policy change; transient storage failures continue to recover automatically.
 
 ## [0.9.2] — local release candidate, pending release (2026-08-16)
