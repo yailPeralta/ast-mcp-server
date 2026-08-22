@@ -7,6 +7,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import packageMetadata from "../package.json" with { type: "json" };
+import { parseBatchDocument, runBatchDocument } from "../src/batch/runner.js";
+import { serializeCliSuccess } from "../src/cli-output.js";
 import { createServer } from "../src/server.js";
 import { PublicOperationalError } from "../src/services/public-errors.js";
 import {
@@ -17,6 +19,7 @@ import {
 import {
   clearProjectSessions,
   getProjectOperationQueueSnapshot,
+  reportSymbolIndexFailure,
   withProject,
 } from "../src/services/project.js";
 import { createProjectIdentity } from "../src/services/project-status.js";
@@ -64,6 +67,32 @@ function publicFailure(result: Awaited<ReturnType<Client["callTool"]>>): {
   expect(text).toBe(JSON.stringify(parsed));
   expect(parsed.error.correlation_id).toMatch(PUBLIC_ERROR_UUID_PATTERN);
   return parsed.error;
+}
+
+async function addCandidateFixtures(fixture: ProjectFixture): Promise<void> {
+  const files = {
+    "src/another.test.ts": `import { formatValue } from "./value.js";\nexport const anotherTestValue = formatValue(1);\n`,
+    "src/value.test.ts": `import { formatValue } from "./value.js";\nexport const directTestValue = formatValue(2);\n`,
+    "src/transitive.test.ts": `import { result } from "./use.js";\nexport const transitiveTestValue = result;\n`,
+    "src/checks/value.check.ts": `import { formatValue } from "../value.js";\nexport const customTestValue = formatValue(3);\n`,
+  };
+  await Promise.all(Object.entries(files).map(([file, content]) => fixture.write(file, content)));
+}
+
+function callCandidates(
+  client: Client,
+  fixture: ProjectFixture,
+  argumentsOverride: Record<string, unknown> = {},
+) {
+  return client.callTool({
+    name: "ast_find_test_candidates",
+    arguments: {
+      project_root: fixture.root,
+      file_path: "src/value.ts",
+      symbol_path: "formatValue",
+      ...argumentsOverride,
+    },
+  });
 }
 
 describe("MCP integration", () => {
@@ -287,6 +316,107 @@ export function formatValue(value: number): string { return String(value); }
     expect(JSON.stringify(status)).not.toContain(fixture.root);
   });
 
+  it("keeps compiler reads fresh during stable persistence fallback", async () => {
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", path.join(fixture.root, ".symbol-index-cache"));
+
+    expect(
+      structured(
+        await client.callTool({
+          name: "ast_get_project_status",
+          arguments: { project_root: fixture.root },
+        }),
+      ),
+    ).toMatchObject({ index_observability: { backend: "sqlite", state: "ready" } });
+    await reportSymbolIndexFailure(fixture.root, "capability_unavailable");
+
+    const status = structured(
+      await client.callTool({
+        name: "ast_get_project_status",
+        arguments: { project_root: fixture.root },
+      }),
+    );
+    expect(status).toMatchObject({
+      state: "fresh",
+      causes: [],
+      compiler: { state: "ready" },
+      index: { state: "failed" },
+      index_observability: {
+        backend: "memory",
+        state: "failed",
+        operation: "fallback",
+        last_operation: "fallback",
+        fallback_count: 1,
+        rejected_entries: 1,
+        last_error: "capability_unavailable",
+      },
+    });
+
+    const search = structured(
+      await client.callTool({
+        name: "ast_search_symbols",
+        arguments: {
+          project_root: fixture.root,
+          query: "formatValue",
+          detail: "selectors",
+        },
+      }),
+    );
+    expect(search.symbols).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ file: "src/value.ts", selector: "formatValue@2" }),
+      ]),
+    );
+
+    const references = structured(
+      await client.callTool({
+        name: "ast_find_references",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+        },
+      }),
+    );
+    expect(references.references).toEqual(
+      expect.arrayContaining([expect.objectContaining({ file: "src/use.ts" })]),
+    );
+
+    const impact = structured(
+      await client.callTool({
+        name: "ast_get_impact",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          direction: "incoming",
+          max_depth: 1,
+          max_nodes: 10,
+          max_edges: 10,
+        },
+      }),
+    );
+    expect(impact).toMatchObject({
+      freshness: {
+        state: "fresh",
+        causes: [],
+        checked_at: expect.any(String),
+      },
+    });
+
+    const finalStatus = structured(
+      await client.callTool({
+        name: "ast_get_project_status",
+        arguments: { project_root: fixture.root },
+      }),
+    );
+    expect(finalStatus).toMatchObject({
+      state: "fresh",
+      causes: [],
+      index_observability: { fallback_count: 1 },
+    });
+  });
+
   it("propagates MCP cancellation to a queued project operation and unlinks it", async () => {
     let markRunning!: () => void;
     const running = new Promise<void>((resolve) => {
@@ -405,6 +535,7 @@ export function formatValue(value: number): string { return String(value); }
       "ast_search_symbols",
       "ast_find_references",
       "ast_get_impact",
+      "ast_find_test_candidates",
       "ast_get_diagnostics",
       "ast_get_file",
       "ast_rename_symbol",
@@ -669,6 +800,119 @@ export function formatValue(value: number): string { return String(value); }
     expect(impact).not.toHaveProperty("edits");
   });
 
+  it("finds exact compiler-backed test candidates with bounded trust metadata", async () => {
+    await addCandidateFixtures(fixture);
+    const tools = await client.listTools();
+    const registered = tools.tools.find((tool) => tool.name === "ast_find_test_candidates");
+    expect(registered).toMatchObject({
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    });
+    expect(registered?.inputSchema.properties).toMatchObject({
+      max_depth: { default: 3, maximum: 32 },
+      max_nodes: { default: 100, maximum: 1000 },
+      max_edges: { default: 200, maximum: 5000 },
+      offset: { default: 0 },
+      limit: { default: 100, maximum: 500 },
+    });
+    expect(Object.keys(registered?.inputSchema.properties ?? {})).not.toEqual(
+      expect.arrayContaining(["direction", "relationship_kinds", "impact", "output_format"]),
+    );
+
+    const candidates = structured(await callCandidates(client, fixture));
+    expect(candidates).toMatchObject({
+      backend: "typescript_compiler",
+      compiler_authoritative: true,
+      root: { file: "src/value.ts", symbol_path: "formatValue", selector: "formatValue@2" },
+      direction: "incoming",
+      max_depth: 3,
+      max_nodes: 100,
+      max_edges: 200,
+      incomplete: false,
+      truncation: { truncated: false, reason: null },
+      completeness: { complete: true, proven_empty: false },
+      freshness: { state: "fresh", causes: [], checked_at: expect.any(String) },
+      offset: 0,
+      limit: 100,
+      total: 3,
+      has_more: false,
+      next_offset: null,
+    });
+    const summary = (candidates.candidates as Array<Record<string, unknown>>).map((candidate) => [
+      candidate.file,
+      candidate.reason,
+      (candidate.evidence as { depth: number }).depth,
+    ]);
+    expect(summary).toEqual([
+      ["src/another.test.ts", "direct_compiler_reference", 1],
+      ["src/value.test.ts", "direct_compiler_reference", 1],
+      ["src/transitive.test.ts", "transitive_compiler_reference", 2],
+    ]);
+    expect(candidates).not.toHaveProperty("operation_id");
+    expect(candidates).not.toHaveProperty("plan_hash");
+    expect(candidates).not.toHaveProperty("edits");
+
+    const custom = structured(
+      await callCandidates(client, fixture, {
+        test_file_patterns: ["**/*.check.ts"],
+        test_directories: [],
+      }),
+    );
+    expect(custom.candidates).toEqual([
+      expect.objectContaining({
+        file: "src/checks/value.check.ts",
+        reason: "convention_match",
+      }),
+    ]);
+
+    const empty = structured(
+      await callCandidates(client, fixture, { symbol_path: "formatValueHelper" }),
+    );
+    expect(empty).toMatchObject({
+      candidates: [],
+      total: 0,
+      completeness: { complete: true, proven_empty: true },
+    });
+  });
+
+  it("fails closed before pagination and keeps candidate proofs atomic", async () => {
+    await addCandidateFixtures(fixture);
+    const incomplete = publicFailure(await callCandidates(client, fixture, { max_nodes: 1 }));
+    expect(incomplete).toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
+
+    const missing = publicFailure(
+      await callCandidates(client, fixture, { symbol_path: "missingSymbol" }),
+    );
+    expect(missing).toMatchObject({ code: "NOT_FOUND" });
+
+    const maximums = structured(
+      await callCandidates(client, fixture, {
+        max_depth: 32,
+        max_nodes: 1000,
+        max_edges: 5000,
+        offset: 2,
+        limit: 1,
+      }),
+    );
+    expect(maximums).toMatchObject({
+      max_depth: 32,
+      max_nodes: 1000,
+      max_edges: 5000,
+      offset: 2,
+      limit: 1,
+      total: 3,
+      candidates: [expect.objectContaining({ file: "src/transitive.test.ts" })],
+    });
+    const proof = (maximums.candidates as Array<{ evidence: Record<string, unknown[]> }>)[0]!
+      .evidence;
+    expect(proof.relationship_ids).toHaveLength(2);
+    expect(proof.relationships).toHaveLength(2);
+  });
+
   it("falls back to compiler search when an indexed candidate is stale", async () => {
     structured(
       await client.callTool({
@@ -803,6 +1047,300 @@ export function formatValue(value: number): string { return String(value); }
       arguments: { project_root: fixture.root },
     });
     expect(invalid.isError).toBe(true);
+  });
+
+  it("exposes exact compiler call spines and bounded omission metadata", async () => {
+    const exact = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          call_spines: { direction: "incoming" },
+          max_bytes: 4096,
+        },
+      }),
+    );
+    expect(exact).toMatchObject({
+      call_spines: {
+        root: { file: "src/value.ts", symbol_path: "formatValue", selector: "formatValue@2" },
+        direction: "incoming",
+        paths: [
+          {
+            endpoint: { file: "src/use.ts", symbol_path: "result", selector: "result@2" },
+            relationship_ids: [expect.any(String)],
+          },
+        ],
+        incomplete: false,
+        authority_state: "authoritative",
+        empty_proven: false,
+      },
+      completeness: { spines_complete: true },
+      omissions: { counts: [], details: [], total: 0, has_more: false },
+      budget: { max_bytes: 4096 },
+    });
+    expect((exact.budget as { used_bytes: number }).used_bytes).toBeLessThanOrEqual(4096);
+
+    const outgoing = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/use.ts",
+          symbol_path: "result",
+          call_spines: {},
+          max_bytes: 4096,
+        },
+      }),
+    );
+    expect(outgoing).toMatchObject({
+      call_spines: {
+        direction: "outgoing",
+        budget: { max_depth: 3, max_nodes: 100, max_edges: 200 },
+        paths: [
+          {
+            endpoint: {
+              file: "src/value.ts",
+              symbol_path: "formatValue",
+              selector: "formatValue@2",
+            },
+          },
+        ],
+      },
+    });
+
+    const bounded = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          call_spines: { direction: "incoming", max_nodes: 1 },
+          omission_detail_limit: 1,
+          max_bytes: 4096,
+        },
+      }),
+    );
+    expect(bounded).toMatchObject({
+      call_spines: {
+        paths: [],
+        incomplete: true,
+        truncation_reasons: ["node_limit"],
+        empty_proven: false,
+      },
+      completeness: { complete: false, evidence_complete: false, spines_complete: false },
+      omissions: {
+        counts: [{ category: "budget", component: "call_spine", count: 1 }],
+        details: [
+          {
+            subject: "formatValue@2",
+            category: "budget",
+            component: "call_spine",
+            reason: "node_limit",
+          },
+        ],
+        total: 1,
+        has_more: false,
+      },
+    });
+  });
+
+  it("atomically omits oversized call spines across direct MCP and batch", async () => {
+    const caller = `call${"x".repeat(900)}`;
+    await fixture.write(
+      "src/spine-target.ts",
+      "export function spineTarget(): number { return 1; }\n",
+    );
+    await fixture.write(
+      "src/spine-caller.ts",
+      `import { spineTarget } from "./spine-target.js";\nexport const ${caller} = spineTarget();\n`,
+    );
+    const baseInput = {
+      file_path: "src/spine-target.ts",
+      symbol_path: "spineTarget",
+      max_bytes: 1024,
+    };
+
+    const noSpine = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: { project_root: fixture.root, ...baseInput },
+      }),
+    );
+    expect(noSpine.completeness).toMatchObject({ complete: true });
+
+    const spineInput = { ...baseInput, call_spines: { direction: "incoming" } };
+    const direct = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: { project_root: fixture.root, ...spineInput },
+      }),
+    );
+    expect(direct).not.toHaveProperty("call_spines");
+    expect(direct).toMatchObject({
+      omissions: {
+        counts: [{ category: "budget", component: "call_spine", count: 1 }],
+        details: [
+          {
+            subject: "spineTarget@1",
+            category: "budget",
+            component: "call_spine",
+            reason: "byte_limit",
+          },
+        ],
+        total: 1,
+        has_more: false,
+      },
+      completeness: {
+        complete: false,
+        evidence_complete: false,
+        spines_complete: false,
+      },
+      truncation: { truncated: true, reason: "byte_limit" },
+      budget: { max_bytes: 1024, used_bytes: expect.any(Number) },
+    });
+    const directBytes = Buffer.byteLength(JSON.stringify(direct), "utf8");
+    expect(directBytes).toBe((direct.budget as { used_bytes: number }).used_bytes);
+    expect(directBytes).toBeLessThanOrEqual(1024);
+
+    const ample = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          ...spineInput,
+          max_bytes: 65536,
+        },
+      }),
+    );
+    expect(ample).toMatchObject({
+      call_spines: {
+        paths: [{ endpoint: { selector: `${caller}@2` } }],
+        incomplete: false,
+      },
+      completeness: { complete: true, spines_complete: true },
+    });
+
+    const document = parseBatchDocument({
+      version: 1,
+      project_root: fixture.root,
+      steps: [{ id: "explore", tool: "ast_explore", input: spineInput }],
+      emit: { $ref: "#/steps/explore" },
+    });
+    const batch = await runBatchDocument(document);
+    const normalize = (value: unknown) =>
+      JSON.parse(
+        JSON.stringify(value, (key, item) => (key === "checked_at" ? "<timestamp>" : item)),
+      );
+    expect(normalize(batch.result)).toEqual(normalize(direct));
+  });
+
+  it("keeps ast_explore direct, batch, JSON, and TOON results logically equivalent", async () => {
+    const input = {
+      file_path: "src/value.ts",
+      symbol_path: "formatValue",
+      call_spines: { direction: "incoming" },
+      max_bytes: 4096,
+    };
+    const direct = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: { project_root: fixture.root, ...input },
+      }),
+    );
+    const document = parseBatchDocument({
+      version: 1,
+      project_root: fixture.root,
+      steps: [{ id: "explore", tool: "ast_explore", input }],
+      emit: { $ref: "#/steps/explore" },
+    });
+    const batch = await runBatchDocument(document);
+    const normalize = (value: unknown) =>
+      JSON.parse(
+        JSON.stringify(value, (key, item) => (key === "checked_at" ? "<timestamp>" : item)),
+      );
+
+    expect(normalize(batch.result)).toEqual(normalize(direct));
+    expect(batch.result).toMatchObject({
+      route: "symbol",
+      completeness: { complete: true, spines_complete: true },
+      omissions: { total: 0, has_more: false },
+      budget: { max_bytes: 4096, used_bytes: expect.any(Number) },
+    });
+    const json = JSON.parse(serializeCliSuccess(batch, "json"));
+    const encodedToon = decode(serializeCliSuccess(batch, "toon")) as Record<string, unknown>;
+    expect(encodedToon).toEqual(json);
+    expect(encodedToon.result).toEqual(batch.result);
+
+    expect(() =>
+      parseBatchDocument({
+        version: 1,
+        project_root: fixture.root,
+        steps: [
+          {
+            id: "explore",
+            tool: "ast_explore",
+            input: { ...input, project_root: "/conflicting/project" },
+          },
+        ],
+      }),
+    ).toThrow(/project_root/i);
+    const tooSmall = parseBatchDocument({
+      version: 1,
+      project_root: fixture.root,
+      steps: [
+        { id: "explore", tool: "ast_explore", input: { query: "formatValue", max_bytes: 1 } },
+      ],
+    });
+    await expect(runBatchDocument(tooSmall)).rejects.toMatchObject({
+      code: "TOOL_ERROR",
+      stepId: "explore",
+    });
+  });
+
+  it("cancels queued ast_explore work without returning partial evidence", async () => {
+    let markRunning!: () => void;
+    const running = new Promise<void>((resolve) => {
+      markRunning = resolve;
+    });
+    let releaseRunning!: () => void;
+    const release = new Promise<void>((resolve) => {
+      releaseRunning = resolve;
+    });
+    const blocker = withProject(fixture.root, async () => {
+      markRunning();
+      await release;
+    });
+    await running;
+
+    const controller = new AbortController();
+    const explored = client.callTool(
+      {
+        name: "ast_explore",
+        arguments: { project_root: fixture.root, query: "formatValue", detail: "full" },
+      },
+      undefined,
+      { signal: controller.signal },
+    );
+    try {
+      await vi.waitFor(() =>
+        expect(getProjectOperationQueueSnapshot(fixture.root).queued_operations).toBe(1),
+      );
+      controller.abort();
+      await expect(explored).rejects.toThrow();
+      await vi.waitFor(() =>
+        expect(getProjectOperationQueueSnapshot(fixture.root)).toMatchObject({
+          active_operations: 1,
+          queued_operations: 0,
+          cancelled_operations: 1,
+        }),
+      );
+    } finally {
+      releaseRunning();
+      await blocker;
+    }
   });
 
   it("exposes lossless TOON envelopes for eligible collection reads only when requested", async () => {

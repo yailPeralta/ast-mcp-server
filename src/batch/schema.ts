@@ -16,6 +16,8 @@ export const READ_BATCH_TOOLS = [
   "ast_get_symbol_source",
   "ast_search_symbols",
   "ast_find_references",
+  "ast_find_test_candidates",
+  "ast_explore",
   "ast_get_diagnostics",
 ] as const;
 

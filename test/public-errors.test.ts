@@ -73,6 +73,24 @@ describe("public error classification and redaction", () => {
     }
   });
 
+  it("classifies incomplete evidence with a bounded, sanitized public message", () => {
+    const classified = classifyPublicError(
+      new PublicOperationalError(
+        "INCOMPLETE_EVIDENCE",
+        `Impact evidence is incomplete at /home/yail/private/source.ts token=opaque ${"é".repeat(
+          MAX_PUBLIC_ERROR_MESSAGE_BYTES,
+        )}`,
+      ),
+    );
+
+    expect(classified.code).toBe("INCOMPLETE_EVIDENCE");
+    expect(Buffer.byteLength(classified.message, "utf8")).toBeLessThanOrEqual(
+      MAX_PUBLIC_ERROR_MESSAGE_BYTES,
+    );
+    expect(classified.message).not.toContain("/home/yail");
+    expect(classified.message).not.toContain("opaque");
+  });
+
   it("maps unknown errors and arbitrary internal codes to a closed generic fallback", () => {
     expect(classifyPublicError(new Error("raw /home/yail/private.ts token=opaque"))).toEqual({
       code: "INTERNAL_ERROR",
@@ -125,6 +143,16 @@ describe("public error classification and redaction", () => {
       error: new Error("Workspace changed while the operation was being prepared."),
       code: "STALE_WORKSPACE",
       message: "The workspace changed. Retry the operation.",
+    },
+    {
+      error: new Error("Compiler-backed impact evidence is incomplete."),
+      code: "INCOMPLETE_EVIDENCE",
+      message: "The required compiler evidence is incomplete.",
+    },
+    {
+      error: new Error("test_file_patterns must contain at most 32 entries."),
+      code: "INVALID_INPUT",
+      message: "The request is invalid.",
     },
     {
       error: new Error("The operation is blocked by validation errors."),

@@ -26,6 +26,26 @@ afterEach(async () => {
 });
 
 describe("context builder", () => {
+  it("preserves default ranking without requesting call traversal", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": `export function formatValueHelper(): void {}
+export function formatValue(): void {}
+`,
+    });
+    fixtures.push(fixture);
+
+    const result = await withProject(fixture.root, (context) =>
+      buildExploreContext(context, request({ query: "formatValue" })),
+    );
+
+    expect(result.symbols.map((item) => item.selector)).toEqual([
+      "formatValue@2",
+      "formatValueHelper@1",
+    ]);
+    expect(result).not.toHaveProperty("call_spines");
+    expect(result.omissions).toEqual({ counts: [], details: [], total: 0, has_more: false });
+  });
+
   it("reuses structural search ranking and reports bounded pagination", async () => {
     const fixture = await createProjectFixture({
       "src/value.ts": `export function formatValueHelper(value: number): string { return String(value); }
@@ -237,8 +257,8 @@ export function formatValue(value: number): string { return String(value); }
       expect.arrayContaining([expect.objectContaining({ selector: "formatValue@999" })]),
     );
     expect(result.freshness).toMatchObject({
-      state: "degraded",
-      causes: expect.arrayContaining(["index_failure"]),
+      state: "fresh",
+      causes: expect.not.arrayContaining(["index_failure"]),
     });
   });
 });

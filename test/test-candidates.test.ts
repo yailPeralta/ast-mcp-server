@@ -4,10 +4,13 @@ import {
   type RelationshipEndpoint,
 } from "../src/services/relationships.js";
 import {
+  MAX_TEST_CANDIDATE_CONVENTION_ITEMS,
+  MAX_TEST_CANDIDATE_CONVENTION_LENGTH,
   findTestCandidates,
   type TestCandidateConventions,
 } from "../src/services/test-candidates.js";
 import type { ImpactResult } from "../src/services/impact.js";
+import { paginate } from "../src/services/pagination.js";
 
 const freshness = {
   state: "fresh" as const,
@@ -27,6 +30,9 @@ function impactFixture(
     readonly intermediate?: boolean;
     readonly incomplete?: boolean;
     readonly stale?: boolean;
+    readonly freshnessState?: "fresh" | "pending" | "stale" | "rebuilding" | "degraded";
+    readonly provenance?: "compiler" | "syntax" | "heuristic";
+    readonly resolution?: "resolved" | "unresolved" | "ambiguous";
   } = {},
 ): ImpactResult {
   const service = endpoint("src/service.ts", "Service", "Service@1");
@@ -41,12 +47,17 @@ function impactFixture(
     source: test,
     target: firstTarget,
     kind: "reference",
-    provenance: "compiler",
+    provenance: options.provenance ?? "compiler",
     confidence: "exact",
-    resolution: "resolved",
-    freshness: options.stale
-      ? { state: "stale", causes: ["source_change"], checked_at: freshness.checked_at }
-      : freshness,
+    resolution: options.resolution ?? "resolved",
+    freshness:
+      options.stale || options.freshnessState !== undefined
+        ? {
+            state: options.freshnessState ?? "stale",
+            causes: ["source_change"],
+            checked_at: freshness.checked_at,
+          }
+        : freshness,
   });
   const second = createRelationshipEdge({
     source: intermediate,
@@ -138,18 +149,101 @@ describe("test candidate resolver", () => {
 
     expect(
       findTestCandidates(impactFixture({ testFile: "checks/service.fixture.ts" }), conventions),
-    ).toHaveLength(1);
+    ).toEqual([
+      expect.objectContaining({
+        file: "checks/service.fixture.ts",
+        reason: "convention_match",
+      }),
+    ]);
     expect(
       findTestCandidates(impactFixture({ testFile: "fixtures/service.fixture.ts" }), conventions),
     ).toEqual([]);
     expect(
       findTestCandidates(impactFixture({ testFile: "checks/service.check.ts" }), conventions),
-    ).toHaveLength(1);
+    ).toEqual([
+      expect.objectContaining({
+        file: "checks/service.check.ts",
+        reason: "convention_match",
+      }),
+    ]);
+
+    const overlappingConventions: TestCandidateConventions = {
+      test_file_patterns: ["**/*.test.*", "**/*.check.ts"],
+      test_directories: [],
+    };
+    expect(findTestCandidates(impactFixture(), overlappingConventions)[0]?.reason).toBe(
+      "direct_compiler_reference",
+    );
+    expect(
+      findTestCandidates(impactFixture({ intermediate: true }), overlappingConventions)[0]?.reason,
+    ).toBe("transitive_compiler_reference");
+  });
+
+  it("enforces exported convention count and length bounds", () => {
+    const tooManyPatterns = Array.from(
+      { length: MAX_TEST_CANDIDATE_CONVENTION_ITEMS + 1 },
+      (_, index) => `**/*.case-${index}.ts`,
+    );
+    const tooLongDirectory = "a".repeat(MAX_TEST_CANDIDATE_CONVENTION_LENGTH + 1);
+
+    expect(() =>
+      findTestCandidates(impactFixture(), { test_file_patterns: tooManyPatterns }),
+    ).toThrow(`at most ${MAX_TEST_CANDIDATE_CONVENTION_ITEMS} entries`);
+    expect(() =>
+      findTestCandidates(impactFixture(), { test_directories: [tooLongDirectory] }),
+    ).toThrow(`must not exceed ${MAX_TEST_CANDIDATE_CONVENTION_LENGTH} characters`);
+  });
+
+  it("returns a proven empty result only for complete authoritative evidence", () => {
+    const result = findTestCandidates(impactFixture({ testFile: "src/service-consumer.ts" }));
+
+    expect(result).toEqual([]);
+  });
+
+  it("paginates whole candidates without splitting relationship proof", () => {
+    const impact = impactFixture({ intermediate: true });
+    const directTest = endpoint("test/service.integration.test.ts", "<module>", "<module>@2");
+    const directEdge = createRelationshipEdge({
+      source: directTest,
+      target: impact.root,
+      kind: "reference",
+      provenance: "compiler",
+      confidence: "exact",
+      resolution: "resolved",
+      freshness,
+    });
+    const candidates = findTestCandidates({
+      ...impact,
+      nodes: [...impact.nodes, { endpoint: directTest, depth: 1, direct: true }],
+      edges: [...impact.edges, directEdge],
+      visited_nodes: impact.visited_nodes + 1,
+      visited_edges: impact.visited_edges + 1,
+    });
+
+    const page = paginate(candidates, 1, 1);
+
+    expect(page).toMatchObject({ offset: 1, limit: 1, total: 2, has_more: false });
+    expect(page.items[0]?.evidence.relationships).toEqual(candidates[1]?.evidence.relationships);
+    expect(page.items[0]?.evidence.relationships).toHaveLength(2);
   });
 
   it.each([
     ["stale evidence", impactFixture({ stale: true })],
+    ["rebuilding evidence", impactFixture({ freshnessState: "rebuilding" })],
+    ["degraded evidence", impactFixture({ freshnessState: "degraded" })],
     ["truncated impact", impactFixture({ incomplete: true })],
+    ["unresolved evidence", impactFixture({ resolution: "unresolved" })],
+    ["heuristic evidence", impactFixture({ provenance: "heuristic" })],
+    [
+      "non-authoritative evidence",
+      {
+        ...impactFixture(),
+        edges: impactFixture().edges.map((edge) => ({
+          ...edge,
+          compiler_authoritative: false as const,
+        })),
+      },
+    ],
   ])("rejects %s instead of presenting an exact candidate", (_label, impact) => {
     expect(() => findTestCandidates(impact)).toThrow(/exact|complete|fresh/i);
   });

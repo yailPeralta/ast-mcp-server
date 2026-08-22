@@ -86,6 +86,8 @@ The first authoritative read opens or rebuilds the store. A fresh project constr
 
 `ast_get_project_status.index_observability` reports the requested policy, effective backend, state, operation, counters and bounded failure reason. Falling back from `enabled` or `canary` to memory increments fallback evidence without relabeling the requested policy as `disabled`.
 
+Persistence health is separate from compiler freshness. A synchronized compiler-backed memory fallback may report top-level `fresh` while `index` and `index_observability` remain `failed`; consumers must inspect those index fields instead of treating top-level `degraded` as the persistence signal. A process-stable `capability_unavailable` fallback reuses one memory index and retries SQLite only after restart or policy change. Invalid-root memory policy fallback is likewise stable within the session, while corruption, migration, read/write, flush, close and contention failures continue to retry and recover automatically.
+
 Project invalidation, eviction and shutdown close SQLite only after active users finish. SQLite files are derived data and never contain source bodies, compiler objects, credentials or operation plans.
 
 ## Operator surface
@@ -122,7 +124,7 @@ Cache files may be inspected or cleared later with the CLI. Source and reviewed 
 ## Consequences
 
 - Default local reads may create a private cache under XDG/HOME.
-- A process can continue compiler-authoritative work when persistence fails, with explicit degraded evidence.
+- A process can continue fresh compiler-authoritative work when persistence fails, with explicit failed index observability.
 - Operators who require zero persistent index state must set `disabled` explicitly.
 - Existing valid canary databases remain usable; unsafe legacy artifacts fail closed.
 - Node versions below `22.13.0` are outside the current development-line package contract.

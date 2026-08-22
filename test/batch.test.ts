@@ -1,6 +1,8 @@
+import { decode } from "@toon-format/toon";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseBatchDocument, runBatchDocument } from "../src/batch/runner.js";
-import { MAX_BATCH_OUTPUT_BYTES, MAX_FOREACH_ITEMS } from "../src/batch/schema.js";
+import { isReadBatchTool, MAX_BATCH_OUTPUT_BYTES, MAX_FOREACH_ITEMS } from "../src/batch/schema.js";
+import { serializeCliSuccess } from "../src/cli-output.js";
 import { clearOperationsForTests } from "../src/services/operations.js";
 import { clearProjectSessions } from "../src/services/project.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
@@ -18,6 +20,21 @@ async function fixture(): Promise<ProjectFixture> {
   return created;
 }
 
+async function candidateFixture(): Promise<ProjectFixture> {
+  const created = await createProjectFixture({
+    "src/value.ts":
+      "export function formatValue(value: number): string { return String(value); }\n",
+    "src/alpha.test.ts":
+      'import { formatValue } from "./value.js";\nexport const alpha = formatValue(1);\n',
+    "src/use.ts":
+      'import { formatValue } from "./value.js";\nexport const result = formatValue(42);\n',
+    "src/transitive.test.ts":
+      'import { result } from "./use.js";\nexport const transitive = result;\n',
+  });
+  fixtures.push(created);
+  return created;
+}
+
 afterEach(async () => {
   clearOperationsForTests();
   clearProjectSessions();
@@ -25,6 +42,123 @@ afterEach(async () => {
 });
 
 describe("batch runner", () => {
+  it("admits test-candidate reads and injects the authoritative pipeline root", async () => {
+    const project = await fixture();
+    const document = parseBatchDocument({
+      version: 1,
+      project_root: project.root,
+      steps: [
+        {
+          id: "candidates",
+          tool: "ast_find_test_candidates",
+          input: { file_path: "src/value.ts", symbol_path: "formatValue", limit: 1 },
+        },
+      ],
+    });
+    const invocations: Array<{ tool: string; input: Record<string, unknown> }> = [];
+
+    await runBatchDocument(document, {
+      invokeTool: async (tool, input) => {
+        invocations.push({ tool, input });
+        return { candidates: [], completeness: { complete: true, proven_empty: true } };
+      },
+    });
+
+    expect(isReadBatchTool(document.steps[0]!.tool)).toBe(true);
+    expect(invocations).toEqual([
+      {
+        tool: "ast_find_test_candidates",
+        input: {
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          limit: 1,
+          project_root: project.root,
+        },
+      },
+    ]);
+    expect(() =>
+      parseBatchDocument({
+        version: 1,
+        project_root: project.root,
+        steps: [
+          {
+            id: "candidates",
+            tool: "ast_find_test_candidates",
+            input: {
+              project_root: "/conflicting/project",
+              file_path: "src/value.ts",
+              symbol_path: "formatValue",
+            },
+          },
+        ],
+      }),
+    ).toThrow(/project_root/i);
+  });
+
+  it("preserves whole candidate pages across logical JSON and final TOON output", async () => {
+    const project = await candidateFixture();
+    const runPage = (offset: number) =>
+      runBatchDocument(
+        parseBatchDocument({
+          version: 1,
+          project_root: project.root,
+          steps: [
+            {
+              id: "candidates",
+              tool: "ast_find_test_candidates",
+              input: {
+                file_path: "src/value.ts",
+                symbol_path: "formatValue",
+                max_depth: 2,
+                offset,
+                limit: 1,
+              },
+            },
+          ],
+          emit: { $ref: "#/steps/candidates" },
+        }),
+      );
+
+    const first = await runPage(0);
+    const second = await runPage(1);
+    const firstResult = first.result as Record<string, unknown>;
+    const secondResult = second.result as Record<string, unknown>;
+
+    expect(firstResult).toMatchObject({
+      backend: "typescript_compiler",
+      compiler_authoritative: true,
+      offset: 0,
+      limit: 1,
+      total: 2,
+      has_more: true,
+      next_offset: 1,
+    });
+    expect(secondResult).toMatchObject({
+      offset: 1,
+      limit: 1,
+      total: 2,
+      has_more: false,
+      next_offset: null,
+    });
+    const pages = [firstResult, secondResult].map(
+      (result) => (result.candidates as Array<Record<string, unknown>>)[0]!,
+    );
+    expect(pages.map((candidate) => candidate.file)).toEqual([
+      "src/alpha.test.ts",
+      "src/transitive.test.ts",
+    ]);
+    expect(
+      pages.map(
+        (candidate) => (candidate.evidence as { relationships: unknown[] }).relationships.length,
+      ),
+    ).toEqual([1, 2]);
+
+    const json = JSON.parse(serializeCliSuccess(first, "json"));
+    const toon = decode(serializeCliSuccess(first, "toon")) as Record<string, unknown>;
+    expect(toon).toEqual(json);
+    expect(toon.result).toEqual(first.result);
+  });
+
   it("chains a symbol search into an exact source read and emits only the projection", async () => {
     const project = await fixture();
     const document = parseBatchDocument({
