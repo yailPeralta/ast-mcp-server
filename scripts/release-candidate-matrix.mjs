@@ -7,6 +7,7 @@ import { constants as fsConstants } from "node:fs";
 import {
   access,
   chmod,
+  copyFile,
   lstat,
   mkdir,
   mkdtemp,
@@ -57,6 +58,7 @@ export const RELEASE_CANDIDATE_COMMAND_IDS = Object.freeze([
   "lifecycle",
   "cli",
   "package",
+  "local-registry",
   "audit",
   "pack",
   "workflow-policy",
@@ -167,6 +169,7 @@ export function createRuntimeCommandPlan(
   yarnEntry,
   packageManager = { nodeBinary: runtime.nodeBinary, yarnEntry },
   workspaceRoot = repositoryRoot,
+  localRegistry,
 ) {
   const yarnPlan = yarnCommands.map(([id, args]) => {
     const authority =
@@ -177,6 +180,35 @@ export function createRuntimeCommandPlan(
       args: Object.freeze([authority.yarnEntry, ...args]),
     });
   });
+  if (localRegistry === undefined) fail("local-registry command authority is required.");
+  yarnPlan.splice(
+    11,
+    0,
+    Object.freeze({
+      id: "local-registry",
+      file: runtime.nodeBinary,
+      args: Object.freeze([
+        yarnEntry,
+        "test:local-registry",
+        "--output",
+        localRegistry.output,
+        "--expected-node",
+        localRegistry.expectedNode,
+        "--yarn-entry",
+        yarnEntry,
+        "--npm-entry",
+        localRegistry.npmEntry,
+        "--transitive-node-bin",
+        localRegistry.transitiveNodeBin,
+        "--expected-node-sha256",
+        localRegistry.expectedNodeSha256,
+        "--expected-yarn-sha256",
+        localRegistry.expectedYarnSha256,
+        "--expected-npm-sha256",
+        localRegistry.expectedNpmSha256,
+      ]),
+    }),
+  );
   return Object.freeze([
     ...yarnPlan,
     Object.freeze({
@@ -571,12 +603,49 @@ async function inspectRuntime(runtimeId, nodeBinary) {
   const yarnEntry = await realpath(yarnLauncher);
   const yarnEntryStats = await lstat(yarnEntry);
   if (!yarnEntryStats.isFile()) fail(`${runtimeId} Yarn entry must resolve to a regular file.`);
+  const npmLauncher = path.join(
+    path.dirname(nodeBinary),
+    process.platform === "win32" ? "npm.cmd" : "npm",
+  );
+  const npmEntry = await realpath(npmLauncher).catch(() => undefined);
+  const npmEntryStats =
+    npmEntry === undefined ? undefined : await lstat(npmEntry).catch(() => undefined);
+  if (npmEntryStats === undefined || !npmEntryStats.isFile()) {
+    fail(`${runtimeId} npm entry must resolve to a regular file.`);
+  }
   return Object.freeze({
     id: runtimeId,
     nodeBinary,
     yarnEntry,
+    npmEntry,
+    nodeSha256: createHash("sha256")
+      .update(await readFile(nodeBinary))
+      .digest("hex"),
+    yarnSha256: createHash("sha256")
+      .update(await readFile(yarnEntry))
+      .digest("hex"),
+    npmSha256: createHash("sha256")
+      .update(await readFile(npmEntry))
+      .digest("hex"),
     version,
     environment: createRuntimeEnvironment(runtimeId, nodeBinary),
+  });
+}
+
+async function prepareLocalRegistryCommand(runtime, materialization) {
+  const authorityRoot = path.join(materialization.temporaryRoot, `local-registry-${runtime.id}`);
+  const transitiveNodeBin = path.join(authorityRoot, "node");
+  await mkdir(authorityRoot, { mode: 0o700 });
+  await copyFile(runtime.nodeBinary, transitiveNodeBin, fsConstants.COPYFILE_EXCL);
+  await chmod(transitiveNodeBin, 0o700);
+  return Object.freeze({
+    output: path.join(materialization.temporaryRoot, `${runtime.id}-local-registry.json`),
+    expectedNode: runtime.id === "node22.13" ? "22.13.0" : "24",
+    npmEntry: runtime.npmEntry,
+    transitiveNodeBin,
+    expectedNodeSha256: runtime.nodeSha256,
+    expectedYarnSha256: runtime.yarnSha256,
+    expectedNpmSha256: runtime.npmSha256,
   });
 }
 
@@ -1087,11 +1156,13 @@ async function runRuntime(
   try {
     failedPhase = "runtime-cache-sentinel-setup";
     const cacheSentinel = await createRuntimeCacheSentinel(runtimeGateEnvironment.HOME);
+    const localRegistry = await prepareLocalRegistryCommand(runtime, materialization);
     const plan = createRuntimeCommandPlan(
       runtime,
       runtime.yarnEntry,
       packageManager,
       materialization.workspaceRoot,
+      localRegistry,
     );
     for (const command of plan) {
       failedPhase = command.id;
@@ -1175,7 +1246,7 @@ async function main() {
   const packageMetadata = JSON.parse(
     await readFile(path.join(repositoryRoot, "package.json"), "utf8"),
   );
-  if (packageMetadata.version !== "0.11.0") fail("package version must be exactly 0.11.0.");
+  if (packageMetadata.version !== "0.11.1") fail("package version must be exactly 0.11.1.");
   const identity = Object.freeze({
     head,
     head_tree: headTree,

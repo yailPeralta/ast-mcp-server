@@ -6,7 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.11.0] — local release candidate, pending release (2026-08-23)
+## [0.11.1] — local recovery candidate, pending release (2026-08-23)
+
+### Fixed
+
+- Public- and local-registry consumer verification now share one dependency-free managed-skill validator that derives the expected release version from the bundled skill metadata, compares installed copies byte-for-byte, and rejects embedded managed guidance.
+- The exact-tree release matrix now runs `test:local-registry` under both supported Node.js lanes, preventing managed-asset verifier drift from reaching publication again.
+
+### Release status
+
+- This local recovery candidate succeeds the immutable npm `0.11.0` publication, whose public-registry verification failed because two consumer validators still required skill bundle `4.4.0` while the published package correctly contained `4.5.0`. Version `0.11.0` remains under `next` only and must not be promoted, tagged, or released. Version `0.11.1` remains pending its exact-tree matrix, CI, and separately authorized delivery sequence; it has not been published or assigned to any dist-tag.
+
+## [0.11.0] — published to `next`, verification failed, not promoted (2026-08-23)
 
 ### Added
 
@@ -21,7 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release status
 
-- This local candidate is pending its exact-tree release matrix, CI, and the repository's separately authorized delivery sequence. It has not been published to npm, assigned to `next` or `latest`, tagged in Git, or released on GitHub; registry and GitHub readbacks remain authoritative.
+- npm published these immutable bytes under `next` with provenance and the expected Git commit. Public-registry verification then failed because two consumer validators still required skill bundle `4.4.0` while the package correctly contained `4.5.0`; `0.11.0` was never promoted to `latest`, tagged in Git, or released on GitHub.
 
 ## [0.10.0] — published to `latest` and `next`, registry verified (2026-08-22)
 

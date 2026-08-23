@@ -22,6 +22,7 @@ import { promisify } from "node:util";
 import { applyPatch } from "diff";
 
 import { createPassedRegistryConsumerGates } from "./registry-consumer-gates.mjs";
+import { validateManagedSkillBundle } from "./managed-skill-bundle-validator.mjs";
 
 const execFileAsync = promisify(execFile);
 const scriptPath = fileURLToPath(import.meta.url);
@@ -423,15 +424,12 @@ async function verifySetupIdempotency(consumerRoot, installedPackageRoot) {
         "utf8",
       ),
     ]);
-  if (
-    !packagedSkill.includes("name: structural-code-editing") ||
-    claudeSkill !== packagedSkill ||
-    hermesSkill !== packagedSkill ||
-    packagedGuidance.includes("ast-tool:structural-code-editing guidance") ||
-    JSON.parse(packagedReleases).current?.version !== "4.4.0"
-  ) {
-    fail("installed setup did not preserve all bundled managed assets.");
-  }
+  validateManagedSkillBundle({
+    packagedSkill,
+    packagedGuidance,
+    packagedReleases,
+    copiedSkills: [claudeSkill, hermesSkill],
+  });
   const claudeGuidance = await readFile(path.join(claudeRoot, "CLAUDE.md"), "utf8");
   const discovery = parseJson(
     (
