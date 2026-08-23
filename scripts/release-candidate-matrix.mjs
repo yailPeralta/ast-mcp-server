@@ -1175,7 +1175,7 @@ async function main() {
   const packageMetadata = JSON.parse(
     await readFile(path.join(repositoryRoot, "package.json"), "utf8"),
   );
-  if (packageMetadata.version !== "0.10.0") fail("package version must be exactly 0.10.0.");
+  if (packageMetadata.version !== "0.11.0") fail("package version must be exactly 0.11.0.");
   const identity = Object.freeze({
     head,
     head_tree: headTree,

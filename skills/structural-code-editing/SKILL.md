@@ -18,6 +18,8 @@ Cargar este skill antes de navegar semánticamente, analizar impacto o referenci
 
 No forzar un roundtrip AST para Markdown, configuración, comentarios ni una edición textual trivial en un archivo ya conocido. Si las tools `ast_*` no están disponibles, declarar el fallback y no presentar búsquedas textuales como evidencia compiler-backed.
 
+The local 0.11.0 release candidate requires Node.js `>=22.13.0` and is verified with exact Node.js 22.13.0 plus the governed Node.js 24 line. Published v0.10.0 retains its immutable Node.js 22.13.0/24 release evidence.
+
 ## Hard Rules
 
 - Verificar primero que las tools existen y que `ast_get_project_status` informa un proyecto usable.

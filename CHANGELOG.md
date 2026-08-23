@@ -6,7 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.10.0] — local release candidate, pending release (2026-08-19)
+## [0.11.0] — local release candidate, pending release (2026-08-23)
+
+### Added
+
+- Managed setup and `install-skill` now install manifested multi-file skill bundles atomically, verify every bundled digest, and admit exact npm-proven predecessor bytes without treating version text as ownership.
+- `ast-tool upgrade --check` inspects supported direct npm and Volta installations without mutation; `ast-tool upgrade` performs the safe direct update with isolated package-manager state and then reconciles managed assets.
+- CLI batch and doctor project selection now discovers the nearest `tsconfig.json` or `jsconfig.json` up to the Git or filesystem boundary, while rejecting same-level ambiguity and symlinked config identities.
+- `ast-tool doctor` reports bounded, privacy-safe compiler, session, index, and queue state with executable continuations; unavailable registered-session evidence is reported as `not_run` instead of being fabricated.
+
+### Fixed
+
+- Project watchers now ignore events owned by exact symbol-index cache artifacts while preserving legitimate source invalidations, including POSIX filenames containing a literal backslash.
+
+### Release status
+
+- This local candidate is pending its exact-tree release matrix, CI, and the repository's separately authorized delivery sequence. It has not been published to npm, assigned to `next` or `latest`, tagged in Git, or released on GitHub; registry and GitHub readbacks remain authoritative.
+
+## [0.10.0] — published to `latest` and `next`, registry verified (2026-08-22)
 
 ### Added
 
@@ -20,7 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release status
 
-- This local candidate is pending its exact-tree release matrix, CI, and the repository's separately authorized delivery sequence. It has not been published to npm, assigned to `next` or `latest`, tagged in Git, or released on GitHub; registry and GitHub readbacks remain authoritative.
+- npm published these immutable bytes under `next` with provenance and the expected Git commit. Public-registry consumer and release-preflight verification passed, `latest` and `next` both resolve to `0.10.0`, and the annotated `v0.10.0` tag plus GitHub Release resolve to the same release commit.
 
 ## [0.9.2] — local release candidate, pending release (2026-08-16)
 
