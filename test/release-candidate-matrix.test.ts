@@ -229,7 +229,7 @@ async function createMatrixFixture(
     writeFile(path.join(scriptsDirectory, "workflow-policy-check.mjs"), "process.exitCode = 99;\n"),
     writeFile(
       path.join(repository, "package.json"),
-      options.packageBytes ?? `${JSON.stringify({ name: "matrix-fixture", version: "0.11.0" })}\n`,
+      options.packageBytes ?? `${JSON.stringify({ name: "matrix-fixture", version: "0.11.1" })}\n`,
     ),
   ]);
 
@@ -248,6 +248,8 @@ async function createMatrixFixture(
     ),
     writeFile(path.join(node22Directory, "yarn"), "fixture yarn entry\n", { mode: 0o600 }),
     writeFile(path.join(node24Directory, "yarn"), "fixture yarn entry\n", { mode: 0o600 }),
+    writeFile(path.join(node22Directory, "npm"), "fixture npm entry\n", { mode: 0o600 }),
+    writeFile(path.join(node24Directory, "npm"), "fixture npm entry\n", { mode: 0o600 }),
   ]);
   await Promise.all([chmod(node22Binary, 0o700), chmod(node24Binary, 0o700)]);
 
@@ -375,25 +377,64 @@ describe("release candidate matrix", () => {
       yarnEntry: "/opt/node-24/lib/corepack/yarn.js",
     };
     const yarnEntry = "/opt/node-22.13/lib/corepack/yarn.js";
-    const plan = createRuntimeCommandPlan(runtime, yarnEntry, packageManager, "/tmp/candidate");
+    const localRegistry = {
+      output: "/private/local-registry.json",
+      expectedNode: "22.13.0",
+      npmEntry: "/opt/node-22.13/lib/npm/npm-cli.js",
+      transitiveNodeBin: "/private/node/node",
+      expectedNodeSha256: "a".repeat(64),
+      expectedYarnSha256: "b".repeat(64),
+      expectedNpmSha256: "c".repeat(64),
+    };
+    const plan = createRuntimeCommandPlan(
+      runtime,
+      yarnEntry,
+      packageManager,
+      "/tmp/candidate",
+      localRegistry,
+    );
     expect(plan.map(({ id }: { id: string }) => id)).toEqual(RELEASE_CANDIDATE_COMMAND_IDS);
-    expect(plan).toHaveLength(15);
+    expect(plan).toHaveLength(16);
     expect(plan[0]).toEqual({
       id: "install",
       file: packageManager.nodeBinary,
       args: [packageManager.yarnEntry, "install", "--immutable"],
     });
-    expect(plan[12]).toEqual({
+    expect(plan[11]).toEqual({
+      id: "local-registry",
+      file: runtime.nodeBinary,
+      args: [
+        yarnEntry,
+        "test:local-registry",
+        "--output",
+        localRegistry.output,
+        "--expected-node",
+        localRegistry.expectedNode,
+        "--yarn-entry",
+        yarnEntry,
+        "--npm-entry",
+        localRegistry.npmEntry,
+        "--transitive-node-bin",
+        localRegistry.transitiveNodeBin,
+        "--expected-node-sha256",
+        localRegistry.expectedNodeSha256,
+        "--expected-yarn-sha256",
+        localRegistry.expectedYarnSha256,
+        "--expected-npm-sha256",
+        localRegistry.expectedNpmSha256,
+      ],
+    });
+    expect(plan[13]).toEqual({
       id: "pack",
       file: runtime.nodeBinary,
       args: [yarnEntry, "pack", "--dry-run", "--json"],
     });
-    expect(plan[13]).toMatchObject({
+    expect(plan[14]).toMatchObject({
       id: "workflow-policy",
       file: runtime.nodeBinary,
       args: ["/tmp/candidate/scripts/workflow-policy-check.mjs"],
     });
-    expect(plan[14]).toEqual({
+    expect(plan[15]).toEqual({
       id: "diff-check",
       file: TRUSTED_GIT_BINARY,
       args: ["diff", "--no-ext-diff", "--check", "HEAD^", "HEAD"],
@@ -974,7 +1015,7 @@ describe("release candidate matrix", () => {
       expect(summary).toMatchObject({
         schema_version: 1,
         status: "pass",
-        package_version: "0.11.0",
+        package_version: "0.11.1",
         package_manager_node_version: "v24.16.0",
       });
       expect(summary.runtimes).toEqual([
@@ -983,14 +1024,14 @@ describe("release candidate matrix", () => {
           node_version: "v22.13.0",
           report: "node22.13.json",
           status: "pass",
-          command_count: 15,
+          command_count: 16,
         },
         {
           id: "node24",
           node_version: "v24.16.0",
           report: "node24.json",
           status: "pass",
-          command_count: 15,
+          command_count: 16,
         },
       ]);
 
@@ -1012,7 +1053,7 @@ describe("release candidate matrix", () => {
           cleanup_status: "pass",
           cleanup_failure_code: null,
         });
-        expect(report.commands).toHaveLength(15);
+        expect(report.commands).toHaveLength(16);
         for (const command of report.commands) {
           expect(exactKeys(command)).toEqual(commandReportKeys);
         }
