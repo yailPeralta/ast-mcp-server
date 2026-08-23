@@ -10,6 +10,7 @@ import {
   getProjectSessionRegistrySnapshot,
   getSourceFileOrThrow,
   invalidateProject,
+  peekRegisteredProjectStatus,
   reportSymbolIndexFailure,
   withProject,
 } from "../src/services/project.js";
@@ -33,6 +34,35 @@ function createDeferred(): { readonly promise: Promise<void>; readonly resolve: 
     resolve = settle;
   });
   return { promise, resolve };
+}
+
+function installWatcherProbe(): {
+  readonly emit: (files: readonly string[]) => void;
+  readonly restore: () => void;
+} {
+  let notifyChange: ((files: readonly string[]) => void) | undefined;
+  const watcherSpy = vi
+    .spyOn(projectWatcherModule, "createProjectWatcher")
+    .mockImplementation((options) => {
+      notifyChange = options.onChange;
+      return {
+        start: () => undefined,
+        close: () => undefined,
+        snapshot: () => ({
+          state: "ready",
+          watched_directories: options.directories?.length ?? 0,
+          pending_paths: [],
+          pending_paths_truncated: false,
+        }),
+      };
+    });
+  return {
+    emit: (files) => {
+      if (!notifyChange) throw new Error("Watcher probe is not ready.");
+      notifyChange(files);
+    },
+    restore: () => watcherSpy.mockRestore(),
+  };
 }
 
 afterEach(async () => {
@@ -763,6 +793,145 @@ describe("project sessions", () => {
         last_error: "corrupt_storage",
       },
     });
+  });
+
+  it("ignores exact owned artifacts in a nested index cache", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", path.join(fixture.root, ".symbol-index-cache"));
+    const probe = installWatcherProbe();
+
+    try {
+      const status = await getProjectStatus(fixture.root);
+      const cachePath = symbolIndexCachePath(readSymbolIndexPersistencePolicy(), status.project)!;
+      const relativeCachePath = path.relative(fixture.root, cachePath).split(path.sep).join("/");
+      for (const eventPath of [
+        path.posix.dirname(relativeCachePath),
+        relativeCachePath,
+        `${relativeCachePath}-wal`,
+        `${relativeCachePath}-shm`,
+        `${relativeCachePath}.corrupt-123-456`,
+      ]) {
+        probe.emit([eventPath]);
+        expect(peekRegisteredProjectStatus(fixture.root)).toMatchObject({ state: "fresh" });
+      }
+    } finally {
+      probe.restore();
+    }
+  });
+
+  it("preserves nested cache descendants, traversal lookalikes, and POSIX backslashes", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", path.join(fixture.root, ".symbol-index-cache"));
+    const probe = installWatcherProbe();
+
+    try {
+      const status = await getProjectStatus(fixture.root);
+      const cachePath = symbolIndexCachePath(readSymbolIndexPersistencePolicy(), status.project)!;
+      const relativeCachePath = path.relative(fixture.root, cachePath).split(path.sep).join("/");
+      const cacheDirectory = path.posix.dirname(relativeCachePath);
+      const lookalikes = [
+        `${cacheDirectory}/real-source.ts`,
+        `${cacheDirectory}/child`,
+        `${cacheDirectory}/child/../${path.posix.basename(relativeCachePath)}`,
+      ];
+      if (path.sep === "/") {
+        const literalBackslashSibling = `${cacheDirectory}\\${path.posix.basename(relativeCachePath)}`;
+        await writeFile(path.join(fixture.root, literalBackslashSibling), "literal backslash\n");
+        lookalikes.push(literalBackslashSibling);
+      }
+      for (const eventPath of lookalikes) {
+        probe.emit([eventPath]);
+        expect(peekRegisteredProjectStatus(fixture.root)).toMatchObject({
+          state: "pending",
+          causes: ["source_change"],
+        });
+        await getProjectStatus(fixture.root);
+      }
+    } finally {
+      probe.restore();
+    }
+  });
+
+  it("ignores exact owned root-level index artifacts", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", fixture.root);
+    const probe = installWatcherProbe();
+
+    try {
+      const status = await getProjectStatus(fixture.root);
+      const cachePath = symbolIndexCachePath(readSymbolIndexPersistencePolicy(), status.project)!;
+      const relativeCachePath = path.relative(fixture.root, cachePath).split(path.sep).join("/");
+      for (const eventPath of [
+        relativeCachePath,
+        `${relativeCachePath}-wal`,
+        `${relativeCachePath}-shm`,
+        `${relativeCachePath}.corrupt-123-456`,
+      ]) {
+        probe.emit([eventPath]);
+        expect(peekRegisteredProjectStatus(fixture.root)).toMatchObject({ state: "fresh" });
+      }
+    } finally {
+      probe.restore();
+    }
+  });
+
+  it("preserves root-level siblings, malformed quarantines, and external-cache sources", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+    vi.stubEnv("AST_SYMBOL_INDEX_PERSISTENCE", "canary");
+    vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", fixture.root);
+    const externalCacheRoot = path.join(
+      path.dirname(fixture.root),
+      `${path.basename(fixture.root)}-external-cache`,
+    );
+    const probe = installWatcherProbe();
+
+    try {
+      const status = await getProjectStatus(fixture.root);
+      const cachePath = symbolIndexCachePath(readSymbolIndexPersistencePolicy(), status.project)!;
+      const relativeCachePath = path.relative(fixture.root, cachePath).split(path.sep).join("/");
+      for (const eventPath of [
+        `${relativeCachePath}-real-source.ts`,
+        `${relativeCachePath}.real-source.ts`,
+        `${relativeCachePath}.corrupt-nope-456`,
+        `${relativeCachePath}.corrupt-123-nope`,
+        `${relativeCachePath}.corrupt-123-456-extra`,
+        `./${relativeCachePath}`,
+      ]) {
+        probe.emit([eventPath]);
+        expect(peekRegisteredProjectStatus(fixture.root)).toMatchObject({
+          state: "pending",
+          causes: ["source_change"],
+        });
+        await getProjectStatus(fixture.root);
+      }
+
+      clearProjectSessions();
+      vi.stubEnv("AST_SYMBOL_INDEX_CACHE_ROOT", externalCacheRoot);
+      await getProjectStatus(fixture.root);
+      probe.emit(["src/value.ts"]);
+      expect(peekRegisteredProjectStatus(fixture.root)).toMatchObject({
+        state: "pending",
+        causes: ["source_change"],
+      });
+    } finally {
+      probe.restore();
+      await rm(externalCacheRoot, { recursive: true, force: true });
+    }
   });
 
   it("returns canonical compiler symbols when failure reporting rejects", async () => {
