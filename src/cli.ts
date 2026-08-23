@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import process from "node:process";
 
 import { ZodError } from "zod";
@@ -35,6 +36,11 @@ import { runUpgradeLease, UpgradeCommandError } from "./services/upgrade-command
 import { reconcileUpgrade } from "./services/upgrade-reconcile.js";
 import { createUpgradeRuntime, UpgradeCleanupError } from "./services/upgrade-runtime.js";
 import { UpgradeError } from "./services/upgrade.js";
+import {
+  CliProjectDiscoveryError,
+  resolveCliBatchProject,
+} from "./services/cli-project-discovery.js";
+import { runDoctor } from "./services/doctor.js";
 
 interface CliFailure {
   status: "error";
@@ -68,6 +74,7 @@ function usage(): string {
     "  ast-tool apply <plan.astplan> --plan-hash <sha256>",
     "  ast-tool cache inspect",
     "  ast-tool cache clear --yes",
+    "  ast-tool doctor [--project <config-or-dir>]",
     "  ast-tool install-skill [claude|hermes|all] [--scope user|project] [--project-root <path>] [--force]",
     "  ast-tool setup [--agents claude,hermes|all --yes] [--force-skill]",
     "  ast-tool upgrade [--check]",
@@ -117,6 +124,13 @@ function parseApplyArgs(args: string[]): { planFile: string; planHash: string } 
     throw new CliError(usage(), "USAGE", 2, "apply");
   }
   return { planFile: args[0], planHash: args[2] };
+}
+
+function parseDoctorArgs(args: string[]): { project?: string } {
+  if (args.length === 0) return {};
+  if (args.length === 2 && args[0] === "--project" && args[1] && !args[1].startsWith("--"))
+    return { project: args[1] };
+  throw new CliError(usage(), "USAGE", 2, "doctor");
 }
 
 interface RunArgs {
@@ -266,10 +280,19 @@ function parseSetupArgs(args: string[]): SetupArgs {
 
 async function parseDocumentForCommand(source: string, command: string) {
   try {
-    return parseBatchDocument(await readBatchInput(source));
+    const input = await readBatchInput(source);
+    return parseBatchDocument(await resolveCliBatchProject(input, process.cwd()));
   } catch (error) {
     if (error instanceof CliError) {
       throw new CliError(error.message, error.code, 2, command, error.stepId, { cause: error });
+    }
+    if (error instanceof CliProjectDiscoveryError) {
+      const relativeSource =
+        source === "-" ? source : path.relative(process.cwd(), path.resolve(source));
+      const shellSource = `'${relativeSource.replaceAll("'", `'\\''`)}'`;
+      throw new CliError(error.message, error.code, 2, command, undefined, undefined, {
+        continuation: `${error.continuation} Then run: ast-tool ${command} ${shellSource}`,
+      });
     }
     const message =
       error instanceof ZodError ? error.issues.map((issue) => issue.message).join("; ") : error;
@@ -286,6 +309,16 @@ async function parseDocumentForCommand(source: string, command: string) {
 
 export async function runCli(args: string[]): Promise<unknown> {
   const [command, ...commandArgs] = args;
+  if (command === "doctor") {
+    const executable = process.argv[1];
+    if (!executable) throw new CliError(usage(), "USAGE", 2, command);
+    return runDoctor({
+      ...parseDoctorArgs(commandArgs),
+      cwd: process.cwd(),
+      executable,
+      environment: process.env,
+    });
+  }
   if (command === "run" || command === "validate") {
     const runArgs =
       command === "run"
@@ -562,6 +595,10 @@ async function main(): Promise<void> {
     const result = await runCli(args);
     const outputFormat = args[0] === "run" ? parseRunArgs(args.slice(1)).outputFormat : "json";
     process.stdout.write(`${serializeCliSuccess(result, outputFormat)}\n`);
+    if (args[0] === "doctor") {
+      const status = (result as { status?: string }).status;
+      process.exitCode = status === "healthy" ? 0 : status === "degraded" ? 1 : 2;
+    }
   } catch (error) {
     const failed = failure(error, args[0] ?? null);
     process.stderr.write(`${JSON.stringify(failed.value)}\n`);
