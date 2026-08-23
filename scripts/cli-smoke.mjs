@@ -8,6 +8,7 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readdir,
   rm,
   symlink,
   writeFile,
@@ -32,6 +33,7 @@ const fakeHermesState = path.join(fixtureRoot, "fake-hermes-state.json");
 const sharedAgentsHome = path.join(fixtureRoot, "home");
 const openCodeConfig = path.join(fixtureRoot, "opencode.json");
 const cacheRoot = path.join(fixtureRoot, "symbol-index-cache");
+const upgradeTemp = path.join(fixtureRoot, "upgrade-tmp");
 const environment = {
   ...process.env,
   PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
@@ -45,6 +47,7 @@ const environment = {
   FAKE_GEMINI_STATE: path.join(fixtureRoot, "fake-gemini-state.json"),
   FAKE_COPILOT_STATE: path.join(fixtureRoot, "fake-copilot-state.json"),
   HOME: sharedAgentsHome,
+  TMPDIR: upgradeTemp,
   OPENCODE_CONFIG: openCodeConfig,
   AST_SYMBOL_INDEX_PERSISTENCE: "disabled",
 };
@@ -67,9 +70,10 @@ async function invoke(
   args,
   invocationEnvironment = environment,
   allowNode2213SQLiteWarning = false,
+  cwd = repositoryRoot,
 ) {
   const { stdout, stderr } = await executeFile(process.execPath, [cliPath, ...args], {
-    cwd: repositoryRoot,
+    cwd,
     env: invocationEnvironment,
     maxBuffer: 12 * 1024 * 1024,
   });
@@ -89,10 +93,10 @@ async function invokeRaw(args) {
   return stdout.trimEnd();
 }
 
-async function invokeFailure(args, invocationEnvironment = environment) {
+async function invokeFailure(args, invocationEnvironment = environment, cwd = repositoryRoot) {
   try {
     await executeFile(process.execPath, [cliPath, ...args], {
-      cwd: repositoryRoot,
+      cwd,
       env: invocationEnvironment,
       maxBuffer: 12 * 1024 * 1024,
     });
@@ -189,6 +193,7 @@ async function installFakeAgents() {
 
 try {
   await installFakeAgents();
+  await mkdir(upgradeTemp);
   await mkdir(path.join(fixtureRoot, "src"), { recursive: true });
   await writeFile(
     path.join(fixtureRoot, "tsconfig.json"),
@@ -333,6 +338,46 @@ try {
   const readResult = await invokeWithStdin(["run", "-"], await readFile(readPipelineFile, "utf8"));
   if (readResult.invocation_count !== 2 || !readResult.result?.text?.includes("formatValue")) {
     throw new Error(`Unexpected read pipeline output: ${JSON.stringify(readResult)}`);
+  }
+  const jsProject = path.join(fixtureRoot, "js-project");
+  const jsNested = path.join(jsProject, "nested", "cwd");
+  const jsPipeline = path.join(jsProject, "pipeline.json");
+  await mkdir(path.join(jsProject, "src"), { recursive: true });
+  await mkdir(jsNested, { recursive: true });
+  await writeFile(
+    path.join(jsProject, "jsconfig.json"),
+    JSON.stringify({ compilerOptions: { allowJs: true, checkJs: true }, include: ["src/**/*.js"] }),
+  );
+  await writeFile(path.join(jsProject, "src", "value.js"), "export function jsValue() {}\n");
+  await writeFile(
+    jsPipeline,
+    JSON.stringify({
+      version: 1,
+      steps: [{ id: "search", tool: "ast_search_symbols", input: { query: "jsValue" } }],
+      emit: { $ref: "#/steps/search" },
+    }),
+  );
+  const jsResult = await invoke(["run", jsPipeline], environment, false, jsNested);
+  if (!jsResult.result?.symbols?.some((symbol) => symbol.selector?.includes("jsValue"))) {
+    throw new Error(`Unexpected jsconfig discovery result: ${JSON.stringify(jsResult)}`);
+  }
+  await writeFile(path.join(jsProject, "tsconfig.json"), "{}");
+  const ambiguous = await invokeFailure(["run", jsPipeline], environment, jsNested);
+  const ambiguousError = JSON.parse(ambiguous.stderr);
+  if (
+    ambiguous.code !== 2 ||
+    ambiguousError.code !== "PROJECT_CONFIG_AMBIGUOUS" ||
+    !ambiguousError.details?.continuation?.includes("ast-tool run '../../pipeline.json'") ||
+    ambiguous.stderr.includes(jsProject)
+  ) {
+    throw new Error(`Unexpected project ambiguity result: ${JSON.stringify(ambiguous)}`);
+  }
+  const explicitJsDocument = JSON.parse(await readFile(jsPipeline, "utf8"));
+  explicitJsDocument.project_root = path.join(jsProject, "jsconfig.json");
+  await writeFile(jsPipeline, JSON.stringify(explicitJsDocument));
+  const explicitJs = await invoke(["run", jsPipeline], environment, false, jsNested);
+  if (!explicitJs.result?.symbols?.some((symbol) => symbol.selector?.includes("jsValue"))) {
+    throw new Error(`Unexpected explicit jsconfig result: ${JSON.stringify(explicitJs)}`);
   }
   const toonReadResult = decode(
     await invokeRaw(["run", "--output-format", "toon", readPipelineFile]),
@@ -701,6 +746,29 @@ try {
   ) {
     throw new Error(`Agent setup was not idempotent: ${JSON.stringify(agentSetupReplay)}`);
   }
+  const doctor = await invoke(["doctor", "--project", fixtureRoot]);
+  if (
+    doctor.schema_version !== 1 ||
+    doctor.status !== "healthy" ||
+    doctor.checks.length > 9 ||
+    doctor.checks.find((check) => check.code === "derived_index")?.status !== "not_run" ||
+    doctor.checks.find((check) => check.code === "operation_queue")?.status !== "not_run"
+  ) {
+    throw new Error(`Unexpected doctor result: ${JSON.stringify(doctor)}`);
+  }
+  const degradedDoctor = await invokeFailure(["doctor", "--project", fixtureRoot], {
+    ...environment,
+    AST_MAX_PROJECT_SESSIONS: "secret=/home/private",
+  });
+  const degradedResult = JSON.parse(degradedDoctor.stdout);
+  if (
+    degradedDoctor.code !== 1 ||
+    degradedDoctor.stderr !== "" ||
+    degradedResult.status !== "degraded" ||
+    JSON.stringify(degradedResult).includes(fixtureRoot)
+  ) {
+    throw new Error(`Unexpected degraded doctor result: ${JSON.stringify(degradedDoctor)}`);
+  }
   if (
     agentSetup.version !== 2 ||
     !Array.isArray(agentSetup.physical_writes) ||
@@ -738,8 +806,36 @@ try {
     throw new Error(`Unexpected project skill installation: ${JSON.stringify(projectSkill)}`);
   }
 
+  for (const args of [["upgrade"], ["upgrade", "--check"]]) {
+    const failed = await invokeFailure(args);
+    const error = JSON.parse(failed.stderr);
+    if (
+      failed.code !== 1 ||
+      failed.stdout !== "" ||
+      error.code !== "UPGRADE_PROVENANCE_UNSUPPORTED" ||
+      failed.stderr.includes(repositoryRoot) ||
+      failed.stderr.includes(fixtureRoot)
+    ) {
+      throw new Error(`Unexpected source-checkout upgrade result: ${JSON.stringify(failed)}`);
+    }
+  }
+  if ((await readdir(upgradeTemp)).some((entry) => entry.startsWith("ast-tool-upgrade-"))) {
+    throw new Error("Upgrade temporary boundary was not removed");
+  }
+  for (const args of [
+    ["upgrade", "--yes"],
+    ["upgrade", "--unknown"],
+    ["doctor", "--unknown"],
+  ]) {
+    const failed = await invokeFailure(args);
+    const error = JSON.parse(failed.stderr);
+    if (failed.code !== 2 || failed.stdout !== "" || error.code !== "USAGE") {
+      throw new Error(`Unexpected CLI usage result: ${JSON.stringify(failed)}`);
+    }
+  }
+
   process.stdout.write(
-    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, toon_output: true, persisted_apply: true, lock_contention: true, replay: true, skill_installation: true, agent_setup: true, cache_inspect: true, cache_clear: true, cache_confirmation: true, cache_unknown_preserved: true, cache_redacted_failure: true })}\n`,
+    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, toon_output: true, persisted_apply: true, lock_contention: true, replay: true, project_discovery: true, doctor: true, skill_installation: true, agent_setup: true, upgrade_preflight: true, cache_inspect: true, cache_clear: true, cache_confirmation: true, cache_unknown_preserved: true, cache_redacted_failure: true })}\n`,
   );
 } finally {
   await rm(fixtureRoot, { recursive: true, force: true });
