@@ -15,6 +15,7 @@ import {
   readFile,
   readdir,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -572,6 +573,85 @@ try {
   if (!discovered.result?.symbols?.some((symbol) => symbol.selector?.includes("packedJsValue"))) {
     throw new Error(`packed CLI did not discover jsconfig: ${JSON.stringify(discovered)}`);
   }
+  const doctorHome = path.join(temporaryRoot, "doctor-home");
+  await mkdir(doctorHome);
+  const doctorEnvironment = {
+    PATH: "",
+    HOME: doctorHome,
+    AST_SYMBOL_INDEX_PERSISTENCE: "disabled",
+    ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
+  };
+  const packedCli = path.join(installedPackageRoot, "dist", "cli.js");
+  const healthyDoctor = parseJsonOutput(
+    (
+      await executeFile(process.execPath, [packedCli, "doctor", "--project", jsProject], {
+        cwd: jsNested,
+        env: doctorEnvironment,
+      })
+    ).stdout,
+  );
+  if (healthyDoctor.status !== "healthy" || healthyDoctor.checks?.length > 9)
+    throw new Error(`packed doctor was not healthy: ${JSON.stringify(healthyDoctor)}`);
+  try {
+    await executeFile(process.execPath, [packedCli, "doctor", "--project", jsProject], {
+      cwd: jsNested,
+      env: { ...doctorEnvironment, AST_MAX_PROJECT_SESSIONS: "invalid" },
+    });
+    throw new Error("packed degraded doctor unexpectedly exited zero");
+  } catch (error) {
+    const result = parseJsonOutput(error?.stdout ?? "{}");
+    if (error?.code !== 1 || error?.stderr !== "" || result.status !== "degraded") throw error;
+  }
+  const continuationCwd = path.join(temporaryRoot, "doctor continuation cwd");
+  const continuationProject = path.join(temporaryRoot, "outside 'doctor project");
+  const continuationBin = path.join(temporaryRoot, "doctor-continuation-bin");
+  await Promise.all([mkdir(continuationCwd), mkdir(continuationProject), mkdir(continuationBin)]);
+  await writeFile(path.join(continuationProject, "tsconfig.json"), "{}");
+  await writeFile(path.join(continuationProject, "jsconfig.json"), "{}");
+  await symlink(globalExecutable, path.join(continuationBin, "ast-tool"));
+  await symlink(process.execPath, path.join(continuationBin, "node"));
+  async function continueDoctor(project, prepare) {
+    let continuation;
+    try {
+      await executeFile(process.execPath, [packedCli, "doctor", "--project", project], {
+        cwd: continuationCwd,
+        env: doctorEnvironment,
+      });
+    } catch (error) {
+      continuation = parseJsonOutput(error?.stdout ?? "{}").checks?.find(
+        (check) => check.code === "project_config",
+      )?.continuation;
+    }
+    const command = continuation?.match(/run:\s*(ast-tool doctor.*)$/iu)?.[1];
+    if (
+      !command ||
+      continuation.includes(temporaryRoot) ||
+      continuation.includes("[path-redacted]")
+    )
+      throw new Error(`packed doctor continuation was unsafe: ${String(continuation)}`);
+    await prepare?.();
+    const continued = parseJsonOutput(
+      (
+        await executeFile("/bin/sh", ["-c", command], {
+          cwd: continuationCwd,
+          env: { ...doctorEnvironment, PATH: continuationBin },
+        })
+      ).stdout,
+    );
+    if (continued.status !== "healthy") throw new Error("packed doctor continuation did not run");
+  }
+  await continueDoctor(continuationProject);
+  const missingContinuationProject = path.join(temporaryRoot, "missing 'doctor project");
+  await continueDoctor(missingContinuationProject, async () => {
+    await mkdir(missingContinuationProject);
+    await writeFile(path.join(missingContinuationProject, "tsconfig.json"), "{}");
+  });
+  const unsafeContinuationProject = path.join(temporaryRoot, "unsafe 'doctor link.json");
+  await symlink(path.join(continuationProject, "tsconfig.json"), unsafeContinuationProject);
+  await continueDoctor(unsafeContinuationProject, async () => {
+    await rm(unsafeContinuationProject);
+    await writeFile(unsafeContinuationProject, "{}");
+  });
 
   console.log(
     JSON.stringify({
@@ -588,6 +668,8 @@ try {
       stderr_correlation: true,
       global_install: true,
       project_discovery: true,
+      doctor: true,
+      doctor_continuation: true,
       upgrade_check: true,
       agent_setup: setupSupported,
       installed_targets: firstItems.length,

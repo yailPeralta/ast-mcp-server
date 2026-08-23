@@ -360,11 +360,41 @@ function createSessionWatcher(
     directories,
     onChange: (files) => {
       const session = getSession();
+      const cachePath = symbolIndexCachePath(
+        session.symbolIndexPolicy,
+        session.context.status.project,
+      );
+      let sourceFiles = files;
+      if (cachePath) {
+        const relativeCachePath = path
+          .relative(session.context.projectRoot, cachePath)
+          .split(path.sep)
+          .join("/");
+        if (!relativeCachePath.startsWith("../") && !path.isAbsolute(relativeCachePath)) {
+          const relativeCacheDirectory = path.posix.dirname(relativeCachePath);
+          const quarantinePrefix = `${relativeCachePath}.corrupt-`;
+          sourceFiles = files.filter((file) => {
+            if (relativeCacheDirectory !== "." && file === relativeCacheDirectory) return false;
+            if (
+              file === relativeCachePath ||
+              file === `${relativeCachePath}-wal` ||
+              file === `${relativeCachePath}-shm`
+            ) {
+              return false;
+            }
+            return !(
+              file.startsWith(quarantinePrefix) &&
+              /^\d+-\d+$/u.test(file.slice(quarantinePrefix.length))
+            );
+          });
+        }
+      }
+      if (sourceFiles.length === 0) return;
       session.context = {
         ...session.context,
         status: transitionProjectStatus(session.context.status, {
           type: "source_changed",
-          files,
+          files: sourceFiles,
         }),
       };
     },
