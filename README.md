@@ -131,6 +131,18 @@ The package exposes two executables when installed:
 - `ast-mcp-server`: MCP stdio server.
 - `ast-tool`: batch, skill-installation, and agent-setup CLI.
 
+### Diagnose the active installation
+
+```bash
+ast-tool doctor [--project <config-or-dir>]
+```
+
+Doctor reuses CLI project discovery and existing runtime authorities without changing project,
+agent, package, or skill state. It prints bounded JSON; exit `0` is healthy, `1` degraded, and `2`
+failed. A healthy compiler remains usable when only the derived SQLite index is degraded.
+Standalone diagnosis marks registered-session-only index and queue evidence as `not_run` rather
+than fabricating healthy state.
+
 ### Upgrade an installed package
 
 Inspect the active global installation without writing, or update it immediately:
