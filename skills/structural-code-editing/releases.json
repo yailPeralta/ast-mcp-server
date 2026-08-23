@@ -1,9 +1,18 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "algorithm": "sha256",
   "current": {
-    "version": "4.4.0",
-    "sha256": "253b588c56d44c8f5565db3f33ce227d80c7c29aa6604d362844f44b1278385a"
+    "version": "4.5.0",
+    "files": [
+      {
+        "path": "SKILL.md",
+        "sha256": "d44944520218c3efee626463f49178ce29c8a647b1b4a8c2a4cba9cd25b93d79"
+      },
+      {
+        "path": "references/operations.md",
+        "sha256": "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98"
+      }
+    ]
   },
   "predecessors": [
     {
@@ -65,6 +74,11 @@
       "version": "4.3.0",
       "sha256": "bf0814b539cd8638aeed108a4e118fe1f2ab418e2e968a77ad75f2d0dbde93b9",
       "npm_versions": ["0.9.2"]
+    },
+    {
+      "version": "4.4.0",
+      "sha256": "253b588c56d44c8f5565db3f33ce227d80c7c29aa6604d362844f44b1278385a",
+      "npm_versions": ["0.10.0"]
     }
   ]
 }

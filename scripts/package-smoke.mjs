@@ -4,6 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import console from "node:console";
 import {
   chmod,
@@ -14,6 +15,7 @@ import {
   readFile,
   readdir,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -47,6 +49,8 @@ const mcpFixtureRoot = path.join(temporaryRoot, "mcp-fixture");
 const mcpXdgCacheHome = path.join(temporaryRoot, "mcp-xdg-cache");
 const mcpTemp = path.join(temporaryRoot, "mcp-tmp");
 const mcpCacheRoot = path.join(mcpXdgCacheHome, "ast-mcp-server", "symbol-index");
+const upgradeTemp = path.join(temporaryRoot, "upgrade-tmp");
+const upgradeHome = path.join(temporaryRoot, "upgrade-home");
 
 function isolatedMcpEnvironment() {
   const environment = {
@@ -126,6 +130,9 @@ async function installFakeAgents() {
 try {
   await mkdir(packageDirectory, { recursive: true });
   await mkdir(consumerDirectory, { recursive: true });
+  await mkdir(upgradeTemp);
+  await mkdir(upgradeHome);
+  await writeFile(path.join(upgradeHome, ".npmrc"), "token=smoke-sentinel\n");
 
   await executeFile(yarnExecutable, ["pack", "--out", archivePath], {
     cwd: repositoryRoot,
@@ -192,6 +199,17 @@ try {
       "utf8",
     ),
   ]);
+  const packagedManifest = JSON.parse(packagedReleases);
+  const packagedAssets = new Map(
+    await Promise.all(
+      packagedManifest.current.files.map(async (file) => {
+        const content = await readFile(
+          path.join(installedPackageRoot, "skills", "structural-code-editing", file.path),
+        );
+        return [file.path, [content, createHash("sha256").update(content).digest("hex")]];
+      }),
+    ),
+  );
   if (
     releaseMetadata.engines?.node !== ">=22.13.0" ||
     installedMetadata.name !== releaseMetadata.name ||
@@ -204,7 +222,11 @@ try {
     !installedChangelog.includes(`## [${releaseMetadata.version}]`) ||
     !packagedSkill.includes("name: structural-code-editing") ||
     packagedGuidance.includes("ast-tool:structural-code-editing guidance") ||
-    JSON.parse(packagedReleases).current?.version !== "4.4.0"
+    packagedManifest.current?.version !== "4.5.0" ||
+    [...packagedAssets.keys()].sort().join() !== "SKILL.md,references/operations.md" ||
+    packagedManifest.current.files.some(
+      (file) => packagedAssets.get(file.path)?.[1] !== file.sha256,
+    )
   ) {
     throw new Error("installed tarball release metadata is incomplete");
   }
@@ -419,16 +441,22 @@ try {
     throw new Error(`tarball setup was not idempotent: ${second.stdout}`);
   }
 
-  const claudeSkill = await readFile(
-    path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md"),
-    "utf8",
-  );
-  const hermesSkill = await readFile(
-    path.join(hermesRoot, "skills", "software-development", "structural-code-editing", "SKILL.md"),
-    "utf8",
-  );
-  if (!claudeSkill.includes("name: structural-code-editing") || claudeSkill !== hermesSkill) {
-    throw new Error("installed tarball skills do not match");
+  for (const [relative, [expected]] of packagedAssets) {
+    const [claudeAsset, hermesAsset] = await Promise.all([
+      readFile(path.join(claudeRoot, "skills", "structural-code-editing", relative)),
+      readFile(
+        path.join(
+          hermesRoot,
+          "skills",
+          "software-development",
+          "structural-code-editing",
+          relative,
+        ),
+      ),
+    ]);
+    if (!claudeAsset.equals(expected) || !hermesAsset.equals(expected)) {
+      throw new Error(`installed tarball skill asset does not match: ${relative}`);
+    }
   }
   if (setupSupported) {
     const [claudeGuidance, codexGuidance, geminiGuidance] = await Promise.all([
@@ -487,6 +515,143 @@ try {
   ) {
     throw new Error(`global tarball install did not expose ast-tool: ${globalInstall.stdout}`);
   }
+  try {
+    await executeFile(globalExecutable, ["upgrade", "--check"], {
+      cwd: temporaryRoot,
+      env: {
+        ...process.env,
+        HOME: upgradeHome,
+        TMPDIR: upgradeTemp,
+        NPM_CONFIG_PREFIX: globalPrefix,
+        NPM_CONFIG_REGISTRY: "http://127.0.0.1:1",
+        NPM_CONFIG_FETCH_RETRIES: "0",
+        NPM_CONFIG_FETCH_TIMEOUT: "1000",
+      },
+    });
+    throw new Error("packed upgrade check unexpectedly reached a registry");
+  } catch (error) {
+    const failure = JSON.parse(error?.stderr ?? "{}");
+    if (
+      failure.code !== "UPGRADE_INSPECTION_FAILED" ||
+      String(error?.stderr).includes(temporaryRoot)
+    ) {
+      throw error;
+    }
+  }
+  if (
+    (await readFile(path.join(upgradeHome, ".npmrc"), "utf8")) !== "token=smoke-sentinel\n" ||
+    (await readdir(upgradeTemp)).some((entry) => entry.startsWith("ast-tool-upgrade-"))
+  ) {
+    throw new Error("packed upgrade check mutated config or retained temporary state");
+  }
+  const jsProject = path.join(temporaryRoot, "packed-js-project");
+  const jsNested = path.join(jsProject, "nested");
+  const jsPipeline = path.join(jsProject, "pipeline.json");
+  await mkdir(path.join(jsProject, "src"), { recursive: true });
+  await mkdir(jsNested);
+  await writeFile(
+    path.join(jsProject, "jsconfig.json"),
+    JSON.stringify({ compilerOptions: { allowJs: true }, include: ["src/**/*.js"] }),
+  );
+  await writeFile(path.join(jsProject, "src", "value.js"), "export function packedJsValue() {}\n");
+  await writeFile(
+    jsPipeline,
+    JSON.stringify({
+      version: 1,
+      steps: [{ id: "search", tool: "ast_search_symbols", input: { query: "packedJsValue" } }],
+      emit: { $ref: "#/steps/search" },
+    }),
+  );
+  const discovered = parseJsonOutput(
+    (
+      await executeFile(globalExecutable, ["run", jsPipeline], {
+        cwd: jsNested,
+        env: { ...process.env, AST_SYMBOL_INDEX_PERSISTENCE: "disabled" },
+      })
+    ).stdout,
+  );
+  if (!discovered.result?.symbols?.some((symbol) => symbol.selector?.includes("packedJsValue"))) {
+    throw new Error(`packed CLI did not discover jsconfig: ${JSON.stringify(discovered)}`);
+  }
+  const doctorHome = path.join(temporaryRoot, "doctor-home");
+  await mkdir(doctorHome);
+  const doctorEnvironment = {
+    PATH: "",
+    HOME: doctorHome,
+    AST_SYMBOL_INDEX_PERSISTENCE: "disabled",
+    ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
+  };
+  const packedCli = path.join(installedPackageRoot, "dist", "cli.js");
+  const healthyDoctor = parseJsonOutput(
+    (
+      await executeFile(process.execPath, [packedCli, "doctor", "--project", jsProject], {
+        cwd: jsNested,
+        env: doctorEnvironment,
+      })
+    ).stdout,
+  );
+  if (healthyDoctor.status !== "healthy" || healthyDoctor.checks?.length > 9)
+    throw new Error(`packed doctor was not healthy: ${JSON.stringify(healthyDoctor)}`);
+  try {
+    await executeFile(process.execPath, [packedCli, "doctor", "--project", jsProject], {
+      cwd: jsNested,
+      env: { ...doctorEnvironment, AST_MAX_PROJECT_SESSIONS: "invalid" },
+    });
+    throw new Error("packed degraded doctor unexpectedly exited zero");
+  } catch (error) {
+    const result = parseJsonOutput(error?.stdout ?? "{}");
+    if (error?.code !== 1 || error?.stderr !== "" || result.status !== "degraded") throw error;
+  }
+  const continuationCwd = path.join(temporaryRoot, "doctor continuation cwd");
+  const continuationProject = path.join(temporaryRoot, "outside 'doctor project");
+  const continuationBin = path.join(temporaryRoot, "doctor-continuation-bin");
+  await Promise.all([mkdir(continuationCwd), mkdir(continuationProject), mkdir(continuationBin)]);
+  await writeFile(path.join(continuationProject, "tsconfig.json"), "{}");
+  await writeFile(path.join(continuationProject, "jsconfig.json"), "{}");
+  await symlink(globalExecutable, path.join(continuationBin, "ast-tool"));
+  await symlink(process.execPath, path.join(continuationBin, "node"));
+  async function continueDoctor(project, prepare) {
+    let continuation;
+    try {
+      await executeFile(process.execPath, [packedCli, "doctor", "--project", project], {
+        cwd: continuationCwd,
+        env: doctorEnvironment,
+      });
+    } catch (error) {
+      continuation = parseJsonOutput(error?.stdout ?? "{}").checks?.find(
+        (check) => check.code === "project_config",
+      )?.continuation;
+    }
+    const command = continuation?.match(/run:\s*(ast-tool doctor.*)$/iu)?.[1];
+    if (
+      !command ||
+      continuation.includes(temporaryRoot) ||
+      continuation.includes("[path-redacted]")
+    )
+      throw new Error(`packed doctor continuation was unsafe: ${String(continuation)}`);
+    await prepare?.();
+    const continued = parseJsonOutput(
+      (
+        await executeFile("/bin/sh", ["-c", command], {
+          cwd: continuationCwd,
+          env: { ...doctorEnvironment, PATH: continuationBin },
+        })
+      ).stdout,
+    );
+    if (continued.status !== "healthy") throw new Error("packed doctor continuation did not run");
+  }
+  await continueDoctor(continuationProject);
+  const missingContinuationProject = path.join(temporaryRoot, "missing 'doctor project");
+  await continueDoctor(missingContinuationProject, async () => {
+    await mkdir(missingContinuationProject);
+    await writeFile(path.join(missingContinuationProject, "tsconfig.json"), "{}");
+  });
+  const unsafeContinuationProject = path.join(temporaryRoot, "unsafe 'doctor link.json");
+  await symlink(path.join(continuationProject, "tsconfig.json"), unsafeContinuationProject);
+  await continueDoctor(unsafeContinuationProject, async () => {
+    await rm(unsafeContinuationProject);
+    await writeFile(unsafeContinuationProject, "{}");
+  });
 
   console.log(
     JSON.stringify({
@@ -502,6 +667,10 @@ try {
       packed_error: true,
       stderr_correlation: true,
       global_install: true,
+      project_discovery: true,
+      doctor: true,
+      doctor_continuation: true,
+      upgrade_check: true,
       agent_setup: setupSupported,
       installed_targets: firstItems.length,
       idempotent_targets: secondItems.length,

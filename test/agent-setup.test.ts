@@ -28,6 +28,16 @@ const bundledAssets = {
   releaseManifestPath: path.join(path.dirname(bundledSkillPath), "releases.json"),
 };
 
+async function writeCurrentSkillBundle(skillPath: string): Promise<void> {
+  const root = path.dirname(bundledSkillPath);
+  const manifest = JSON.parse(await readFile(bundledAssets.releaseManifestPath, "utf8"));
+  for (const file of manifest.current.files) {
+    const destination = path.join(path.dirname(skillPath), file.path);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await writeFile(destination, await readFile(path.join(root, file.path)));
+  }
+}
+
 async function makeTemporaryDirectory(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "ast-agent-setup-test-"));
   temporaryDirectories.push(directory);
@@ -248,7 +258,7 @@ describe("agent setup", () => {
         expect.objectContaining({ asset: "guidance", status: "installed" }),
       ]),
     );
-    expect(first.physical_writes).toHaveLength(3);
+    expect(first.physical_writes).toHaveLength(5);
     expect(second.physical_writes).toEqual([]);
     expect(
       await readFile(path.join(fake.environment.CLAUDE_CONFIG_DIR!, "CLAUDE.md"), "utf8"),
@@ -563,6 +573,7 @@ if (process.argv[2] === "debug" && process.argv[3] === "config") {
         completed_writes: [],
         pending: [
           expect.objectContaining({ asset: "skill", status: "installed" }),
+          expect.objectContaining({ asset: "skill", status: "installed" }),
           expect.objectContaining({ path: guidancePath, asset: "guidance" }),
         ],
       },
@@ -578,8 +589,7 @@ if (process.argv[2] === "debug" && process.argv[3] === "config") {
     const claudeRoot = path.join(root, "claude");
     const skillPath = path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md");
     const guidancePath = path.join(claudeRoot, "CLAUDE.md");
-    await mkdir(path.dirname(skillPath), { recursive: true });
-    await writeFile(skillPath, await readFile(bundledAssets.sourceSkillPath));
+    await writeCurrentSkillBundle(skillPath);
 
     const skillPlan = await planBundledSkillInstallation({
       target: ["claude"],
@@ -614,8 +624,7 @@ if (process.argv[2] === "debug" && process.argv[3] === "config") {
     const root = await makeTemporaryDirectory();
     const claudeRoot = path.join(root, "claude");
     const skillPath = path.join(claudeRoot, "skills", "structural-code-editing", "SKILL.md");
-    await mkdir(path.dirname(skillPath), { recursive: true });
-    await writeFile(skillPath, await readFile(bundledAssets.sourceSkillPath));
+    await writeCurrentSkillBundle(skillPath);
 
     const skillPlan = await planBundledSkillInstallation({
       target: ["claude"],
