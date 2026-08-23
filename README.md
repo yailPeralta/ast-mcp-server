@@ -131,6 +131,29 @@ The package exposes two executables when installed:
 - `ast-mcp-server`: MCP stdio server.
 - `ast-tool`: batch, skill-installation, and agent-setup CLI.
 
+### Diagnose the active installation
+
+```bash
+ast-tool doctor [--project <config-or-dir>]
+```
+
+Doctor reuses CLI project discovery and existing runtime authorities without changing project,
+agent, package, or skill state. It prints bounded JSON; exit `0` is healthy, `1` degraded, and `2`
+failed. A healthy compiler remains usable when only the derived SQLite index is degraded.
+Standalone diagnosis marks registered-session-only index and queue evidence as `not_run` rather
+than fabricating healthy state.
+
+### Upgrade an installed package
+
+Inspect the active global installation without writing, or update it immediately:
+
+```bash
+ast-tool upgrade --check
+ast-tool upgrade
+```
+
+Upgrade supports only a direct package proven to belong to the active npm global prefix or to Volta. It rejects linked/source and ambiguous installations, never uses `sudo`, guesses from `PATH`, or accepts `--yes`. npm runs its proven `npm-cli.js` through the active Node with lifecycle scripts disabled and a disposable cache/config copy; cleanup is verified and blocks success if absence cannot be proven. Volta uses its native integration. The updated CLI then reconciles managed setup through that Node. Customized skill bytes remain untouched and produce `ast-tool setup --agents all --yes --force-skill`. Restart MCP clients after any package update; an already-running server does not change in place.
+
 ## Guided agent setup
 
 The installed package opens the interactive wizard with:
@@ -361,6 +384,8 @@ Example search-to-source pipeline:
 ```
 
 A `$ref` is an RFC 6901 JSON Pointer rooted at prior step results. References cannot point forward. If `emit` is omitted, only the final step result is returned; intermediate results remain inside the process.
+
+For CLI batches only, omit `project_root` or provide a directory to select the nearest `tsconfig.json` or `jsconfig.json` from the invocation directory upward. An explicit config file always wins. Discovery stops at a `.git` or filesystem boundary and rejects same-level ambiguity or symlinked identities; MCP tool calls still require an explicit `project_root`.
 
 `ast_find_test_candidates` and `ast_explore` are admitted as read steps. The batch runner injects the pipeline `project_root`, rejects a conflicting step root, and invokes the same registered MCP implementation. Candidate relationship proofs and exploration clusters remain whole; final JSON and TOON differ only in serialization, not logical evidence.
 
