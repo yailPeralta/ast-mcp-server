@@ -101,6 +101,7 @@ describe("upgrade provenance planning", () => {
     await mkdir(globalRoot, { recursive: true });
     await writeFile(path.join(source, "package.json"), JSON.stringify(metadata()));
     await writeFile(path.join(source, "dist", "cli.js"), "");
+    await writeFile(path.join(source, "dist", "index.js"), "");
     await symlink(source, path.join(globalRoot, "ast-mcp-server"), "dir");
     let installed = false;
     const { runtime } = fixture({
