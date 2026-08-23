@@ -746,6 +746,29 @@ try {
   ) {
     throw new Error(`Agent setup was not idempotent: ${JSON.stringify(agentSetupReplay)}`);
   }
+  const doctor = await invoke(["doctor", "--project", fixtureRoot]);
+  if (
+    doctor.schema_version !== 1 ||
+    doctor.status !== "healthy" ||
+    doctor.checks.length > 9 ||
+    doctor.checks.find((check) => check.code === "derived_index")?.status !== "not_run" ||
+    doctor.checks.find((check) => check.code === "operation_queue")?.status !== "not_run"
+  ) {
+    throw new Error(`Unexpected doctor result: ${JSON.stringify(doctor)}`);
+  }
+  const degradedDoctor = await invokeFailure(["doctor", "--project", fixtureRoot], {
+    ...environment,
+    AST_MAX_PROJECT_SESSIONS: "secret=/home/private",
+  });
+  const degradedResult = JSON.parse(degradedDoctor.stdout);
+  if (
+    degradedDoctor.code !== 1 ||
+    degradedDoctor.stderr !== "" ||
+    degradedResult.status !== "degraded" ||
+    JSON.stringify(degradedResult).includes(fixtureRoot)
+  ) {
+    throw new Error(`Unexpected degraded doctor result: ${JSON.stringify(degradedDoctor)}`);
+  }
   if (
     agentSetup.version !== 2 ||
     !Array.isArray(agentSetup.physical_writes) ||
@@ -802,16 +825,17 @@ try {
   for (const args of [
     ["upgrade", "--yes"],
     ["upgrade", "--unknown"],
+    ["doctor", "--unknown"],
   ]) {
     const failed = await invokeFailure(args);
     const error = JSON.parse(failed.stderr);
     if (failed.code !== 2 || failed.stdout !== "" || error.code !== "USAGE") {
-      throw new Error(`Unexpected upgrade usage result: ${JSON.stringify(failed)}`);
+      throw new Error(`Unexpected CLI usage result: ${JSON.stringify(failed)}`);
     }
   }
 
   process.stdout.write(
-    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, toon_output: true, persisted_apply: true, lock_contention: true, replay: true, project_discovery: true, skill_installation: true, agent_setup: true, upgrade_preflight: true, cache_inspect: true, cache_clear: true, cache_confirmation: true, cache_unknown_preserved: true, cache_redacted_failure: true })}\n`,
+    `${JSON.stringify({ status: "ok", transport: "bash-cli", read_invocations: 2, toon_output: true, persisted_apply: true, lock_contention: true, replay: true, project_discovery: true, doctor: true, skill_installation: true, agent_setup: true, upgrade_preflight: true, cache_inspect: true, cache_clear: true, cache_confirmation: true, cache_unknown_preserved: true, cache_redacted_failure: true })}\n`,
   );
 } finally {
   await rm(fixtureRoot, { recursive: true, force: true });
