@@ -6,7 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.11.1] — local recovery candidate, pending release (2026-08-23)
+## [0.11.2] — local recovery candidate, pending release (2026-08-23)
+
+### Fixed
+
+- Public-registry verification now copies the isolated runner's complete local runtime dependency closure, including the shared managed-skill validator, before launching it outside the source tree.
+- A deterministic copied-runner regression executes the isolated entry point and rejects any local import omitted by its production bootstrap.
+
+### Release status
+
+- This local recovery candidate succeeds immutable npm versions `0.11.0` and `0.11.1`, neither of which was promotable: `0.11.0` verification exposed stale managed-skill predicates, and `0.11.1` verification exposed the copied runner's missing validator module. Version `0.11.2` remains pending its exact-tree matrix, CI, and separately authorized delivery sequence; it has not been published or assigned to any dist-tag.
+
+## [0.11.1] — published to `next`, verification failed, not promoted (2026-08-23)
 
 ### Fixed
 
@@ -15,7 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release status
 
-- This local recovery candidate succeeds the immutable npm `0.11.0` publication, whose public-registry verification failed because two consumer validators still required skill bundle `4.4.0` while the published package correctly contained `4.5.0`. Version `0.11.0` remains under `next` only and must not be promoted, tagged, or released. Version `0.11.1` remains pending its exact-tree matrix, CI, and separately authorized delivery sequence; it has not been published or assigned to any dist-tag.
+- npm published these immutable bytes under `next` with provenance and the expected Git commit. Public-registry verification then failed because the isolated registry runner omitted its newly imported managed-skill validator module; `0.11.1` was never promoted to `latest`, tagged in Git, or released on GitHub.
 
 ## [0.11.0] — published to `next`, verification failed, not promoted (2026-08-23)
 

@@ -28,6 +28,7 @@ const execFileAsync = promisify(execFile);
 const scriptPath = fileURLToPath(import.meta.url);
 const scriptDirectory = path.dirname(scriptPath);
 const gateContractPath = path.join(scriptDirectory, "registry-consumer-gates.mjs");
+const managedSkillValidatorPath = path.join(scriptDirectory, "managed-skill-bundle-validator.mjs");
 const repositoryRoot = path.resolve(scriptDirectory, "..");
 const PACKAGE_NAME = "ast-mcp-server";
 const OFFICIAL_REGISTRY = "https://registry.npmjs.org";
@@ -57,6 +58,19 @@ const EXPECTED_TOOLS = Object.freeze([
   "ast_get_operation_preview",
   "ast_apply_operation",
 ]);
+
+export async function copyRegistryConsumerRunner(targetRoot) {
+  const copiedRunner = path.join(targetRoot, "registry-consumer-smoke.mjs");
+  await Promise.all([
+    copyFile(scriptPath, copiedRunner),
+    copyFile(gateContractPath, path.join(targetRoot, "registry-consumer-gates.mjs")),
+    copyFile(
+      managedSkillValidatorPath,
+      path.join(targetRoot, "managed-skill-bundle-validator.mjs"),
+    ),
+  ]);
+  return copiedRunner;
+}
 
 function fail(message) {
   throw new Error(`Registry consumer smoke failed: ${message}`);
@@ -1270,11 +1284,7 @@ async function runOuter(options) {
     }
 
     await verifySetupIdempotency(consumerRoot, installedPackageRoot);
-    const copiedRunner = path.join(consumerRoot, "registry-consumer-smoke.mjs");
-    await Promise.all([
-      copyFile(scriptPath, copiedRunner),
-      copyFile(gateContractPath, path.join(consumerRoot, "registry-consumer-gates.mjs")),
-    ]);
+    const copiedRunner = await copyRegistryConsumerRunner(consumerRoot);
     const inner = await execute(
       process.execPath,
       [
