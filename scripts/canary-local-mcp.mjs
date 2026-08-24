@@ -2719,6 +2719,177 @@ class LinuxRssMonitor {
   }
 }
 
+async function linuxChildPids(pid) {
+  const value = await readFile(`/proc/${pid}/task/${pid}/children`, "utf8");
+  return value.trim() ? value.trim().split(/\s+/).map(Number) : [];
+}
+
+async function linuxPssBytes(pid) {
+  const rollup = await readFile(`/proc/${pid}/smaps_rollup`, "utf8");
+  const match = /^Pss:\s+(\d+)\s+kB$/m.exec(rollup);
+  if (!match) fail("Linux PSS evidence is unavailable.");
+  return Number(match[1]) * 1024;
+}
+
+async function waitForCompilerChild(parentPid, present) {
+  return withTimeout(
+    (async () => {
+      for (;;) {
+        const children = await linuxChildPids(parentPid);
+        if (present ? children.length === 1 : children.length === 0) return children[0];
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    })(),
+    30_000,
+    `Timed out waiting for the compiler worker to become ${present ? "active" : "idle"}.`,
+  );
+}
+
+export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheRoot }) {
+  if (process.platform !== "linux") fail("Supervised worker PSS evidence requires Linux.");
+  const baselineClient = await spawnMcp({
+    nodeBin,
+    nodeOptions: [],
+    environment: projectEnvironment("disabled", path.join(cacheRoot, "baseline"), {
+      AST_COMPILER_WORKER_MODE: "in_process",
+    }),
+  });
+  let baselineRead, baselineTools;
+  try {
+    baselineTools = await baselineClient.request("tools/list", {});
+    baselineRead = canonicalizeToolResult(
+      structuredToolResult(
+        await baselineClient.callTool("ast_search_symbols", {
+          project_root: projectRoot,
+          query: "evidenceValue",
+          detail: "selectors",
+          output_format: "json",
+          offset: 0,
+          limit: 500,
+        }),
+        "ast_search_symbols",
+      ),
+    );
+  } finally {
+    await closeClient(baselineClient);
+  }
+  const cycles = [],
+    events = [],
+    reads = [],
+    toolSets = [],
+    fingerprints = [],
+    hits = [],
+    idleByParent = [];
+  for (let parent = 0; parent < 3; parent += 1) {
+    const client = await spawnMcp({
+      nodeBin,
+      nodeOptions: [],
+      environment: projectEnvironment("canary", path.join(cacheRoot, `parent-${parent}`), {
+        AST_COMPILER_WORKER_MODE: "supervised",
+        AST_COMPILER_WORKER_IDLE_TTL_MS: "250",
+        CANARY_CREDENTIAL_SECRET: "credential-secret",
+      }),
+    });
+    try {
+      const parentPid = client.child.pid;
+      toolSets.push(await client.request("tools/list", {}));
+      const initialChild = await waitForCompilerChild(parentPid, true);
+      const baselinePss = (await linuxPssBytes(parentPid)) + (await linuxPssBytes(initialChild));
+      const idlePss = [];
+      for (let cycle = 0; cycle < 3; cycle += 1) {
+        const status =
+          cycle > 0
+            ? structuredToolResult(
+                await client.callTool("ast_get_project_status", { project_root: projectRoot }),
+                "ast_get_project_status",
+              )
+            : undefined;
+        const result = structuredToolResult(
+          await client.callTool("ast_search_symbols", {
+            project_root: projectRoot,
+            query: "evidenceValue",
+            detail: "selectors",
+            output_format: "json",
+            offset: 0,
+            limit: 500,
+          }),
+          "ast_search_symbols",
+        );
+        const observedStatus =
+          status ??
+          structuredToolResult(
+            await client.callTool("ast_get_project_status", { project_root: projectRoot }),
+            "ast_get_project_status",
+          );
+        const childPid = (await linuxChildPids(parentPid))[0];
+        if (!childPid) fail("Compiler worker exited before PSS sampling.");
+        const loadedPss = (await linuxPssBytes(parentPid)) + (await linuxPssBytes(childPid));
+        await waitForCompilerChild(parentPid, false);
+        const idle = await linuxPssBytes(parentPid);
+        const reclaimed = ((loadedPss - idle) / Math.max(1, loadedPss - baselinePss)) * 100;
+        const observation = indexObservability(observedStatus);
+        if (observedStatus.source_count !== 400)
+          fail("Supervised evidence requires exactly 400 files.");
+        if (cycle > 0) hits.push(observation);
+        reads.push(canonicalizeToolResult(result));
+        fingerprints.push(observedStatus.source_snapshot_fingerprint);
+        idlePss.push(idle);
+        cycles.push({
+          parent: parent + 1,
+          cycle: cycle + 1,
+          loaded_pss_bytes: loadedPss,
+          idle_pss_bytes: idle,
+          reclaimed_percent: Math.floor(reclaimed),
+        });
+      }
+      idleByParent.push(idlePss);
+      events.push(...client.stderrEvents.filter((event) => event.event === "compiler_worker"));
+      const publicFailure = await client.callTool("ast_get_file", {
+        project_root: projectRoot,
+        file_path: "../../credential-secret-NODE_OPTIONS.ts",
+      });
+      const publicText = JSON.stringify(publicFailure);
+      if (
+        publicFailure?.isError !== true ||
+        !toolError(publicFailure) ||
+        Buffer.byteLength(publicText) > 4096 ||
+        /credential-secret|NODE_OPTIONS|\/tmp\//i.test(publicText)
+      )
+        fail("Supervised public-error evidence disclosed sensitive input.");
+    } finally {
+      await closeClient(client);
+    }
+  }
+  const encodedEvents = JSON.stringify(events);
+  const approved = new Set(["event", "version", "kind", "generation", "correlation_id", "count"]);
+  if (
+    events.length !== 9 ||
+    events.some((event) => Object.keys(event).some((key) => !approved.has(key))) ||
+    /credential-secret|NODE_OPTIONS|\/tmp\//i.test(encodedEvents)
+  )
+    fail("Supervised worker events exceeded the approved diagnostic schema.");
+  const expectedRead = JSON.stringify(baselineRead);
+  const expectedTools = JSON.stringify(baselineTools);
+  return Object.freeze({
+    schema_version: 1,
+    parent_count: 3,
+    cycles_per_parent: 3,
+    equivalent_reads:
+      reads.every((read) => JSON.stringify(read) === expectedRead) &&
+      toolSets.every((value) => JSON.stringify(value) === expectedTools),
+    stable_fingerprint: fingerprints.every((value) => value === fingerprints[0]),
+    sqlite_hits: hits.filter((value) => value.operation === "hit" && value.backend === "sqlite")
+      .length,
+    reused_files: Math.min(...hits.map((value) => value.reused_files)),
+    rebuilt_files: Math.max(...hits.map((value) => value.rebuilt_files)),
+    minimum_reclaimed_percent: Math.min(...cycles.map((cycle) => cycle.reclaimed_percent)),
+    no_upward_pss_trend: idleByParent.every((values) => values.at(-1) <= values[0] + 1024 * 1024),
+    diagnostics_redacted: true,
+    cycles,
+    events,
+  });
+}
+
 class CanaryMcpProcess {
   constructor(child) {
     this.child = child;

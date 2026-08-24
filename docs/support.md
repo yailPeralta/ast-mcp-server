@@ -32,6 +32,22 @@ The server does not provide:
 
 Operation locks coordinate cooperating same-user processes. They do not stop editors, network filesystems, or hostile same-user writers. Report-set freezer coordination likewise assumes cooperating same-UID processes and cannot defend checked evidence against a malicious process with the same filesystem authority. The freezer guarantees no-replace atomic visibility of the checked directory; it does not claim persistence across sudden power loss because parent-directory `fsync` durability is not established.
 
+## Optional supervised compiler worker
+
+The default and rollback remain `AST_COMPILER_WORKER_MODE=in_process`. Explicit `supervised` mode keeps one lightweight stdio parent connected to one disposable compiler child per connection:
+
+```bash
+AST_COMPILER_WORKER_MODE=supervised \
+AST_COMPILER_WORKER_IDLE_TTL_MS=60000 \
+ast-mcp-server
+```
+
+The parent waits for `ready` before replaying bounded initialization state. Generation-affine forwarding and cancellation reject stale settlements and do not retry forwarded calls. Recycling requires stable parent and child quiescence; mutation history, live leases, and completion-critical work keep the child pinned. Parent death closes admission and permits only completion-critical drain before exit.
+
+Set the TTL to `0` to disable recycling without removing the relay, or select `in_process` to remove the worker boundary. No shared daemon, pool, cross-client deduplication, default promotion, or automatic mutation-plan repair is provided.
+
+The scoped Linux evidence passed on exact Node.js 22.13.0 and the governed Node.js 24 line: three parents each completed three load/idle/respawn cycles with at least 80% PSS-delta reclamation and no upward trend. Respawns retained the compiler fingerprint, recorded six SQLite hits, reused exactly 400 files, rebuilt zero, and returned equivalent reads. Diagnostics remained bounded and redacted, and parent-death inspection found zero orphan processes. These results do not establish support for macOS, Windows, or other Linux environments.
+
 ## Symbol-index persistence
 
 Published v0.10.0 and the local `0.11.2` recovery candidate select native SQLite when the persistence setting is absent or explicitly `enabled`; operators requiring no persistent index state must set `disabled` explicitly:

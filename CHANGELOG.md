@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added an explicit per-connection supervised compiler-worker mode that can recycle an idle compiler child while the local stdio parent remains connected; `in_process` remains the default and rollback, and TTL `0` disables recycling.
+- Added scoped Linux evidence on exact Node.js 22.13.0 and Node.js 24 for PSS reclamation, stable compiler fingerprints, SQLite reuse, bounded redaction, and parent-death cleanup without orphans.
+
+### Fixed
+
+- Compiler-worker startup now waits for `ready` before replaying initialization, preventing cross-channel settlement ordering from rejecting the first forwarded request as stale.
+
 ## [0.11.2] — local recovery candidate, pending release (2026-08-23)
 
 ### Fixed

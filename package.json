@@ -49,7 +49,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
-    "test": "vitest run",
+    "test": "vitest run --exclude test/supervised-worker.integration.test.ts && yarn build && vitest run test/supervised-worker.integration.test.ts --no-file-parallelism",
     "test:watch": "vitest",
     "test:mcp": "yarn build && node scripts/mcp-smoke.mjs",
     "test:lifecycle": "yarn build && node scripts/mcp-lifecycle-smoke.mjs",

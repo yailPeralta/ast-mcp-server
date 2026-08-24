@@ -15,6 +15,7 @@ import {
   findDeclarationByName,
   getSourceFileOrThrow,
   invalidateProjectIfIdle,
+  recordProjectMutationHistory,
   withProjectOperation,
 } from "./project.js";
 import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
@@ -474,6 +475,7 @@ async function createPlan(
       };
       operationContext.checkpoint();
       operations.set(operationId, record);
+      recordProjectMutationHistory();
       retainedOperationId = operationId;
       await operationTestHooks.afterRetain?.(operationId);
       return publicOperation(record);
@@ -1198,6 +1200,7 @@ export function importOperationRecord(
   }
   pruneOperations();
   operations.set(record.operation_id, record);
+  recordProjectMutationHistory();
   return publicOperation(record);
 }
 
