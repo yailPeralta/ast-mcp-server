@@ -52,6 +52,31 @@ export interface CacheTreeInspection {
 
 export type CanonicalCanaryReport = Readonly<Record<string, unknown>>;
 
+export interface SupervisedWorkerEvent {
+  readonly event: "compiler_worker";
+  readonly version: 1;
+  readonly kind: "idle" | "crash" | "ambiguity";
+  readonly generation: number;
+  readonly correlation_id?: string;
+  readonly count?: number;
+}
+
+export interface SupervisedWorkerEvidence {
+  readonly schema_version: 1;
+  readonly parent_count: 3;
+  readonly cycles_per_parent: 3;
+  readonly equivalent_reads: boolean;
+  readonly stable_fingerprint: boolean;
+  readonly sqlite_hits: number;
+  readonly reused_files: number;
+  readonly rebuilt_files: number;
+  readonly minimum_reclaimed_percent: number;
+  readonly no_upward_pss_trend: boolean;
+  readonly diagnostics_redacted: boolean;
+  readonly cycles: readonly Readonly<Record<string, number>>[];
+  readonly events: readonly SupervisedWorkerEvent[];
+}
+
 export interface CanaryReportSet {
   readonly astNode24: CanonicalCanaryReport;
   readonly astNode22_13: CanonicalCanaryReport;
@@ -81,3 +106,10 @@ export function runDeterministicFixture(
     nodeOptions: readonly string[];
   }>,
 ): Promise<CanonicalCanaryReport>;
+export function runSupervisedWorkerEvidence(
+  options: Readonly<{
+    nodeBin: string;
+    projectRoot: string;
+    cacheRoot: string;
+  }>,
+): Promise<SupervisedWorkerEvidence>;

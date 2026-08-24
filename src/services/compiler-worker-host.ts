@@ -143,6 +143,7 @@ export function spawnCompilerWorkerProcess(options: {
     ready: ready.promise,
     async replay(frames: readonly [unknown, unknown]) {
       await control("handshake", {});
+      await ready.promise;
       for (const frame of frames) await write(frame as JSONRPCMessage);
     },
     forward(message: JSONRPCMessage) {

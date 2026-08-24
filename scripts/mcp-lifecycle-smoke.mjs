@@ -9,6 +9,7 @@ import process from "node:process";
 import { clearInterval, clearTimeout, setInterval, setTimeout } from "node:timers";
 import { fileURLToPath } from "node:url";
 import { JSONRPCMessageSchema, LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
+import { runSupervisedWorkerEvidence } from "./canary-local-mcp.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const scriptPath = fileURLToPath(import.meta.url);
@@ -652,21 +653,32 @@ async function exerciseCanaryCloseReopen(projectRoot, cacheRoot) {
   );
 }
 
-async function createProjectFixture(root, suffix = "") {
+async function createProjectFixture(root, suffix = "", sourceCount = 2) {
   const projectRoot = path.join(root, `project${suffix}`);
   await mkdir(path.join(projectRoot, "src"), { recursive: true });
   await writeFile(
     path.join(projectRoot, "tsconfig.json"),
     JSON.stringify({ compilerOptions: { strict: true, target: "ES2022" }, include: ["src/**/*"] }),
   );
-  await writeFile(
-    path.join(projectRoot, "src/value.ts"),
-    "export function targetValue(value: number): number { return value + 1; }\n",
-  );
-  await writeFile(
-    path.join(projectRoot, "src/use.ts"),
-    'import { targetValue } from "./value.js";\nexport const result = targetValue(1);\n',
-  );
+  if (sourceCount === 2) {
+    await writeFile(
+      path.join(projectRoot, "src/value.ts"),
+      "export function targetValue(value: number): number { return value + 1; }\n",
+    );
+    await writeFile(
+      path.join(projectRoot, "src/use.ts"),
+      'import { targetValue } from "./value.js";\nexport const result = targetValue(1);\n',
+    );
+  } else {
+    await Promise.all(
+      Array.from({ length: sourceCount }, (_, index) =>
+        writeFile(
+          path.join(projectRoot, `src/evidence-${index}.ts`),
+          `export const evidenceValue${index} = ${index};\n`,
+        ),
+      ),
+    );
+  }
   return projectRoot;
 }
 
@@ -678,6 +690,7 @@ async function runLifecycleMatrix() {
     const mutationProjectRoot = await createProjectFixture(root, "-mutation");
     const mixedProjectRoot = await createProjectFixture(root, "-mixed");
     const cacheRoot = path.join(root, "cache");
+    const evidenceProjectRoot = await createProjectFixture(root, "-evidence", 400);
     await mkdir(cacheRoot, { recursive: true, mode: 0o700 });
 
     await exerciseCleanTrigger("stdin_eof");
@@ -701,6 +714,18 @@ async function runLifecycleMatrix() {
     supervised.assertProtocolClean();
     // prettier-ignore
     const orphanProcesses = await (async () => { const parent = new LifecycleProcess(spawn(process.execPath, [scriptPath, PARENT_MODE, mutationProjectRoot], { stdio: ["pipe", "pipe", "pipe"] })); await parent.waitForEvent("lifecycle_critical_apply_entered"); const workerPids = await waitFor(() => processChildren(parent.child.pid).then((ids) => ids.length ? ids : undefined), "Compiler child was not observed."); const parentExited = new Promise((resolve) => parent.child.once("exit", resolve)); parent.child.kill("SIGKILL"); await withTimeout(parentExited, PROCESS_TIMEOUT_MS, "Parent controller did not exit."); await new Promise((resolve) => setTimeout(resolve, 100)); assert.equal(workerPids.every(processAlive), true); for (const pid of workerPids) process.kill(pid, "SIGUSR1"); await waitFor(() => workerPids.every((pid) => !processAlive(pid)), "Compiler child remained orphaned after critical release.", 2_000); return workerPids.filter(processAlive).length; })();
+    const evidence = await runSupervisedWorkerEvidence({
+      nodeBin: process.execPath,
+      projectRoot: evidenceProjectRoot,
+      cacheRoot: path.join(root, "evidence-cache"),
+    });
+    assert.equal(
+      evidence.minimum_reclaimed_percent >= 80 &&
+        evidence.sqlite_hits === 6 &&
+        evidence.reused_files === 400 &&
+        evidence.rebuilt_files === 0,
+      true,
+    );
 
     process.stdout.write(
       `${JSON.stringify({
@@ -718,6 +743,7 @@ async function runLifecycleMatrix() {
         supervised_transport: true,
         protocol_stdout_clean: true,
         parent_death_completion_critical: true,
+        supervised_worker_evidence: true,
         orphan_processes: orphanProcesses,
       })}\n`,
     );
