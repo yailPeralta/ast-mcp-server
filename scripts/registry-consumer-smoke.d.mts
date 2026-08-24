@@ -4,6 +4,8 @@ export interface RegistrySmokeToolClient {
 
 export function createFakeAgents(root: string): Promise<string>;
 
+export function copyRegistryConsumerRunner(targetRoot: string): Promise<string>;
+
 export function preparePrivateCanaryRoot(canaryRoot: string): Promise<void>;
 
 export function preparePreviewApplyReplay(

@@ -1,11 +1,14 @@
+import { execFile } from "node:child_process";
 import { chmod, copyFile, lstat, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { createTwoFilesPatch } from "diff";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  copyRegistryConsumerRunner,
   createFakeAgents,
   preparePrivateCanaryRoot,
   preparePreviewApplyReplay,
@@ -19,6 +22,7 @@ const SOURCE_FILE = "src/value.ts";
 const BEFORE = "export const value = 'before';\n";
 const EXPECTED = "export const value = 'after';\n";
 const temporaryRoots: string[] = [];
+const execFileAsync = promisify(execFile);
 
 type MutationPhase = "prepare" | "mismatch" | "preview";
 type MutationOutcome = "response" | "throw";
@@ -111,6 +115,26 @@ describe("registry consumer mutation evidence", () => {
     await Promise.all(
       temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
     );
+  });
+
+  it("copies a registry runner with a complete local runtime dependency closure", async () => {
+    const targetRoot = await mkdtemp(path.join(process.cwd(), ".ast-registry-runner-test-"));
+    temporaryRoots.push(targetRoot);
+    const copiedRunner = await copyRegistryConsumerRunner(targetRoot);
+
+    const rejection = await execFileAsync(process.execPath, [copiedRunner], {
+      cwd: targetRoot,
+      env: { HOME: targetRoot, PATH: process.env.PATH ?? "", NODE_OPTIONS: "" },
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(rejection).toMatchObject({
+      code: 1,
+      stderr:
+        "Registry consumer smoke failed: all reviewed output and release arguments are required.\n",
+    });
   });
 
   it("normalizes the harness-owned canary root under a permissive umask", async () => {
