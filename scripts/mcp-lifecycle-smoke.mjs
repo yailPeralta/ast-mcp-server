@@ -665,6 +665,17 @@ async function runLifecycleMatrix() {
     await exerciseCompletionCriticalApply(mutationProjectRoot);
     await exerciseCriticalWithStalledNoncritical(mixedProjectRoot);
     await exerciseCanaryCloseReopen(projectRoot, cacheRoot);
+    const supervised = new LifecycleProcess(
+      spawn(process.execPath, [path.join(repositoryRoot, "dist/index.js")], {
+        env: { ...process.env, AST_COMPILER_WORKER_MODE: "supervised" },
+        stdio: ["pipe", "pipe", "pipe"],
+      }),
+    );
+    await supervised.initialize();
+    assert.ok(await supervised.request("tools/list", {}));
+    supervised.endStdin();
+    await supervised.waitForExit();
+    supervised.assertProtocolClean();
 
     process.stdout.write(
       `${JSON.stringify({
@@ -679,6 +690,7 @@ async function runLifecycleMatrix() {
         completion_critical_apply: true,
         completion_critical_with_noncritical: true,
         canary_close_reopen: true,
+        supervised_transport: true,
         protocol_stdout_clean: true,
         orphan_processes: 0,
       })}\n`,

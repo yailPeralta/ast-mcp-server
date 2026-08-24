@@ -20,12 +20,14 @@ export async function runStdioServer(options: RunStdioServerOptions = {}) {
 }
 async function runConfiguredStdioServer(): Promise<void> {
   const policy = readRuntimePolicy();
-  const selected = await loadRuntimeModule(policy, {
+  const selected = await loadRuntimeModule<{ run: () => Promise<unknown> }>(policy, {
     inProcess: async () => ({ run: () => runStdioServer({ runtimePolicy: policy }) }),
-    supervised: async () => {
-      await import("./compiler-worker-entry.js");
-      return { run: async () => Promise.reject(new Error("Compiler worker startup failed.")) };
-    },
+    supervised: async () => ({
+      run: () =>
+        import("./services/compiler-worker-host.js").then((host) =>
+          host.runSupervisedStdioServer(),
+        ),
+    }),
   });
   await selected.module.run();
 }
