@@ -6,13 +6,15 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { clearTimeout, setTimeout } from "node:timers";
+import { clearInterval, clearTimeout, setInterval, setTimeout } from "node:timers";
 import { fileURLToPath } from "node:url";
 import { JSONRPCMessageSchema, LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
+import { runSupervisedWorkerEvidence } from "./canary-local-mcp.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const scriptPath = fileURLToPath(import.meta.url);
 const FIXTURE_MODE = "--fixture-server";
+const PARENT_MODE = "--supervised-parent-death";
 const PROCESS_TIMEOUT_MS = 5_000;
 
 function withTimeout(promise, milliseconds, message) {
@@ -68,6 +70,7 @@ function waitForFixtureControl(type) {
 }
 
 async function runFixtureServer() {
+  const supervisedChild = Boolean(process.send && process.argv[2] !== FIXTURE_MODE);
   const [
     { z },
     { createServer },
@@ -76,6 +79,7 @@ async function runFixtureServer() {
     projectModule,
     operationsModule,
     resultModule,
+    { installPrivateControl },
   ] = await Promise.all([
     import("zod"),
     import("../dist/server.js"),
@@ -84,11 +88,13 @@ async function runFixtureServer() {
     import("../dist/services/project.js"),
     import("../dist/services/operations.js"),
     import("../dist/tools/result.js"),
+    import("../dist/compiler-worker-entry.js"),
   ]);
   const { withProject } = projectModule;
   const { setOperationTestHooksForTests } = operationsModule;
   const { createToolErrorContext, errorResult, structuredResult } = resultModule;
-  const scenario = process.env.AST_LIFECYCLE_SCENARIO ?? "clean";
+  // prettier-ignore
+  const scenario = supervisedChild ? "completion_critical_apply" : process.env.AST_LIFECYCLE_SCENARIO ?? "clean";
 
   if (
     scenario === "completion_critical_apply" ||
@@ -98,7 +104,8 @@ async function runFixtureServer() {
       afterReplace: async (_file, index) => {
         if (index !== 0) return;
         emitFixtureEvent("lifecycle_critical_apply_entered");
-        await waitForFixtureControl("release_critical_apply");
+        // prettier-ignore
+        await (supervisedChild ? new Promise((resolve) => { const keepAlive = setInterval(() => undefined, 1_000); process.once("SIGUSR1", () => { clearInterval(keepAlive); resolve(); }); }) : waitForFixtureControl("release_critical_apply"));
         emitFixtureEvent("lifecycle_critical_apply_released");
       },
     });
@@ -178,7 +185,7 @@ async function runFixtureServer() {
     process.stderr.write(
       `${JSON.stringify({ event: "lifecycle_resource_close", version: 1, count: closeCount })}\n`,
     );
-    if (scenario === "completion_critical_apply") {
+    if (scenario === "completion_critical_apply" && !supervisedChild) {
       await waitForFixtureControl("release_mcp_close");
     }
     await originalClose();
@@ -186,7 +193,7 @@ async function runFixtureServer() {
   };
 
   let handledSignalCount = 0;
-  await runStdioServer({
+  const runtime = runStdioServer({
     server,
     runtimeActivity,
     onRuntimeTrigger: (trigger) => {
@@ -198,8 +205,25 @@ async function runFixtureServer() {
       emitFixtureEvent("lifecycle_completion_critical_wait");
     },
   });
+  if (supervisedChild) installPrivateControl(runtime);
+  await runtime;
   emitFixtureEvent("lifecycle_fixture_ready");
 }
+
+// prettier-ignore
+async function processChildren(parentPid) { const ids = await readdir("/proc"); const children = []; for (const id of ids) { if (!/^\d+$/.test(id)) continue; try { const stat = await readFile(`/proc/${id}/stat`, "utf8"), match = stat.match(/^\d+ \(.*\) . (\d+)/); if (Number(match?.[1]) === parentPid) children.push(Number(id)); } catch { continue; } } return children; }
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+// prettier-ignore
+async function waitFor(check, message, timeout = PROCESS_TIMEOUT_MS) { const started = Date.now(); while (Date.now() - started < timeout) { const value = await check(); if (value) return value; await new Promise((resolve) => setTimeout(resolve, 25)); } throw new Error(message); }
+// prettier-ignore
+async function runSupervisedParent(projectRoot) { const [{ CompilerWorkerHost, spawnCompilerWorkerProcess }] = await Promise.all([import("../dist/services/compiler-worker-host.js")]); const host = new CompilerWorkerHost((generation) => spawnCompilerWorkerProcess({ generation, workerEntryPath: scriptPath, environment: { AST_SHUTDOWN_DRAIN_TIMEOUT_MS: "100" } }), 1_000); await host.start([{ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: LATEST_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "parent-death", version: "1" } } }, { jsonrpc: "2.0", method: "notifications/initialized", params: {} }]); const prepared = await host.forward({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "ast_rename_symbol", arguments: { project_root: projectRoot, file_path: "src/value.ts", symbol_path: "renamedValue", new_name: "parentDeathValue", dry_run: true, allow_new_errors: false } } }); const plan = prepared.result.structuredContent; await host.forward({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "ast_apply_operation", arguments: { operation_id: plan.operation_id, plan_hash: plan.plan_hash } } }); }
 
 class LifecycleProcess {
   constructor(child) {
@@ -629,21 +653,32 @@ async function exerciseCanaryCloseReopen(projectRoot, cacheRoot) {
   );
 }
 
-async function createProjectFixture(root, suffix = "") {
+async function createProjectFixture(root, suffix = "", sourceCount = 2) {
   const projectRoot = path.join(root, `project${suffix}`);
   await mkdir(path.join(projectRoot, "src"), { recursive: true });
   await writeFile(
     path.join(projectRoot, "tsconfig.json"),
     JSON.stringify({ compilerOptions: { strict: true, target: "ES2022" }, include: ["src/**/*"] }),
   );
-  await writeFile(
-    path.join(projectRoot, "src/value.ts"),
-    "export function targetValue(value: number): number { return value + 1; }\n",
-  );
-  await writeFile(
-    path.join(projectRoot, "src/use.ts"),
-    'import { targetValue } from "./value.js";\nexport const result = targetValue(1);\n',
-  );
+  if (sourceCount === 2) {
+    await writeFile(
+      path.join(projectRoot, "src/value.ts"),
+      "export function targetValue(value: number): number { return value + 1; }\n",
+    );
+    await writeFile(
+      path.join(projectRoot, "src/use.ts"),
+      'import { targetValue } from "./value.js";\nexport const result = targetValue(1);\n',
+    );
+  } else {
+    await Promise.all(
+      Array.from({ length: sourceCount }, (_, index) =>
+        writeFile(
+          path.join(projectRoot, `src/evidence-${index}.ts`),
+          `export const evidenceValue${index} = ${index};\n`,
+        ),
+      ),
+    );
+  }
   return projectRoot;
 }
 
@@ -655,6 +690,7 @@ async function runLifecycleMatrix() {
     const mutationProjectRoot = await createProjectFixture(root, "-mutation");
     const mixedProjectRoot = await createProjectFixture(root, "-mixed");
     const cacheRoot = path.join(root, "cache");
+    const evidenceProjectRoot = await createProjectFixture(root, "-evidence", 400);
     await mkdir(cacheRoot, { recursive: true, mode: 0o700 });
 
     await exerciseCleanTrigger("stdin_eof");
@@ -676,6 +712,20 @@ async function runLifecycleMatrix() {
     supervised.endStdin();
     await supervised.waitForExit();
     supervised.assertProtocolClean();
+    // prettier-ignore
+    const orphanProcesses = await (async () => { const parent = new LifecycleProcess(spawn(process.execPath, [scriptPath, PARENT_MODE, mutationProjectRoot], { stdio: ["pipe", "pipe", "pipe"] })); await parent.waitForEvent("lifecycle_critical_apply_entered"); const workerPids = await waitFor(() => processChildren(parent.child.pid).then((ids) => ids.length ? ids : undefined), "Compiler child was not observed."); const parentExited = new Promise((resolve) => parent.child.once("exit", resolve)); parent.child.kill("SIGKILL"); await withTimeout(parentExited, PROCESS_TIMEOUT_MS, "Parent controller did not exit."); await new Promise((resolve) => setTimeout(resolve, 100)); assert.equal(workerPids.every(processAlive), true); for (const pid of workerPids) process.kill(pid, "SIGUSR1"); await waitFor(() => workerPids.every((pid) => !processAlive(pid)), "Compiler child remained orphaned after critical release.", 2_000); return workerPids.filter(processAlive).length; })();
+    const evidence = await runSupervisedWorkerEvidence({
+      nodeBin: process.execPath,
+      projectRoot: evidenceProjectRoot,
+      cacheRoot: path.join(root, "evidence-cache"),
+    });
+    assert.equal(
+      evidence.minimum_reclaimed_percent >= 80 &&
+        evidence.sqlite_hits === 6 &&
+        evidence.reused_files === 400 &&
+        evidence.rebuilt_files === 0,
+      true,
+    );
 
     process.stdout.write(
       `${JSON.stringify({
@@ -692,7 +742,9 @@ async function runLifecycleMatrix() {
         canary_close_reopen: true,
         supervised_transport: true,
         protocol_stdout_clean: true,
-        orphan_processes: 0,
+        parent_death_completion_critical: true,
+        supervised_worker_evidence: true,
+        orphan_processes: orphanProcesses,
       })}\n`,
     );
   } finally {
@@ -701,6 +753,10 @@ async function runLifecycleMatrix() {
 }
 
 if (process.argv[2] === FIXTURE_MODE) {
+  await runFixtureServer();
+} else if (process.argv[2] === PARENT_MODE) {
+  await runSupervisedParent(process.argv[3]);
+} else if (process.send) {
   await runFixtureServer();
 } else {
   await runLifecycleMatrix();

@@ -33,6 +33,8 @@ export interface RunStdioServerOptions {
 
 export interface StdioRuntimeHandle {
   shutdown(trigger?: ShutdownTrigger): Promise<ShutdownResult>;
+  snapshot?(): Readonly<Record<string, unknown>>;
+  readonly shutdownGraceMs?: number;
 }
 
 function emitShutdownFailureEvent(): void {
@@ -144,5 +146,21 @@ export async function runStdioServer(
 
   return Object.freeze({
     shutdown: (trigger: ShutdownTrigger = "requested") => requestShutdown(trigger),
+    shutdownGraceMs: runtimePolicy.shutdownDrainTimeoutMs,
+    snapshot: () => {
+      const runtime = runtimeActivity.snapshot(),
+        project = getProjectRuntimeShutdownSnapshot();
+      return Object.freeze({
+        runtime_admission: runtime.admission,
+        active_requests: runtime.active_requests,
+        active_sends: runtime.active_sends,
+        project_admission: project.admission,
+        session_count: project.session_count,
+        active_operations: project.active_operations,
+        queued_operations: project.queued_operations,
+        completion_critical_operations: project.completion_critical_operations,
+        mutation_history: project.mutation_history,
+      });
+    },
   });
 }

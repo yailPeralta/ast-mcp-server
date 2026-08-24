@@ -1,15 +1,25 @@
 import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import type { JSONRPCMessage, RequestId } from "@modelcontextprotocol/sdk/types.js";
 import { decodeCompilerWorkerEnvelope, startCompilerWorker } from "./compiler-worker-protocol.js";
-import { createCompilerWorkerSpawnSpec, type RuntimePolicyEnvironment } from "./runtime-policy.js";
+import {
+  createCompilerWorkerSpawnSpec,
+  readRuntimePolicy,
+  type RuntimePolicyEnvironment,
+} from "./runtime-policy.js";
+import { emitCompilerWorkerEvent } from "./runtime-logger.js";
+import { PublicOperationalError, renderPublicError } from "./public-errors.js";
 type Trigger = "requested" | "parent_exit" | "protocol";
 type Ready = { readonly generation: number; readonly sequence: number };
 export class CompilerWorkerHostError extends Error {
-  constructor(readonly kind: "startup" | "protocol" | "worker_exit") {
+  constructor(
+    readonly kind: "startup" | "protocol" | "worker_exit" | "ambiguous_apply",
+    readonly recovery?: { readonly correlation_id: string; readonly expires_at: number },
+  ) {
     super("Compiler worker request failed.");
   }
 }
@@ -45,12 +55,19 @@ export function spawnCompilerWorkerProcess(options: {
   const ready = deferred<string>();
   const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
   const pending = new Map<RequestId, ReturnType<typeof deferred<Record<string, unknown>>>>();
+  const snapshots: ReturnType<typeof deferred<Record<string, unknown>>>[] = [];
+  const acknowledgements = new Map<number, ReturnType<typeof deferred<void>>>();
   let outbound = 0;
   let inbound = 0;
+  let controlInbound = 0;
+  let writes = 0;
   const fail = (error: Error) => {
     ready.reject(error);
     for (const request of pending.values()) request.reject(error);
     pending.clear();
+    for (const snapshot of snapshots.splice(0)) snapshot.reject(error);
+    for (const acknowledged of acknowledgements.values()) acknowledged.reject(error);
+    acknowledgements.clear();
   };
   child.once("close", () => fail(new CompilerWorkerHostError("worker_exit")));
   child.on("message", (message) => {
@@ -59,12 +76,21 @@ export function spawnCompilerWorkerProcess(options: {
     if (
       !decoded.ok ||
       decoded.value.generation !== options.generation ||
-      (decoded.value.sequence as number) <= inbound ||
-      decoded.value.type !== "ready"
+      (decoded.value.sequence as number) <= controlInbound ||
+      !["ready", "snapshot", "settled"].includes(decoded.value.type as string)
     )
       return fail(new CompilerWorkerHostError("protocol"));
-    inbound = decoded.value.sequence as number;
-    ready.resolve(frame);
+    controlInbound = decoded.value.sequence as number;
+    if (decoded.value.type === "settled") {
+      const writeSequence = (decoded.value.payload as Record<string, unknown>).write_sequence;
+      if (!Number.isSafeInteger(writeSequence))
+        return fail(new CompilerWorkerHostError("protocol"));
+      acknowledgements.get(writeSequence as number)?.resolve();
+      acknowledgements.delete(writeSequence as number);
+    } else if (decoded.value.type === "ready") {
+      inbound = 1;
+      ready.resolve(frame);
+    } else snapshots.shift()?.resolve(decoded.value);
   });
   createInterface({ input: child.stdout! }).on("line", (line) => {
     if (Buffer.byteLength(line) > 256 * 1024) return fail(new CompilerWorkerHostError("protocol"));
@@ -84,17 +110,27 @@ export function spawnCompilerWorkerProcess(options: {
       payload: { request_id: message.id, message },
     });
   });
-  const write = (message: JSONRPCMessage) => {
+  const write = (message: JSONRPCMessage, acknowledge = false) => {
     if (!bounded(message) || !child.stdin?.writable)
       return Promise.reject(new CompilerWorkerHostError("protocol"));
     options.beforeWrite?.(message);
-    return new Promise<void>((resolve, reject) =>
+    const writeSequence = ++writes,
+      processed = acknowledge ? deferred<void>() : undefined;
+    if (processed) {
+      acknowledgements.set(writeSequence, processed);
+      void processed.promise.catch(() => undefined);
+    }
+    const written = new Promise<void>((resolve, reject) =>
       child.stdin!.write(`${JSON.stringify(message)}\n`, (error) =>
-        error ? reject(error) : resolve(),
+        error ? (acknowledgements.delete(writeSequence), reject(error)) : resolve(),
       ),
     );
+    return processed ? written.then(() => processed.promise) : written;
   };
-  const control = (type: "handshake" | "shutdown", payload: Record<string, unknown>) => {
+  const control = (
+    type: "handshake" | "snapshot" | "shutdown",
+    payload: Record<string, unknown>,
+  ) => {
     const frame = { v: 1, generation: options.generation, sequence: ++outbound, type, payload };
     if (!bounded(frame) || !child.connected)
       return Promise.reject(new CompilerWorkerHostError("protocol"));
@@ -107,10 +143,11 @@ export function spawnCompilerWorkerProcess(options: {
     ready: ready.promise,
     async replay(frames: readonly [unknown, unknown]) {
       await control("handshake", {});
+      await ready.promise;
       for (const frame of frames) await write(frame as JSONRPCMessage);
     },
     forward(message: JSONRPCMessage) {
-      if (!("id" in message)) return write(message).then(() => undefined);
+      if (!("id" in message)) return write(message, true).then(() => undefined);
       if (message.id === undefined) return Promise.reject(new CompilerWorkerHostError("protocol"));
       const result = deferred<Record<string, unknown>>();
       const id = message.id;
@@ -123,8 +160,18 @@ export function spawnCompilerWorkerProcess(options: {
     },
     cancel(id: RequestId) {
       if (!pending.has(id)) return false;
-      void write({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: id } });
+      void write(
+        { jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: id } },
+        true,
+      ).catch(() => undefined);
       return true;
+    },
+    async snapshot() {
+      await Promise.all([...acknowledgements.values()].map(({ promise }) => promise));
+      const result = deferred<Record<string, unknown>>();
+      snapshots.push(result);
+      await control("snapshot", {});
+      return (await result.promise).payload as Record<string, unknown>;
     },
     terminate: () => {
       child.kill("SIGKILL");
@@ -144,11 +191,38 @@ export class CompilerWorkerHost {
   private child?: ReturnType<typeof spawnCompilerWorkerProcess>;
   private starting?: Promise<Ready>;
   private readonly active = new Map<RequestId, number>();
+  private readonly leases = new Map<string, number>();
   private initialization: unknown[] = [];
+  private activity = 0;
+  private parentWork = 0;
+  private parentAdmission: "open" | "closed" = "open";
+  private idleTimer?: ReturnType<typeof setTimeout>;
+  private retiring?: Promise<void>;
   constructor(
     private readonly spawn: (generation: number) => ReturnType<typeof spawnCompilerWorkerProcess>,
     private readonly timeoutMs = 10_000,
+    private readonly lifecycle: {
+      readonly idleTtlMs?: number;
+      readonly leaseLimit?: number;
+      readonly leaseTtlMs?: number;
+      readonly now?: () => number;
+    } = {},
   ) {}
+  private now() {
+    return (this.lifecycle.now ?? Date.now)();
+  }
+  // prettier-ignore
+  private pruneLeases() { const now = this.now(); for (const [id, expiry] of this.leases) if (expiry <= now) this.leases.delete(id); }
+  // prettier-ignore
+  private addLease(id: unknown) { if (typeof id !== "string" || !id || !bounded(id)) return; this.pruneLeases(); this.leases.set(id, this.now() + (this.lifecycle.leaseTtlMs ?? 15 * 60_000)); while (this.leases.size > (this.lifecycle.leaseLimit ?? 128)) this.leases.delete(this.leases.keys().next().value!); }
+  // prettier-ignore
+  private scheduleIdle() { clearTimeout(this.idleTimer); const ttl = this.lifecycle.idleTtlMs ?? 0; if (ttl > 0 && this.child) this.idleTimer = setTimeout(() => { this.retiring = this.recycle(this.activity).catch(async () => { const child = this.child; await child?.reap().catch(() => undefined); if (this.child === child) this.child = undefined; }).finally(() => { this.retiring = undefined; }); }, ttl); }
+  // prettier-ignore
+  private static quiescent(value: Record<string, unknown>) { return value.runtime_admission === "open" && value.project_admission === "open" && ["active_requests", "active_sends", "active_operations", "queued_operations", "completion_critical_operations"].every((key) => value[key] === 0) && value.mutation_history === false; }
+  // prettier-ignore
+  private async recycle(activity: number) { this.pruneLeases(); const child = this.child, generation = this.generation, sequence = this.sequence; if (!child || this.parentWork || this.leases.size || child.generation !== generation) return this.scheduleIdle(); const first = await child.snapshot(); if (!CompilerWorkerHost.quiescent(first) || activity !== this.activity || sequence !== this.sequence) return this.scheduleIdle(); this.parentAdmission = "closed"; const second = await child.snapshot(); if (child !== this.child || generation !== this.generation || sequence !== this.sequence || activity !== this.activity || !CompilerWorkerHost.quiescent(second)) { this.parentAdmission = "open"; return this.scheduleIdle(); } await this.stopChild(child, "requested"); emitCompilerWorkerEvent({ kind: "idle", generation }); this.parentAdmission = "open"; }
+  // prettier-ignore
+  private async stopChild(child: ReturnType<typeof spawnCompilerWorkerProcess>, trigger: Trigger): Promise<"complete" | "forced"> { const completion = child.shutdown(trigger); try { await within(completion, this.timeoutMs); if (this.child === child) this.child = undefined; return "complete"; } catch { const snapshot = await child.snapshot().catch(() => undefined); if (snapshot?.completion_critical_operations) { await completion; if (this.child === child) this.child = undefined; return "complete"; } child.terminate(); await child.reap().catch(() => undefined); if (this.child === child) this.child = undefined; return "forced"; } }
   async start(initialization: readonly unknown[]): Promise<Ready> {
     if (this.child) return { generation: this.child.generation, sequence: this.sequence };
     if (this.starting) return this.starting;
@@ -174,6 +248,8 @@ export class CompilerWorkerHost {
         if (!child || envelope.generation !== child.generation) throw new Error();
         this.child = child;
         this.sequence = envelope.sequence as number;
+        this.parentAdmission = "open";
+        this.scheduleIdle();
         return { generation: child.generation, sequence: this.sequence };
       } catch {
         child?.terminate();
@@ -187,7 +263,10 @@ export class CompilerWorkerHost {
   }
   async forward(message: JSONRPCMessage): Promise<JSONRPCMessage | undefined> {
     if (!bounded(message)) throw new CompilerWorkerHostError("protocol");
+    await this.retiring;
+    this.activity += 1;
     await this.start(this.initialization.length === 2 ? this.initialization : []);
+    this.parentWork += 1;
     const id = "id" in message ? message.id : undefined;
     if (id !== undefined) this.active.set(id, this.generation);
     try {
@@ -209,42 +288,86 @@ export class CompilerWorkerHost {
       )
         throw new CompilerWorkerHostError("protocol");
       this.sequence = settled.sequence as number;
-      return payload.message as JSONRPCMessage;
+      const response = payload.message as JSONRPCMessage;
+      const result =
+        "result" in response ? (response.result as Record<string, unknown>) : undefined;
+      this.addLease(
+        result?.operation_id ??
+          (result?.structuredContent as Record<string, unknown> | undefined)?.operation_id,
+      );
+      return response;
     } catch (error) {
+      if (error instanceof CompilerWorkerHostError && error.kind === "worker_exit") {
+        const child = this.child;
+        await child?.reap().catch(() => undefined);
+        if (this.child === child) this.child = undefined;
+        emitCompilerWorkerEvent({
+          kind: "crash",
+          generation: child?.generation ?? this.generation,
+        });
+        const params =
+          "params" in message
+            ? (message.params as { name?: unknown; arguments?: { operation_id?: unknown } })
+            : undefined;
+        const operationId =
+          params?.name === "ast_apply_operation" ? params.arguments?.operation_id : undefined;
+        if (typeof operationId === "string") {
+          this.addLease(operationId);
+          const correlationId = randomUUID();
+          emitCompilerWorkerEvent({
+            kind: "ambiguity",
+            generation: child?.generation ?? this.generation,
+            correlationId,
+            count: this.leases.size,
+          });
+          throw new CompilerWorkerHostError("ambiguous_apply", {
+            correlation_id: correlationId,
+            expires_at: this.leases.get(operationId)!,
+          });
+        }
+      }
       throw error instanceof CompilerWorkerHostError
         ? error
         : new CompilerWorkerHostError("worker_exit");
     } finally {
       if (id !== undefined) this.active.delete(id);
+      this.parentWork -= 1;
+      this.scheduleIdle();
     }
   }
   cancel(id: RequestId): "not_found" | "forwarded" {
     if (this.active.get(id) !== this.generation || !this.child) return "not_found";
     return this.child.cancel(id) ? "forwarded" : "not_found";
   }
-  async shutdown(trigger: Trigger): Promise<"complete"> {
+  async shutdown(trigger: Trigger): Promise<"complete" | "forced"> {
+    clearTimeout(this.idleTimer);
     await this.starting?.catch(() => undefined);
     if (!this.child) return "complete";
     const child = this.child;
-    const result = await child.shutdown(trigger);
-    if (this.child === child) {
-      this.child = undefined;
-    }
-    return result;
+    this.parentAdmission = "closed";
+    return this.stopChild(child, trigger);
   }
   snapshot() {
+    this.pruneLeases();
     return {
       generation: this.generation,
       sequence: this.sequence,
       state: this.child ? "ready" : this.starting ? "starting" : "idle",
       active_requests: this.active.size,
+      parent_work: this.parentWork,
+      parent_admission: this.parentAdmission,
+      lease_tombstones: this.leases.size,
     } as const;
   }
 }
 export async function runSupervisedStdioServer() {
   const entry = fileURLToPath(new URL("../compiler-worker-entry.js", import.meta.url));
-  const host = new CompilerWorkerHost((generation) =>
-    spawnCompilerWorkerProcess({ generation, workerEntryPath: entry, environment: process.env }),
+  const policy = readRuntimePolicy(process.env);
+  const host = new CompilerWorkerHost(
+    (generation) =>
+      spawnCompilerWorkerProcess({ generation, workerEntryPath: entry, environment: process.env }),
+    10_000,
+    { idleTtlMs: policy.compilerWorkerIdleTtlMs },
   );
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   const relay = async (line: string) => {
@@ -259,11 +382,22 @@ export async function runSupervisedStdioServer() {
     try {
       const response = await host.forward(message);
       if (response) process.stdout.write(`${JSON.stringify(response)}\n`);
-    } catch {
-      if ("id" in message)
+    } catch (error) {
+      if ("id" in message) {
+        const ambiguous =
+          error instanceof CompilerWorkerHostError &&
+          error.kind === "ambiguous_apply" &&
+          error.recovery;
+        const rendered = ambiguous
+          ? renderPublicError(
+              new PublicOperationalError("AMBIGUOUS_APPLY", "The apply outcome is ambiguous."),
+              ambiguous.correlation_id,
+            ).envelope.error
+          : undefined;
         process.stdout.write(
-          `{"jsonrpc":"2.0","id":${JSON.stringify(message.id)},"error":{"code":-32603,"message":"Compiler worker request failed."}}\n`,
+          `${JSON.stringify({ jsonrpc: "2.0", id: message.id, error: { code: -32603, message: rendered?.message ?? "Compiler worker request failed.", ...(ambiguous ? { data: { code: "AMBIGUOUS_APPLY", ...ambiguous } } : {}) } })}\n`,
         );
+      }
     }
   };
   lines.on("line", (line) => void relay(line));

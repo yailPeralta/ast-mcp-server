@@ -16,6 +16,7 @@ export const PUBLIC_ERROR_CODES = Object.freeze([
   "STALE_WORKSPACE",
   "INCOMPLETE_EVIDENCE",
   "MUTATION_BLOCKED",
+  "AMBIGUOUS_APPLY",
   "CONFLICT",
   "INTERNAL_ERROR",
 ] as const);
@@ -42,6 +43,7 @@ const FIXED_PUBLIC_MESSAGES: Readonly<Record<PublicErrorCode, string>> = Object.
   STALE_WORKSPACE: "The workspace changed. Retry the operation.",
   INCOMPLETE_EVIDENCE: "The required compiler evidence is incomplete.",
   MUTATION_BLOCKED: "The mutation is blocked.",
+  AMBIGUOUS_APPLY: "The apply outcome is ambiguous. Inspect the operation receipt before retrying.",
   CONFLICT: "The operation conflicts with current state.",
   INTERNAL_ERROR: INTERNAL_ERROR_MESSAGE,
 });
@@ -232,7 +234,10 @@ function codedError(error: unknown): ClassifiedPublicError | null {
       if (code === null || message === null || !PUBLIC_ERROR_CODE_SET.has(code)) return null;
       return {
         code: code as PublicErrorCode,
-        message: sanitizePublicText(message),
+        message:
+          code === "AMBIGUOUS_APPLY"
+            ? FIXED_PUBLIC_MESSAGES.AMBIGUOUS_APPLY
+            : sanitizePublicText(message),
       };
     }
 
@@ -294,9 +299,11 @@ function serializePublicError(
   return { envelope, text: JSON.stringify(envelope) };
 }
 
-export function renderPublicError(error: unknown): RenderedPublicError {
+export function renderPublicError(
+  error: unknown,
+  correlationId: string = randomUUID(),
+): RenderedPublicError {
   const classified = classifyPublicError(error);
-  const correlationId = randomUUID();
   const initial = serializePublicError(classified.code, classified.message, correlationId);
   if (Buffer.byteLength(initial.text, "utf8") <= MAX_PUBLIC_ERROR_RESPONSE_BYTES) {
     return initial;

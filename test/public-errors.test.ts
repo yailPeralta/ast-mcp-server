@@ -1,12 +1,14 @@
 import { Buffer } from "node:buffer";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   MAX_PUBLIC_ERROR_MESSAGE_BYTES,
   PUBLIC_ERROR_CODES,
   PublicOperationalError,
   classifyPublicError,
+  renderPublicError,
   sanitizePublicText,
 } from "../src/services/public-errors.js";
+import { emitCompilerWorkerEvent } from "../src/services/runtime-logger.js";
 import { ProjectOperationSchedulerError } from "../src/services/project-operation-scheduler.js";
 import { ProjectCapacityError } from "../src/services/project.js";
 import { RequestContextError } from "../src/services/request-context.js";
@@ -68,7 +70,10 @@ describe("public error classification and redaction", () => {
         classifyPublicError(new PublicOperationalError(code, `Safe ${code} message.`)),
       ).toEqual({
         code,
-        message: `Safe ${code} message.`,
+        message:
+          code === "AMBIGUOUS_APPLY"
+            ? "The apply outcome is ambiguous. Inspect the operation receipt before retrying."
+            : `Safe ${code} message.`,
       });
     }
   });
@@ -298,4 +303,6 @@ describe("public error classification and redaction", () => {
     expect(sanitized).not.toContain("�");
     expect(sanitized).toMatch(/truncated]$/);
   });
+  // prettier-ignore
+  it("renders ambiguous apply and worker events with one bounded safe correlation", () => { const raw = "/tmp/private/raw-operation-id", correlationId = "123e4567-e89b-42d3-a456-426614174000"; const rendered = renderPublicError(new PublicOperationalError("AMBIGUOUS_APPLY", raw), correlationId); expect([rendered.envelope.error.code, rendered.envelope.error.correlation_id, Buffer.byteLength(rendered.text)]).toEqual(["AMBIGUOUS_APPLY", correlationId, expect.any(Number)]); expect(Buffer.byteLength(rendered.text)).toBeLessThanOrEqual(4096); expect(rendered.text).not.toContain(raw); const write = vi.spyOn(process.stderr, "write").mockReturnValue(true); emitCompilerWorkerEvent({ kind: "ambiguity", generation: 1, correlationId }); expect(String(write.mock.calls[0]?.[0])).toContain(correlationId); });
 });
