@@ -1,6 +1,6 @@
 # ADR 0010: Govern the local stdio production runtime
 
-- Status: Accepted; runtime and persistence clauses superseded by ADR 0011
+- Status: Accepted; persistence clauses superseded by ADR 0011 and the in-process-only runtime clause superseded by ADR 0014
 - Date: 2026-08-07
 - Decision owners: ast-mcp-server maintainers
 - Scope: local MCP runtime, lifecycle, operational contract and release transitions
@@ -10,6 +10,8 @@
 Treat `ast-mcp-server` as a production-quality local MCP server for a trusted single user on Linux x64 with the required GNU coreutils publication primitive, transported over `stdio`, with TypeScript and JavaScript as the supported language surface. ADR 0011 updates the current development-line runtime matrix to exact Node.js `22.13.0` and the governed Node 24 line; the `22.5.0` matrix recorded later in this ADR is historical release evidence.
 
 Keep execution in process for this release, but place strict admission, scheduling, cancellation, lifecycle and disclosure boundaries around compiler work. Worker/process isolation remains a future option if measured workloads prove that cooperative in-process control is insufficient.
+
+ADR 0014 now governs the current development line's opt-in supervised compiler worker. The historical decision above remains the default: `in_process` is still the default and rollback.
 
 The compiler/project remains the sole semantic authority. Scheduling, persistence, telemetry and cancellation cannot authorize a result or weaken `prepare -> review -> apply` mutation checks.
 
@@ -144,4 +146,4 @@ This couples irreversible transitions before public artifact/consumer proof and 
 
 Runtime changes are delivered in independently revertible slices: policy/session limits, scheduler/cancellation, error boundary, shutdown, canary/support and release automation. Reverting one slice must preserve compiler authority and mutation safety.
 
-Operational rollback keeps persistence disabled, stops release before `latest`, and returns to the last published stable package. Any future worker isolation, platform expansion or SQLite promotion must preserve the public error/status contracts or introduce an explicit versioned migration.
+Operational rollback keeps persistence disabled, stops release before `latest`, and returns to the last published stable package. ADR 0014 governs worker isolation; any platform expansion or SQLite promotion must preserve the public error/status contracts or introduce an explicit versioned migration.
