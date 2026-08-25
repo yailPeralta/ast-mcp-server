@@ -79,10 +79,10 @@ describe("CLI project discovery", () => {
     const repo = path.join(root, "repo");
     const nested = path.join(repo, "nested");
     const outside = path.join(root, "outside");
+    await mkdir(outside);
     await Promise.all([
       mkdir(path.join(repo, ".git"), { recursive: true }),
       mkdir(nested, { recursive: true }),
-      mkdir(outside),
       writeFile(path.join(root, "tsconfig.json"), "{}"),
       writeFile(path.join(outside, "jsconfig.json"), "{}"),
     ]);
