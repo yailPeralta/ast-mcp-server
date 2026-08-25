@@ -1,13 +1,17 @@
+import path from "node:path";
 export const RUNTIME_POLICY_ENV_KEYS = Object.freeze([
   "AST_MAX_PROJECT_SESSIONS",
   "AST_MAX_QUEUED_OPERATIONS_PER_PROJECT",
   "AST_QUEUE_WAIT_TIMEOUT_MS",
   "AST_OPERATION_DEADLINE_MS",
   "AST_SHUTDOWN_DRAIN_TIMEOUT_MS",
+  "AST_COMPILER_WORKER_MODE",
+  "AST_COMPILER_WORKER_IDLE_TTL_MS",
 ] as const);
 
 export type RuntimePolicyEnvironmentKey = (typeof RUNTIME_POLICY_ENV_KEYS)[number];
-export type RuntimePolicyReason = "default" | "configured" | "invalid_integer" | "out_of_range";
+export type RuntimePolicyReason =
+  "default" | "configured" | "invalid_integer" | "invalid_mode" | "out_of_range";
 
 export type RuntimePolicyEnvironment = Readonly<Record<string, unknown>>;
 export type RuntimePolicyReasons = Readonly<
@@ -20,6 +24,8 @@ export interface RuntimePolicy {
   readonly queueWaitTimeoutMs: number;
   readonly operationDeadlineMs: number;
   readonly shutdownDrainTimeoutMs: number;
+  readonly compilerWorkerMode: "in_process" | "supervised";
+  readonly compilerWorkerIdleTtlMs: number;
   readonly reasons: RuntimePolicyReasons;
 }
 
@@ -75,6 +81,20 @@ export function parseRuntimePolicy(environment: RuntimePolicyEnvironment): Runti
     100,
     60_000,
   );
+  const rawWorkerMode = environment.AST_COMPILER_WORKER_MODE;
+  const compilerWorkerMode = rawWorkerMode === "supervised" ? "supervised" : "in_process";
+  const compilerWorkerModeReason: RuntimePolicyReason =
+    rawWorkerMode === undefined
+      ? "default"
+      : rawWorkerMode === "in_process" || rawWorkerMode === "supervised"
+        ? "configured"
+        : "invalid_mode";
+  const compilerWorkerIdleTtlMs = parseBoundedInteger(
+    environment.AST_COMPILER_WORKER_IDLE_TTL_MS,
+    60_000,
+    0,
+    86_400_000,
+  );
 
   const reasons: RuntimePolicyReasons = Object.freeze({
     AST_MAX_PROJECT_SESSIONS: maxProjectSessions.reason,
@@ -82,6 +102,8 @@ export function parseRuntimePolicy(environment: RuntimePolicyEnvironment): Runti
     AST_QUEUE_WAIT_TIMEOUT_MS: queueWaitTimeoutMs.reason,
     AST_OPERATION_DEADLINE_MS: operationDeadlineMs.reason,
     AST_SHUTDOWN_DRAIN_TIMEOUT_MS: shutdownDrainTimeoutMs.reason,
+    AST_COMPILER_WORKER_MODE: compilerWorkerModeReason,
+    AST_COMPILER_WORKER_IDLE_TTL_MS: compilerWorkerIdleTtlMs.reason,
   });
 
   return Object.freeze({
@@ -90,8 +112,65 @@ export function parseRuntimePolicy(environment: RuntimePolicyEnvironment): Runti
     queueWaitTimeoutMs: queueWaitTimeoutMs.value,
     operationDeadlineMs: operationDeadlineMs.value,
     shutdownDrainTimeoutMs: shutdownDrainTimeoutMs.value,
+    compilerWorkerMode,
+    compilerWorkerIdleTtlMs: compilerWorkerIdleTtlMs.value,
     reasons,
   });
+}
+
+const WORKER_PATH_KEYS = ["HOME", "XDG_CACHE_HOME", "AST_SYMBOL_INDEX_CACHE_ROOT"] as const;
+const WORKER_ENV_KEYS = [
+  ...WORKER_PATH_KEYS,
+  "AST_SYMBOL_INDEX_PERSISTENCE",
+  "AST_SYMBOL_INDEX_BUSY_TIMEOUT_MS",
+] as const;
+const MAX_WORKER_ENV_VALUE_LENGTH = 4096;
+function validEnvironmentString(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= MAX_WORKER_ENV_VALUE_LENGTH &&
+    !value.includes("\0")
+  );
+}
+export function createCompilerWorkerSpawnSpec(
+  workerEntryPath: string,
+  environment: RuntimePolicyEnvironment,
+) {
+  const projected: Record<string, string> = {};
+  for (const key of WORKER_ENV_KEYS) {
+    const value = environment[key];
+    if (value === undefined) continue;
+    if (!validEnvironmentString(value))
+      return { ok: false, reason: "invalid_environment" as const };
+    const isPath = WORKER_PATH_KEYS.includes(key as (typeof WORKER_PATH_KEYS)[number]);
+    const invalidMode =
+      key === "AST_SYMBOL_INDEX_PERSISTENCE" && !["disabled", "canary", "enabled"].includes(value);
+    const invalidTimeout =
+      key === "AST_SYMBOL_INDEX_BUSY_TIMEOUT_MS" &&
+      parseBoundedInteger(value, 1_000, 1, 60_000).reason !== "configured";
+    if (
+      (isPath && (!path.isAbsolute(value) || path.normalize(value) !== value)) ||
+      invalidMode ||
+      invalidTimeout
+    ) {
+      return { ok: false, reason: "invalid_environment" as const };
+    }
+    projected[key] = value;
+  }
+  const policy = parseRuntimePolicy(environment);
+  Object.assign(projected, {
+    AST_MAX_PROJECT_SESSIONS: String(policy.maxProjectSessions),
+    AST_MAX_QUEUED_OPERATIONS_PER_PROJECT: String(policy.maxQueuedOperationsPerProject),
+    AST_QUEUE_WAIT_TIMEOUT_MS: String(policy.queueWaitTimeoutMs),
+    AST_OPERATION_DEADLINE_MS: String(policy.operationDeadlineMs),
+    AST_SHUTDOWN_DRAIN_TIMEOUT_MS: String(policy.shutdownDrainTimeoutMs),
+  });
+  return {
+    ok: true,
+    command: process.execPath,
+    args: [workerEntryPath],
+    options: { shell: false, env: projected },
+  };
 }
 
 export function readRuntimePolicy(

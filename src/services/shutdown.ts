@@ -1,4 +1,5 @@
-export type ShutdownTrigger = "requested" | "stdin_eof" | "transport_closed" | "sigint" | "sigterm";
+export type ShutdownTrigger =
+  "requested" | "parent_exit" | "stdin_eof" | "transport_closed" | "sigint" | "sigterm";
 
 export interface RuntimeDrainSnapshot {
   readonly active_operations: number;
