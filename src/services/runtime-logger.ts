@@ -79,3 +79,8 @@ export function renderToolFailureEvent(input: ToolFailureEventInput): string {
 export function emitToolFailureEvent(input: ToolFailureEventInput): void {
   process.stderr.write(`${renderToolFailureEvent(input)}\n`);
 }
+
+// prettier-ignore
+export function emitCompilerWorkerEvent(input: { readonly kind: "idle" | "crash" | "ambiguity"; readonly generation: number; readonly correlationId?: string; readonly count?: number }): void {
+  const event = { event: "compiler_worker", version: 1, kind: input.kind, generation: Number.isSafeInteger(input.generation) ? input.generation : 0, correlation_id: input.correlationId && UUID_PATTERN.test(input.correlationId) ? input.correlationId : undefined, count: input.count === undefined ? undefined : Math.max(0, Math.min(128, Math.trunc(input.count))) }; process.stderr.write(`${JSON.stringify(event)}\n`);
+}
