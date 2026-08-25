@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.2] — local release candidate, pending release (2026-08-25)
+
 ### Added
 
 - Added an explicit per-connection supervised compiler-worker mode that can recycle an idle compiler child while the local stdio parent remains connected; `in_process` remains the default and rollback, and TTL `0` disables recycling.
@@ -14,17 +16,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Compiler-worker startup now waits for `ready` before replaying initialization, preventing cross-channel settlement ordering from rejecting the first forwarded request as stale.
-
-## [0.11.2] — local recovery candidate, pending release (2026-08-23)
-
-### Fixed
-
+- CLI project-discovery fixtures now create the external project directory before concurrent configuration writes, eliminating a nondeterministic `ENOENT` setup race.
 - Public-registry verification now copies the isolated runner's complete local runtime dependency closure, including the shared managed-skill validator, before launching it outside the source tree.
 - A deterministic copied-runner regression executes the isolated entry point and rejects any local import omitted by its production bootstrap.
 
 ### Release status
 
-- This local recovery candidate succeeds immutable npm versions `0.11.0` and `0.11.1`, neither of which was promotable: `0.11.0` verification exposed stale managed-skill predicates, and `0.11.1` verification exposed the copied runner's missing validator module. Version `0.11.2` remains pending its exact-tree matrix, CI, and separately authorized delivery sequence; it has not been published or assigned to any dist-tag.
+- This local release candidate succeeds immutable npm versions `0.11.0` and `0.11.1`, neither of which was promotable: `0.11.0` verification exposed stale managed-skill predicates, and `0.11.1` verification exposed the copied runner's missing validator module. Version `0.11.2` remains pending its exact-tree matrix, CI, and separately authorized delivery sequence; it has not been published or assigned to any dist-tag.
 
 ## [0.11.1] — published to `next`, verification failed, not promoted (2026-08-23)
 
