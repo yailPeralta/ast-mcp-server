@@ -88,6 +88,18 @@ The local `0.11.2` recovery candidate requires Node.js `>=22.13.0`; its evidence
 
 This is a local stdio server. It runs with the invoking user's filesystem permissions, and clients may request any `project_root` that user can access. It does not provide HTTP authentication, sandboxing, tenant isolation, or a remote-service security boundary. Remote, untrusted, and multi-tenant operation is unsupported.
 
+### Optional supervised compiler worker
+
+The compiler runs in process by default. Linux operators may explicitly keep the stdio parent connected while allowing an idle compiler child to exit and lazily respawn:
+
+```bash
+AST_COMPILER_WORKER_MODE=supervised ast-mcp-server
+```
+
+The parent waits for child readiness before replaying bounded initialization state. Requests and cancellation remain generation-affine; mutation history, live operation leases, and completion-critical apply work prevent unsafe recycling. Set `AST_COMPILER_WORKER_MODE=in_process` for the full rollback, or set `AST_COMPILER_WORKER_IDLE_TTL_MS=0` to retain the relay while disabling idle recycling.
+
+The scoped Linux canary passed on exact Node.js 22.13.0 and Node.js 24 with repeatable PSS reclamation, stable compiler fingerprints, unchanged SQLite reuse, bounded redacted diagnostics, and no orphan after parent death. This is one child per connection, not a shared daemon, pool, or new default. See [ADR 0014](docs/adr/0014-supervised-compiler-worker.md).
+
 In published v0.10.0 and the local `0.11.2` recovery candidate, an absent `AST_SYMBOL_INDEX_PERSISTENCE` or explicit `enabled` selects the private SQLite symbol-index cache. `disabled` is the immediate memory-only rollback. `canary` requires an explicit absolute normalized `AST_SYMBOL_INDEX_CACHE_ROOT`. Invalid policy or storage fails closed to compiler-authoritative memory reads with bounded path-free status.
 
 The default cache root is selected from `AST_SYMBOL_INDEX_CACHE_ROOT`, then `XDG_CACHE_HOME`, then `HOME`. Inspect or clear only derived cache artifacts through the bounded CLI:

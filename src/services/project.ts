@@ -112,6 +112,7 @@ const projectRoots = new WeakMap<Project, string>();
 let projectSessionAccessSequence = 0n;
 let projectRuntimePolicy: RuntimePolicy | undefined;
 let projectRuntimeAdmission: "open" | "closed" = "open";
+let projectMutationHistory = false;
 
 function nextProjectSessionAccessSequence(): bigint {
   projectSessionAccessSequence += 1n;
@@ -1068,6 +1069,7 @@ export function clearProjectSessions(): void {
   projectSessionAccessSequence = 0n;
   projectRuntimePolicy = undefined;
   projectRuntimeAdmission = "open";
+  projectMutationHistory = false;
 }
 
 export interface ProjectRuntimeShutdownSnapshot {
@@ -1076,6 +1078,11 @@ export interface ProjectRuntimeShutdownSnapshot {
   readonly active_operations: number;
   readonly queued_operations: number;
   readonly completion_critical_operations: number;
+  readonly mutation_history: boolean;
+}
+
+export function recordProjectMutationHistory(): void {
+  projectMutationHistory = true;
 }
 
 export function prepareProjectRuntimeForStartup(): void {
@@ -1083,6 +1090,7 @@ export function prepareProjectRuntimeForStartup(): void {
     throw new Error("Cannot start a project runtime while sessions remain open.");
   }
   projectRuntimeAdmission = "open";
+  projectMutationHistory = false;
 }
 
 export function getProjectRuntimeShutdownSnapshot(): ProjectRuntimeShutdownSnapshot {
@@ -1101,6 +1109,7 @@ export function getProjectRuntimeShutdownSnapshot(): ProjectRuntimeShutdownSnaps
     active_operations: activeOperations,
     queued_operations: queuedOperations,
     completion_critical_operations: completionCriticalOperations,
+    mutation_history: projectMutationHistory,
   });
 }
 

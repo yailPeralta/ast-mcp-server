@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { loadRuntimeModule } from "../src/index.js";
 import {
+  createCompilerWorkerSpawnSpec,
   RUNTIME_POLICY_ENV_KEYS,
   parseRuntimePolicy,
   type RuntimePolicyEnvironmentKey,
@@ -53,6 +55,7 @@ describe("runtime policy", () => {
       queueWaitTimeoutMs: 30_000,
       operationDeadlineMs: 120_000,
       shutdownDrainTimeoutMs: 10_000,
+      compilerWorkerIdleTtlMs: 60_000,
     });
     expect(policy.reasons).toEqual(
       Object.fromEntries(RUNTIME_POLICY_ENV_KEYS.map((key) => [key, "default"])),
@@ -118,6 +121,8 @@ describe("runtime policy", () => {
       "queueWaitTimeoutMs",
       "operationDeadlineMs",
       "shutdownDrainTimeoutMs",
+      "compilerWorkerMode",
+      "compilerWorkerIdleTtlMs",
       "reasons",
     ]);
     expect(Object.isFrozen(RUNTIME_POLICY_ENV_KEYS)).toBe(true);
@@ -152,6 +157,68 @@ describe("runtime policy", () => {
       "AST_QUEUE_WAIT_TIMEOUT_MS",
       "AST_OPERATION_DEADLINE_MS",
       "AST_SHUTDOWN_DRAIN_TIMEOUT_MS",
+      "AST_COMPILER_WORKER_MODE",
+      "AST_COMPILER_WORKER_IDLE_TTL_MS",
     ] satisfies RuntimePolicyEnvironmentKey[]);
+  });
+
+  it("selects supervised mode only by explicit valid opt-in and supports TTL zero", () => {
+    const supervised = parseRuntimePolicy({
+      AST_COMPILER_WORKER_MODE: "supervised",
+      AST_COMPILER_WORKER_IDLE_TTL_MS: "0",
+    });
+    const invalid = parseRuntimePolicy({ AST_COMPILER_WORKER_MODE: "fork $(touch nope)" });
+    expect(supervised.compilerWorkerMode).toBe("supervised");
+    expect(supervised.compilerWorkerIdleTtlMs).toBe(0);
+    expect(invalid.compilerWorkerMode).toBe("in_process");
+    expect(invalid.reasons.AST_COMPILER_WORKER_MODE).toBe("invalid_mode");
+  });
+  it("loads only the selected runtime module", async () => {
+    const inProcess = vi.fn(async () => "local");
+    const supervised = vi.fn(async () => "child");
+    const loaders = { inProcess, supervised };
+    await expect(loadRuntimeModule(parseRuntimePolicy({}), loaders)).resolves.toEqual({
+      mode: "in_process",
+      module: "local",
+    });
+    expect([inProcess.mock.calls.length, supervised.mock.calls.length]).toEqual([1, 0]);
+    vi.clearAllMocks();
+    const policy = parseRuntimePolicy({ AST_COMPILER_WORKER_MODE: "supervised" });
+    await expect(loadRuntimeModule(policy, loaders)).resolves.toEqual({
+      mode: "supervised",
+      module: "child",
+    });
+    expect([inProcess.mock.calls.length, supervised.mock.calls.length]).toEqual([0, 1]);
+  });
+  it("builds a fixed shell-free spawn spec from a closed environment allowlist", () => {
+    const result = createCompilerWorkerSpawnSpec("/app/dist/compiler-worker-entry.js", {
+      XDG_CACHE_HOME: "/tmp/cache;echo data",
+      AST_MAX_PROJECT_SESSIONS: "12",
+      NODE_OPTIONS: "--import=/tmp/hostile.mjs",
+      LD_PRELOAD: "/tmp/inject.so",
+      AST_COMPILER_WORKER_MODE: "supervised",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      command: process.execPath,
+      args: ["/app/dist/compiler-worker-entry.js"],
+      options: {
+        shell: false,
+        env: { XDG_CACHE_HOME: "/tmp/cache;echo data", AST_MAX_PROJECT_SESSIONS: "12" },
+      },
+    });
+    expect(JSON.stringify(result)).not.toMatch(/NODE_OPTIONS|LD_PRELOAD|AST_COMPILER_WORKER_MODE/);
+  });
+  it("fails projection before spawn for NUL, oversized, or non-string allowed values", () => {
+    for (const environment of [
+      { HOME: "/home/worker\0hidden" },
+      { XDG_CACHE_HOME: `/${"x".repeat(4097)}` },
+      { AST_SYMBOL_INDEX_CACHE_ROOT: 7 },
+    ]) {
+      expect(createCompilerWorkerSpawnSpec("/app/worker.js", environment)).toEqual({
+        ok: false,
+        reason: "invalid_environment",
+      });
+    }
   });
 });

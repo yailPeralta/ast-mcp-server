@@ -863,6 +863,7 @@ describe("production-readiness-sqlite-default-v5 canary contract", () => {
         "parseCanaryArguments",
         "runCanary",
         "runDeterministicFixture",
+        "runSupervisedWorkerEvidence",
         "validateWorkloadManifest",
       ].sort(),
     );
