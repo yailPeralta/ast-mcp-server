@@ -29,6 +29,12 @@ The local 0.11.2 release candidate requires Node.js `>=22.13.0` and is verified 
 - Nunca reconstruir postimages desde un diff; después del apply, ejecutar el gate canónico del proyecto.
 - Conservar `correlation_id` en errores públicos sin exponer source, paths absolutos, argumentos, environment, cache, stacks ni credenciales.
 
+## Diagnostic aggregates
+
+`ast_get_diagnostics` keeps its existing response shape unless `include_aggregates: true` is requested. Enabled summaries cover the complete normalized snapshot, not only the selected raw page, and cap both code and file groups at 20.
+
+For each dimension, `groups.length + omitted_group_count = total_group_count` and group counts sum to `covered_diagnostic_count`. Code coverage plus omitted diagnostics equals the total; file coverage additionally includes `unfiled_diagnostic_count`. File groups expose normalized project-relative paths only and may include paths absent from the raw page.
+
 ## Decision Gates
 
 | Situación                              | Acción                                                                 |
