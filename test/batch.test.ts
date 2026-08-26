@@ -42,6 +42,34 @@ afterEach(async () => {
 });
 
 describe("batch runner", () => {
+  it("preserves diagnostic aggregates through batch JSON and final TOON output", async () => {
+    const project = await fixture();
+    await project.write("src/error.ts", "export const broken: string = 1;\n");
+    const output = await runBatchDocument(
+      parseBatchDocument({
+        version: 1,
+        project_root: project.root,
+        steps: [
+          {
+            id: "diagnostics",
+            tool: "ast_get_diagnostics",
+            input: { include_aggregates: true, offset: 0, limit: 1 },
+          },
+        ],
+        emit: { $ref: "#/steps/diagnostics" },
+      }),
+    );
+    const result = output.result as Record<string, unknown>;
+    expect(result.aggregates).toMatchObject({
+      group_limit: 20,
+      codes: { groups: [{ code: 2322, count: 1 }] },
+      files: { groups: [{ file: "src/error.ts", count: 1 }] },
+    });
+    expect(decode(serializeCliSuccess(output, "toon"))).toEqual(
+      JSON.parse(serializeCliSuccess(output, "json")),
+    );
+  });
+
   it("admits test-candidate reads and injects the authoritative pipeline root", async () => {
     const project = await fixture();
     const document = parseBatchDocument({

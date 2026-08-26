@@ -18,11 +18,13 @@ it("pins a real compiler generation after retaining mutation history", async () 
   await prepareRename({ projectRoot: fixture.root, filePath: "src/value.ts", symbolPath: "value", newName: "renamed" }); expect(getProjectRuntimeShutdownSnapshot()).toMatchObject({ admission: "open", mutation_history: true });
 });
 
-it("proves supervised parity, idle PSS reclamation, SQLite reuse, and redaction", async () => {
+it("proves supervised parity, aggregate cancellation, PSS reclamation, and redaction", async () => {
   const files = Object.fromEntries(
     Array.from({ length: 400 }, (_, index) => [
       `src/evidence-${index}.ts`,
-      `export const evidenceValue${index} = ${index};\n`,
+      index === 0
+        ? "export const evidenceValue0: string = 0;\n"
+        : `export const evidenceValue${index} = ${index};\n`,
     ]),
   );
   fixture = await createProjectFixture(files);
@@ -44,6 +46,10 @@ it("proves supervised parity, idle PSS reclamation, SQLite reuse, and redaction"
     rebuilt_files: 0,
     no_upward_pss_trend: true,
     diagnostics_redacted: true,
+    aggregate_success: true,
+    aggregate_equivalent_reads: true,
+    aggregate_cancellation_in_process: true,
+    aggregate_cancellation_supervised: true,
   });
   expect(evidence.minimum_reclaimed_percent).toBeGreaterThanOrEqual(80);
   expect(evidence.cycles).toHaveLength(9);

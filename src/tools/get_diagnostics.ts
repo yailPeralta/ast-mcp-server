@@ -1,6 +1,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { normalizeDiagnostic } from "../services/diagnostics.js";
+import {
+  buildDiagnosticAggregates,
+  DIAGNOSTIC_AGGREGATE_GROUP_LIMIT,
+  normalizeDiagnostic,
+} from "../services/diagnostics.js";
 import { PaginationInputSchema, PaginationOutputSchema, paginate } from "../services/pagination.js";
 import { getSourceFileOrThrow, withProject } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
@@ -20,6 +24,31 @@ const DiagnosticSchema = z.object({
   message: z.string(),
 });
 
+const AggregateMetadataSchema = {
+  total_group_count: z.number().int().safe().min(0),
+  omitted_group_count: z.number().int().safe().min(0),
+  covered_diagnostic_count: z.number().int().safe().min(0),
+  omitted_diagnostic_count: z.number().int().safe().min(0),
+  truncated: z.boolean(),
+};
+
+const DiagnosticAggregatesSchema = z.object({
+  group_limit: z.literal(DIAGNOSTIC_AGGREGATE_GROUP_LIMIT),
+  codes: z.object({
+    groups: z
+      .array(z.object({ code: z.number().int().safe(), count: z.number().int().safe().positive() }))
+      .max(DIAGNOSTIC_AGGREGATE_GROUP_LIMIT),
+    ...AggregateMetadataSchema,
+  }),
+  files: z.object({
+    groups: z
+      .array(z.object({ file: z.string(), count: z.number().int().safe().positive() }))
+      .max(DIAGNOSTIC_AGGREGATE_GROUP_LIMIT),
+    ...AggregateMetadataSchema,
+    unfiled_diagnostic_count: z.number().int().safe().min(0),
+  }),
+});
+
 const AstGetDiagnosticsInputSchema = z.object({
   project_root: z
     .string()
@@ -28,6 +57,7 @@ const AstGetDiagnosticsInputSchema = z.object({
     .string()
     .optional()
     .describe("Optional project-relative or absolute file path. Omit for project diagnostics."),
+  include_aggregates: z.boolean().optional().default(false),
   ...ToolOutputFormatInputSchema,
   ...PaginationInputSchema,
 });
@@ -37,6 +67,7 @@ const AstGetDiagnosticsOutputSchema = z.object({
   error_count: z.number().int().min(0),
   warning_count: z.number().int().min(0),
   duration_ms: z.number().min(0),
+  aggregates: DiagnosticAggregatesSchema.optional(),
   ...PaginationOutputSchema,
 });
 
@@ -55,7 +86,10 @@ export function registerGetDiagnostics(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ project_root, file_path, output_format, offset, limit }, extra) => {
+    async (
+      { project_root, file_path, include_aggregates, output_format, offset, limit },
+      extra,
+    ) => {
       const requestContext = createRequestContext(extra.signal);
       try {
         const structuredContent = await withProject(
@@ -72,6 +106,9 @@ export function registerGetDiagnostics(server: McpServer): void {
                   `${right.file ?? ""}:${right.line ?? 0}:${right.column ?? 0}:${right.code}`,
                 ),
               );
+            const aggregates = include_aggregates
+              ? buildDiagnosticAggregates(normalized, operationContext)
+              : undefined;
             const page = paginate(normalized, offset, limit);
             const { items, ...metadata } = page;
             return {
@@ -81,6 +118,7 @@ export function registerGetDiagnostics(server: McpServer): void {
               warning_count: normalized.filter((diagnostic) => diagnostic.category === "Warning")
                 .length,
               duration_ms: performance.now() - startedAt,
+              ...(aggregates ? { aggregates } : {}),
               ...metadata,
             };
           },
