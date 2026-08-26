@@ -6,6 +6,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { Project } from "ts-morph";
 import packageMetadata from "../package.json" with { type: "json" };
 import { parseBatchDocument, runBatchDocument } from "../src/batch/runner.js";
 import { serializeCliSuccess } from "../src/cli-output.js";
@@ -743,6 +744,93 @@ export function formatValue(value: number): string { return String(value); }
       }),
     );
     expect(diagnostics.error_count).toBe(0);
+  });
+
+  it("returns opt-in page-independent diagnostic aggregates from one compiler query", async () => {
+    await fixture.write("src/alpha-error.ts", "export const alpha: string = 1;\n");
+    await fixture.write("src/zeta-error.ts", 'export const zeta: number = "x";\n');
+    clearProjectSessions();
+
+    const compilerQuery = vi.spyOn(Project.prototype, "getPreEmitDiagnostics");
+    const first = structured(
+      await client.callTool({
+        name: "ast_get_diagnostics",
+        arguments: { project_root: fixture.root, include_aggregates: true, offset: 0, limit: 1 },
+      }),
+    );
+    expect(compilerQuery).toHaveBeenCalledTimes(1);
+    compilerQuery.mockRestore();
+
+    const second = structured(
+      await client.callTool({
+        name: "ast_get_diagnostics",
+        arguments: { project_root: fixture.root, include_aggregates: true, offset: 1, limit: 1 },
+      }),
+    );
+    const disabled = structured(
+      await client.callTool({
+        name: "ast_get_diagnostics",
+        arguments: { project_root: fixture.root, offset: 0, limit: 1 },
+      }),
+    );
+    const encoded = toon(
+      await client.callTool({
+        name: "ast_get_diagnostics",
+        arguments: {
+          project_root: fixture.root,
+          include_aggregates: true,
+          output_format: "toon",
+          offset: 1,
+          limit: 1,
+        },
+      }),
+    );
+    const batch = await runBatchDocument(
+      parseBatchDocument({
+        version: 1,
+        project_root: fixture.root,
+        steps: [
+          {
+            id: "diagnostics",
+            tool: "ast_get_diagnostics",
+            input: { include_aggregates: true, offset: 1, limit: 1 },
+          },
+        ],
+        emit: { $ref: "#/steps/diagnostics" },
+      }),
+    );
+
+    expect(Object.keys(disabled).sort()).toEqual([
+      "diagnostics",
+      "duration_ms",
+      "error_count",
+      "has_more",
+      "limit",
+      "next_offset",
+      "offset",
+      "total",
+      "warning_count",
+    ]);
+    expect(first.aggregates).toEqual(second.aggregates);
+    expect(encoded.aggregates).toEqual(first.aggregates);
+    expect((batch.result as Record<string, unknown>).aggregates).toEqual(first.aggregates);
+    expect(first.diagnostics).not.toEqual(second.diagnostics);
+    expect(first.aggregates).toMatchObject({
+      group_limit: 20,
+      codes: { groups: [{ code: 2322, count: 2 }], covered_diagnostic_count: 2 },
+      files: {
+        groups: [
+          { file: "src/alpha-error.ts", count: 1 },
+          { file: "src/zeta-error.ts", count: 1 },
+        ],
+        covered_diagnostic_count: 2,
+        unfiled_diagnostic_count: 0,
+      },
+    });
+    expect(JSON.stringify(first.aggregates)).not.toContain(fixture.root);
+    expect((first.diagnostics as Array<{ file: string }>).map(({ file }) => file)).not.toContain(
+      "src/zeta-error.ts",
+    );
   });
 
   it("exposes bounded direct and transitive compiler impact without mutation plans", async () => {

@@ -2745,8 +2745,63 @@ async function waitForCompilerChild(parentPid, present) {
   );
 }
 
+async function proveDiagnosticAggregateCancellation({ nodeBin, projectRoot, cacheRoot, mode }) {
+  const client = await spawnMcp({
+    nodeBin,
+    nodeOptions: [],
+    fixtureServer: true,
+    environment: projectEnvironment("disabled", cacheRoot, {
+      AST_COMPILER_WORKER_MODE: mode,
+      AST_QUEUE_WAIT_TIMEOUT_MS: "30000",
+    }),
+  });
+  try {
+    const hold = client.beginToolCall("ast_canary_hold", { project_root: projectRoot });
+    await client.waitForEvent("canary_hold_active");
+    const diagnostics = client.beginToolCall("ast_get_diagnostics", {
+      project_root: projectRoot,
+      include_aggregates: true,
+      offset: 0,
+      limit: 1,
+    });
+    await pollQueueSnapshot(client, projectRoot, (snapshot) => snapshot.queued_operations === 1);
+    client.cancel(diagnostics.id, "diagnostic aggregate cancellation gate");
+    const protocolCancelled = (await diagnostics.promise)?.canary_protocol_cancelled === true;
+    await pollQueueSnapshot(client, projectRoot, (snapshot) => snapshot.queued_operations === 0);
+    const failure = await client.waitForEvent(
+      "tool_failure",
+      (event) => event.tool === "ast_get_diagnostics",
+    );
+    client.cancel(hold.id);
+    await hold.promise;
+    await pollQueueSnapshot(
+      client,
+      projectRoot,
+      (snapshot) => snapshot.active_operations === 0 && snapshot.queued_operations === 0,
+    );
+    await closeClient(client);
+    return (
+      protocolCancelled &&
+      failure.tool === "ast_get_diagnostics" &&
+      failure.code === "REQUEST_CANCELLED"
+    );
+  } catch (error) {
+    await client.terminate().catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheRoot }) {
   if (process.platform !== "linux") fail("Supervised worker PSS evidence requires Linux.");
+  const aggregateCancellation = {};
+  for (const mode of ["in_process", "supervised"]) {
+    aggregateCancellation[mode] = await proveDiagnosticAggregateCancellation({
+      nodeBin,
+      projectRoot,
+      cacheRoot: path.join(cacheRoot, `aggregate-cancellation-${mode}`),
+      mode,
+    });
+  }
   const baselineClient = await spawnMcp({
     nodeBin,
     nodeOptions: [],
@@ -2754,7 +2809,7 @@ export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheR
       AST_COMPILER_WORKER_MODE: "in_process",
     }),
   });
-  let baselineRead, baselineTools;
+  let baselineRead, baselineAggregates, baselineTools;
   try {
     baselineTools = await baselineClient.request("tools/list", {});
     baselineRead = canonicalizeToolResult(
@@ -2770,6 +2825,18 @@ export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheR
         "ast_search_symbols",
       ),
     );
+    baselineAggregates = canonicalizeToolResult(
+      structuredToolResult(
+        await baselineClient.callTool("ast_get_diagnostics", {
+          project_root: projectRoot,
+          include_aggregates: true,
+          output_format: "json",
+          offset: 0,
+          limit: 1,
+        }),
+        "ast_get_diagnostics",
+      ),
+    );
   } finally {
     await closeClient(baselineClient);
   }
@@ -2779,7 +2846,8 @@ export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheR
     toolSets = [],
     fingerprints = [],
     hits = [],
-    idleByParent = [];
+    idleByParent = [],
+    aggregateReads = [];
   for (let parent = 0; parent < 3; parent += 1) {
     const client = await spawnMcp({
       nodeBin,
@@ -2793,6 +2861,20 @@ export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheR
     try {
       const parentPid = client.child.pid;
       toolSets.push(await client.request("tools/list", {}));
+      aggregateReads.push(
+        canonicalizeToolResult(
+          structuredToolResult(
+            await client.callTool("ast_get_diagnostics", {
+              project_root: projectRoot,
+              include_aggregates: true,
+              output_format: "json",
+              offset: parent,
+              limit: 1,
+            }),
+            "ast_get_diagnostics",
+          ),
+        ),
+      );
       const initialChild = await waitForCompilerChild(parentPid, true);
       const baselinePss = (await linuxPssBytes(parentPid)) + (await linuxPssBytes(initialChild));
       const idlePss = [];
@@ -2869,6 +2951,7 @@ export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheR
   )
     fail("Supervised worker events exceeded the approved diagnostic schema.");
   const expectedRead = JSON.stringify(baselineRead);
+  const expectedAggregates = JSON.stringify(baselineAggregates.aggregates);
   const expectedTools = JSON.stringify(baselineTools);
   return Object.freeze({
     schema_version: 1,
@@ -2885,6 +2968,14 @@ export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheR
     minimum_reclaimed_percent: Math.min(...cycles.map((cycle) => cycle.reclaimed_percent)),
     no_upward_pss_trend: idleByParent.every((values) => values.at(-1) <= values[0] + 1024 * 1024),
     diagnostics_redacted: true,
+    aggregate_success:
+      baselineAggregates.aggregates?.group_limit === 20 &&
+      baselineAggregates.aggregates?.codes?.covered_diagnostic_count === 1,
+    aggregate_equivalent_reads: aggregateReads.every(
+      (value) => JSON.stringify(value.aggregates) === expectedAggregates,
+    ),
+    aggregate_cancellation_in_process: aggregateCancellation.in_process,
+    aggregate_cancellation_supervised: aggregateCancellation.supervised,
     cycles,
     events,
   });
@@ -2906,6 +2997,12 @@ class CanaryMcpProcess {
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => this.consumeStdout(chunk));
     child.stderr.on("data", (chunk) => this.consumeStderr(chunk));
+    this.termination = new Promise((resolve) => {
+      child.once("error", () => resolve("spawn_error"));
+      child.once("close", (code, signal) =>
+        resolve(signal ? "signalled" : code === 0 ? "exit_zero" : "exit_nonzero"),
+      );
+    });
     this.exit = new Promise((resolve) => {
       child.once("close", (code, signal) => {
         this.closed = true;
@@ -3032,22 +3129,31 @@ class CanaryMcpProcess {
     pending.resolve({ canary_protocol_cancelled: true });
   }
 
-  async waitForEvent(eventName) {
-    const existing = this.stderrEvents.find((event) => event.event === eventName);
+  async waitForEvent(eventName, predicate = () => true, phase = eventName) {
+    const existing = this.stderrEvents.find(
+      (event) => event.event === eventName && predicate(event),
+    );
     if (existing) return existing;
     let inspect;
     try {
       return await withTimeout(
-        new Promise((resolve) => {
-          inspect = () => {
-            const event = this.stderrEvents.find((candidate) => candidate.event === eventName);
-            if (event) resolve(event);
-            else this.stderrWaiters.push(inspect);
-          };
-          this.stderrWaiters.push(inspect);
-        }),
+        Promise.race([
+          new Promise((resolve) => {
+            inspect = () => {
+              const event = this.stderrEvents.find(
+                (candidate) => candidate.event === eventName && predicate(candidate),
+              );
+              if (event) resolve(event);
+              else this.stderrWaiters.push(inspect);
+            };
+            this.stderrWaiters.push(inspect);
+          }),
+          this.termination.then((classification) => {
+            throw new Error(`Canary process ended before ${phase} (${classification}).`);
+          }),
+        ]),
         30_000,
-        `Timed out waiting for fixture event ${eventName}.`,
+        `Timed out waiting for ${phase}.`,
       );
     } finally {
       this.stderrWaiters = this.stderrWaiters.filter((waiter) => waiter !== inspect);
@@ -3103,11 +3209,15 @@ async function spawnMcp(options) {
   const client = new CanaryMcpProcess(child);
   activeMcpProcesses.add(client);
   try {
-    if (options.fixtureServer) await client.waitForEvent("canary_fixture_ready");
+    if (options.fixtureServer) {
+      const mode =
+        options.environment.AST_COMPILER_WORKER_MODE === "supervised" ? "supervised" : "in_process";
+      await client.waitForEvent("canary_fixture_ready", undefined, `fixture readiness (${mode})`);
+    }
     await client.initialize();
     return client;
   } catch (error) {
-    await client.terminate();
+    await client.terminate().catch(() => undefined);
     throw error;
   }
 }
@@ -3772,12 +3882,23 @@ async function exerciseRuntimeBounds(options, fixtureRoot) {
     }),
   });
 
+  const aggregateSuccess = structuredToolResult(
+    await client.callTool("ast_get_diagnostics", {
+      project_root: projectRoot,
+      include_aggregates: true,
+      offset: 0,
+      limit: 1,
+    }),
+    "ast_get_diagnostics",
+  );
+
   const active = client.beginToolCall("ast_canary_hold", { project_root: projectRoot });
   await client.waitForEvent("canary_hold_active");
-  const queued = client.beginToolCall("ast_list_files", {
+  const queued = client.beginToolCall("ast_get_diagnostics", {
     project_root: projectRoot,
+    include_aggregates: true,
     offset: 0,
-    limit: 10,
+    limit: 1,
   });
   await pollQueueSnapshot(client, projectRoot, (snapshot) => snapshot.queued_operations === 1);
 
@@ -3798,6 +3919,9 @@ async function exerciseRuntimeBounds(options, fixtureRoot) {
   const queuedResult = await queued.promise;
   const queuedProtocolCancelled = queuedResult?.canary_protocol_cancelled === true;
   await pollQueueSnapshot(client, projectRoot, (snapshot) => snapshot.queued_operations === 0);
+  const aggregateCancellationCode = (
+    await client.waitForEvent("tool_failure", (event) => event.tool === "ast_get_diagnostics")
+  ).code;
   client.cancel(active.id);
   const activeResult = await active.promise;
   const activeProtocolCancelled = activeResult?.canary_protocol_cancelled === true;
@@ -3818,6 +3942,10 @@ async function exerciseRuntimeBounds(options, fixtureRoot) {
     queued_cancellation: queuedProtocolCancelled,
     active_cancellation: activeProtocolCancelled,
     public_cancellation: publicCancellationCode === "REQUEST_CANCELLED",
+    aggregate_success:
+      aggregateSuccess.aggregates?.group_limit === 20 &&
+      aggregateSuccess.aggregates?.codes?.covered_diagnostic_count === aggregateSuccess.total,
+    aggregate_cancellation: aggregateCancellationCode === "REQUEST_CANCELLED",
     session_capacity: capacityCode === "PROJECT_CAPACITY_EXCEEDED",
     queue_drained:
       finalSnapshot.active_operations === 0 &&
@@ -3835,6 +3963,7 @@ async function exerciseRuntimeBounds(options, fixtureRoot) {
       queued_cancellation: queuedProtocolCancelled ? "protocol_cancelled" : "failed",
       active_cancellation: activeProtocolCancelled ? "protocol_cancelled" : "failed",
       public_cancellation: publicCancellationCode,
+      aggregate_cancellation: aggregateCancellationCode,
       session_capacity: capacityCode,
     },
     operation_queue: finalSnapshot,

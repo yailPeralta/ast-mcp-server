@@ -345,6 +345,12 @@ Project-scoped tools accept `project_root`, either the project directory or an e
 
 Read results use project-relative paths, deterministic ordering, structured MCP output, and pagination where result sets can grow with the project.
 
+### Diagnostic aggregates
+
+Set `include_aggregates: true` on `ast_get_diagnostics` to summarize the complete normalized diagnostic snapshot independently of the selected raw page. The option defaults to `false`; disabled responses omit `aggregates` and keep the existing shape.
+
+Each code and file dimension returns at most 20 ranked groups. `groups.length + omitted_group_count = total_group_count`, and `sum(groups[*].count) = covered_diagnostic_count`. Code coverage plus `omitted_diagnostic_count` equals the diagnostic total; file coverage also adds `unfiled_diagnostic_count`. File groups contain normalized project-relative paths only, but may disclose a path that is absent from the selected raw page.
+
 `ast_explore` supports query, exact file, and exact symbol routes. Its default `summary` profile returns bounded reusable selectors; `context` adds selected source and `full` adds compiler references. Whole symbol clusters are admitted under the caller's `max_bytes` ceiling, so source, reference records, and call paths are never sliced. `omissions` classifies withheld components as `budget`, `incomplete`, or `untrusted`, and any requested omission keeps completeness false.
 
 Exact `file_path` plus `symbol_path` requests may opt into bounded static `call_spines`. Only fresh, exact, compiler-resolved invocation sites qualify; generic references, dynamic dispatch, and runtime behavior are not inferred. Absence of `call_spines` performs no call traversal. Every response still reports freshness, completeness, truncation, unresolved selectors, record limits, and canonical serialized-byte accounting. Use the primitive tools when a single exact operation is clearer or when preparing a mutation. See [ADR 0013](docs/adr/0013-ast-explore-presentation.md).
