@@ -1,3 +1,5 @@
+import { toolCatalog } from "../tools/catalog.js";
+
 export interface AgentTargetCommandResult {
   exitCode: number;
   stdout: string;
@@ -44,20 +46,7 @@ export type Compatibility =
   | { status: "incompatible"; reason: string };
 
 export const MCP_SERVER_NAME = "ast";
-const EXPECTED_TOOLS = [
-  "ast_list_files",
-  "ast_get_outline",
-  "ast_get_symbol_source",
-  "ast_search_symbols",
-  "ast_find_references",
-  "ast_find_test_candidates",
-  "ast_get_diagnostics",
-  "ast_rename_symbol",
-  "ast_replace_symbol_body",
-  "ast_scaffold_class",
-  "ast_get_operation_preview",
-  "ast_apply_operation",
-] as const;
+const EXPECTED_TOOLS = toolCatalog.compatibility.required;
 
 function semver(value: string): [number, number, number] | undefined {
   const match = value.match(/(?:^|\s|v)(\d+)\.(\d+)\.(\d+)(?=\s|$|[-+()]|\.(?:\s|$))/);
