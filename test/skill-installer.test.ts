@@ -21,9 +21,32 @@ const sourceSkillPath = path.resolve(
 );
 const bundledSkillRoot = path.dirname(sourceSkillPath);
 
-async function public010Skill(): Promise<string> {
+const publishedSkillFixtures = [
+  {
+    npmVersion: "0.10.0",
+    skillVersion: "4.4.0",
+    sha256: "253b588c56d44c8f5565db3f33ce227d80c7c29aa6604d362844f44b1278385a",
+  },
+  {
+    npmVersion: "0.11.0",
+    skillVersion: "4.5.0",
+    sha256: "be757e8bd98733c7ee952d63a2805dcd9877becf651b4fcb6ab63d20f6546f21",
+  },
+  {
+    npmVersion: "0.11.1",
+    skillVersion: "4.5.0",
+    sha256: "2729b30ff6b7344e6680c7ee02ab540bc6db9774ad7111f091cd356f8cc9d4ce",
+  },
+  {
+    npmVersion: "0.11.2",
+    skillVersion: "4.5.0",
+    sha256: "18132b4b747d135e4ccfbca9e2190a9afb41e144cc06c31c5e6bc0f1571e11da",
+  },
+] as const;
+
+async function publishedSkill(npmVersion: string): Promise<string> {
   const fixture = await readFile(
-    new URL("fixtures/structural-code-editing-0.10.0.md.gz.base64", import.meta.url),
+    new URL(`fixtures/structural-code-editing-${npmVersion}.md.gz.base64`, import.meta.url),
     "utf8",
   );
   return gunzipSync(Buffer.from(fixture, "base64")).toString("utf8");
@@ -187,51 +210,59 @@ describe("skill installer", () => {
     });
   });
 
-  it("ships and atomically upgrades the public 0.10.0 skill to the manifested bundle", async () => {
-    const root = await temporaryDirectory();
-    const manifest = JSON.parse(
-      await readFile(path.join(bundledSkillRoot, "releases.json"), "utf8"),
-    );
-    expect(manifest.current.files.map((file: { path: string }) => file.path).sort()).toEqual([
-      "SKILL.md",
-      "references/operations.md",
-    ]);
-    expect(await readFile(path.join(bundledSkillRoot, "references/operations.md"), "utf8")).toMatch(
-      /ast_find_test_candidates.*completeness\.proven_empty.*ast_explore\.call_spines.*empty_proven.*total.*has_more.*next_offset/s,
-    );
-    for (const file of manifest.current.files) {
-      expect(sha256(await readFile(path.join(bundledSkillRoot, file.path), "utf8"))).toBe(
-        file.sha256,
+  it.each(publishedSkillFixtures)(
+    "ships and atomically upgrades the published $npmVersion skill to the manifested bundle",
+    async ({ npmVersion, skillVersion, sha256: expectedSha256 }) => {
+      const root = await temporaryDirectory();
+      const manifest = JSON.parse(
+        await readFile(path.join(bundledSkillRoot, "releases.json"), "utf8"),
       );
-    }
-    const predecessor = await public010Skill();
-    expect(manifest.predecessors).toContainEqual(
-      expect.objectContaining({ sha256: sha256(predecessor), npm_versions: ["0.10.0"] }),
-    );
-    const options = officialOptions(root);
-    const skillRoot = path.join(root, "claude", "skills", "structural-code-editing");
-    await mkdir(skillRoot, { recursive: true });
-    await writeFile(path.join(skillRoot, "SKILL.md"), predecessor);
+      expect(manifest.current.files.map((file: { path: string }) => file.path).sort()).toEqual([
+        "SKILL.md",
+        "references/operations.md",
+      ]);
+      expect(
+        await readFile(path.join(bundledSkillRoot, "references/operations.md"), "utf8"),
+      ).toMatch(
+        /ast_find_test_candidates.*completeness\.proven_empty.*ast_explore\.call_spines.*empty_proven.*total.*has_more.*next_offset/s,
+      );
+      for (const file of manifest.current.files) {
+        expect(sha256(await readFile(path.join(bundledSkillRoot, file.path), "utf8"))).toBe(
+          file.sha256,
+        );
+      }
+      const predecessor = await publishedSkill(npmVersion);
+      expect(sha256(predecessor)).toBe(expectedSha256);
+      expect(manifest.predecessors).toContainEqual({
+        version: skillVersion,
+        sha256: expectedSha256,
+        npm_versions: [npmVersion],
+      });
+      const options = officialOptions(root);
+      const skillRoot = path.join(root, "claude", "skills", "structural-code-editing");
+      await mkdir(skillRoot, { recursive: true });
+      await writeFile(path.join(skillRoot, "SKILL.md"), predecessor);
 
-    await expect(installBundledSkill(options)).resolves.toMatchObject({
-      installations: [{ status: "updated" }],
-    });
-    for (const file of manifest.current.files) {
-      await expect(readFile(path.join(skillRoot, file.path), "utf8")).resolves.toBe(
-        await readFile(path.join(bundledSkillRoot, file.path), "utf8"),
-      );
-    }
-    await expect(installBundledSkill(options)).resolves.toMatchObject({
-      installations: [{ status: "unchanged" }],
-      physicalWrites: [],
-    });
-  });
+      await expect(installBundledSkill(options)).resolves.toMatchObject({
+        installations: [{ status: "updated" }],
+      });
+      for (const file of manifest.current.files) {
+        await expect(readFile(path.join(skillRoot, file.path), "utf8")).resolves.toBe(
+          await readFile(path.join(bundledSkillRoot, file.path), "utf8"),
+        );
+      }
+      await expect(installBundledSkill(options)).resolves.toMatchObject({
+        installations: [{ status: "unchanged" }],
+        physicalWrites: [],
+      });
+    },
+  );
 
   it("preserves the public 0.10.0 skill when a new bundled reference conflicts", async () => {
     const root = await temporaryDirectory();
     const skillRoot = path.join(root, "claude", "skills", "structural-code-editing");
     const reference = path.join(skillRoot, "references", "operations.md");
-    const predecessor = await public010Skill();
+    const predecessor = await publishedSkill("0.10.0");
     await mkdir(path.dirname(reference), { recursive: true });
     await writeFile(path.join(skillRoot, "SKILL.md"), predecessor);
     await writeFile(reference, "user-owned reference\n");

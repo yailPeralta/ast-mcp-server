@@ -1,20 +1,20 @@
 # Support policy
 
-This document defines the supported platform, runtime, persistence, and operational boundary for published `ast-mcp-server` v0.10.0 and the local `0.11.2` release candidate.
+This document defines the supported platform, runtime, persistence, and operational boundary for published `ast-mcp-server` v0.11.2 and the local `0.12.0` release candidate.
 
 ## Supported release target
 
 | Environment                                                                   | Status      | Contract                                                                                      |
 | ----------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------- |
 | Linux x64 with required GNU coreutils and procfs, Node.js 22.5.0              | Historical  | Immutable v0.8.1 release evidence; not the runtime floor of the published or candidate lines. |
-| Linux x64 with required GNU coreutils and procfs, exact Node.js 22.13.0       | Supported   | Published v0.10.0 and local 0.11.2 matrices, each bound to its own package and tree bytes.    |
-| Linux x64 with required GNU coreutils and procfs, current Node.js 24 line     | Supported   | Published v0.10.0 and local 0.11.2 matrices, each bound to its own package and tree bytes.    |
+| Linux x64 with required GNU coreutils and procfs, exact Node.js 22.13.0       | Supported   | Published v0.11.2 and local 0.12.0 matrices, each bound to its own package and tree bytes.    |
+| Linux x64 with required GNU coreutils and procfs, current Node.js 24 line     | Supported   | Published v0.11.2 and local 0.12.0 matrices, each bound to its own package and tree bytes.    |
 | Other Linux architectures or systems without the required filesystem features | Unverified  | Not supported until equivalent architecture, mutation, and filesystem-publication gates pass. |
 | macOS                                                                         | Unverified  | Not supported until equivalent filesystem, process, package, mutation, and canary gates pass. |
 | Windows                                                                       | Unverified  | Not supported until equivalent filesystem, process, package, mutation, and canary gates pass. |
 | Remote, untrusted, or multi-tenant service use                                | Unsupported | No network authentication, sandbox, or tenant-isolation boundary is provided.                 |
 
-The local `0.11.2` release candidate requires Node.js `>=22.13.0`; its matrix targets exact Node.js 22.13.0 and the governed Node.js 24 major. Published v0.10.0 retains its immutable `>=22.13.0` metadata and exact Node.js 22.13.0/24 release evidence. The earlier v0.8.1 Node.js 22.5.0/24 matrix remains historical evidence for those bytes only. A future runtime satisfying an engine range is not automatically a verified release target.
+The local `0.12.0` release candidate requires Node.js `>=22.13.0`; its matrix targets exact Node.js 22.13.0 and the governed Node.js 24 major. Published v0.11.2 retains its immutable `>=22.13.0` metadata and exact Node.js 22.13.0/24 release evidence. The earlier v0.8.1 Node.js 22.5.0/24 matrix remains historical evidence for those bytes only. A future runtime satisfying an engine range is not automatically a verified release target.
 
 The checked-evidence freezer requires GNU coreutils 9.7 `mv` with `--update=none-fail`, `--no-copy`, and `--no-target-directory`. Managed setup-file mutation additionally requires that same `mv` with `--exchange`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, `O_DIRECTORY`, and `O_NOFOLLOW`. It fails closed when any verified Linux primitive is unavailable. Equivalent publication, exchange, descriptor-link, and descriptor-relative mutation semantics have not been verified on other operating systems or architectures.
 
@@ -50,7 +50,7 @@ The scoped Linux evidence passed on exact Node.js 22.13.0 and the governed Node.
 
 ## Symbol-index persistence
 
-Published v0.10.0 and the local `0.11.2` release candidate select native SQLite when the persistence setting is absent or explicitly `enabled`; operators requiring no persistent index state must set `disabled` explicitly:
+Published v0.11.2 and the local `0.12.0` release candidate select native SQLite when the persistence setting is absent or explicitly `enabled`; operators requiring no persistent index state must set `disabled` explicitly:
 
 ```bash
 AST_SYMBOL_INDEX_PERSISTENCE=disabled \
@@ -80,7 +80,7 @@ Both commands are bounded and path-free. Clear preflights the tree, refuses unsa
 
 ## Production-readiness acceptance
 
-The four retained Linux x64 production-readiness reports cover `ast-mcp-server` and `x-scraper` under Node.js 22.5.0 and Node.js 24 for package version 0.6.0, commit `2d0b21bbb80fae1acfca6a85d5891d87e68b59c1`, and tree `af931d49769fabdf06f623965a6cfe1f9afb8a81`. They are historical integration evidence only: they are not reattributed to v0.8.1, published-next v0.9.0 or v0.9.1, the local 0.9.2 candidate, published v0.10.0, published-next v0.11.0 or v0.11.1, or the local v0.11.2 release candidate. The exact 0.9.0 and 0.9.1 release matrices remain historical evidence for their immutable published-next bytes, the exact 0.9.2 matrix remains historical local-candidate evidence, the exact 0.10.0 matrix remains historical published-release evidence, and the exact 0.11.0 and 0.11.1 matrices remain historical evidence for their immutable published-next bytes before public-registry verification exposed their distinct verifier defects. A separate exact 0.11.2 release matrix is the release-candidate gate for current repository bytes under both supported runtime lines, including supervised-worker lifecycle and reclamation evidence, deterministic CLI project-discovery fixture setup, local-registry managed-asset verification, and the public copied-runner dependency-closure regression; none of these matrices rebinds the older retained reports. MCP-PROD-404 remains normative for admission:
+The four retained Linux x64 production-readiness reports cover `ast-mcp-server` and `x-scraper` under Node.js 22.5.0 and Node.js 24 for package version 0.6.0, commit `2d0b21bbb80fae1acfca6a85d5891d87e68b59c1`, and tree `af931d49769fabdf06f623965a6cfe1f9afb8a81`. They are historical integration evidence only: they are not reattributed to v0.8.1, published-next v0.9.0 or v0.9.1, the local 0.9.2 candidate, published v0.10.0, published-next v0.11.0 or v0.11.1, published v0.11.2, or the local v0.12.0 release candidate. The exact 0.9.0 and 0.9.1 release matrices remain historical evidence for their immutable published-next bytes, the exact 0.9.2 matrix remains historical local-candidate evidence, the exact 0.10.0 matrix remains historical published-release evidence, the exact 0.11.0 and 0.11.1 matrices remain historical evidence for their immutable published-next bytes before public-registry verification exposed their distinct verifier defects, and the exact 0.11.2 matrix remains historical published-release evidence. A separate exact 0.12.0 release matrix is the release-candidate gate for current repository bytes under both supported runtime lines, including bounded diagnostic aggregates, catalog-derived tool capability projections, and their independent release oracles; none of these matrices rebinds the older retained reports. MCP-PROD-404 remains normative for admission:
 
 - zero semantic mismatches across disabled, cold, warm, restart, and rollback reads;
 - byte-identical real-repository status and worktree trees;

@@ -6,7 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.11.2] — local release candidate, pending release (2026-08-25)
+## [0.12.0] — local release candidate, pending release (2026-08-27)
+
+### Added
+
+- Diagnostic pagination can now include opt-in bounded aggregates computed from the complete normalized snapshot, with code and file dimensions capped at 20 entries and explicit coverage metadata.
+- Added an immutable tool capability catalog with MCP, batch, and agent projections derived from one source of truth, plus independent inventory, integration, canary, package, and documentation oracles.
+
+### Fixed
+
+- Canary validation continues to enforce the established public runtime gate payload while capability metadata is checked independently, preventing an internal catalog change from widening the public canary schema.
+
+### Release status
+
+- Version `0.12.0` remains pending its exact-tree two-runtime matrix, CI, and separately authorized delivery sequence. It has not been published, assigned to an npm dist-tag, tagged in Git, or released on GitHub.
+
+## [0.11.2] — published to `latest` and `next`, registry verified (2026-08-25)
 
 ### Added
 
@@ -22,7 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release status
 
-- This local release candidate succeeds immutable npm versions `0.11.0` and `0.11.1`, neither of which was promotable: `0.11.0` verification exposed stale managed-skill predicates, and `0.11.1` verification exposed the copied runner's missing validator module. Version `0.11.2` remains pending its exact-tree matrix, CI, and separately authorized delivery sequence; it has not been published or assigned to any dist-tag.
+- npm published these immutable bytes under `next` with provenance and the expected Git commit. Public-registry consumer and release-preflight verification passed, `latest` and `next` both resolve to `0.11.2`, and the annotated `v0.11.2` tag plus GitHub Release resolve to the same release commit. This release supersedes immutable versions `0.11.0` and `0.11.1`, whose separate public-registry verification defects prevented promotion.
 
 ## [0.11.1] — published to `next`, verification failed, not promoted (2026-08-23)
 
