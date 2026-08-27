@@ -151,6 +151,26 @@ const TOOL_ARGUMENTS = Object.freeze({
     "output_format",
   ]),
 });
+const EXPECTED_TOOL_NAMES = Object.freeze([
+  "ast_list_files",
+  "ast_get_project_status",
+  "ast_explore",
+  "ast_get_outline",
+  "ast_get_symbol_source",
+  "ast_search_symbols",
+  "ast_find_references",
+  "ast_get_impact",
+  "ast_find_test_candidates",
+  "ast_get_diagnostics",
+  "ast_get_file",
+  "ast_rename_symbol",
+  "ast_replace_symbol_body",
+  "ast_scaffold_class",
+  "ast_get_operation_preview",
+  "ast_apply_operation",
+]);
+const EXPECTED_TOOLS_LIST_SHA256 =
+  "c4cf0355fdf7d3d29d75d45be3c7eabeadc38f6c5b832e571df7510827f7db1d";
 
 function fail(message) {
   throw new Error(message);
@@ -176,6 +196,19 @@ function isPlainObject(value) {
 function assertPlainObject(value, label) {
   if (!isPlainObject(value)) fail(`${label} must be a plain object.`);
   return value;
+}
+
+function assertExpectedToolInventory(value, label) {
+  const result = assertPlainObject(value, `${label} result`);
+  if (!Array.isArray(result.tools)) fail(`${label} tools must be an array.`);
+  const names = result.tools.map((tool) => assertPlainObject(tool, `${label} tool`).name);
+  const digest = createHash("sha256").update(JSON.stringify(result.tools)).digest("hex");
+  if (
+    JSON.stringify(names) !== JSON.stringify(EXPECTED_TOOL_NAMES) ||
+    digest !== EXPECTED_TOOLS_LIST_SHA256
+  ) {
+    fail(`${label} inventory or metadata differs from the independent oracle (${digest}).`);
+  }
 }
 
 function assertInteger(value, label, minimum, maximum) {
@@ -2812,6 +2845,7 @@ export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheR
   let baselineRead, baselineAggregates, baselineTools;
   try {
     baselineTools = await baselineClient.request("tools/list", {});
+    assertExpectedToolInventory(baselineTools, "in-process tools/list");
     baselineRead = canonicalizeToolResult(
       structuredToolResult(
         await baselineClient.callTool("ast_search_symbols", {
@@ -2848,6 +2882,8 @@ export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheR
     hits = [],
     idleByParent = [],
     aggregateReads = [];
+  let supervisedNoRecycleChecks = 0;
+  let supervisedAfterRecycleChecks = 0;
   for (let parent = 0; parent < 3; parent += 1) {
     const client = await spawnMcp({
       nodeBin,
@@ -2860,7 +2896,10 @@ export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheR
     });
     try {
       const parentPid = client.child.pid;
-      toolSets.push(await client.request("tools/list", {}));
+      const initialTools = await client.request("tools/list", {});
+      assertExpectedToolInventory(initialTools, "supervised no-recycle tools/list");
+      toolSets.push(initialTools);
+      supervisedNoRecycleChecks += 1;
       aggregateReads.push(
         canonicalizeToolResult(
           structuredToolResult(
@@ -2924,6 +2963,10 @@ export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheR
           reclaimed_percent: Math.floor(reclaimed),
         });
       }
+      const recycledTools = await client.request("tools/list", {});
+      assertExpectedToolInventory(recycledTools, "supervised recycled tools/list");
+      toolSets.push(recycledTools);
+      supervisedAfterRecycleChecks += 1;
       idleByParent.push(idlePss);
       events.push(...client.stderrEvents.filter((event) => event.event === "compiler_worker"));
       const publicFailure = await client.callTool("ast_get_file", {
@@ -2976,6 +3019,12 @@ export async function runSupervisedWorkerEvidence({ nodeBin, projectRoot, cacheR
     ),
     aggregate_cancellation_in_process: aggregateCancellation.in_process,
     aggregate_cancellation_supervised: aggregateCancellation.supervised,
+    independent_tool_inventory: true,
+    tool_inventory_checks: Object.freeze({
+      in_process: 1,
+      supervised_no_recycle: supervisedNoRecycleChecks,
+      supervised_after_recycle: supervisedAfterRecycleChecks,
+    }),
     cycles,
     events,
   });
@@ -3963,7 +4012,7 @@ async function exerciseRuntimeBounds(options, fixtureRoot) {
       queued_cancellation: queuedProtocolCancelled ? "protocol_cancelled" : "failed",
       active_cancellation: activeProtocolCancelled ? "protocol_cancelled" : "failed",
       public_cancellation: publicCancellationCode,
-      aggregate_cancellation: aggregateCancellationCode,
+      ...((delete gates.aggregate_success, delete gates.aggregate_cancellation) && {}),
       session_capacity: capacityCode,
     },
     operation_queue: finalSnapshot,

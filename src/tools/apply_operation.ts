@@ -4,6 +4,8 @@ import { applyOperation } from "../services/operations.js";
 import { createRequestContext } from "../services/request-context.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
+const TOOL_NAME = "ast_apply_operation";
+
 const AstApplyOperationInputSchema = z.object({
   operation_id: z.string().uuid().describe("Identifier returned by a prepare operation."),
   plan_hash: z.string().length(64).describe("Plan hash returned by the same prepare operation."),
@@ -20,7 +22,7 @@ const AstApplyOperationOutputSchema = z.object({
 
 export function registerApplyOperation(server: McpServer): void {
   server.registerTool(
-    "ast_apply_operation",
+    TOOL_NAME,
     {
       title: "Apply a prepared structural operation",
       description:
@@ -41,8 +43,11 @@ export function registerApplyOperation(server: McpServer): void {
           ...(await applyOperation(operation_id, plan_hash, requestContext)),
         });
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_apply_operation"));
+        return errorResult(error, createToolErrorContext(TOOL_NAME));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerApplyOperation, compatibility: "required", effect: "apply", batch: "none", directOutputFormats: Object.freeze(["json"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;

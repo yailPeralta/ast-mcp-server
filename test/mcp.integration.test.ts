@@ -1,4 +1,5 @@
 import { decode } from "@toon-format/toon";
+import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -8,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { Project } from "ts-morph";
 import packageMetadata from "../package.json" with { type: "json" };
+import toolInventory from "./fixtures/tool-inventory.json" with { type: "json" };
 import { parseBatchDocument, runBatchDocument } from "../src/batch/runner.js";
 import { serializeCliSuccess } from "../src/cli-output.js";
 import { createServer } from "../src/server.js";
@@ -527,24 +529,10 @@ export function formatValue(value: number): string { return String(value); }
 
   it("exposes compact structured read results", async () => {
     const tools = await client.listTools();
-    expect(tools.tools.map((tool) => tool.name)).toEqual([
-      "ast_list_files",
-      "ast_get_project_status",
-      "ast_explore",
-      "ast_get_outline",
-      "ast_get_symbol_source",
-      "ast_search_symbols",
-      "ast_find_references",
-      "ast_get_impact",
-      "ast_find_test_candidates",
-      "ast_get_diagnostics",
-      "ast_get_file",
-      "ast_rename_symbol",
-      "ast_replace_symbol_body",
-      "ast_scaffold_class",
-      "ast_get_operation_preview",
-      "ast_apply_operation",
-    ]);
+    expect(tools.tools.map((tool) => tool.name)).toEqual(toolInventory.names);
+    expect(createHash("sha256").update(JSON.stringify(tools.tools)).digest("hex")).toBe(
+      toolInventory.tools_list_sha256,
+    );
 
     const files = structured(
       await client.callTool({

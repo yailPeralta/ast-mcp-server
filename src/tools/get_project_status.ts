@@ -9,6 +9,8 @@ import { getProjectStatus } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
+const TOOL_NAME = "ast_get_project_status";
+
 const AstGetProjectStatusInputSchema = z.object({
   project_root: z
     .string()
@@ -124,7 +126,7 @@ const ProjectStatusOutputSchema = z.object({
 
 export function registerGetProjectStatus(server: McpServer): void {
   server.registerTool(
-    "ast_get_project_status",
+    TOOL_NAME,
     {
       title: "Get project freshness status",
       description:
@@ -144,8 +146,11 @@ export function registerGetProjectStatus(server: McpServer): void {
         const output = await getProjectStatus(project_root, requestContext);
         return structuredResult({ ...output });
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_get_project_status", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerGetProjectStatus, compatibility: "optional", effect: "read", batch: "none", directOutputFormats: Object.freeze(["json"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;

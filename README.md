@@ -492,7 +492,19 @@ The server does **not** claim a filesystem-wide transaction:
 
 ## Development gates
 
+### Add or change an MCP tool
+
+Keep schemas, metadata, annotations, handlers, errors, and serialization in the tool module. Export
+one frozen descriptor, add it to the intentional order in `src/tools/catalog.ts`, and declare only
+static effect, batch, compatibility, and direct-format facts. Do not add request state, dynamic
+discovery, invocation-by-name, or a generic executor to the catalog.
+
+Update the independent `tools/list` inventories only after reviewing the complete wire metadata;
+they must not import or derive expectations from the catalog. Then run the focused catalog and MCP
+integration tests plus the runtime, package, and managed-skill gates below.
+
 ```bash
+yarn vitest run test/tool-catalog.test.ts test/mcp.integration.test.ts
 yarn format:check
 yarn lint
 yarn typecheck

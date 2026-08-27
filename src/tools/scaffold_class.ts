@@ -6,6 +6,8 @@ import { createRequestContext } from "../services/request-context.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 import { PreparedOperationOutputSchema, serializePreparedOperation } from "./operation-schema.js";
 
+const TOOL_NAME = "ast_scaffold_class";
+
 const IdentifierSchema = z.string().min(1).max(200);
 const TypeTextSchema = z.string().min(1).max(10_000);
 const AccessSchema = z.enum(["public", "protected", "private"]);
@@ -142,7 +144,7 @@ export function registerScaffoldClass(server: McpServer): void {
   // Keep the complete runtime schema and isolate only the registrar type.
   const registerTool = server.registerTool.bind(server) as unknown as ScaffoldToolRegistrar;
   registerTool(
-    "ast_scaffold_class",
+    TOOL_NAME,
     {
       title: "Prepare Class Scaffold",
       description:
@@ -177,8 +179,11 @@ export function registerScaffoldClass(server: McpServer): void {
         };
         return structuredResult(structuredContent);
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_scaffold_class", args.project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, args.project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerScaffoldClass, compatibility: "required", effect: "prepare", batch: "prepare", directOutputFormats: Object.freeze(["json"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;

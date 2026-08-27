@@ -5,6 +5,8 @@ import { findDeclarationByName, getSourceFileOrThrow, withProject } from "../ser
 import { createRequestContext } from "../services/request-context.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
+const TOOL_NAME = "ast_get_symbol_source";
+
 const AstGetSymbolSourceInputSchema = z.object({
   project_root: z
     .string()
@@ -22,7 +24,7 @@ const AstGetSymbolSourceOutputSchema = z.object({
 
 export function registerGetSymbolSource(server: McpServer): void {
   server.registerTool(
-    "ast_get_symbol_source",
+    TOOL_NAME,
     {
       title: "Get one symbol implementation",
       description:
@@ -50,8 +52,11 @@ export function registerGetSymbolSource(server: McpServer): void {
         );
         return structuredResult(structuredContent);
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_get_symbol_source", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerGetSymbolSource, compatibility: "required", effect: "read", batch: "read", directOutputFormats: Object.freeze(["json"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;

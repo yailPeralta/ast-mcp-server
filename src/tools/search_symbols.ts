@@ -14,6 +14,8 @@ import {
   ToolOutputFormatInputSchema,
 } from "./result.js";
 
+const TOOL_NAME = "ast_search_symbols";
+
 const SEARCH_DEFAULT_LIMIT = 20;
 const SearchDetailSchema = z.enum(["selectors", "summary", "full"]).default("summary");
 
@@ -100,7 +102,7 @@ function projectSymbols(detail: SearchDetail, symbols: FullSearchSymbol[]) {
 
 export function registerSearchSymbols(server: McpServer): void {
   server.registerTool(
-    "ast_search_symbols",
+    TOOL_NAME,
     {
       title: "Search project symbols",
       description:
@@ -159,8 +161,11 @@ export function registerSearchSymbols(server: McpServer): void {
         const outputSchema = SearchOutputSchemas[detail] as z.ZodType<Record<string, unknown>>;
         return formattedResult(outputSchema, structuredContent, output_format);
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_search_symbols", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerSearchSymbols, compatibility: "required", effect: "read", batch: "read", directOutputFormats: Object.freeze(["json", "toon"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;

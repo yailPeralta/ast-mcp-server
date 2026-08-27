@@ -4,7 +4,7 @@ description: "Trigger: navegar, analizar o editar TypeScript/JavaScript con el c
 license: "ISC"
 metadata:
   author: "yail"
-  version: "4.5.0"
+  version: "4.6.0"
   hermes:
     tags: ["typescript", "javascript", "ast", "refactoring", "mcp"]
     homepage: "https://github.com/yailPeralta/ast-mcp-server"
@@ -34,6 +34,12 @@ The local 0.11.2 release candidate requires Node.js `>=22.13.0` and is verified 
 `ast_get_diagnostics` keeps its existing response shape unless `include_aggregates: true` is requested. Enabled summaries cover the complete normalized snapshot, not only the selected raw page, and cap both code and file groups at 20.
 
 For each dimension, `groups.length + omitted_group_count = total_group_count` and group counts sum to `covered_diagnostic_count`. Code coverage plus omitted diagnostics equals the total; file coverage additionally includes `unfiled_diagnostic_count`. File groups expose normalized project-relative paths only and may include paths absent from the raw page.
+
+## Contributor contract
+
+Al agregar o modificar una tool, mantener schemas, metadata, annotations, handler, errores y serialización en su módulo. Exportar un descriptor congelado y ubicarlo deliberadamente en `src/tools/catalog.ts`; el catálogo solo admite hechos estáticos de efecto, batch, compatibilidad y formatos directos.
+
+Las expectativas de `tools/list` deben seguir siendo independientes: revisar el inventario y metadata completos antes de actualizar sus hashes, sin importar ni derivar valores desde el catálogo.
 
 ## Decision Gates
 

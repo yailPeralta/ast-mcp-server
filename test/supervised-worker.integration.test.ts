@@ -50,6 +50,12 @@ it("proves supervised parity, aggregate cancellation, PSS reclamation, and redac
     aggregate_equivalent_reads: true,
     aggregate_cancellation_in_process: true,
     aggregate_cancellation_supervised: true,
+    independent_tool_inventory: true,
+    tool_inventory_checks: {
+      in_process: 1,
+      supervised_no_recycle: 3,
+      supervised_after_recycle: 3,
+    },
   });
   expect(evidence.minimum_reclaimed_percent).toBeGreaterThanOrEqual(80);
   expect(evidence.cycles).toHaveLength(9);

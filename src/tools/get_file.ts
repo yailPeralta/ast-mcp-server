@@ -11,6 +11,8 @@ import { createRequestContext } from "../services/request-context.js";
 import { FRESHNESS_CAUSES, SNAPSHOT_STATES } from "../services/read-contracts.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
+const TOOL_NAME = "ast_get_file";
+
 const AstGetFileInputSchema = z.object({
   project_root: z
     .string()
@@ -73,7 +75,7 @@ const AstGetFileOutputSchema = z.object({
 
 export function registerGetFile(server: McpServer): void {
   server.registerTool(
-    "ast_get_file",
+    TOOL_NAME,
     {
       title: "Get bounded source file",
       description:
@@ -127,8 +129,11 @@ export function registerGetFile(server: McpServer): void {
         );
         return structuredResult(structuredContent);
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_get_file", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerGetFile, compatibility: "optional", effect: "read", batch: "none", directOutputFormats: Object.freeze(["json"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;
