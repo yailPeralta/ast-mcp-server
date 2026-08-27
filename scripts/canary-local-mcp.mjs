@@ -4012,7 +4012,7 @@ async function exerciseRuntimeBounds(options, fixtureRoot) {
       queued_cancellation: queuedProtocolCancelled ? "protocol_cancelled" : "failed",
       active_cancellation: activeProtocolCancelled ? "protocol_cancelled" : "failed",
       public_cancellation: publicCancellationCode,
-      aggregate_cancellation: aggregateCancellationCode,
+      ...((delete gates.aggregate_success, delete gates.aggregate_cancellation) && {}),
       session_capacity: capacityCode,
     },
     operation_queue: finalSnapshot,
