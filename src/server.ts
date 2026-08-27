@@ -16,6 +16,8 @@ export const PACKAGE_VERSION = packageMetadata.version;
 
 export interface CreateServerOptions {
   readonly runtimeActivity?: RuntimeActivityTracker;
+  /** Deny every apply-effect tool at registration (deny-by-default apply guard). */
+  readonly denyApply?: boolean;
 }
 
 function installRuntimeActivityTracking(
@@ -59,6 +61,10 @@ export function createServer(options: CreateServerOptions = {}): McpServer {
     version: PACKAGE_VERSION,
   });
   if (options.runtimeActivity) installRuntimeActivityTracking(server, options.runtimeActivity);
-  toolCatalog.registerAll(server);
+  if (options.denyApply === undefined) {
+    toolCatalog.registerAll(server);
+  } else {
+    toolCatalog.registerAll(server, { denyApply: options.denyApply });
+  }
   return server;
 }

@@ -52,6 +52,7 @@ const CI_RELEASE_GATES = Object.freeze([
   "yarn test:lifecycle",
   "yarn test:cli",
   "yarn test:package",
+  "yarn test:dsh-adapter",
   "yarn audit",
   "yarn pack --dry-run --json",
   "node scripts/workflow-policy-check.mjs",

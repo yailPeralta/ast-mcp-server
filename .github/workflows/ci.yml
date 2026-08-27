@@ -44,6 +44,7 @@ jobs:
       - run: yarn test:lifecycle
       - run: yarn test:cli
       - run: yarn test:package
+      - run: yarn test:dsh-adapter
       - run: yarn audit
       - run: yarn pack --dry-run --json
       - run: node scripts/workflow-policy-check.mjs

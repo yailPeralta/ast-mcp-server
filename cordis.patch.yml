@@ -1,0 +1,31 @@
+# DeepSeek Harness adapter patch for ast-mcp-server (roadmap initiative 4).
+#
+# Mounts the packaged `ast-mcp-server` stdio command through the official
+# `@deepseek-ai/dsh-mcp-client` bridge. Harness does not resolve MCP binaries
+# from PATH, so the entrypoint is resolved relative to the profile directory
+# (`baseUrl`), where `dsh plugin --profile <name> add ast-mcp-server@0.13.0`
+# installs this package as a dependency.
+#
+# First-slice surface: reads + prepare + preview. Every apply path is denied
+# by the server-side guard activated through `AST_MCP_APPLY_GUARD=deny`.
+#
+# Known upstream gaps (documented, never safety authority):
+# - the official bridge drops MCP tool.annotations, incl. readOnlyHint and
+#   destructiveHint, so the guard enumerates tool names instead of hints;
+# - the stdio child runs outside the Harness sandbox.
+- insert:
+    - id: mcp-ast
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: ast
+        transport: stdio
+        command: !!js process.execPath
+        args:
+          - !!js >-
+            process.getBuiltinModule('node:url').fileURLToPath(
+              new URL('node_modules/ast-mcp-server/dist/index.js', baseUrl)
+            )
+        env:
+          AST_MCP_APPLY_GUARD: "deny"
+        cwd: !!js process.cwd()
+        failOnStartupError: true

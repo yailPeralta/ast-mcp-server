@@ -5,6 +5,42 @@ __metadata:
   version: 10
   cacheKey: 10c0
 
+"@deepseek-ai/cosmokit@npm:^1.8.2":
+  version: 1.8.2
+  resolution: "@deepseek-ai/cosmokit@npm:1.8.2"
+  checksum: 10c0/2e15902445b984f2d245687f6c3590cc0251eaeec5fd5173138fc61f791a0af0c77e56b27f060ee6868213996578afd36efd52ef18d115aa0ca57fca89c6a2cb
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-mcp-client@npm:0.1.1-rc.2":
+  version: 0.1.1-rc.2
+  resolution: "@deepseek-ai/dsh-mcp-client@npm:0.1.1-rc.2"
+  dependencies:
+    "@deepseek-ai/schemastery": "npm:^3.18.1"
+    "@modelcontextprotocol/sdk": "npm:^1.12.0"
+    zod: "npm:^4.4.3"
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.1
+    "@deepseek-ai/dsh-attachment": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-invariants": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-llm": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-subprocess": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-timeout": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-tools": ^0.1.1-rc.2
+  checksum: 10c0/d2ccd20af6edcc24591c4143506714348d3488d5a9e6d64832531b7218be911448a0b60f455a473ccada1019f7dd573058a87ce1556de91b06be4a9d41ef1554
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/schemastery@npm:^3.18.1":
+  version: 3.18.1
+  resolution: "@deepseek-ai/schemastery@npm:3.18.1"
+  dependencies:
+    "@deepseek-ai/cosmokit": "npm:^1.8.2"
+    "@standard-schema/spec": "npm:^1.1.0"
+  checksum: 10c0/3219b8012fb22fcf97bb530150d4492f1ec5b3bc80bb221c4edc6f4793e733ab726824aa7b58622e0108c46172059119685225e3cb0981acd405cfe9955d50de
+  languageName: node
+  linkType: hard
+
 "@emnapi/core@npm:2.0.0-alpha.3":
   version: 2.0.0-alpha.3
   resolution: "@emnapi/core@npm:2.0.0-alpha.3"
@@ -725,6 +761,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "ast-mcp-server@workspace:."
   dependencies:
+    "@deepseek-ai/dsh-mcp-client": "npm:0.1.1-rc.2"
     "@eslint/js": "npm:^10.0.1"
     "@modelcontextprotocol/sdk": "npm:^1.12.0"
     "@toon-format/toon": "npm:4.1.0"
@@ -738,6 +775,7 @@ __metadata:
     typescript: "npm:^5.6.0"
     typescript-eslint: "npm:^8.65.0"
     vitest: "npm:^4.1.10"
+    yaml: "npm:^2.9.0"
     zod: "npm:^3.23.8"
   bin:
     ast-mcp-server: dist/index.js
@@ -2697,6 +2735,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"yaml@npm:^2.9.0":
+  version: 2.9.0
+  resolution: "yaml@npm:2.9.0"
+  bin:
+    yaml: bin.mjs
+  checksum: 10c0/f340718df45e97a9551b9bf9dac61c80050bc464513b710debfb5067c380c8472e3b67809cffacb4ab5ffb5e66ef9310816c88b05f371cec60abfedd8c88e0a2
+  languageName: node
+  linkType: hard
+
 "yocto-queue@npm:^0.1.0":
   version: 0.1.0
   resolution: "yocto-queue@npm:0.1.0"
@@ -2720,7 +2767,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:^3.25 || ^4.0":
+"zod@npm:^3.25 || ^4.0, zod@npm:^4.4.3":
   version: 4.4.3
   resolution: "zod@npm:4.4.3"
   checksum: 10c0/7ea31b558e88f9faf44f31dd185e2e1cbf51fed3081787fb96cc2534749b50c0acfc6da7f0922a7353ed092dd358c7d50c28ea96c94d04af64191bd33152eca3

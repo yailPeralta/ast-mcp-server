@@ -123,6 +123,7 @@ describe("runtime policy", () => {
       "shutdownDrainTimeoutMs",
       "compilerWorkerMode",
       "compilerWorkerIdleTtlMs",
+      "denyApply",
       "reasons",
     ]);
     expect(Object.isFrozen(RUNTIME_POLICY_ENV_KEYS)).toBe(true);
@@ -159,6 +160,7 @@ describe("runtime policy", () => {
       "AST_SHUTDOWN_DRAIN_TIMEOUT_MS",
       "AST_COMPILER_WORKER_MODE",
       "AST_COMPILER_WORKER_IDLE_TTL_MS",
+      "AST_MCP_APPLY_GUARD",
     ] satisfies RuntimePolicyEnvironmentKey[]);
   });
 
