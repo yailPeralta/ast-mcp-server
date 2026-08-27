@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { toolCatalog } from "../tools/catalog.js";
 
 export const BATCH_SCHEMA_VERSION = 1 as const;
 export const MAX_BATCH_STEPS = 50;
@@ -10,24 +11,15 @@ export const MAX_BATCH_INPUT_BYTES = 1024 * 1024;
 export const MAX_BATCH_OUTPUT_BYTES = 10 * 1024 * 1024;
 export const MAX_BATCH_CONTEXT_BYTES = 50 * 1024 * 1024;
 
-export const READ_BATCH_TOOLS = [
-  "ast_list_files",
-  "ast_get_outline",
-  "ast_get_symbol_source",
-  "ast_search_symbols",
-  "ast_find_references",
-  "ast_find_test_candidates",
-  "ast_explore",
-  "ast_get_diagnostics",
-] as const;
+export const READ_BATCH_TOOLS = toolCatalog.batch.read;
+export const PREPARE_BATCH_TOOLS = toolCatalog.batch.prepare;
 
-export const PREPARE_BATCH_TOOLS = [
-  "ast_rename_symbol",
-  "ast_replace_symbol_body",
-  "ast_scaffold_class",
-] as const;
-
-export const BATCH_TOOLS = [...READ_BATCH_TOOLS, ...PREPARE_BATCH_TOOLS] as const;
+type CatalogBatchToolName =
+  (typeof READ_BATCH_TOOLS)[number] | (typeof PREPARE_BATCH_TOOLS)[number];
+export const BATCH_TOOLS = Object.freeze([
+  ...READ_BATCH_TOOLS,
+  ...PREPARE_BATCH_TOOLS,
+]) as readonly [CatalogBatchToolName, ...CatalogBatchToolName[]];
 
 export type BatchToolName = (typeof BATCH_TOOLS)[number];
 
