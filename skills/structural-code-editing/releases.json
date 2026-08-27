@@ -2,11 +2,11 @@
   "schema_version": 2,
   "algorithm": "sha256",
   "current": {
-    "version": "4.5.0",
+    "version": "4.6.0",
     "files": [
       {
         "path": "SKILL.md",
-        "sha256": "84573954aa6dd15a9719aabda4b274f29156c233ebf05a1528a7edb4c6466c59"
+        "sha256": "9f580451276563f961d756d0d41bad924b4bca9ebd4c0cbd0701ed8007dd8c99"
       },
       {
         "path": "references/operations.md",
