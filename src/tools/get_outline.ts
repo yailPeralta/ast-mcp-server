@@ -6,6 +6,8 @@ import { getSourceFileOrThrow, withProject } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
+const TOOL_NAME = "ast_get_outline";
+
 const AstGetOutlineInputSchema = z.object({
   project_root: z
     .string()
@@ -34,7 +36,7 @@ const AstGetOutlineOutputSchema = z.object({
 
 export function registerGetOutline(server: McpServer): void {
   server.registerTool(
-    "ast_get_outline",
+    TOOL_NAME,
     {
       title: "Get compact file outline",
       description:
@@ -66,8 +68,11 @@ export function registerGetOutline(server: McpServer): void {
         );
         return structuredResult(structuredContent);
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_get_outline", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerGetOutline, compatibility: "required", effect: "read", batch: "read", directOutputFormats: Object.freeze(["json"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;

@@ -29,6 +29,8 @@ import {
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 import { RelationshipEndpointSchema } from "./relationship-schema.js";
 
+const TOOL_NAME = "ast_explore";
+
 const ExploreDetailSchema = z.enum(["selectors", "summary", "context", "full"]).default("summary");
 const ReferenceDetailSchema = z.enum(["locations", "context"]).default("locations");
 const CallSpinesInputSchema = z.object({
@@ -243,7 +245,7 @@ const ExploreOutputSchema = z.object({
 
 export function registerExplore(server: McpServer): void {
   server.registerTool(
-    "ast_explore",
+    TOOL_NAME,
     {
       title: "Explore project context",
       description:
@@ -315,8 +317,11 @@ export function registerExplore(server: McpServer): void {
         );
         return structuredResult(ExploreOutputSchema.parse(output));
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_explore", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerExplore, compatibility: "optional", effect: "read", batch: "read", directOutputFormats: Object.freeze(["json"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;

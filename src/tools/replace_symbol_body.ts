@@ -5,6 +5,8 @@ import { createRequestContext } from "../services/request-context.js";
 import { PreparedOperationOutputSchema, serializePreparedOperation } from "./operation-schema.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
+const TOOL_NAME = "ast_replace_symbol_body";
+
 const AstReplaceSymbolBodyInputSchema = z.object({
   project_root: z.string(),
   file_path: z.string(),
@@ -22,7 +24,7 @@ const AstReplaceSymbolBodyInputSchema = z.object({
 
 export function registerReplaceSymbolBody(server: McpServer): void {
   server.registerTool(
-    "ast_replace_symbol_body",
+    TOOL_NAME,
     {
       title: "Prepare an exact function-body replacement",
       description:
@@ -59,8 +61,11 @@ export function registerReplaceSymbolBody(server: McpServer): void {
         );
         return structuredResult(serializePreparedOperation(operation));
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_replace_symbol_body", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerReplaceSymbolBody, compatibility: "required", effect: "prepare", batch: "prepare", directOutputFormats: Object.freeze(["json"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;

@@ -5,6 +5,8 @@ import { createRequestContext } from "../services/request-context.js";
 import { PreparedOperationOutputSchema, serializePreparedOperation } from "./operation-schema.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
+const TOOL_NAME = "ast_rename_symbol";
+
 const AstRenameSymbolInputSchema = z.object({
   project_root: z.string(),
   file_path: z.string(),
@@ -22,7 +24,7 @@ const AstRenameSymbolInputSchema = z.object({
 
 export function registerRenameSymbol(server: McpServer): void {
   server.registerTool(
-    "ast_rename_symbol",
+    TOOL_NAME,
     {
       title: "Prepare a project-wide structural rename",
       description:
@@ -59,8 +61,11 @@ export function registerRenameSymbol(server: McpServer): void {
         );
         return structuredResult(serializePreparedOperation(operation));
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_rename_symbol", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerRenameSymbol, compatibility: "required", effect: "prepare", batch: "prepare", directOutputFormats: Object.freeze(["json"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;

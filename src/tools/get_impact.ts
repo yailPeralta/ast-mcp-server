@@ -27,6 +27,8 @@ import {
   ToolOutputFormatInputSchema,
 } from "./result.js";
 
+const TOOL_NAME = "ast_get_impact";
+
 const AstGetImpactInputSchema = z.object({
   project_root: z
     .string()
@@ -94,7 +96,7 @@ const ImpactOutputSchema = z.object({
 
 export function registerGetImpact(server: McpServer): void {
   server.registerTool(
-    "ast_get_impact",
+    TOOL_NAME,
     {
       title: "Get bounded compiler-backed impact",
       description:
@@ -158,8 +160,11 @@ export function registerGetImpact(server: McpServer): void {
         );
         return formattedResult(ImpactOutputSchema, structuredContent, output_format);
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_get_impact", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerGetImpact, compatibility: "optional", effect: "read", batch: "none", directOutputFormats: Object.freeze(["json", "toon"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;
