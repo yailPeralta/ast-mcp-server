@@ -222,7 +222,7 @@ try {
     !installedChangelog.includes(`## [${releaseMetadata.version}]`) ||
     !packagedSkill.includes("name: structural-code-editing") ||
     packagedGuidance.includes("ast-tool:structural-code-editing guidance") ||
-    packagedManifest.current?.version !== "4.5.0" ||
+    packagedManifest.current?.version !== "4.6.0" ||
     [...packagedAssets.keys()].sort().join() !== "SKILL.md,references/operations.md" ||
     packagedManifest.current.files.some(
       (file) => packagedAssets.get(file.path)?.[1] !== file.sha256,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AGENT_IDS,
   AGENT_TARGETS,
@@ -8,8 +8,43 @@ import {
   type AgentTargetId,
   type AgentTargetRuntime,
 } from "../src/services/agent-targets.js";
+import { toolCatalog } from "../src/tools/catalog.js";
+
+afterEach(() => {
+  vi.doUnmock("../src/tools/catalog.js");
+  vi.resetModules();
+});
 
 describe("agent target registry", () => {
+  it("keeps compatibility at 12 required tools and four optional tools", () => {
+    expect(toolCatalog.compatibility.required).toHaveLength(12);
+    expect(toolCatalog.compatibility.optional).toEqual([
+      "ast_get_project_status",
+      "ast_explore",
+      "ast_get_impact",
+      "ast_get_file",
+    ]);
+  });
+
+  it("derives the Hermes minimum from the catalog required projection", async () => {
+    vi.resetModules();
+    vi.doMock("../src/tools/catalog.js", () => ({
+      toolCatalog: { compatibility: { required: ["ast_catalog_required"] } },
+    }));
+    const { inspectAgentFixture: inspectCatalogFixture } =
+      await import("../src/services/agent-targets.js");
+
+    await expect(
+      inspectCatalogFixture(
+        "hermes",
+        [
+          { exitCode: 0, stdout: "ast stdio all enabled", stderr: "" },
+          { exitCode: 0, stdout: "ast_catalog_required", stderr: "" },
+        ],
+        { nodeExecutable: "/node", serverEntryPath: "/package/dist/index.js" },
+      ),
+    ).resolves.toEqual({ status: "current" });
+  });
   it("keeps the supported targets ordered and uniquely addressable", () => {
     expect(AGENT_IDS).toEqual(["claude", "hermes", "opencode", "codex", "gemini", "copilot"]);
     expect(new Set(AGENT_TARGETS.map((target) => target.id)).size).toBe(AGENT_TARGETS.length);

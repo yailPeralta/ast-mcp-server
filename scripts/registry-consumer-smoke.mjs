@@ -58,6 +58,8 @@ const EXPECTED_TOOLS = Object.freeze([
   "ast_get_operation_preview",
   "ast_apply_operation",
 ]);
+const EXPECTED_TOOLS_LIST_SHA256 =
+  "e0a86578aeca0f738e0ae39c543353962e51c9c17183b730149bb190b86e6bf9";
 
 export async function copyRegistryConsumerRunner(targetRoot) {
   const copiedRunner = path.join(targetRoot, "registry-consumer-smoke.mjs");
@@ -861,8 +863,14 @@ async function runInner(
     }
     const tools = await defaultConnection.client.listTools();
     const toolNames = tools.tools.map(({ name }) => name);
-    if (JSON.stringify(toolNames) !== JSON.stringify(EXPECTED_TOOLS)) {
-      fail("exact 16-tool inventory does not match.");
+    const toolInventorySha256 = createHash("sha256")
+      .update(JSON.stringify(tools.tools))
+      .digest("hex");
+    if (
+      JSON.stringify(toolNames) !== JSON.stringify(EXPECTED_TOOLS) ||
+      toolInventorySha256 !== EXPECTED_TOOLS_LIST_SHA256
+    ) {
+      fail("exact 16-tool inventory or metadata does not match.");
     }
     const status = structured(
       await defaultConnection.client.callTool({
