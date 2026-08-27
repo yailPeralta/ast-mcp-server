@@ -73,6 +73,12 @@ export interface SupervisedWorkerEvidence {
   readonly minimum_reclaimed_percent: number;
   readonly no_upward_pss_trend: boolean;
   readonly diagnostics_redacted: boolean;
+  readonly independent_tool_inventory: boolean;
+  readonly tool_inventory_checks: Readonly<{
+    readonly in_process: 1;
+    readonly supervised_no_recycle: 3;
+    readonly supervised_after_recycle: 3;
+  }>;
   readonly cycles: readonly Readonly<Record<string, number>>[];
   readonly events: readonly SupervisedWorkerEvent[];
 }
