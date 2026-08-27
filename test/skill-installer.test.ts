@@ -42,6 +42,11 @@ const publishedSkillFixtures = [
     skillVersion: "4.5.0",
     sha256: "18132b4b747d135e4ccfbca9e2190a9afb41e144cc06c31c5e6bc0f1571e11da",
   },
+  {
+    npmVersion: "0.12.0",
+    skillVersion: "4.6.0",
+    sha256: "d0048ffd9a585d00791540c6fa5e0bec91ff95b1448479678f85702e6b09be8a",
+  },
 ] as const;
 
 async function publishedSkill(npmVersion: string): Promise<string> {

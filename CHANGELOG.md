@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.12.0] — local release candidate, pending release (2026-08-27)
+## [0.12.0] — published to `latest` and `next`, registry verified (2026-08-27)
 
 ### Added
 
@@ -19,7 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release status
 
-- Version `0.12.0` remains pending its exact-tree two-runtime matrix, CI, and separately authorized delivery sequence. It has not been published, assigned to an npm dist-tag, tagged in Git, or released on GitHub.
+- npm published these immutable bytes under `next` with provenance and the expected Git commit. Public-registry consumer and release-preflight verification passed, `latest` and `next` both resolve to `0.12.0`, and the annotated `v0.12.0` tag plus GitHub Release resolve to the same release commit.
 
 ## [0.11.2] — published to `latest` and `next`, registry verified (2026-08-25)
 
