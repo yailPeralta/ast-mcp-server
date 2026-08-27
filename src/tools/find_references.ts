@@ -11,6 +11,8 @@ import {
   ToolOutputFormatInputSchema,
 } from "./result.js";
 
+const TOOL_NAME = "ast_find_references";
+
 const ReferenceDetailSchema = z.enum(["locations", "context"]).default("locations");
 
 const AstFindReferencesInputSchema = z.object({
@@ -58,7 +60,7 @@ const ReferenceOutputSchemas = {
 
 export function registerFindReferences(server: McpServer): void {
   server.registerTool(
-    "ast_find_references",
+    TOOL_NAME,
     {
       title: "Find semantic symbol references",
       description:
@@ -118,8 +120,11 @@ export function registerFindReferences(server: McpServer): void {
         const outputSchema = ReferenceOutputSchemas[detail] as z.ZodType<Record<string, unknown>>;
         return formattedResult(outputSchema, structuredContent, output_format);
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_find_references", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerFindReferences, compatibility: "required", effect: "read", batch: "read", directOutputFormats: Object.freeze(["json", "toon"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;

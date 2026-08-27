@@ -6,6 +6,8 @@ import { withProject } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
+const TOOL_NAME = "ast_list_files";
+
 const AstListFilesInputSchema = z.object({
   project_root: z
     .string()
@@ -24,7 +26,7 @@ const AstListFilesOutputSchema = z.object({
 
 export function registerListFiles(server: McpServer): void {
   server.registerTool(
-    "ast_list_files",
+    TOOL_NAME,
     {
       title: "List TypeScript/JavaScript project files",
       description:
@@ -62,8 +64,11 @@ export function registerListFiles(server: McpServer): void {
 
         return structuredResult(output);
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_list_files", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerListFiles, compatibility: "required", effect: "read", batch: "read", directOutputFormats: Object.freeze(["json"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;

@@ -15,6 +15,8 @@ import {
   ToolOutputFormatInputSchema,
 } from "./result.js";
 
+const TOOL_NAME = "ast_get_diagnostics";
+
 const DiagnosticSchema = z.object({
   code: z.number().int(),
   category: z.string(),
@@ -73,7 +75,7 @@ const AstGetDiagnosticsOutputSchema = z.object({
 
 export function registerGetDiagnostics(server: McpServer): void {
   server.registerTool(
-    "ast_get_diagnostics",
+    TOOL_NAME,
     {
       title: "Get TypeScript diagnostics",
       description:
@@ -126,8 +128,11 @@ export function registerGetDiagnostics(server: McpServer): void {
         );
         return formattedResult(AstGetDiagnosticsOutputSchema, structuredContent, output_format);
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_get_diagnostics", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerGetDiagnostics, compatibility: "required", effect: "read", batch: "read", directOutputFormats: Object.freeze(["json", "toon"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;

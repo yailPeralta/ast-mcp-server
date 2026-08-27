@@ -28,6 +28,8 @@ import {
 } from "./relationship-schema.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
+const TOOL_NAME = "ast_find_test_candidates";
+
 const ConventionSchema = z
   .array(z.string().min(1).max(MAX_TEST_CANDIDATE_CONVENTION_LENGTH))
   .max(MAX_TEST_CANDIDATE_CONVENTION_ITEMS)
@@ -85,7 +87,7 @@ const FindTestCandidatesOutputSchema = z.object({
 
 export function registerFindTestCandidates(server: McpServer): void {
   server.registerTool(
-    "ast_find_test_candidates",
+    TOOL_NAME,
     {
       title: "Find compiler-backed affected test candidates",
       description:
@@ -176,8 +178,11 @@ export function registerFindTestCandidates(server: McpServer): void {
         );
         return structuredResult(FindTestCandidatesOutputSchema.parse(result));
       } catch (error) {
-        return errorResult(error, createToolErrorContext("ast_find_test_candidates", project_root));
+        return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
     },
   );
 }
+
+// prettier-ignore
+export const toolDescriptor = Object.freeze({ name: TOOL_NAME, register: registerFindTestCandidates, compatibility: "required", effect: "read", batch: "read", directOutputFormats: Object.freeze(["json"] as const) }) satisfies import("./catalog.js").ToolDescriptor<typeof TOOL_NAME>;
