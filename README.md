@@ -322,6 +322,33 @@ hermes mcp test ast
 
 Project-scoped tools accept `project_root`, either the project directory or an explicit `tsconfig.json` path. The server contains no repository-specific paths.
 
+### DeepSeek Harness (Developer Preview)
+
+A thin adapter ships inside this package since 0.13.0: `cordis.patch.yml` mounts the
+packaged `ast-mcp-server` stdio command through the official
+[`@deepseek-ai/dsh-mcp-client`](https://github.com/deepseek-ai/deepseek-harness/blob/cd5ef8148158c3a752a658978873241fdf8e2bbc/packages/mcp/mcp-client/README.md)
+bridge, declared through exactly `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`.
+Install it into a profile and the harness discovers the tools as `mcp__ast__*`:
+
+```bash
+dsh plugin --profile web add ast-mcp-server@0.13.0
+```
+
+The first supported surface is **reads + prepare + preview**. Every apply path is
+denied by a deny-by-default guard (`AST_MCP_APPLY_GUARD=deny`, set by the patch), so
+`ast_apply_operation` is not even registered on the Harness surface. Known upstream
+gaps apply and are never safety authority: the official bridge drops MCP tool
+annotations (`readOnlyHint`/`destructiveHint`) and launches the stdio child outside
+the Harness sandbox.
+
+Pinned identities: DeepSeek Harness `dsh-v0.1.2-alpha.1` at revision
+`cd5ef8148158c3a752a658978873241fdf8e2bbc`; the adapter fixture pins
+`@deepseek-ai/dsh-mcp-client@0.1.1-rc.2` (the `0.1.2-alpha.1` package version is not
+published to npm; its config schema is byte-identical). Composition is proven with
+`dsh --profile web --dump-config`; an independent runtime smoke
+(`yarn test:dsh-adapter`) proves package-relative entrypoint resolution, stdio
+startup, discovery, and invocation under `tools.mode: native` (the default).
+
 ## MCP tools
 
 | Tool                        | Purpose                                                              | Mutates files |

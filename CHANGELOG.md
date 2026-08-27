@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.13.0] — local release candidate, pending release (2026-08-27)
+
+### Added
+
+- DeepSeek Harness Developer Preview adapter (roadmap initiative 4, first slice): `cordis.patch.yml` mounts the packaged `ast-mcp-server` stdio command through `@deepseek-ai/dsh-mcp-client`, declared via `"dsh": {"bundle": {"patch": "./cordis.patch.yml"}}`. The first surface is reads + prepare + preview with a deny-by-default apply guard (`AST_MCP_APPLY_GUARD=deny` keeps `ast_apply_operation` unregistered); `yarn test:dsh-adapter` proves the packed tarball fixture, package-relative entrypoint resolution, and the independent stdio smoke under `tools.mode: native`.
+
 ## [0.12.0] — published to `latest` and `next`, registry verified (2026-08-27)
 
 ### Added
