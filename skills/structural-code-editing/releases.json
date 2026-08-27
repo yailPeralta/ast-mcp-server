@@ -6,7 +6,7 @@
     "files": [
       {
         "path": "SKILL.md",
-        "sha256": "d0048ffd9a585d00791540c6fa5e0bec91ff95b1448479678f85702e6b09be8a"
+        "sha256": "df2ebc3f3903cf5abf4eb6612da527cad97a92f29f1a9a475ea6e8b4cf47abfb"
       },
       {
         "path": "references/operations.md",
@@ -94,6 +94,11 @@
       "version": "4.5.0",
       "sha256": "18132b4b747d135e4ccfbca9e2190a9afb41e144cc06c31c5e6bc0f1571e11da",
       "npm_versions": ["0.11.2"]
+    },
+    {
+      "version": "4.6.0",
+      "sha256": "d0048ffd9a585d00791540c6fa5e0bec91ff95b1448479678f85702e6b09be8a",
+      "npm_versions": ["0.12.0"]
     }
   ]
 }
