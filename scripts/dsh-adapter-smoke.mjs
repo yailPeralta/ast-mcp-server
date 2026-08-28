@@ -92,7 +92,7 @@ async function packPinnedMcpClient(source) {
     ...process.env,
     NODE_OPTIONS: "",
     CI: "true",
-    COREPACK_INTEGRITY_CHECK: "0",
+    COREPACK_INTEGRITY_KEYS: "0",
     COREPACK_USE_LATEST: "0",
   };
   await run("pnpm", ["pack", "--pack-destination", temporaryRoot], { cwd, env: environment });
@@ -121,7 +121,7 @@ async function provisionPinnedHarness() {
     ...process.env,
     NODE_OPTIONS: "",
     CI: "true",
-    COREPACK_INTEGRITY_CHECK: "0",
+    COREPACK_INTEGRITY_KEYS: "0",
     COREPACK_USE_LATEST: "0",
   };
   await run("corepack", ["enable"], { cwd: root, env: provisionEnvironment });
@@ -427,7 +427,7 @@ try {
   const dshEnvironment = {
     ...process.env,
     DSH_HOME: dshHome,
-    COREPACK_INTEGRITY_CHECK: "0",
+    COREPACK_INTEGRITY_KEYS: "0",
     COREPACK_USE_LATEST: "0",
   };
   await run(process.execPath, [cliBin, "plugin", "--profile", "smoke", "add", archiveReference], {
