@@ -26,6 +26,13 @@ export interface OpenCodeConfigPlan {
 
 export type OpenCodeAstRegistrationStatus = "missing" | "current" | "repairable" | "conflict";
 
+export class OpenCodeConfigRecoveryError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "OpenCodeConfigRecoveryError";
+  }
+}
+
 function desiredAst(nodeExecutable: string, serverEntryPath: string) {
   return {
     type: "local",
@@ -261,5 +268,52 @@ export async function restoreOpenCodeConfigPlan(plan: OpenCodeConfigPlan): Promi
   const restoredMode = (await stat(plan.filePath)).mode & 0o777;
   if (restored !== plan.beforeContent || restoredMode !== plan.mode) {
     throw new Error("OpenCode configuration restoration could not be verified.");
+  }
+}
+
+async function inspectOpenCodeConfigPlanState(
+  plan: OpenCodeConfigPlan,
+): Promise<"preimage" | "postimage" | "conflict"> {
+  let content = "";
+  let exists = true;
+  let mode: number | undefined;
+  try {
+    content = await readFile(plan.filePath, "utf8");
+    mode = (await stat(plan.filePath)).mode & 0o777;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") exists = false;
+    else throw error;
+  }
+  if (!plan.beforeExists && !exists) return "preimage";
+  if (plan.beforeExists && exists && content === plan.beforeContent && mode === plan.mode)
+    return "preimage";
+  if (exists && content === plan.content && mode === plan.mode) return "postimage";
+  return "conflict";
+}
+
+export async function runOpenCodeConfigTransaction<T>(
+  plan: OpenCodeConfigPlan,
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    const state = await inspectOpenCodeConfigPlanState(plan);
+    if (state === "postimage") {
+      try {
+        await restoreOpenCodeConfigPlan(plan);
+      } catch (restoreError) {
+        throw new OpenCodeConfigRecoveryError(
+          "Published OpenCode configuration could not be restored.",
+          { cause: restoreError },
+        );
+      }
+    } else if (state === "conflict") {
+      throw new OpenCodeConfigRecoveryError(
+        "OpenCode configuration changed concurrently after an ambiguous write outcome; no restoration was attempted.",
+        { cause: error },
+      );
+    }
+    throw error;
   }
 }

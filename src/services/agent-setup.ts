@@ -41,7 +41,8 @@ import {
   classifyOpenCodeAstRegistration,
   planOpenCodeConfig,
   resolveOpenCodeConfigPath,
-  restoreOpenCodeConfigPlan,
+  OpenCodeConfigRecoveryError,
+  runOpenCodeConfigTransaction,
   withIsolatedOpenCodeConfig,
   type OpenCodeConfigPlan,
 } from "./opencode-config.js";
@@ -504,11 +505,26 @@ async function repairMcp(
         { agent, inspection: authenticated },
       );
     }
-    const removed = await target.mcp.unregister(runtime);
-    if (!target.mcp.removalAccepted(removed)) {
-      const afterFailedRemoval = await target.mcp.inspect(runtime, context);
-      restoreRequired = afterFailedRemoval.status === "missing";
-      throw commandFailure(agent, "legacy MCP removal", removed);
+    let removalError: unknown;
+    try {
+      const removed = await target.mcp.unregister(runtime);
+      if (!target.mcp.removalAccepted(removed)) {
+        removalError = commandFailure(agent, "legacy MCP removal", removed);
+      }
+    } catch (error) {
+      removalError = error;
+    }
+    if (removalError !== undefined) {
+      const afterAmbiguousRemoval = await target.mcp.inspect(runtime, context);
+      if (afterAmbiguousRemoval.status === "missing") restoreRequired = true;
+      else if (afterAmbiguousRemoval.status !== "repairable") {
+        throw new AgentSetupError(
+          `${target.label} removal outcome is ambiguous and the current registration is not safe to restore.`,
+          "AGENT_MCP_CONFLICT",
+          { agent, inspection: afterAmbiguousRemoval },
+        );
+      }
+      throw removalError;
     }
     restoreRequired = true;
     const added = await target.mcp.register(runtime, context);
@@ -810,33 +826,24 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
       await verifyManagedAssetPlans(skillPlan, guidancePlan, applyContext);
       if (inspection.status === "missing" || inspection.status === "repairable") {
         if (agent === "opencode") {
-          let applied = false;
           try {
-            await applyOpenCodeConfigPlan(openCodePlan!);
-            applied = openCodePlan!.status === "installed";
-            await verifyOpenCode(detection, environment, timeoutMs, {
-              nodeExecutable,
-              serverEntryPath: options.serverEntryPath,
+            await runOpenCodeConfigTransaction(openCodePlan!, async () => {
+              await applyOpenCodeConfigPlan(openCodePlan!);
+              await verifyOpenCode(detection, environment, timeoutMs, {
+                nodeExecutable,
+                serverEntryPath: options.serverEntryPath,
+              });
             });
           } catch (error) {
-            if (applied) {
-              try {
-                await restoreOpenCodeConfigPlan(openCodePlan!);
-              } catch (restoreError) {
-                throw new AgentSetupError(
-                  "OpenCode verification failed and the original configuration could not be restored.",
-                  "AGENT_VERIFICATION_FAILED",
-                  {
-                    cause: error instanceof Error ? error.message : String(error),
-                    restore:
-                      restoreError instanceof Error ? restoreError.message : String(restoreError),
-                  },
-                );
-              }
-            }
+            if (error instanceof OpenCodeConfigRecoveryError)
+              throw new AgentSetupError(
+                "OpenCode configuration outcome could not be restored safely.",
+                "AGENT_VERIFICATION_FAILED",
+                { cause: error.message },
+              );
             throw error;
           }
-          if (applied)
+          if (openCodePlan!.status === "installed")
             physicalWrites.push({
               path: openCodePlan!.filePath,
               asset: "mcp_config",

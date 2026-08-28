@@ -105,6 +105,15 @@ if (isClaude && args[0] === "mcp" && args[1] === "add") {
 }
 
 if (isClaude && args[0] === "mcp" && args[1] === "remove") {
+  if (process.env.FAKE_UNREGISTER_MUTATE_THEN_HANG === "1") {
+    fs.rmSync(statePath, { force: true });
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+  }
+  if (process.env.FAKE_UNREGISTER_NO_MUTATION_THEN_HANG === "1") {
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+  }
   if (!readState() && process.env.FAKE_FAIL_EMPTY_REMOVE === "1") {
     console.error("simulated cleanup failure");
     process.exit(1);
@@ -393,6 +402,42 @@ describe("agent setup", () => {
     ).rejects.toMatchObject({ code: "AGENT_COMMAND_FAILED" });
     expect(JSON.parse(await readFile(fake.claudeState, "utf8"))).toEqual(legacy);
   });
+
+  it.each([
+    ["FAKE_UNREGISTER_MUTATE_THEN_HANG", true],
+    ["FAKE_UNREGISTER_NO_MUTATION_THEN_HANG", false],
+  ] as const)(
+    "inspects ambiguous unregister outcome %s before deciding whether to restore",
+    async (failureFlag, mutated) => {
+      const root = await makeTemporaryDirectory();
+      const fake = await createFakeAgents(root);
+      const serverEntryPath = path.join(root, "dist", "index.js");
+      await mkdir(path.dirname(serverEntryPath), { recursive: true });
+      await writeFile(serverEntryPath, "");
+      const legacy = { command: process.execPath, entry: serverEntryPath };
+      await writeFile(fake.claudeState, JSON.stringify(legacy));
+      const detections = await detectInstalledAgents({ environment: fake.environment });
+
+      await expect(
+        runAgentSetup({
+          agents: ["claude"],
+          detections,
+          environment: { ...fake.environment, [failureFlag]: "1" },
+          commandTimeoutMs: 150,
+          ...bundledAssets,
+          serverEntryPath,
+          nodeExecutable: process.execPath,
+        }),
+      ).rejects.toMatchObject({ code: "AGENT_COMMAND_TIMEOUT" });
+
+      expect(JSON.parse(await readFile(fake.claudeState, "utf8"))).toEqual(legacy);
+      if (!mutated) {
+        // A duplicate legacy add would fail because the authenticated preimage still exists,
+        // replacing the original timeout with AGENT_VERIFICATION_FAILED.
+        expect(await readFile(fake.claudeState, "utf8")).toBe(JSON.stringify(legacy));
+      }
+    },
+  );
 
   it.each(["codex", "gemini", "copilot"] as const)(
     "restores an authenticated legacy %s registration after guarded add fails",

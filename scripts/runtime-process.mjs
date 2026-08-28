@@ -122,16 +122,17 @@ export function runBoundedCommand(command, args, options = {}) {
     child.once("error", (error) => void finishError(error));
     child.once("close", (exitCode, signal) => {
       if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (exitCode === 0) resolve({ stdout, stderr });
-      else {
+      if (exitCode === 0) {
+        settled = true;
+        clearTimeout(timer);
+        resolve({ stdout, stderr });
+      } else {
         const error = new Error(
           `${command} exited with ${exitCode ?? `signal ${signal ?? "unknown"}`}`,
         );
         error.stdout = stdout;
         error.stderr = stderr;
-        reject(error);
+        void finishError(error);
       }
     });
     const timer = setTimeout(

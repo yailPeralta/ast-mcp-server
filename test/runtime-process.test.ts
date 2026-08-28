@@ -72,4 +72,38 @@ describe("bounded subprocess runtime", () => {
       expect(() => process.kill(pid, 0)).toThrow();
     },
   );
+
+  it.skipIf(process.platform === "win32")(
+    "terminates a nonzero command's surviving grandchild before rejecting with evidence",
+    async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "ast-process-nonzero-"));
+      roots.push(root);
+      const pidFile = path.join(root, "grandchild.pid");
+      const source = `
+        const { spawn } = require("node:child_process");
+        const fs = require("node:fs");
+        const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+        child.unref();
+        fs.writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));
+        console.log("captured stdout");
+        console.error("captured stderr");
+        process.exit(7);
+      `;
+
+      let rejection: unknown;
+      try {
+        await runBoundedCommand(process.execPath, ["-e", source]);
+      } catch (error) {
+        rejection = error;
+      }
+      expect(rejection).toMatchObject({
+        message: expect.stringContaining("exited with 7"),
+        stdout: expect.stringContaining("captured stdout"),
+        stderr: expect.stringContaining("captured stderr"),
+      });
+      const pid = Number(await readFile(pidFile, "utf8"));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(() => process.kill(pid, 0)).toThrow();
+    },
+  );
 });

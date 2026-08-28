@@ -7,6 +7,7 @@ import {
   planOpenCodeConfig,
   resolveOpenCodeConfigPath,
   restoreOpenCodeConfigPlan,
+  runOpenCodeConfigTransaction,
   withIsolatedOpenCodeConfig,
 } from "../src/services/opencode-config.js";
 
@@ -203,5 +204,51 @@ describe("OpenCode routed configuration", () => {
 
     await expect(restoreOpenCodeConfigPlan(plan)).rejects.toThrow(/concurrently/i);
     expect(await readFile(file, "utf8")).toBe('{"human":true}\n');
+  });
+
+  it("restores exact bytes and mode when publication succeeds before an exception", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "opencode.json");
+    const original =
+      '{\n  // preimage\n  "mcp":{"ast":{"type":"local","command":["/node","/server"],"enabled":true}}\n}\n';
+    await writeFile(file, original);
+    await chmod(file, 0o640);
+    const plan = await planOpenCodeConfig({
+      filePath: file,
+      nodeExecutable: "/node",
+      serverEntryPath: "/server",
+    });
+
+    await expect(
+      runOpenCodeConfigTransaction(plan, async () => {
+        await applyOpenCodeConfigPlan(plan);
+        throw new Error("publish acknowledgement lost");
+      }),
+    ).rejects.toThrow(/acknowledgement lost/i);
+
+    expect(await readFile(file, "utf8")).toBe(original);
+    expect((await stat(file)).mode & 0o777).toBe(0o640);
+  });
+
+  it("does not restore or replace the authenticated preimage when publication never happened", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "opencode.json");
+    const original = "{}\n";
+    await writeFile(file, original);
+    const before = await stat(file);
+    const plan = await planOpenCodeConfig({
+      filePath: file,
+      nodeExecutable: "/node",
+      serverEntryPath: "/server",
+    });
+
+    await expect(
+      runOpenCodeConfigTransaction(plan, async () => {
+        throw new Error("write rejected before publication");
+      }),
+    ).rejects.toThrow(/before publication/i);
+
+    expect(await readFile(file, "utf8")).toBe(original);
+    expect((await stat(file)).ino).toBe(before.ino);
   });
 });
