@@ -8,6 +8,8 @@ import { toolCatalog } from "../src/tools/catalog.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const PATCH_PATH = path.join(repositoryRoot, "cordis.patch.yml");
+const PACKAGE_PATH = path.join(repositoryRoot, "package.json");
+const SMOKE_PATH = path.join(repositoryRoot, "scripts", "dsh-adapter-smoke.mjs");
 
 /** The loader's serialized `!!js` expression node (`{ __jsExpr: string }`). */
 interface JsExpr {
@@ -67,6 +69,17 @@ async function parsePatch(): Promise<
 }
 
 describe("DeepSeek Harness adapter patch", () => {
+  it("keeps the dsh manifest exact and records compatibility identity outside it", async () => {
+    const metadata = JSON.parse(await readFile(PACKAGE_PATH, "utf8"));
+
+    expect(metadata.dsh).toEqual({ bundle: { patch: "./cordis.patch.yml" } });
+    expect(metadata.deepseekHarness).toEqual({
+      revision: "cd5ef8148158c3a752a658978873241fdf8e2bbc",
+      tag: "dsh-v0.1.2-alpha.1",
+      mcpClientVersion: "0.1.2-alpha.1",
+    });
+  });
+
   it("is a single insert mounting the official MCP client over stdio", async () => {
     const patch = await parsePatch();
 
@@ -105,6 +118,40 @@ describe("DeepSeek Harness adapter patch", () => {
 
     expect(config.env).toMatchObject({ AST_MCP_APPLY_GUARD: "deny" });
     expect(config.failOnStartupError).toBe(true);
+  });
+});
+
+describe("pinned Harness smoke contract", () => {
+  it("proves every promised class, native presentation and bounded apply denial", async () => {
+    const source = await readFile(SMOKE_PATH, "utf8");
+
+    for (const qualifiedName of [
+      "mcp__ast__ast_get_project_status",
+      "mcp__ast__ast_rename_symbol",
+      "mcp__ast__ast_get_operation_preview",
+      "mcp__ast__ast_apply_operation",
+    ]) {
+      expect(source).toContain(qualifiedName);
+    }
+    expect(source).toContain('tools.mode: "native"');
+    expect(source).toContain("tarballSha256");
+    expect(source).not.toContain("process.exit(");
+    expect(source).toContain('detached: process.platform !== "win32"');
+    expect(source).toContain("process.kill(-child.pid");
+    expect(source).toContain('run("taskkill", ["/pid", String(child.pid), "/t", "/f"]');
+    expect(source).toContain('child.kill("SIGKILL")');
+    expect(source).toContain("await guardedClient.close().catch");
+    expect(source).not.toContain("await client.close();");
+    expect(source).toContain("await rm(temporaryRoot, { recursive: true, force: true })");
+  });
+
+  it("keeps installation guidance executable and free of unpublished registry claims", async () => {
+    const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
+    const patch = await readFile(PATCH_PATH, "utf8");
+
+    expect(readme).toContain("yarn pack --out ast-mcp-server-%v.tgz");
+    expect(readme).toContain("--env AST_MCP_APPLY_GUARD=allow");
+    expect(patch).not.toContain("ast-mcp-server@0.13.0");
   });
 });
 

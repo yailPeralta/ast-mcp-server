@@ -2,7 +2,7 @@
 // DeepSeek Harness adapter smoke (roadmap initiative 4, first slice).
 //
 // Mandatory evidence against the PINNED Harness revision — never a green-skip:
-//   A. Packed tarball fixture: dsh.bundle.patch + dsh.pinnedHarness, shipped
+//   A. Packed tarball fixture: exact dsh.bundle.patch + deepseekHarness identity, shipped
 //      cordis.patch.yml, exact 0.13.0 version.
 //   B. Guard matrix against the resolved entrypoint (independent MCP client):
 //      unset/deny/invalid deny ast_apply_operation; only `allow` enables it;
@@ -10,8 +10,8 @@
 //   C. Pinned-Harness proof (HARD FAIL when the harness is missing or the
 //      revision/version mismatches): install the exact tarball into an isolated
 //      profile, prove --dump-config composition, then discover mcp__ast__* and
-//      invoke a read tool THROUGH the harness tool registry via a probe plugin,
-//      asserting apply is absent.
+//      invoke read, prepare, and preview tools THROUGH the harness tool registry
+//      via a probe plugin, asserting apply is absent and direct invocation is rejected.
 //
 // The pinned harness is resolved from DSH_HARNESS_SOURCE (a checkout at
 // cd5ef814) or, when unset, provisioned by cloning + building it at the exact
@@ -21,6 +21,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { execFile, spawn } from "node:child_process";
 import console from "node:console";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -54,8 +55,16 @@ async function run(command, args, options = {}) {
   return execFileAsync(command, args, {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
+    timeout: 10 * 60 * 1000,
+    killSignal: "SIGKILL",
     ...options,
   });
+}
+
+async function sha256(filePath) {
+  return createHash("sha256")
+    .update(await readFile(filePath))
+    .digest("hex");
 }
 
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ast-dsh-adapter-"));
@@ -105,6 +114,12 @@ async function resolvePinnedHarness() {
     : await provisionPinnedHarness(nodeBinDir);
   const head = (await run("git", ["-C", source, "rev-parse", "HEAD"])).stdout.trim();
   assert(head === PINNED_REVISION, `harness HEAD ${head} != pinned ${PINNED_REVISION}`);
+  const dirty = (await run("git", ["-C", source, "status", "--porcelain=v1"])).stdout.trim();
+  assert(dirty === "", "pinned harness source must be a clean checkout");
+  const taggedRevision = (
+    await run("git", ["-C", source, "rev-list", "-n", "1", PINNED_TAG])
+  ).stdout.trim();
+  assert(taggedRevision === head, `harness tag ${PINNED_TAG} does not resolve to pinned HEAD`);
   const cliBin = path.join(source, "apps", "cli", "lib", "bin.js");
   const cliVersion = (await run(nodeBin, [cliBin, "--version"])).stdout.trim();
   assert(cliVersion === PINNED_VERSION, `harness CLI ${cliVersion} != pinned ${PINNED_VERSION}`);
@@ -120,7 +135,18 @@ async function resolvePinnedHarness() {
     mcpClientVersion === PINNED_VERSION,
     `mcp-client ${mcpClientVersion} != pinned ${PINNED_VERSION}`,
   );
-  return { source, cliBin, nodeBin };
+  return {
+    source,
+    cliBin,
+    nodeBin,
+    identity: {
+      revision: head,
+      tag: PINNED_TAG,
+      cliVersion,
+      mcpClientVersion,
+      cliSha256: await sha256(cliBin),
+    },
+  };
 }
 
 /** Pack @deepseek-ai/dsh-mcp-client from the pinned source into an installable tarball. */
@@ -173,49 +199,104 @@ async function provisionPinnedHarness(nodeBinDir) {
 
 /** Boot the profile with the probe plugin and return its DSH_PROBE_RESULT marker. */
 async function bootWithProbe(cliBin, nodeBin, environment, fixtureProject, dshHome) {
+  const detached = process.platform !== "win32";
   const child = spawn(nodeBin, [cliBin, "--profile", "smoke", "probe"], {
     cwd: temporaryRoot,
     env: { ...environment, AST_PROBE_PROJECT_ROOT: fixtureProject, DSH_HOME: dshHome },
     stdio: ["ignore", "ignore", "pipe"],
+    detached: process.platform !== "win32",
   });
+  async function signalTree(signal) {
+    if (process.platform === "win32" && child.pid !== undefined) {
+      try {
+        await run("taskkill", ["/pid", String(child.pid), "/t", "/f"], { timeout: 5_000 });
+        return;
+      } catch {
+        // Fall through to the child handle when taskkill cannot observe the PID.
+      }
+    }
+    if (detached && child.pid !== undefined) {
+      try {
+        process.kill(-child.pid, signal);
+        return;
+      } catch {
+        // The process group may already be gone; fall through to the child handle.
+      }
+    }
+    child.kill(signal);
+  }
+  function waitForExit(timeoutMs) {
+    if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const onExit = () => {
+        clearTimeout(timer);
+        resolve(true);
+      };
+      const timer = setTimeout(() => {
+        child.off("exit", onExit);
+        resolve(false);
+      }, timeoutMs);
+      child.once("exit", onExit);
+    });
+  }
   let stderr = "";
   child.stderr.on("data", (chunk) => {
     stderr += chunk.toString();
   });
-  const marker = await new Promise((resolve) => {
-    let settled = false;
-    function finish(value) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(deadline);
-      clearInterval(interval);
-      resolve(value);
-    }
-    function check() {
-      const match = /DSH_PROBE_RESULT:(\{.*\})\n/u.exec(stderr);
-      if (match) finish(JSON.parse(match[1]));
-    }
-    const deadline = setTimeout(() => finish(undefined), 45_000);
-    const interval = setInterval(check, 250);
-    child.on("exit", () => {
-      const match = /DSH_PROBE_RESULT:(\{.*\})\n/u.exec(stderr);
-      finish(match ? JSON.parse(match[1]) : undefined);
+  try {
+    const marker = await new Promise((resolve) => {
+      let settled = false;
+      function finish(value) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(deadline);
+        clearInterval(interval);
+        resolve(value);
+      }
+      function check() {
+        const match = /DSH_PROBE_RESULT:(\{.*\})\n/u.exec(stderr);
+        if (match) finish(JSON.parse(match[1]));
+      }
+      const deadline = setTimeout(() => finish(undefined), 45_000);
+      const interval = setInterval(check, 250);
+      child.on("exit", () => {
+        const match = /DSH_PROBE_RESULT:(\{.*\})\n/u.exec(stderr);
+        finish(match ? JSON.parse(match[1]) : undefined);
+      });
     });
-  });
-  if (child.exitCode === null && child.signalCode === null) {
-    child.kill("SIGTERM");
-    await new Promise((resolve) => child.once("exit", resolve));
+    assert(marker !== undefined, "harness probe produced no DSH_PROBE_RESULT marker");
+    return marker;
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      await signalTree("SIGTERM");
+      const stopped = await waitForExit(5_000);
+      if (!stopped && child.exitCode === null && child.signalCode === null) {
+        // Keep the direct child kill as a platform fallback, then kill the POSIX
+        // process group so the Harness-owned stdio MCP child cannot be orphaned.
+        child.kill("SIGKILL");
+        await signalTree("SIGKILL");
+        assert(await waitForExit(5_000), "harness probe process tree did not terminate");
+      }
+    }
   }
-  assert(marker !== undefined, "harness probe produced no DSH_PROBE_RESULT marker");
-  return marker;
 }
 
-/** The probe plugin: discovers mcp__ast__* and invokes a read tool through ctx.tools. */
+/** The probe plugin: exercises every promised tool class through the Harness registry. */
 function probeSource() {
   return `export default function apply(ctx) {
   const projectRoot = process.env.AST_PROBE_PROJECT_ROOT;
   const deadline = Date.now() + 30000;
-  const marker = { discovered: [], applyAbsent: null, invoked: null, error: null };
+  const marker = { discovered: [], applyAbsent: null, calls: {}, applyRejected: null, error: null };
+  async function execute(name, arguments_, callId) {
+    const result = await ctx.tools.execute({
+      callId,
+      name,
+      arguments: arguments_,
+      signal: AbortSignal.timeout(10000),
+    });
+    if (result.isError) throw new Error(String(result.error).slice(0, 240));
+    return result.value && result.value.structuredContent;
+  }
   async function run() {
     while (Date.now() < deadline) {
       const names = ctx.tools.schemas().map((s) => s.name);
@@ -224,37 +305,66 @@ function probeSource() {
         marker.discovered = ast;
         marker.applyAbsent = !ast.includes("mcp__ast__ast_apply_operation");
         try {
-          const result = await ctx.tools.execute({
-            callId: "probe-status",
-            name: "mcp__ast__ast_get_project_status",
-            arguments: { project_root: projectRoot },
-            signal: AbortSignal.timeout(30000),
-          });
-          marker.invoked = result.isError
-            ? { isError: true, error: String(result.error) }
-            : {
-                isError: false,
-                structuredKeys:
-                  result.value &&
-                  result.value.structuredContent &&
-                  typeof result.value.structuredContent === "object"
-                    ? Object.keys(result.value.structuredContent).length
-                    : 0,
-              };
+          const status = await execute(
+            "mcp__ast__ast_get_project_status",
+            { project_root: projectRoot },
+            "probe-read",
+          );
+          marker.calls.read = { ok: status && typeof status === "object" };
+          const prepared = await execute(
+            "mcp__ast__ast_rename_symbol",
+            {
+              project_root: projectRoot,
+              file_path: "src/value.ts",
+              symbol_path: "value",
+              new_name: "renamedValue",
+              dry_run: true,
+            },
+            "probe-prepare",
+          );
+          marker.calls.prepare = {
+            ok: typeof prepared?.operation_id === "string",
+            operationId: prepared?.operation_id,
+          };
+          const preview = await execute(
+            "mcp__ast__ast_get_operation_preview",
+            { operation_id: prepared?.operation_id, file: "src/value.ts" },
+            "probe-preview",
+          );
+          marker.calls.preview = { ok: typeof preview?.plan_hash === "string" };
+          try {
+            const rejected = await ctx.tools.execute({
+              callId: "probe-apply-rejection",
+              name: "mcp__ast__ast_apply_operation",
+              arguments: { operation_id: prepared?.operation_id, plan_hash: preview?.plan_hash },
+              signal: AbortSignal.timeout(10000),
+            });
+            marker.applyRejected = {
+              ok: rejected.isError === true,
+              kind: rejected.isError === true ? "registry-error" : "unexpected-success",
+            };
+          } catch (error) {
+            marker.applyRejected = {
+              ok: true,
+              kind: "registry-exception",
+              detail: String(error).slice(0, 240),
+            };
+          }
         } catch (error) {
-          marker.invoked = { isError: true, error: String(error) };
+          marker.error = String(error).slice(0, 240);
         }
         process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n");
-        process.exit(marker.applyAbsent && marker.invoked && marker.invoked.isError === false ? 0 : 1);
         return;
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     marker.error = "timeout waiting for mcp__ast tools";
     process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n");
-    process.exit(1);
   }
-  void run();
+  void run().catch((error) => {
+    marker.error = String(error).slice(0, 240);
+    process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n");
+  });
 }
 `;
 }
@@ -273,24 +383,25 @@ try {
       `package.json version ${packageMetadata.version} does not match the pinned adapter fixture ${expectedVersion}`,
     );
   }
-  if (packageMetadata.dsh?.bundle?.patch !== "./cordis.patch.yml") {
+  if (JSON.stringify(packageMetadata.dsh) !== '{"bundle":{"patch":"./cordis.patch.yml"}}') {
     fail(`package.json must declare exactly "dsh": {"bundle": {"patch": "./cordis.patch.yml"}}`);
   }
-  const pinned = packageMetadata.dsh?.pinnedHarness;
+  const pinned = packageMetadata.deepseekHarness;
   assert(
     pinned?.revision === PINNED_REVISION,
-    "dsh.pinnedHarness.revision must equal the pinned revision",
+    "deepseekHarness.revision must equal the pinned revision",
   );
-  assert(pinned?.tag === PINNED_TAG, "dsh.pinnedHarness.tag must equal the pinned tag");
+  assert(pinned?.tag === PINNED_TAG, "deepseekHarness.tag must equal the pinned tag");
   assert(
     pinned?.mcpClientVersion === PINNED_VERSION,
-    "dsh.pinnedHarness.mcpClientVersion must equal the pinned mcp-client version",
+    "deepseekHarness.mcpClientVersion must equal the pinned mcp-client version",
   );
   if (!packageMetadata.files.includes("cordis.patch.yml")) {
     fail("cordis.patch.yml must be listed in package.json files");
   }
   await mkdir(packageDirectory, { recursive: true });
   await run(yarnExecutable, ["pack", "--out", archivePath], { cwd: repositoryRoot });
+  summary.tarballSha256 = await sha256(archivePath);
   const { stdout: archiveListing } = await run("tar", ["-tzf", archivePath]);
   const archiveFiles = archiveListing
     .split("\n")
@@ -402,7 +513,7 @@ try {
       const listed = await client.listTools();
       return listed.tools.map((tool) => tool.name).sort();
     } finally {
-      await client.close();
+      await client.close().catch(() => undefined);
     }
   }
 
@@ -436,38 +547,43 @@ try {
     cwd: consumerDirectory,
   });
   const guardedClient = new Client({ name: "ast-dsh-adapter-flow", version: "1.0.0" });
-  await guardedClient.connect(guardedTransport);
-  const call = async (name, arguments_) => {
-    const result = await guardedClient.callTool({ name, arguments: arguments_ });
-    if (result.isError === true) {
-      fail(`guarded call ${name} failed: ${JSON.stringify(result.content)}`);
-    }
-    return result.structuredContent;
-  };
-  await call("ast_get_project_status", { project_root: fixtureProject });
-  const prepared = await call("ast_rename_symbol", {
-    project_root: fixtureProject,
-    file_path: "src/value.ts",
-    symbol_path: "value",
-    new_name: "renamedValue",
-    dry_run: true,
-  });
-  assert(typeof prepared.operation_id === "string", "prepare returned no operation_id");
-  const preview = await call("ast_get_operation_preview", {
-    operation_id: prepared.operation_id,
-    file: "src/value.ts",
-  });
-  assert(typeof preview.plan_hash === "string", "preview returned no plan_hash");
-  await guardedClient.close();
+  try {
+    await guardedClient.connect(guardedTransport);
+    const call = async (name, arguments_) => {
+      const result = await guardedClient.callTool({ name, arguments: arguments_ });
+      if (result.isError === true) {
+        fail(`guarded call ${name} failed`);
+      }
+      return result.structuredContent;
+    };
+    await call("ast_get_project_status", { project_root: fixtureProject });
+    const prepared = await call("ast_rename_symbol", {
+      project_root: fixtureProject,
+      file_path: "src/value.ts",
+      symbol_path: "value",
+      new_name: "renamedValue",
+      dry_run: true,
+    });
+    assert(typeof prepared.operation_id === "string", "prepare returned no operation_id");
+    const preview = await call("ast_get_operation_preview", {
+      operation_id: prepared.operation_id,
+      file: "src/value.ts",
+    });
+    assert(typeof preview.plan_hash === "string", "preview returned no plan_hash");
+  } finally {
+    await guardedClient.close().catch(() => undefined);
+  }
   summary.phases.b = "ok";
 
   // ── Phase C: pinned-Harness proof (mandatory) ──────────────────────────────
-  const { source, cliBin, nodeBin } = await resolvePinnedHarness();
+  const { source, cliBin, nodeBin, identity } = await resolvePinnedHarness();
   const mcpClientArchive = await packPinnedMcpClient(source);
+  summary.harness = { ...identity, mcpClientTarballSha256: await sha256(mcpClientArchive) };
   await mkdir(dshHome, { recursive: true });
   const dshEnvironment = {
     ...process.env,
     DSH_HOME: dshHome,
+    DSH_TOOLS_MODE: "native",
     COREPACK_INTEGRITY_KEYS: "0",
     COREPACK_USE_LATEST: "0",
   };
@@ -481,6 +597,9 @@ try {
     cwd: temporaryRoot,
     env: dshEnvironment,
   });
+  const profileDir = path.join(dshHome, "profiles", "smoke");
+  const nativeModePatch = "- id: tools\n  config:\n    mode: native\n";
+  await writeFile(path.join(profileDir, "cordis.patch.yml"), nativeModePatch, "utf8");
   const { stdout: dumpConfig } = await run(
     nodeBin,
     [cliBin, "--profile", "smoke", "--dump-config"],
@@ -499,12 +618,16 @@ try {
   ]) {
     assert(dumpConfig.includes(required), `dump-config is missing ${required}`);
   }
+  assert(
+    /- id:\s*tools\s*\n(?:[ \t].*\n)*?[ \t]+mode:\s*native\b/mu.test(dumpConfig),
+    'dump-config must contain tools.mode: "native"',
+  );
+  summary.effectiveToolsMode = "native";
 
-  const profileDir = path.join(dshHome, "profiles", "smoke");
   await writeFile(path.join(profileDir, "probe.mjs"), probeSource(), "utf8");
   await writeFile(
     path.join(profileDir, "cordis.patch.yml"),
-    "- insert:\n    - id: ast-probe\n      name: './probe.mjs'\n      inject: ['tools']\n",
+    `${nativeModePatch}- insert:\n    - id: ast-probe\n      name: './probe.mjs'\n      inject: ['tools']\n`,
     "utf8",
   );
 
@@ -518,11 +641,11 @@ try {
     probe.applyAbsent === true,
     "harness registry still exposes mcp__ast__ast_apply_operation",
   );
-  assert(probe.invoked?.isError === false, "harness invocation failed");
-  assert(
-    typeof probe.invoked?.structuredKeys === "number" && probe.invoked.structuredKeys > 0,
-    "harness invocation returned no structured result",
-  );
+  assert(probe.calls?.read?.ok === true, "harness read invocation failed");
+  assert(probe.calls?.prepare?.ok === true, "harness prepare invocation failed");
+  assert(probe.calls?.preview?.ok === true, "harness preview invocation failed");
+  assert(probe.applyRejected?.ok === true, "harness accepted a denied apply invocation");
+  assert(probe.error === null, `harness probe failed: ${probe.error ?? "unknown"}`);
   summary.phases.c = "ok";
 
   console.log(`DSH_ADAPTER_SMOKE_OK:${JSON.stringify(summary)}`);

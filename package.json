@@ -29,12 +29,12 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    },
-    "pinnedHarness": {
-      "revision": "cd5ef8148158c3a752a658978873241fdf8e2bbc",
-      "tag": "dsh-v0.1.2-alpha.1",
-      "mcpClientVersion": "0.1.2-alpha.1"
     }
+  },
+  "deepseekHarness": {
+    "revision": "cd5ef8148158c3a752a658978873241fdf8e2bbc",
+    "tag": "dsh-v0.1.2-alpha.1",
+    "mcpClientVersion": "0.1.2-alpha.1"
   },
   "main": "dist/index.js",
   "bin": {
