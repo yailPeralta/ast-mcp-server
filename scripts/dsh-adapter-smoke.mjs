@@ -13,25 +13,24 @@
 //      invoke read, prepare, and preview tools THROUGH the harness tool registry
 //      via a probe plugin, asserting apply is absent and direct invocation is rejected.
 //
-// The pinned harness is resolved from DSH_HARNESS_SOURCE (a checkout at
-// cd5ef814) or, when unset, provisioned by cloning + building it at the exact
+// DSH_HARNESS_SOURCE, when provided, is Git object evidence only. The smoke
+// always materializes, installs, and builds a fresh checkout at the exact
 // revision. Teardown always runs via `finally`.
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import console from "node:console";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { URL, fileURLToPath, pathToFileURL } from "node:url";
 import { clearInterval, clearTimeout, setInterval, setTimeout } from "node:timers";
-import { promisify } from "node:util";
+import { URL, fileURLToPath, pathToFileURL } from "node:url";
 import yaml from "yaml";
+import { parseProbeMarker, runBoundedCommand, terminateProcessTree } from "./runtime-process.mjs";
 
-const execFileAsync = promisify(execFile);
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const packageMetadata = JSON.parse(
   await readFile(path.join(repositoryRoot, "package.json"), "utf8"),
@@ -52,11 +51,9 @@ function assert(condition, message) {
 }
 
 async function run(command, args, options = {}) {
-  return execFileAsync(command, args, {
-    encoding: "utf8",
+  return runBoundedCommand(command, args, {
     maxBuffer: 64 * 1024 * 1024,
     timeout: 10 * 60 * 1000,
-    killSignal: "SIGKILL",
     ...options,
   });
 }
@@ -65,6 +62,14 @@ async function sha256(filePath) {
   return createHash("sha256")
     .update(await readFile(filePath))
     .digest("hex");
+}
+
+async function closeMcpSession(client, transport, connected) {
+  if (connected) {
+    await client.close().catch(() => undefined);
+  } else {
+    await transport.close().catch(() => undefined);
+  }
 }
 
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ast-dsh-adapter-"));
@@ -109,13 +114,9 @@ async function resolveHarnessNode() {
 /** Resolve the pinned harness source and return its runnable CLI bin, verifying identity. */
 async function resolvePinnedHarness() {
   const { nodeBin, nodeBinDir } = await resolveHarnessNode();
-  const source = process.env.DSH_HARNESS_SOURCE
-    ? path.resolve(process.env.DSH_HARNESS_SOURCE)
-    : await provisionPinnedHarness(nodeBinDir);
+  const source = await materializePinnedHarness(nodeBinDir);
   const head = (await run("git", ["-C", source, "rev-parse", "HEAD"])).stdout.trim();
   assert(head === PINNED_REVISION, `harness HEAD ${head} != pinned ${PINNED_REVISION}`);
-  const dirty = (await run("git", ["-C", source, "status", "--porcelain=v1"])).stdout.trim();
-  assert(dirty === "", "pinned harness source must be a clean checkout");
   const taggedRevision = (
     await run("git", ["-C", source, "rev-list", "-n", "1", PINNED_TAG])
   ).stdout.trim();
@@ -144,7 +145,7 @@ async function resolvePinnedHarness() {
       tag: PINNED_TAG,
       cliVersion,
       mcpClientVersion,
-      cliSha256: await sha256(cliBin),
+      observedCliSha256: await sha256(cliBin),
     },
   };
 }
@@ -171,13 +172,33 @@ async function packPinnedMcpClient(source) {
   return archive;
 }
 
-/** Clone, install, and build the harness at the exact pinned revision. */
-async function provisionPinnedHarness(nodeBinDir) {
+/** Materialize, install, and build a fresh harness tree at the pinned revision. */
+async function materializePinnedHarness(nodeBinDir) {
   const root = path.join(temporaryRoot, "pinned-harness");
-  await run("git", ["clone", "--filter=blob:none", "--no-checkout", HARNESS_REPOSITORY, root], {
-    cwd: temporaryRoot,
-  });
-  await run("git", ["-C", root, "checkout", PINNED_REVISION]);
+  const suppliedEvidence = process.env.DSH_HARNESS_SOURCE
+    ? path.resolve(process.env.DSH_HARNESS_SOURCE)
+    : undefined;
+  const objectSource = suppliedEvidence ?? HARNESS_REPOSITORY;
+  if (suppliedEvidence) {
+    await run("git", ["-C", suppliedEvidence, "cat-file", "-e", `${PINNED_REVISION}^{commit}`]);
+    const tag = (
+      await run("git", ["-C", suppliedEvidence, "rev-parse", `${PINNED_TAG}^{commit}`])
+    ).stdout.trim();
+    assert(tag === PINNED_REVISION, `supplied harness tag ${PINNED_TAG} is not pinned`);
+  }
+  await run(
+    "git",
+    [
+      "clone",
+      "--no-hardlinks",
+      "--no-checkout",
+      ...(suppliedEvidence ? [] : ["--filter=blob:none"]),
+      objectSource,
+      root,
+    ],
+    { cwd: temporaryRoot },
+  );
+  await run("git", ["-C", root, "checkout", "--detach", PINNED_REVISION]);
   // The git commit is the authoritative identity (verified via rev-parse HEAD);
   // corepack verifies the pnpm download signature, which fails when the registry
   // rotates its signing key, so disable that check for the pinned source build.
@@ -199,46 +220,12 @@ async function provisionPinnedHarness(nodeBinDir) {
 
 /** Boot the profile with the probe plugin and return its DSH_PROBE_RESULT marker. */
 async function bootWithProbe(cliBin, nodeBin, environment, fixtureProject, dshHome) {
-  const detached = process.platform !== "win32";
   const child = spawn(nodeBin, [cliBin, "--profile", "smoke", "probe"], {
     cwd: temporaryRoot,
     env: { ...environment, AST_PROBE_PROJECT_ROOT: fixtureProject, DSH_HOME: dshHome },
     stdio: ["ignore", "ignore", "pipe"],
     detached: process.platform !== "win32",
   });
-  async function signalTree(signal) {
-    if (process.platform === "win32" && child.pid !== undefined) {
-      try {
-        await run("taskkill", ["/pid", String(child.pid), "/t", "/f"], { timeout: 5_000 });
-        return;
-      } catch {
-        // Fall through to the child handle when taskkill cannot observe the PID.
-      }
-    }
-    if (detached && child.pid !== undefined) {
-      try {
-        process.kill(-child.pid, signal);
-        return;
-      } catch {
-        // The process group may already be gone; fall through to the child handle.
-      }
-    }
-    child.kill(signal);
-  }
-  function waitForExit(timeoutMs) {
-    if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
-    return new Promise((resolve) => {
-      const onExit = () => {
-        clearTimeout(timer);
-        resolve(true);
-      };
-      const timer = setTimeout(() => {
-        child.off("exit", onExit);
-        resolve(false);
-      }, timeoutMs);
-      child.once("exit", onExit);
-    });
-  }
   let stderr = "";
   child.stderr.on("data", (chunk) => {
     stderr += chunk.toString();
@@ -254,30 +241,28 @@ async function bootWithProbe(cliBin, nodeBin, environment, fixtureProject, dshHo
         resolve(value);
       }
       function check() {
-        const match = /DSH_PROBE_RESULT:(\{.*\})\n/u.exec(stderr);
-        if (match) finish(JSON.parse(match[1]));
+        const parsed = parseProbeMarker(stderr);
+        if (parsed.status === "found") finish(parsed.value);
+        if (parsed.status === "invalid") finish({ parseError: parsed.detail });
       }
       const deadline = setTimeout(() => finish(undefined), 45_000);
       const interval = setInterval(check, 250);
       child.on("exit", () => {
-        const match = /DSH_PROBE_RESULT:(\{.*\})\n/u.exec(stderr);
-        finish(match ? JSON.parse(match[1]) : undefined);
+        const parsed = parseProbeMarker(stderr);
+        finish(
+          parsed.status === "found"
+            ? parsed.value
+            : parsed.status === "invalid"
+              ? { parseError: parsed.detail }
+              : undefined,
+        );
       });
     });
     assert(marker !== undefined, "harness probe produced no DSH_PROBE_RESULT marker");
+    assert(marker.parseError === undefined, marker.parseError ?? "invalid probe marker");
     return marker;
   } finally {
-    if (child.exitCode === null && child.signalCode === null) {
-      await signalTree("SIGTERM");
-      const stopped = await waitForExit(5_000);
-      if (!stopped && child.exitCode === null && child.signalCode === null) {
-        // Keep the direct child kill as a platform fallback, then kill the POSIX
-        // process group so the Harness-owned stdio MCP child cannot be orphaned.
-        child.kill("SIGKILL");
-        await signalTree("SIGKILL");
-        assert(await waitForExit(5_000), "harness probe process tree did not terminate");
-      }
-    }
+    await terminateProcessTree(child);
   }
 }
 
@@ -401,7 +386,7 @@ try {
   }
   await mkdir(packageDirectory, { recursive: true });
   await run(yarnExecutable, ["pack", "--out", archivePath], { cwd: repositoryRoot });
-  summary.tarballSha256 = await sha256(archivePath);
+  summary.observedTarballSha256 = await sha256(archivePath);
   const { stdout: archiveListing } = await run("tar", ["-tzf", archivePath]);
   const archiveFiles = archiveListing
     .split("\n")
@@ -508,12 +493,14 @@ try {
       cwd: consumerDirectory,
     });
     const client = new Client({ name: "ast-dsh-adapter-smoke", version: "1.0.0" });
-    await client.connect(transport);
+    let connected = false;
     try {
+      await client.connect(transport);
+      connected = true;
       const listed = await client.listTools();
       return listed.tools.map((tool) => tool.name).sort();
     } finally {
-      await client.close().catch(() => undefined);
+      await closeMcpSession(client, transport, connected);
     }
   }
 
@@ -547,8 +534,10 @@ try {
     cwd: consumerDirectory,
   });
   const guardedClient = new Client({ name: "ast-dsh-adapter-flow", version: "1.0.0" });
+  let guardedConnected = false;
   try {
     await guardedClient.connect(guardedTransport);
+    guardedConnected = true;
     const call = async (name, arguments_) => {
       const result = await guardedClient.callTool({ name, arguments: arguments_ });
       if (result.isError === true) {
@@ -571,14 +560,17 @@ try {
     });
     assert(typeof preview.plan_hash === "string", "preview returned no plan_hash");
   } finally {
-    await guardedClient.close().catch(() => undefined);
+    await closeMcpSession(guardedClient, guardedTransport, guardedConnected);
   }
   summary.phases.b = "ok";
 
   // ── Phase C: pinned-Harness proof (mandatory) ──────────────────────────────
   const { source, cliBin, nodeBin, identity } = await resolvePinnedHarness();
   const mcpClientArchive = await packPinnedMcpClient(source);
-  summary.harness = { ...identity, mcpClientTarballSha256: await sha256(mcpClientArchive) };
+  summary.harness = {
+    ...identity,
+    observedMcpClientTarballSha256: await sha256(mcpClientArchive),
+  };
   await mkdir(dshHome, { recursive: true });
   const dshEnvironment = {
     ...process.env,

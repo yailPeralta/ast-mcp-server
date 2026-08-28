@@ -134,15 +134,20 @@ describe("pinned Harness smoke contract", () => {
       expect(source).toContain(qualifiedName);
     }
     expect(source).toContain('tools.mode: "native"');
-    expect(source).toContain("tarballSha256");
+    expect(source).toContain("observedTarballSha256");
     expect(source).not.toContain("process.exit(");
     expect(source).toContain('detached: process.platform !== "win32"');
-    expect(source).toContain("process.kill(-child.pid");
-    expect(source).toContain('run("taskkill", ["/pid", String(child.pid), "/t", "/f"]');
-    expect(source).toContain('child.kill("SIGKILL")');
-    expect(source).toContain("await guardedClient.close().catch");
+    expect(source).toContain("terminateProcessTree(child)");
+    expect(source).toContain("closeMcpSession");
+    expect(source).toContain("await transport.close().catch");
     expect(source).not.toContain("await client.close();");
     expect(source).toContain("await rm(temporaryRoot, { recursive: true, force: true })");
+    expect(source).toContain("materializePinnedHarness");
+    expect(source).toContain('"--no-hardlinks"');
+    expect(source).not.toContain("const source = process.env.DSH_HARNESS_SOURCE");
+    expect(source).toContain("observedCliSha256");
+    expect(source).toContain("closeMcpSession");
+    expect(source).not.toContain("execFileAsync");
   });
 
   it("keeps installation guidance executable and free of unpublished registry claims", async () => {
