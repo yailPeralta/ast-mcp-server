@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- DeepSeek Harness Developer Preview adapter (roadmap initiative 4, first slice): `cordis.patch.yml` mounts the packaged `ast-mcp-server` stdio command through `@deepseek-ai/dsh-mcp-client`, declared via `"dsh": {"bundle": {"patch": "./cordis.patch.yml"}}`. The first surface is reads + prepare + preview with a deny-by-default apply guard (`AST_MCP_APPLY_GUARD=deny` keeps `ast_apply_operation` unregistered); `yarn test:dsh-adapter` proves the packed tarball fixture, package-relative entrypoint resolution, and the independent stdio smoke under `tools.mode: native`.
+- DeepSeek Harness Developer Preview adapter (roadmap initiative 4, first slice): `cordis.patch.yml` mounts the packaged `ast-mcp-server` stdio command through `@deepseek-ai/dsh-mcp-client`, declared via `"dsh": {"bundle": {"patch": "./cordis.patch.yml"}}` with the pinned identity recorded in `dsh.pinnedHarness` (revision `cd5ef814…`, `dsh-v0.1.2-alpha.1`). The first surface is reads + prepare + preview with a fail-closed apply guard (`ast_apply_operation` registers only under an explicit `AST_MCP_APPLY_GUARD=allow`; unset, `deny`, or invalid denies it). `yarn test:dsh-adapter` is a mandatory, never-skipping gate: tarball fixture, guard matrix, and — against the source-built pinned Harness — profile install, `--dump-config` composition, and Harness-mediated discovery + invocation of `mcp__ast__*` with apply absent.
 
 ## [0.12.0] — published to `latest` and `next`, registry verified (2026-08-27)
 

@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 // DeepSeek Harness adapter smoke (roadmap initiative 4, first slice).
 //
-// Phases:
-//   A. Pack the tarball and assert the adapter fixture (dsh.bundle.patch,
-//      cordis.patch.yml shipped, exact 0.13.0 version).
-//   B. Independent MCP smoke against the package-relative entrypoint exactly as
-//      the patch resolves it: guard on -> 15 tools, no ast_apply_operation,
-//      reads/prepare/preview work; guard off -> full 16-tool surface.
-//   C. Harness composition smoke (only when a dsh CLI is available; otherwise a
-//      bounded SKIP marker): install the tarball into a scratch profile, prove
-//      dump-config composition, and observe the harness spawn the installed
-//      ast-mcp-server over stdio under tools.mode native (the default).
+// Mandatory evidence against the PINNED Harness revision — never a green-skip:
+//   A. Packed tarball fixture: dsh.bundle.patch + dsh.pinnedHarness, shipped
+//      cordis.patch.yml, exact 0.13.0 version.
+//   B. Guard matrix against the resolved entrypoint (independent MCP client):
+//      unset/deny/invalid deny ast_apply_operation; only `allow` enables it;
+//      reads + prepare + preview work while apply is denied.
+//   C. Pinned-Harness proof (HARD FAIL when the harness is missing or the
+//      revision/version mismatches): install the exact tarball into an isolated
+//      profile, prove --dump-config composition, then discover mcp__ast__* and
+//      invoke a read tool THROUGH the harness tool registry via a probe plugin,
+//      asserting apply is absent.
 //
-// Exit is non-zero only on real assertion failures; a missing dsh CLI/pnpm in
-// phase C prints a SKIP marker and succeeds (the tarball fixture and
-// independent smoke in phases A/B always run).
+// The pinned harness is resolved from DSH_HARNESS_SOURCE (a checkout at
+// cd5ef814) or, when unset, provisioned by cloning + building it at the exact
+// revision. Teardown always runs via `finally`.
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -36,6 +37,10 @@ const packageMetadata = JSON.parse(
 );
 const expectedVersion = "0.13.0";
 const yarnExecutable = process.platform === "win32" ? "yarn.cmd" : "yarn";
+const PINNED_REVISION = "cd5ef8148158c3a752a658978873241fdf8e2bbc";
+const PINNED_TAG = "dsh-v0.1.2-alpha.1";
+const PINNED_VERSION = "0.1.2-alpha.1";
+const HARNESS_REPOSITORY = "https://github.com/deepseek-ai/deepseek-harness.git";
 
 function fail(message) {
   throw new Error(`dsh-adapter-smoke: ${message}`);
@@ -46,15 +51,158 @@ function assert(condition, message) {
 }
 
 async function run(command, args, options = {}) {
-  const result = await execFileAsync(command, args, {
+  return execFileAsync(command, args, {
     encoding: "utf8",
-    maxBuffer: 32 * 1024 * 1024,
+    maxBuffer: 64 * 1024 * 1024,
     ...options,
   });
-  return result;
 }
 
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ast-dsh-adapter-"));
+
+/** Resolve the pinned harness source and return its runnable CLI bin, verifying identity. */
+async function resolvePinnedHarness() {
+  const source = process.env.DSH_HARNESS_SOURCE
+    ? path.resolve(process.env.DSH_HARNESS_SOURCE)
+    : await provisionPinnedHarness();
+  const head = (await run("git", ["-C", source, "rev-parse", "HEAD"])).stdout.trim();
+  assert(head === PINNED_REVISION, `harness HEAD ${head} != pinned ${PINNED_REVISION}`);
+  const cliBin = path.join(source, "apps", "cli", "lib", "bin.js");
+  const cliVersion = (await run(process.execPath, [cliBin, "--version"])).stdout.trim();
+  assert(cliVersion === PINNED_VERSION, `harness CLI ${cliVersion} != pinned ${PINNED_VERSION}`);
+  const mcpClientVersion = (
+    await run(process.execPath, [
+      "-p",
+      `require(${JSON.stringify(
+        path.join(source, "packages", "mcp", "mcp-client", "package.json"),
+      )}).version`,
+    ])
+  ).stdout.trim();
+  assert(
+    mcpClientVersion === PINNED_VERSION,
+    `mcp-client ${mcpClientVersion} != pinned ${PINNED_VERSION}`,
+  );
+  return { source, cliBin };
+}
+
+/** Pack @deepseek-ai/dsh-mcp-client from the pinned source into an installable tarball. */
+async function packPinnedMcpClient(source) {
+  const cwd = path.join(source, "packages", "mcp", "mcp-client");
+  const environment = { ...process.env, NODE_OPTIONS: "", CI: "true" };
+  await run("pnpm", ["pack", "--pack-destination", temporaryRoot], { cwd, env: environment });
+  const archive = path.join(temporaryRoot, `deepseek-ai-dsh-mcp-client-${PINNED_VERSION}.tgz`);
+  assert(
+    await readFile(archive, "utf8").then(
+      () => true,
+      () => false,
+    ),
+    `pinned mcp-client tarball missing at ${archive}`,
+  );
+  return archive;
+}
+
+/** Clone, install, and build the harness at the exact pinned revision. */
+async function provisionPinnedHarness() {
+  const root = path.join(temporaryRoot, "pinned-harness");
+  await run("git", ["clone", "--filter=blob:none", "--no-checkout", HARNESS_REPOSITORY, root], {
+    cwd: temporaryRoot,
+  });
+  await run("git", ["-C", root, "checkout", PINNED_REVISION]);
+  const provisionEnvironment = { ...process.env, NODE_OPTIONS: "", CI: "true" };
+  await run("corepack", ["enable"], { cwd: root, env: provisionEnvironment });
+  await run("pnpm", ["install"], { cwd: root, env: provisionEnvironment });
+  await run("pnpm", ["build"], { cwd: root, env: provisionEnvironment });
+  return root;
+}
+
+/** Boot the profile with the probe plugin and return its DSH_PROBE_RESULT marker. */
+async function bootWithProbe(cliBin, environment, fixtureProject, dshHome) {
+  const child = spawn(process.execPath, [cliBin, "--profile", "smoke", "probe"], {
+    cwd: temporaryRoot,
+    env: { ...environment, AST_PROBE_PROJECT_ROOT: fixtureProject, DSH_HOME: dshHome },
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk.toString();
+  });
+  const marker = await new Promise((resolve) => {
+    let settled = false;
+    function finish(value) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      clearInterval(interval);
+      resolve(value);
+    }
+    function check() {
+      const match = /DSH_PROBE_RESULT:(\{.*\})\n/u.exec(stderr);
+      if (match) finish(JSON.parse(match[1]));
+    }
+    const deadline = setTimeout(() => finish(undefined), 45_000);
+    const interval = setInterval(check, 250);
+    child.on("exit", () => {
+      const match = /DSH_PROBE_RESULT:(\{.*\})\n/u.exec(stderr);
+      finish(match ? JSON.parse(match[1]) : undefined);
+    });
+  });
+  if (child.exitCode === null && child.signalCode === null) {
+    child.kill("SIGTERM");
+    await new Promise((resolve) => child.once("exit", resolve));
+  }
+  assert(marker !== undefined, "harness probe produced no DSH_PROBE_RESULT marker");
+  return marker;
+}
+
+/** The probe plugin: discovers mcp__ast__* and invokes a read tool through ctx.tools. */
+function probeSource() {
+  return `export default function apply(ctx) {
+  const projectRoot = process.env.AST_PROBE_PROJECT_ROOT;
+  const deadline = Date.now() + 30000;
+  const marker = { discovered: [], applyAbsent: null, invoked: null, error: null };
+  async function run() {
+    while (Date.now() < deadline) {
+      const names = ctx.tools.schemas().map((s) => s.name);
+      const ast = names.filter((n) => n.startsWith("mcp__ast__")).sort();
+      if (ast.length > 0) {
+        marker.discovered = ast;
+        marker.applyAbsent = !ast.includes("mcp__ast__ast_apply_operation");
+        try {
+          const result = await ctx.tools.execute({
+            callId: "probe-status",
+            name: "mcp__ast__ast_get_project_status",
+            arguments: { project_root: projectRoot },
+            signal: AbortSignal.timeout(30000),
+          });
+          marker.invoked = result.isError
+            ? { isError: true, error: String(result.error) }
+            : {
+                isError: false,
+                structuredKeys:
+                  result.value &&
+                  result.value.structuredContent &&
+                  typeof result.value.structuredContent === "object"
+                    ? Object.keys(result.value.structuredContent).length
+                    : 0,
+              };
+        } catch (error) {
+          marker.invoked = { isError: true, error: String(error) };
+        }
+        process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n");
+        process.exit(marker.applyAbsent && marker.invoked && marker.invoked.isError === false ? 0 : 1);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    marker.error = "timeout waiting for mcp__ast tools";
+    process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n");
+    process.exit(1);
+  }
+  void run();
+}
+`;
+}
+
 const packageDirectory = path.join(temporaryRoot, "package");
 const archivePath = path.join(packageDirectory, "ast-mcp-server.tgz");
 const consumerDirectory = path.join(temporaryRoot, "consumer");
@@ -72,6 +220,16 @@ try {
   if (packageMetadata.dsh?.bundle?.patch !== "./cordis.patch.yml") {
     fail(`package.json must declare exactly "dsh": {"bundle": {"patch": "./cordis.patch.yml"}}`);
   }
+  const pinned = packageMetadata.dsh?.pinnedHarness;
+  assert(
+    pinned?.revision === PINNED_REVISION,
+    "dsh.pinnedHarness.revision must equal the pinned revision",
+  );
+  assert(pinned?.tag === PINNED_TAG, "dsh.pinnedHarness.tag must equal the pinned tag");
+  assert(
+    pinned?.mcpClientVersion === PINNED_VERSION,
+    "dsh.pinnedHarness.mcpClientVersion must equal the pinned mcp-client version",
+  );
   if (!packageMetadata.files.includes("cordis.patch.yml")) {
     fail("cordis.patch.yml must be listed in package.json files");
   }
@@ -109,7 +267,7 @@ try {
   );
   summary.phases.a = "ok";
 
-  // ── Phase B: independent MCP smoke at the resolved entrypoint ──────────────
+  // ── Phase B: guard matrix + flow at the resolved entrypoint ────────────────
   await mkdir(consumerDirectory, { recursive: true });
   const archiveReference = `file:${archivePath.replaceAll("\\", "/")}`;
   await writeFile(
@@ -143,9 +301,6 @@ try {
   );
   await readFile(path.join(installedPackageRoot, "cordis.patch.yml"), "utf8");
 
-  // The patch resolves the entrypoint relative to the profile directory
-  // (`baseUrl`, a trailing-slash file URL); the consumer directory is the
-  // analogous install anchor.
   const resolvedEntrypoint = fileURLToPath(
     new URL(
       "node_modules/ast-mcp-server/dist/index.js",
@@ -168,16 +323,16 @@ try {
   await writeFile(path.join(fixtureProject, "tsconfig.json"), "{}\n", "utf8");
   await writeFile(path.join(fixtureProject, "src/value.ts"), "export const value = 1;\n", "utf8");
 
-  async function probeTools(environment) {
+  async function listTools(guardValue) {
     const childEnvironment = {
       ...process.env,
-      HOME: path.join(temporaryRoot, environment.label),
-      XDG_CACHE_HOME: path.join(temporaryRoot, environment.label, "cache"),
+      HOME: path.join(temporaryRoot, `home-${guardValue ?? "unset"}`),
+      XDG_CACHE_HOME: path.join(temporaryRoot, `cache-${guardValue ?? "unset"}`),
     };
-    if (environment.guard === undefined) {
+    if (guardValue === undefined) {
       delete childEnvironment.AST_MCP_APPLY_GUARD;
     } else {
-      childEnvironment.AST_MCP_APPLY_GUARD = environment.guard;
+      childEnvironment.AST_MCP_APPLY_GUARD = guardValue;
     }
     const transport = new StdioClientTransport({
       command: process.execPath,
@@ -195,15 +350,23 @@ try {
     }
   }
 
-  const guarded = await probeTools({ label: "guarded", guard: "deny" });
-  assert(guarded.length === 15, `guarded tool count ${guarded.length}, expected 15`);
+  for (const guardValue of [undefined, "deny", "bogus-value"]) {
+    const names = await listTools(guardValue);
+    assert(
+      names.length === 15,
+      `guard ${String(guardValue)}: expected 15 tools, got ${names.length}`,
+    );
+    assert(
+      !names.includes("ast_apply_operation"),
+      `guard ${String(guardValue)}: ast_apply_operation must be denied`,
+    );
+  }
+  const allowed = await listTools("allow");
+  assert(allowed.length === 16, `guard allow: expected 16 tools, got ${allowed.length}`);
   assert(
-    !guarded.includes("ast_apply_operation"),
-    "guarded surface still exposes ast_apply_operation",
+    allowed.includes("ast_apply_operation"),
+    "guard allow: ast_apply_operation must be present",
   );
-  const unguarded = await probeTools({ label: "unguarded", guard: undefined });
-  assert(unguarded.length === 16, `unguarded tool count ${unguarded.length}, expected 16`);
-  assert(unguarded.includes("ast_apply_operation"), "unguarded surface lost ast_apply_operation");
 
   const guardedTransport = new StdioClientTransport({
     command: process.execPath,
@@ -242,28 +405,30 @@ try {
   await guardedClient.close();
   summary.phases.b = "ok";
 
-  // ── Phase C: harness composition smoke (dsh CLI optional) ───────────────────
-  const dshBin = process.env.DSH_BIN || "dsh";
-  try {
-    await run(dshBin, ["--version"], { cwd: temporaryRoot });
-    await run("pnpm", ["--version"], { cwd: temporaryRoot });
-  } catch {
-    summary.phases.c = { skipped: "dsh CLI and/or pnpm unavailable" };
-    console.log(`DSH_ADAPTER_SMOKE_SKIP:dsh-cli:${JSON.stringify(summary.phases.c)}`);
-    process.exitCode = 0;
-    process.exit(0);
-  }
-
+  // ── Phase C: pinned-Harness proof (mandatory) ──────────────────────────────
+  const { source, cliBin } = await resolvePinnedHarness();
+  const mcpClientArchive = await packPinnedMcpClient(source);
   await mkdir(dshHome, { recursive: true });
   const dshEnvironment = { ...process.env, DSH_HOME: dshHome };
-  await run(dshBin, ["plugin", "--profile", "smoke", "add", archiveReference], {
+  await run(process.execPath, [cliBin, "plugin", "--profile", "smoke", "add", archiveReference], {
     cwd: temporaryRoot,
     env: dshEnvironment,
   });
-  const { stdout: dumpConfig } = await run(dshBin, ["--profile", "smoke", "--dump-config"], {
-    cwd: temporaryRoot,
-    env: dshEnvironment,
-  });
+  // Pin the bridge itself: install the pinned mcp-client tarball so the mcp row
+  // resolves the exact revision rather than an ambient package.
+  await run(
+    process.execPath,
+    [cliBin, "plugin", "--profile", "smoke", "add", `file:${mcpClientArchive}`],
+    {
+      cwd: temporaryRoot,
+      env: dshEnvironment,
+    },
+  );
+  const { stdout: dumpConfig } = await run(
+    process.execPath,
+    [cliBin, "--profile", "smoke", "--dump-config"],
+    { cwd: temporaryRoot, env: dshEnvironment },
+  );
   for (const required of [
     "mcp-ast",
     "name: '@deepseek-ai/dsh-mcp-client'",
@@ -275,33 +440,29 @@ try {
     assert(dumpConfig.includes(required), `dump-config is missing ${required}`);
   }
 
-  const child = spawn(dshBin, ["--profile", "smoke", "probe"], {
-    cwd: temporaryRoot,
-    env: dshEnvironment,
-    stdio: ["ignore", "ignore", "pipe"],
-  });
-  let bootStderr = "";
-  child.stderr.on("data", (chunk) => {
-    bootStderr += chunk.toString();
-  });
-  const observedStartup = await new Promise((resolve) => {
-    const deadline = setTimeout(() => resolve(false), 30_000);
-    const interval = setInterval(() => {
-      if (bootStderr.includes("ast-mcp-server running over stdio.")) {
-        clearTimeout(deadline);
-        clearInterval(interval);
-        resolve(true);
-      }
-    }, 250);
-    child.on("exit", () => {
-      clearTimeout(deadline);
-      clearInterval(interval);
-      resolve(bootStderr.includes("ast-mcp-server running over stdio."));
-    });
-  });
-  assert(observedStartup, "harness boot never observed the installed ast-mcp-server stdio startup");
-  child.kill("SIGTERM");
-  await new Promise((resolve) => child.on("exit", resolve));
+  const profileDir = path.join(dshHome, "profiles", "smoke");
+  await writeFile(path.join(profileDir, "probe.mjs"), probeSource(), "utf8");
+  await writeFile(
+    path.join(profileDir, "cordis.patch.yml"),
+    "- insert:\n    - id: ast-probe\n      name: './probe.mjs'\n      inject: ['tools']\n",
+    "utf8",
+  );
+
+  const probe = await bootWithProbe(cliBin, dshEnvironment, fixtureProject, dshHome);
+  const astNames = (probe.discovered ?? []).filter((name) => name.startsWith("mcp__ast__"));
+  assert(
+    astNames.length === 15,
+    `harness discovered ${astNames.length} mcp__ast__ tools, expected 15`,
+  );
+  assert(
+    probe.applyAbsent === true,
+    "harness registry still exposes mcp__ast__ast_apply_operation",
+  );
+  assert(probe.invoked?.isError === false, "harness invocation failed");
+  assert(
+    typeof probe.invoked?.structuredKeys === "number" && probe.invoked.structuredKeys > 0,
+    "harness invocation returned no structured result",
+  );
   summary.phases.c = "ok";
 
   console.log(`DSH_ADAPTER_SMOKE_OK:${JSON.stringify(summary)}`);

@@ -29,6 +29,11 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "pinnedHarness": {
+      "revision": "cd5ef8148158c3a752a658978873241fdf8e2bbc",
+      "tag": "dsh-v0.1.2-alpha.1",
+      "mcpClientVersion": "0.1.2-alpha.1"
     }
   },
   "main": "dist/index.js",
@@ -87,7 +92,6 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@deepseek-ai/dsh-mcp-client": "0.1.1-rc.2",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "@toon-format/toon": "4.1.0",
     "diff": "^9.0.0",
