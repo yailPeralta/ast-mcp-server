@@ -137,6 +137,19 @@ if (executableName === "hermes" && args[0] === "mcp" && args[1] === "list") {
   process.exit(0);
 }
 
+if (executableName === "hermes" && args[0] === "config" && args[1] === "get") {
+  const state = readState();
+  if (!state) process.exit(1);
+  console.log(
+    JSON.stringify({
+      command: state.command,
+      args: [state.entry],
+      ...(state.guard ? { env: { AST_MCP_APPLY_GUARD: state.guard } } : {}),
+    }),
+  );
+  process.exit(0);
+}
+
 if (executableName === "hermes" && args[0] === "mcp" && args[1] === "test") {
   const state = readState();
   if (!state || state.conflict) {
@@ -236,6 +249,10 @@ if (
     console.error("Unsupported Copilot MCP add syntax.");
     process.exit(2);
   }
+  if (guardFromArgs() === "allow" && process.env.FAKE_FAIL_GUARDED_ADD === "1") {
+    console.error("simulated guarded registration failure");
+    process.exit(1);
+  }
   writeState({ command: args[separator + 1], entry: args[separator + 2], guard: guardFromArgs() });
   console.log("Added MCP server ast");
   process.exit(0);
@@ -272,6 +289,10 @@ if (executableName === "gemini" && args[0] === "mcp" && args[1] === "add") {
       continue;
     }
     positionals.push(args[index]);
+  }
+  if (guardFromArgs() === "allow" && process.env.FAKE_FAIL_GUARDED_ADD === "1") {
+    console.error("simulated guarded registration failure");
+    process.exit(1);
   }
   writeState({ command: positionals[0], entry: positionals[1], guard: guardFromArgs() });
   console.log("MCP server ast added.");

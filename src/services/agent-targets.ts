@@ -93,14 +93,14 @@ function expected(context: AgentTargetMcpContext, command: unknown, args: unknow
 }
 
 function structuredGuardStatus(...values: unknown[]): "current" | "repairable" | "conflict" {
-  const records = values.filter(
+  const provided = values.filter((value) => value !== undefined);
+  if (provided.length === 0) return "repairable";
+  const records = provided.filter(
     (value): value is Record<string, unknown> =>
       value !== null && typeof value === "object" && !Array.isArray(value),
   );
-  if (records.length === 0 || records.every((record) => Object.keys(record).length === 0)) {
-    return "repairable";
-  }
-  return records.length === 1 &&
+  return records.length === provided.length &&
+    records.length === 1 &&
     Object.keys(records[0]).length === 1 &&
     records[0].AST_MCP_APPLY_GUARD === "allow"
     ? "current"
@@ -147,7 +147,7 @@ function structuredInspection(
     return { status: "error", operation: "MCP inspection", result };
   const transport = (value.transport ?? value) as Record<string, unknown>;
   return matchingRegistration(
-    expected(context, transport.command, transport.args),
+    transport.type === "stdio" && expected(context, transport.command, transport.args),
     structuredGuardStatus(transport.env, transport.environment),
   );
 }
@@ -217,10 +217,11 @@ const claudeMcp: AgentTargetMcpAdapter = {
         : { status: "error", operation: "MCP inspection", result };
     const fields = new Map<string, string>();
     for (const line of result.stdout.split(/\r?\n/)) {
-      const match = line.match(/^\s*(Status|Type|Command|Args):\s*(.*)$/i);
+      const match = line.match(/^\s*(Scope|Status|Type|Command|Args):\s*(.*)$/i);
       if (match) fields.set(match[1].toLowerCase(), match[2].trim());
     }
     const matches =
+      /^user config\b/i.test(fields.get("scope") ?? "") &&
       /connected/i.test(fields.get("status") ?? "") &&
       fields.get("type")?.toLowerCase() === "stdio" &&
       expected(context, fields.get("command"), [fields.get("args")]);
@@ -268,19 +269,51 @@ function hermesRegister(
 }
 
 const hermesMcp: AgentTargetMcpAdapter = {
-  async inspect(runtime) {
+  async inspect(runtime, context) {
     const listed = await runtime.run(["mcp", "list"]);
     if (listed.exitCode !== 0) return { status: "error", operation: "MCP list", result: listed };
     if (!/^\s*ast(?:\s|$)/im.test(listed.stdout)) return { status: "missing" };
+    const configured = await runtime.run(["config", "get", "mcp_servers.ast", "--json"]);
+    const registration = parseJson(configured) as Record<string, unknown> | undefined;
+    if (
+      configured.exitCode !== 0 ||
+      !registration ||
+      Array.isArray(registration) ||
+      !expected(context, registration.command, registration.args)
+    ) {
+      return {
+        status: "conflict",
+        detail: "The existing 'ast' registration cannot be authenticated as this package.",
+      };
+    }
+    const guardStatus = structuredGuardStatus(registration.env);
+    const admittedKeys =
+      guardStatus === "repairable" ? ["args", "command"] : ["args", "command", "env"];
+    if (
+      guardStatus === "conflict" ||
+      Object.keys(registration).sort().join(",") !== admittedKeys.join(",")
+    ) {
+      return {
+        status: "conflict",
+        detail: "The existing 'ast' registration has unsupported configuration.",
+      };
+    }
     const tested = await runtime.run(["mcp", "test", MCP_SERVER_NAME]);
     const expectedWithoutApply = EXPECTED_TOOLS.filter((tool) => tool !== APPLY_TOOL);
     if (
       tested.exitCode === 0 &&
       expectedWithoutApply.every((tool) => tested.stdout.includes(tool))
     ) {
-      return !EXPECTED_TOOLS.includes(APPLY_TOOL) || tested.stdout.includes(APPLY_TOOL)
+      const applyPresent =
+        !EXPECTED_TOOLS.includes(APPLY_TOOL) || tested.stdout.includes(APPLY_TOOL);
+      return guardStatus === "current" && applyPresent
         ? { status: "current" }
-        : { status: "repairable" };
+        : guardStatus === "repairable" && !tested.stdout.includes(APPLY_TOOL)
+          ? { status: "repairable" }
+          : {
+              status: "conflict",
+              detail: "The existing 'ast' registration tool surface contradicts its configuration.",
+            };
     }
     return {
       status: "conflict",

@@ -105,6 +105,10 @@ if (isClaude && args[0] === "mcp" && args[1] === "add") {
 }
 
 if (isClaude && args[0] === "mcp" && args[1] === "remove") {
+  if (!readState() && process.env.FAKE_FAIL_EMPTY_REMOVE === "1") {
+    console.error("simulated cleanup failure");
+    process.exit(1);
+  }
   fs.rmSync(statePath, { force: true });
   console.log("Removed MCP server ast");
   process.exit(0);
@@ -112,6 +116,17 @@ if (isClaude && args[0] === "mcp" && args[1] === "remove") {
 
 if (!isClaude && args[0] === "mcp" && args[1] === "list") {
   console.log(readState() ? "ast  stdio  all  ✓ enabled" : "No MCP servers configured.");
+  process.exit(0);
+}
+
+if (!isClaude && args[0] === "config" && args[1] === "get") {
+  const state = readState();
+  if (!state) process.exit(1);
+  console.log(JSON.stringify({
+    command: state.command,
+    args: [state.entry],
+    ...(state.guard ? { env: { AST_MCP_APPLY_GUARD: state.guard } } : {}),
+  }));
   process.exit(0);
 }
 
@@ -352,6 +367,85 @@ describe("agent setup", () => {
     expect(JSON.parse(await readFile(fake.claudeState, "utf8"))).toEqual(legacy);
   });
 
+  it("attempts and verifies rollback even when failed-repair cleanup also fails", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "");
+    const legacy = { command: process.execPath, entry: serverEntryPath };
+    await writeFile(fake.claudeState, JSON.stringify(legacy));
+    const detections = await detectInstalledAgents({ environment: fake.environment });
+
+    await expect(
+      runAgentSetup({
+        agents: ["claude"],
+        detections,
+        environment: {
+          ...fake.environment,
+          FAKE_FAIL_GUARDED_ADD: "1",
+          FAKE_FAIL_EMPTY_REMOVE: "1",
+        },
+        ...bundledAssets,
+        serverEntryPath,
+        nodeExecutable: process.execPath,
+      }),
+    ).rejects.toMatchObject({ code: "AGENT_COMMAND_FAILED" });
+    expect(JSON.parse(await readFile(fake.claudeState, "utf8"))).toEqual(legacy);
+  });
+
+  it.each(["codex", "gemini", "copilot"] as const)(
+    "restores an authenticated legacy %s registration after guarded add fails",
+    async (agent) => {
+      const root = await makeTemporaryDirectory();
+      const bin = path.join(root, "bin");
+      const executable = path.join(bin, agent);
+      const state = path.join(root, `${agent}-state.json`);
+      const serverEntryPath = path.join(root, "dist", "index.js");
+      await mkdir(bin, { recursive: true });
+      await mkdir(path.dirname(serverEntryPath), { recursive: true });
+      await writeFile(serverEntryPath, "");
+      await writeFile(state, JSON.stringify({ command: process.execPath, entry: serverEntryPath }));
+      await writeFile(executable, await readFile(path.resolve("scripts/fixtures/fake-agent.mjs")));
+      await chmod(executable, 0o755);
+      const environment = {
+        ...process.env,
+        HOME: root,
+        PATH: `${bin}${path.delimiter}${path.dirname(process.execPath)}`,
+        [`FAKE_${agent.toUpperCase()}_STATE`]: state,
+        FAKE_FAIL_GUARDED_ADD: "1",
+      };
+
+      await expect(
+        runAgentSetup({
+          agents: [agent],
+          detections: [
+            {
+              id: agent,
+              label: agent,
+              installed: true,
+              executable,
+              compatibility: {
+                status: "compatible",
+                contract: `${agent}-mcp-v1`,
+                version: "1.0.0",
+              },
+            },
+          ],
+          environment,
+          ...bundledAssets,
+          serverEntryPath,
+          nodeExecutable: process.execPath,
+        }),
+      ).rejects.toMatchObject({ code: "AGENT_COMMAND_FAILED" });
+
+      expect(JSON.parse(await readFile(state, "utf8"))).toEqual({
+        command: process.execPath,
+        entry: serverEntryPath,
+      });
+    },
+  );
+
   it("fails preflight on a conflicting MCP registration before any write", async () => {
     const root = await makeTemporaryDirectory();
     const fake = await createFakeAgents(root);
@@ -573,6 +667,67 @@ if (process.argv[2] === "debug" && process.argv[3] === "config") {
     const updated = JSON.parse(await readFile(selectedConfig, "utf8"));
     expect(updated.theme).toBe("dark");
     expect(updated.mcp.ast.environment).toEqual({ AST_MCP_APPLY_GUARD: "allow" });
+  });
+
+  it("restores exact OpenCode bytes when post-write effective verification fails", async () => {
+    const root = await makeTemporaryDirectory();
+    const selectedConfig = path.join(root, "config", "opencode.json");
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    const executable = path.join(root, "opencode");
+    const counter = path.join(root, "debug-count");
+    const original = `${JSON.stringify({
+      marker: "preserve",
+      mcp: { ast: { type: "local", command: [process.execPath, serverEntryPath], enabled: true } },
+    })}\n`;
+    await mkdir(path.dirname(selectedConfig), { recursive: true });
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "");
+    await writeFile(selectedConfig, original);
+    await writeFile(
+      executable,
+      `#!/usr/bin/env node
+const fs = require("node:fs");
+if (process.argv[2] === "debug" && process.argv[3] === "config") {
+  const count = fs.existsSync(process.env.FAKE_COUNTER) ? Number(fs.readFileSync(process.env.FAKE_COUNTER, "utf8")) : 0;
+  fs.writeFileSync(process.env.FAKE_COUNTER, String(count + 1));
+  if (count === 0) console.log(fs.readFileSync(process.env.OPENCODE_CONFIG, "utf8"));
+  else console.log(JSON.stringify({mcp:{ast:{type:"local",command:["/wrong"],enabled:true}}}));
+} else if (process.argv[2] === "mcp") console.log("ast connected");
+else console.log("1.18.18");
+`,
+    );
+    await chmod(executable, 0o755);
+    const environment = {
+      ...process.env,
+      HOME: root,
+      OPENCODE_CONFIG: selectedConfig,
+      OPENCODE_CONFIG_DIR: path.dirname(selectedConfig),
+      FAKE_COUNTER: counter,
+    };
+
+    await expect(
+      runAgentSetup({
+        agents: ["opencode"],
+        detections: [
+          {
+            id: "opencode",
+            label: "OpenCode",
+            installed: true,
+            executable,
+            compatibility: {
+              status: "compatible",
+              contract: "opencode-mcp-v1",
+              version: "1.18.18",
+            },
+          },
+        ],
+        environment,
+        ...bundledAssets,
+        serverEntryPath,
+        nodeExecutable: process.execPath,
+      }),
+    ).rejects.toMatchObject({ code: "AGENT_VERIFICATION_FAILED" });
+    expect(await readFile(selectedConfig, "utf8")).toBe(original);
   });
 
   it("rejects an effective OpenCode conflict before skill or config writes", async () => {

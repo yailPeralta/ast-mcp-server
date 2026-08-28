@@ -39,6 +39,15 @@ describe("agent target registry", () => {
         "hermes",
         [
           { exitCode: 0, stdout: "ast stdio all enabled", stderr: "" },
+          {
+            exitCode: 0,
+            stdout: JSON.stringify({
+              command: "/node",
+              args: ["/package/dist/index.js"],
+              env: { AST_MCP_APPLY_GUARD: "allow" },
+            }),
+            stderr: "",
+          },
           { exitCode: 0, stdout: "ast_catalog_required", stderr: "" },
         ],
         { nodeExecutable: "/node", serverEntryPath: "/package/dist/index.js" },
@@ -123,6 +132,7 @@ describe("agent target registry", () => {
           exitCode: 0,
           stdout: JSON.stringify({
             name: "ast",
+            type: "stdio",
             command: "/node",
             args: ["/package/dist/index.js"],
             env: { AST_MCP_APPLY_GUARD: "allow" },
@@ -197,6 +207,11 @@ describe("agent target registry", () => {
         { exitCode: 0, stdout: "ast stdio all enabled", stderr: "" },
         {
           exitCode: 0,
+          stdout: JSON.stringify({ command: "/node", args: ["/package/dist/index.js"] }),
+          stderr: "",
+        },
+        {
+          exitCode: 0,
           stdout:
             "ast_list_files ast_get_outline ast_get_symbol_source ast_search_symbols ast_find_references ast_find_test_candidates ast_get_diagnostics ast_rename_symbol ast_replace_symbol_body ast_scaffold_class ast_get_operation_preview",
           stderr: "",
@@ -213,6 +228,74 @@ describe("agent target registry", () => {
     expect(guardedDifferently).toMatchObject({ status: "conflict" });
     expect(legacyHermes).toEqual({ status: "repairable" });
     expect(copilotUnknown).toMatchObject({ status: "error", operation: "MCP inspection" });
+  });
+
+  it("fails closed instead of repairing malformed or unauthenticated registrations", async () => {
+    const context = { nodeExecutable: "/node", serverEntryPath: "/package/dist/index.js" };
+    const codexFixtures = [
+      { transport: { type: "http", command: "/node", args: [context.serverEntryPath] } },
+      {
+        transport: { type: "stdio", command: "/node", args: [context.serverEntryPath], env: null },
+      },
+      { transport: { type: "stdio", command: "/node", args: [context.serverEntryPath], env: [] } },
+      {
+        transport: {
+          type: "stdio",
+          command: "/node",
+          args: [context.serverEntryPath],
+          env: "AST_MCP_APPLY_GUARD=allow",
+        },
+      },
+    ];
+    for (const fixture of codexFixtures) {
+      await expect(
+        inspectAgentFixture(
+          "codex",
+          [{ exitCode: 0, stdout: JSON.stringify({ name: "ast", ...fixture }), stderr: "" }],
+          context,
+        ),
+      ).resolves.toMatchObject({ status: "conflict" });
+    }
+
+    await expect(
+      inspectAgentFixture(
+        "claude",
+        [
+          {
+            exitCode: 0,
+            stdout: `ast:\n  Scope: Project config\n  Status: Connected\n  Type: stdio\n  Command: /node\n  Args: ${context.serverEntryPath}`,
+            stderr: "",
+          },
+        ],
+        context,
+      ),
+    ).resolves.toMatchObject({ status: "conflict" });
+
+    await expect(
+      inspectAgentFixture(
+        "hermes",
+        [
+          { exitCode: 0, stdout: "ast stdio all enabled", stderr: "" },
+          {
+            exitCode: 0,
+            stdout: JSON.stringify({ command: "/custom/server", args: ["other.js"] }),
+            stderr: "",
+          },
+        ],
+        context,
+      ),
+    ).resolves.toMatchObject({ status: "conflict" });
+
+    await expect(
+      inspectAgentFixture(
+        "hermes",
+        [
+          { exitCode: 0, stdout: "ast stdio all enabled", stderr: "" },
+          { exitCode: 2, stdout: "", stderr: "config evidence unavailable" },
+        ],
+        context,
+      ),
+    ).resolves.toMatchObject({ status: "conflict" });
   });
 
   it("distinguishes repairable legacy Claude and Gemini registrations from current ones", async () => {

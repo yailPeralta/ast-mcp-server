@@ -6,6 +6,7 @@ import {
   applyOpenCodeConfigPlan,
   planOpenCodeConfig,
   resolveOpenCodeConfigPath,
+  restoreOpenCodeConfigPlan,
   withIsolatedOpenCodeConfig,
 } from "../src/services/opencode-config.js";
 
@@ -166,5 +167,41 @@ describe("OpenCode routed configuration", () => {
       planOpenCodeConfig({ filePath: file, nodeExecutable: "/node", serverEntryPath: "/server" }),
     ).rejects.toThrow(/parseable/i);
     expect(await readFile(file, "utf8")).toBe(malformed);
+  });
+
+  it("CAS-restores exact original bytes and mode after post-write verification fails", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "opencode.json");
+    const original =
+      '{\n  // exact legacy bytes\n  "mcp": {"ast":{"type":"local","command":["/node","/server"],"enabled":true}}\n}\n';
+    await writeFile(file, original);
+    await chmod(file, 0o640);
+    const plan = await planOpenCodeConfig({
+      filePath: file,
+      nodeExecutable: "/node",
+      serverEntryPath: "/server",
+    });
+    await applyOpenCodeConfigPlan(plan);
+
+    await restoreOpenCodeConfigPlan(plan);
+
+    expect(await readFile(file, "utf8")).toBe(original);
+    expect((await stat(file)).mode & 0o777).toBe(0o640);
+  });
+
+  it("refuses to restore over a concurrent post-write change", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "opencode.json");
+    await writeFile(file, "{}\n");
+    const plan = await planOpenCodeConfig({
+      filePath: file,
+      nodeExecutable: "/node",
+      serverEntryPath: "/server",
+    });
+    await applyOpenCodeConfigPlan(plan);
+    await writeFile(file, '{"human":true}\n');
+
+    await expect(restoreOpenCodeConfigPlan(plan)).rejects.toThrow(/concurrently/i);
+    expect(await readFile(file, "utf8")).toBe('{"human":true}\n');
   });
 });
