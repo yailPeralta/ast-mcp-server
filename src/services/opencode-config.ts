@@ -224,53 +224,6 @@ export async function applyOpenCodeConfigPlan(plan: OpenCodeConfigPlan): Promise
   }
 }
 
-export async function restoreOpenCodeConfigPlan(plan: OpenCodeConfigPlan): Promise<void> {
-  if (plan.status === "unchanged") return;
-  let current = "";
-  let exists = true;
-  try {
-    current = await readFile(plan.filePath, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") exists = false;
-    else throw error;
-  }
-  if (!exists || hash(current) !== hash(plan.content)) {
-    throw new Error(
-      "OpenCode configuration changed concurrently; original bytes were not restored.",
-    );
-  }
-  if (!plan.beforeExists) {
-    await rm(plan.filePath);
-    try {
-      await stat(plan.filePath);
-      throw new Error("OpenCode configuration restoration did not remove the created file.");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    return;
-  }
-  const directory = path.dirname(plan.filePath);
-  const temporary = path.join(
-    directory,
-    `.${path.basename(plan.filePath)}.${randomUUID()}.restore`,
-  );
-  try {
-    await writeFile(temporary, plan.beforeContent, {
-      encoding: "utf8",
-      flag: "wx",
-      mode: plan.mode,
-    });
-    await rename(temporary, plan.filePath);
-  } finally {
-    await rm(temporary, { force: true });
-  }
-  const restored = await readFile(plan.filePath, "utf8");
-  const restoredMode = (await stat(plan.filePath)).mode & 0o777;
-  if (restored !== plan.beforeContent || restoredMode !== plan.mode) {
-    throw new Error("OpenCode configuration restoration could not be verified.");
-  }
-}
-
 async function inspectOpenCodeConfigPlanState(
   plan: OpenCodeConfigPlan,
 ): Promise<"preimage" | "postimage" | "conflict"> {
