@@ -291,26 +291,18 @@ async function inspectOpenCodeConfigPlanState(
   return "conflict";
 }
 
-export async function runOpenCodeConfigTransaction<T>(
+export async function runOpenCodeConfigTransaction(
   plan: OpenCodeConfigPlan,
-  operation: () => Promise<T>,
-): Promise<T> {
+  operation: () => Promise<void>,
+): Promise<void> {
   try {
     return await operation();
   } catch (error) {
     const state = await inspectOpenCodeConfigPlanState(plan);
-    if (state === "postimage") {
-      try {
-        await restoreOpenCodeConfigPlan(plan);
-      } catch (restoreError) {
-        throw new OpenCodeConfigRecoveryError(
-          "Published OpenCode configuration could not be restored.",
-          { cause: restoreError },
-        );
-      }
-    } else if (state === "conflict") {
+    if (state === "postimage") return undefined;
+    if (state === "conflict") {
       throw new OpenCodeConfigRecoveryError(
-        "OpenCode configuration changed concurrently after an ambiguous write outcome; no restoration was attempted.",
+        "OpenCode configuration changed concurrently after an ambiguous write outcome; the concurrent bytes were preserved.",
         { cause: error },
       );
     }

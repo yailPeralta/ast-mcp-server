@@ -75,6 +75,9 @@ if (args[0] === "--version") {
 if (isClaude && args[0] === "mcp" && args[1] === "get") {
   const state = readState();
   if (!state) {
+    if (process.env.FAKE_CONCURRENT_AFTER_MISSING_INSPECTION === "1") {
+      writeState({ command: "/concurrent/node", entry: "/concurrent/server.js", guard: "deny" });
+    }
     console.error('No MCP server named "ast".');
     process.exit(1);
   }
@@ -100,6 +103,10 @@ if (isClaude && args[0] === "mcp" && args[1] === "add") {
     process.exit(1);
   }
   writeState({ command: args[separator + 1], entry: args[separator + 2], guard });
+  if (guard === "allow" && process.env.FAKE_GUARDED_ADD_MUTATE_THEN_HANG === "1") {
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+  }
   console.log("Added stdio MCP server ast");
   process.exit(0);
 }
@@ -439,6 +446,70 @@ describe("agent setup", () => {
     },
   );
 
+  it("preserves a concurrent replacement installed after missing recovery classification", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "");
+    await writeFile(
+      fake.claudeState,
+      JSON.stringify({ command: process.execPath, entry: serverEntryPath }),
+    );
+    const detections = await detectInstalledAgents({ environment: fake.environment });
+
+    await expect(
+      runAgentSetup({
+        agents: ["claude"],
+        detections,
+        environment: {
+          ...fake.environment,
+          FAKE_UNREGISTER_MUTATE_THEN_HANG: "1",
+          FAKE_CONCURRENT_AFTER_MISSING_INSPECTION: "1",
+        },
+        commandTimeoutMs: 150,
+        ...bundledAssets,
+        serverEntryPath,
+        nodeExecutable: process.execPath,
+      }),
+    ).rejects.toMatchObject({ code: "AGENT_MCP_CONFLICT" });
+    expect(JSON.parse(await readFile(fake.claudeState, "utf8"))).toEqual({
+      command: "/concurrent/node",
+      entry: "/concurrent/server.js",
+      guard: "deny",
+    });
+  });
+
+  it("treats an exact modern postimage as committed after guarded-add acknowledgement is lost", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "");
+    await writeFile(
+      fake.claudeState,
+      JSON.stringify({ command: process.execPath, entry: serverEntryPath }),
+    );
+    const detections = await detectInstalledAgents({ environment: fake.environment });
+
+    const result = await runAgentSetup({
+      agents: ["claude"],
+      detections,
+      environment: { ...fake.environment, FAKE_GUARDED_ADD_MUTATE_THEN_HANG: "1" },
+      commandTimeoutMs: 150,
+      ...bundledAssets,
+      serverEntryPath,
+      nodeExecutable: process.execPath,
+    });
+
+    expect(result.agents[0]?.mcp).toBe("configured");
+    expect(JSON.parse(await readFile(fake.claudeState, "utf8"))).toEqual({
+      command: process.execPath,
+      entry: serverEntryPath,
+      guard: "allow",
+    });
+  });
+
   it.each(["codex", "gemini", "copilot"] as const)(
     "restores an authenticated legacy %s registration after guarded add fails",
     async (agent) => {
@@ -714,7 +785,7 @@ if (process.argv[2] === "debug" && process.argv[3] === "config") {
     expect(updated.mcp.ast.environment).toEqual({ AST_MCP_APPLY_GUARD: "allow" });
   });
 
-  it("restores exact OpenCode bytes when post-write effective verification fails", async () => {
+  it("keeps an exact committed OpenCode postimage when acknowledgement verification fails", async () => {
     const root = await makeTemporaryDirectory();
     const selectedConfig = path.join(root, "config", "opencode.json");
     const serverEntryPath = path.join(root, "dist", "index.js");
@@ -750,29 +821,29 @@ else console.log("1.18.18");
       FAKE_COUNTER: counter,
     };
 
-    await expect(
-      runAgentSetup({
-        agents: ["opencode"],
-        detections: [
-          {
-            id: "opencode",
-            label: "OpenCode",
-            installed: true,
-            executable,
-            compatibility: {
-              status: "compatible",
-              contract: "opencode-mcp-v1",
-              version: "1.18.18",
-            },
+    const result = await runAgentSetup({
+      agents: ["opencode"],
+      detections: [
+        {
+          id: "opencode",
+          label: "OpenCode",
+          installed: true,
+          executable,
+          compatibility: {
+            status: "compatible",
+            contract: "opencode-mcp-v1",
+            version: "1.18.18",
           },
-        ],
-        environment,
-        ...bundledAssets,
-        serverEntryPath,
-        nodeExecutable: process.execPath,
-      }),
-    ).rejects.toMatchObject({ code: "AGENT_VERIFICATION_FAILED" });
-    expect(await readFile(selectedConfig, "utf8")).toBe(original);
+        },
+      ],
+      environment,
+      ...bundledAssets,
+      serverEntryPath,
+      nodeExecutable: process.execPath,
+    });
+    expect(result.agents[0]?.mcp).toBe("configured");
+    expect(await readFile(selectedConfig, "utf8")).not.toBe(original);
+    expect(await readFile(selectedConfig, "utf8")).toContain("AST_MCP_APPLY_GUARD");
   });
 
   it("rejects an effective OpenCode conflict before skill or config writes", async () => {

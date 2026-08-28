@@ -495,16 +495,48 @@ async function repairMcp(
   const target = getAgentTarget(agent);
   const runtime = targetRuntime(detection, environment, timeoutMs);
   const context = { serverEntryPath, nodeExecutable };
-  let restoreRequired = false;
-  try {
-    const authenticated = await target.mcp.inspect(runtime, context);
-    if (authenticated.status !== "repairable") {
+  const authenticated = await target.mcp.inspect(runtime, context);
+  if (authenticated.status !== "repairable") {
+    throw new AgentSetupError(
+      `${target.label} legacy registration changed before repair and was not removed.`,
+      "AGENT_MCP_CONFLICT",
+      { agent, inspection: authenticated },
+    );
+  }
+
+  const recover = async (cause: unknown): Promise<void> => {
+    const durable = await target.mcp.inspect(runtime, context);
+    if (durable.status === "current") return;
+    if (durable.status === "repairable") throw cause;
+    if (durable.status !== "missing") {
       throw new AgentSetupError(
-        `${target.label} legacy registration changed before repair and was not removed.`,
+        `${target.label} migration outcome conflicts with the authenticated registration; it was preserved.`,
         "AGENT_MCP_CONFLICT",
-        { agent, inspection: authenticated },
+        { agent, inspection: durable },
       );
     }
+
+    // The authenticated preimage is absent. Add it directly: never unregister
+    // here, because a concurrent replacement must make this add fail harmlessly.
+    const restored = await target.mcp.registerLegacy(runtime, context);
+    const afterRestore = await target.mcp.inspect(runtime, context);
+    if (afterRestore.status === "current") return;
+    if (afterRestore.status === "repairable") throw cause;
+    if (!target.mcp.registrationAccepted(restored) && afterRestore.status === "conflict") {
+      throw new AgentSetupError(
+        `${target.label} changed concurrently during migration recovery; the replacement was preserved.`,
+        "AGENT_MCP_CONFLICT",
+        { agent, inspection: afterRestore },
+      );
+    }
+    throw new AgentSetupError(
+      `${target.label} migration failed and its authenticated legacy registration is missing.`,
+      "AGENT_VERIFICATION_FAILED",
+      { agent, cause: cause instanceof Error ? cause.message : String(cause), afterRestore },
+    );
+  };
+
+  try {
     let removalError: unknown;
     try {
       const removed = await target.mcp.unregister(runtime);
@@ -515,30 +547,14 @@ async function repairMcp(
       removalError = error;
     }
     if (removalError !== undefined) {
-      const afterAmbiguousRemoval = await target.mcp.inspect(runtime, context);
-      if (afterAmbiguousRemoval.status === "missing") restoreRequired = true;
-      else if (afterAmbiguousRemoval.status !== "repairable") {
-        throw new AgentSetupError(
-          `${target.label} removal outcome is ambiguous and the current registration is not safe to restore.`,
-          "AGENT_MCP_CONFLICT",
-          { agent, inspection: afterAmbiguousRemoval },
-        );
-      }
-      throw removalError;
+      return recover(removalError);
     }
-    restoreRequired = true;
+
     const added = await target.mcp.register(runtime, context);
     if (!target.mcp.registrationAccepted(added)) {
       throw commandFailure(agent, "MCP registration repair", added);
     }
-    const verified = await inspectMcp(
-      agent,
-      detection,
-      serverEntryPath,
-      nodeExecutable,
-      environment,
-      timeoutMs,
-    );
+    const verified = await target.mcp.inspect(runtime, context);
     if (verified.status !== "current") {
       throw new AgentSetupError(
         `${target.label} saved the repaired MCP registration but verification did not match.`,
@@ -547,33 +563,7 @@ async function repairMcp(
       );
     }
   } catch (error) {
-    if (!restoreRequired) throw error;
-    let cleanupFailure: string | undefined;
-    try {
-      const cleanup = await target.mcp.unregister(runtime);
-      if (!target.mcp.removalAccepted(cleanup)) {
-        cleanupFailure = `cleanup exited with code ${cleanup.exitCode}`;
-      }
-    } catch (cleanupError) {
-      cleanupFailure = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
-    }
-    const restored = await target.mcp.registerLegacy(runtime, context);
-    const restoredInspection = target.mcp.registrationAccepted(restored)
-      ? await target.mcp.inspect(runtime, context)
-      : undefined;
-    if (!target.mcp.registrationAccepted(restored) || restoredInspection?.status !== "repairable") {
-      throw new AgentSetupError(
-        `${target.label} MCP registration repair failed and the legacy registration could not be restored.`,
-        "AGENT_VERIFICATION_FAILED",
-        {
-          agent,
-          cause: error instanceof Error ? error.message : String(error),
-          cleanup: cleanupFailure,
-          restored: restoredInspection,
-        },
-      );
-    }
-    throw error;
+    return recover(error);
   }
 }
 

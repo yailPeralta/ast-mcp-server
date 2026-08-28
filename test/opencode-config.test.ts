@@ -206,7 +206,7 @@ describe("OpenCode routed configuration", () => {
     expect(await readFile(file, "utf8")).toBe('{"human":true}\n');
   });
 
-  it("restores exact bytes and mode when publication succeeds before an exception", async () => {
+  it("treats the exact modern postimage as committed after an acknowledgement exception", async () => {
     const root = await temporaryDirectory();
     const file = path.join(root, "opencode.json");
     const original =
@@ -224,9 +224,9 @@ describe("OpenCode routed configuration", () => {
         await applyOpenCodeConfigPlan(plan);
         throw new Error("publish acknowledgement lost");
       }),
-    ).rejects.toThrow(/acknowledgement lost/i);
+    ).resolves.toBeUndefined();
 
-    expect(await readFile(file, "utf8")).toBe(original);
+    expect(await readFile(file, "utf8")).toBe(plan.content);
     expect((await stat(file)).mode & 0o777).toBe(0o640);
   });
 
@@ -250,5 +250,27 @@ describe("OpenCode routed configuration", () => {
 
     expect(await readFile(file, "utf8")).toBe(original);
     expect((await stat(file)).ino).toBe(before.ino);
+  });
+
+  it("fails closed and preserves concurrent bytes instead of attempting rollback", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "opencode.json");
+    await writeFile(file, "{}\n");
+    const plan = await planOpenCodeConfig({
+      filePath: file,
+      nodeExecutable: "/node",
+      serverEntryPath: "/server",
+    });
+    const concurrent = '{"concurrent":true}\n';
+
+    await expect(
+      runOpenCodeConfigTransaction(plan, async () => {
+        await applyOpenCodeConfigPlan(plan);
+        await writeFile(file, concurrent);
+        throw new Error("ambiguous acknowledgement");
+      }),
+    ).rejects.toThrow(/concurrently/i);
+
+    expect(await readFile(file, "utf8")).toBe(concurrent);
   });
 });
