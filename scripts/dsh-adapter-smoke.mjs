@@ -21,7 +21,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { execFile, spawn } from "node:child_process";
 import console from "node:console";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -60,18 +60,56 @@ async function run(command, args, options = {}) {
 
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ast-dsh-adapter-"));
 
+/** True when a Node version satisfies the pinned harness engine (`^22.19.0 || >=24.0.0`). */
+function satisfiesHarnessEngine(version) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)/u.exec(version.trim());
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return major >= 24 || (major === 22 && minor >= 19);
+}
+
+/**
+ * Resolve a Node binary that can build/run the pinned harness. The ast-mcp-server
+ * CI matrix includes Node 22.13.0, which is below the harness engine floor; when
+ * the current node is too old, reuse the Node 24 already cached in the CI
+ * toolcache by the earlier setup-node step.
+ */
+async function resolveHarnessNode() {
+  if (satisfiesHarnessEngine(process.version)) {
+    return { nodeBin: process.execPath, nodeBinDir: path.dirname(process.execPath) };
+  }
+  const toolcacheRoot = process.env.RUNNER_TOOL_CACHE
+    ? path.join(process.env.RUNNER_TOOL_CACHE, "node")
+    : "/opt/hostedtoolcache/node";
+  const names = await readdir(toolcacheRoot).catch(() => []);
+  for (const name of names) {
+    const candidate = path.join(toolcacheRoot, name, "x64", "bin", "node");
+    const version = await run(candidate, ["--version"])
+      .then((result) => result.stdout.trim())
+      .catch(() => "");
+    if (satisfiesHarnessEngine(version)) {
+      return { nodeBin: candidate, nodeBinDir: path.dirname(candidate) };
+    }
+  }
+  fail(
+    `node ${process.version} cannot build the pinned harness (requires ^22.19.0 || >=24.0.0) and no qualifying node was found under ${toolcacheRoot}`,
+  );
+}
+
 /** Resolve the pinned harness source and return its runnable CLI bin, verifying identity. */
 async function resolvePinnedHarness() {
+  const { nodeBin, nodeBinDir } = await resolveHarnessNode();
   const source = process.env.DSH_HARNESS_SOURCE
     ? path.resolve(process.env.DSH_HARNESS_SOURCE)
-    : await provisionPinnedHarness();
+    : await provisionPinnedHarness(nodeBinDir);
   const head = (await run("git", ["-C", source, "rev-parse", "HEAD"])).stdout.trim();
   assert(head === PINNED_REVISION, `harness HEAD ${head} != pinned ${PINNED_REVISION}`);
   const cliBin = path.join(source, "apps", "cli", "lib", "bin.js");
-  const cliVersion = (await run(process.execPath, [cliBin, "--version"])).stdout.trim();
+  const cliVersion = (await run(nodeBin, [cliBin, "--version"])).stdout.trim();
   assert(cliVersion === PINNED_VERSION, `harness CLI ${cliVersion} != pinned ${PINNED_VERSION}`);
   const mcpClientVersion = (
-    await run(process.execPath, [
+    await run(nodeBin, [
       "-p",
       `require(${JSON.stringify(
         path.join(source, "packages", "mcp", "mcp-client", "package.json"),
@@ -82,7 +120,7 @@ async function resolvePinnedHarness() {
     mcpClientVersion === PINNED_VERSION,
     `mcp-client ${mcpClientVersion} != pinned ${PINNED_VERSION}`,
   );
-  return { source, cliBin };
+  return { source, cliBin, nodeBin };
 }
 
 /** Pack @deepseek-ai/dsh-mcp-client from the pinned source into an installable tarball. */
@@ -108,7 +146,7 @@ async function packPinnedMcpClient(source) {
 }
 
 /** Clone, install, and build the harness at the exact pinned revision. */
-async function provisionPinnedHarness() {
+async function provisionPinnedHarness(nodeBinDir) {
   const root = path.join(temporaryRoot, "pinned-harness");
   await run("git", ["clone", "--filter=blob:none", "--no-checkout", HARNESS_REPOSITORY, root], {
     cwd: temporaryRoot,
@@ -117,8 +155,11 @@ async function provisionPinnedHarness() {
   // The git commit is the authoritative identity (verified via rev-parse HEAD);
   // corepack verifies the pnpm download signature, which fails when the registry
   // rotates its signing key, so disable that check for the pinned source build.
+  // A qualifying node's bin directory leads PATH so pnpm/tsx/tsc/tsdown run under
+  // a Node that meets the harness engine floor.
   const provisionEnvironment = {
     ...process.env,
+    PATH: `${nodeBinDir}${path.delimiter}${process.env.PATH ?? ""}`,
     NODE_OPTIONS: "",
     CI: "true",
     COREPACK_INTEGRITY_KEYS: "0",
@@ -131,8 +172,8 @@ async function provisionPinnedHarness() {
 }
 
 /** Boot the profile with the probe plugin and return its DSH_PROBE_RESULT marker. */
-async function bootWithProbe(cliBin, environment, fixtureProject, dshHome) {
-  const child = spawn(process.execPath, [cliBin, "--profile", "smoke", "probe"], {
+async function bootWithProbe(cliBin, nodeBin, environment, fixtureProject, dshHome) {
+  const child = spawn(nodeBin, [cliBin, "--profile", "smoke", "probe"], {
     cwd: temporaryRoot,
     env: { ...environment, AST_PROBE_PROJECT_ROOT: fixtureProject, DSH_HOME: dshHome },
     stdio: ["ignore", "ignore", "pipe"],
@@ -421,7 +462,7 @@ try {
   summary.phases.b = "ok";
 
   // ── Phase C: pinned-Harness proof (mandatory) ──────────────────────────────
-  const { source, cliBin } = await resolvePinnedHarness();
+  const { source, cliBin, nodeBin } = await resolvePinnedHarness();
   const mcpClientArchive = await packPinnedMcpClient(source);
   await mkdir(dshHome, { recursive: true });
   const dshEnvironment = {
@@ -430,24 +471,23 @@ try {
     COREPACK_INTEGRITY_KEYS: "0",
     COREPACK_USE_LATEST: "0",
   };
-  await run(process.execPath, [cliBin, "plugin", "--profile", "smoke", "add", archiveReference], {
+  await run(nodeBin, [cliBin, "plugin", "--profile", "smoke", "add", archiveReference], {
     cwd: temporaryRoot,
     env: dshEnvironment,
   });
   // Pin the bridge itself: install the pinned mcp-client tarball so the mcp row
   // resolves the exact revision rather than an ambient package.
-  await run(
-    process.execPath,
-    [cliBin, "plugin", "--profile", "smoke", "add", `file:${mcpClientArchive}`],
+  await run(nodeBin, [cliBin, "plugin", "--profile", "smoke", "add", `file:${mcpClientArchive}`], {
+    cwd: temporaryRoot,
+    env: dshEnvironment,
+  });
+  const { stdout: dumpConfig } = await run(
+    nodeBin,
+    [cliBin, "--profile", "smoke", "--dump-config"],
     {
       cwd: temporaryRoot,
       env: dshEnvironment,
     },
-  );
-  const { stdout: dumpConfig } = await run(
-    process.execPath,
-    [cliBin, "--profile", "smoke", "--dump-config"],
-    { cwd: temporaryRoot, env: dshEnvironment },
   );
   for (const required of [
     "mcp-ast",
@@ -468,7 +508,7 @@ try {
     "utf8",
   );
 
-  const probe = await bootWithProbe(cliBin, dshEnvironment, fixtureProject, dshHome);
+  const probe = await bootWithProbe(cliBin, nodeBin, dshEnvironment, fixtureProject, dshHome);
   const astNames = (probe.discovered ?? []).filter((name) => name.startsWith("mcp__ast__"));
   assert(
     astNames.length === 15,
