@@ -53,6 +53,8 @@ describe("OpenCode routed configuration", () => {
     expect(content).toContain('"theme": "dark"');
     expect(content).toContain('"other"');
     expect(content).toContain('"command": [');
+    expect(content).toContain('"environment"');
+    expect(content).toContain('"AST_MCP_APPLY_GUARD"');
     expect(content).not.toContain("opencode mcp add");
     expect((await stat(file)).mode & 0o777).toBe(0o640);
   });

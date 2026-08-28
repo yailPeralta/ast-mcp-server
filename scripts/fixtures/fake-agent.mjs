@@ -224,7 +224,17 @@ if (executableName === "gemini" && args[0] === "mcp" && args[1] === "list") {
   process.exit(0);
 }
 if (executableName === "gemini" && args[0] === "mcp" && args[1] === "add") {
-  writeState({ command: args[3], entry: args[4] });
+  // args[2] is the server name; skip option flags (--env KEY=VALUE, --scope user)
+  // and read the positionals that follow it.
+  const positionals = [];
+  for (let index = 3; index < args.length; index += 1) {
+    if (args[index] === "--env" || args[index] === "--scope") {
+      index += 1;
+      continue;
+    }
+    positionals.push(args[index]);
+  }
+  writeState({ command: positionals[0], entry: positionals[1] });
   console.log("MCP server ast added.");
   process.exit(0);
 }

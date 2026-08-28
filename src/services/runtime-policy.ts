@@ -99,11 +99,13 @@ export function parseRuntimePolicy(environment: RuntimePolicyEnvironment): Runti
     86_400_000,
   );
   const rawApplyGuard = environment.AST_MCP_APPLY_GUARD;
-  const denyApply = rawApplyGuard === "deny";
+  // Fail-closed: only an explicit `allow` permits the apply-effect MCP tool on
+  // this surface. A missing value, `deny`, or any invalid value denies apply.
+  const denyApply = rawApplyGuard !== "allow";
   const applyGuardReason: RuntimePolicyReason =
     rawApplyGuard === undefined
       ? "default"
-      : rawApplyGuard === "deny"
+      : rawApplyGuard === "allow" || rawApplyGuard === "deny"
         ? "configured"
         : "invalid_mode";
 
@@ -177,6 +179,9 @@ export function createCompilerWorkerSpawnSpec(
     AST_QUEUE_WAIT_TIMEOUT_MS: String(policy.queueWaitTimeoutMs),
     AST_OPERATION_DEADLINE_MS: String(policy.operationDeadlineMs),
     AST_SHUTDOWN_DRAIN_TIMEOUT_MS: String(policy.shutdownDrainTimeoutMs),
+    // Forward the parent's resolved apply-guard policy so the supervised worker
+    // registers the same tool surface (deny-by-default fail-closed, allow opt-in).
+    AST_MCP_APPLY_GUARD: policy.denyApply ? "deny" : "allow",
   });
   return {
     ok: true,

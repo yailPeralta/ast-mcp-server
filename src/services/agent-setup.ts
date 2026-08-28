@@ -623,6 +623,7 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
       type: "local",
       command: [nodeExecutable, options.serverEntryPath],
       enabled: true,
+      environment: { AST_MCP_APPLY_GUARD: "allow" },
     };
     if (effectiveAst !== undefined && JSON.stringify(effectiveAst) !== JSON.stringify(desiredAst)) {
       throw new AgentSetupError(

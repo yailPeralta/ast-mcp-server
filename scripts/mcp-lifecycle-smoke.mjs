@@ -387,6 +387,7 @@ async function spawnFixture(scenario, extraEnvironment = {}) {
       AST_LIFECYCLE_SCENARIO: scenario,
       AST_SHUTDOWN_DRAIN_TIMEOUT_MS: "100",
       AST_SYMBOL_INDEX_PERSISTENCE: "disabled",
+      AST_MCP_APPLY_GUARD: "allow",
       ...extraEnvironment,
     },
     stdio: ["pipe", "pipe", "pipe", "ipc"],
@@ -703,7 +704,11 @@ async function runLifecycleMatrix() {
     await exerciseCanaryCloseReopen(projectRoot, cacheRoot);
     const supervised = new LifecycleProcess(
       spawn(process.execPath, [path.join(repositoryRoot, "dist/index.js")], {
-        env: { ...process.env, AST_COMPILER_WORKER_MODE: "supervised" },
+        env: {
+          ...process.env,
+          AST_COMPILER_WORKER_MODE: "supervised",
+          AST_MCP_APPLY_GUARD: "allow",
+        },
         stdio: ["pipe", "pipe", "pipe"],
       }),
     );

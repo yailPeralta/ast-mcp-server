@@ -480,6 +480,7 @@ function minimalChildEnvironment(home, temp) {
     TMPDIR: temp,
     PATH: process.env.PATH ?? "",
     LANG: "C.UTF-8",
+    AST_MCP_APPLY_GUARD: "allow",
   };
   if (process.env.SystemRoot !== undefined) environment.SystemRoot = process.env.SystemRoot;
   return environment;

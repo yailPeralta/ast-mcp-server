@@ -47,6 +47,8 @@ export type Compatibility =
 
 export const MCP_SERVER_NAME = "ast";
 const EXPECTED_TOOLS = toolCatalog.compatibility.required;
+/** Ambient agent surfaces opt into the apply-effect tool (fail-closed guard default is deny). */
+const APPLY_GUARD_ALLOW_ENV = "AST_MCP_APPLY_GUARD=allow";
 
 function semver(value: string): [number, number, number] | undefined {
   const match = value.match(/(?:^|\s|v)(\d+)\.(\d+)\.(\d+)(?=\s|$|[-+()]|\.(?:\s|$))/);
@@ -169,6 +171,8 @@ const claudeMcp: AgentTargetMcpAdapter = {
       "add",
       "--scope",
       "user",
+      "--env",
+      APPLY_GUARD_ALLOW_ENV,
       "--transport",
       "stdio",
       MCP_SERVER_NAME,
@@ -200,6 +204,8 @@ const hermesMcp: AgentTargetMcpAdapter = {
         MCP_SERVER_NAME,
         "--command",
         context.nodeExecutable,
+        "--env",
+        APPLY_GUARD_ALLOW_ENV,
         "--args",
         context.serverEntryPath,
       ],
@@ -220,6 +226,8 @@ const codexMcp: AgentTargetMcpAdapter = {
       "mcp",
       "add",
       MCP_SERVER_NAME,
+      "--env",
+      APPLY_GUARD_ALLOW_ENV,
       "--",
       context.nodeExecutable,
       context.serverEntryPath,
@@ -239,6 +247,8 @@ const copilotMcp: AgentTargetMcpAdapter = {
       "mcp",
       "add",
       MCP_SERVER_NAME,
+      "--env",
+      APPLY_GUARD_ALLOW_ENV,
       "--",
       context.nodeExecutable,
       context.serverEntryPath,
@@ -281,6 +291,8 @@ const geminiMcp: AgentTargetMcpAdapter = {
       "mcp",
       "add",
       MCP_SERVER_NAME,
+      "--env",
+      APPLY_GUARD_ALLOW_ENV,
       context.nodeExecutable,
       context.serverEntryPath,
       "--scope",

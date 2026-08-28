@@ -156,7 +156,17 @@ describe("agent target registry", () => {
     expect(inspection).toMatchObject({ status: "blocked_untrusted_folder" });
     expect(calls).toEqual([
       ["mcp", "list"],
-      ["mcp", "add", "ast", "/node", "/package/dist/index.js", "--scope", "user"],
+      [
+        "mcp",
+        "add",
+        "ast",
+        "--env",
+        "AST_MCP_APPLY_GUARD=allow",
+        "/node",
+        "/package/dist/index.js",
+        "--scope",
+        "user",
+      ],
     ]);
   });
 
@@ -172,7 +182,18 @@ describe("agent target registry", () => {
       { nodeExecutable: "/node", serverEntryPath: "/package/dist/index.js" },
     );
 
-    expect(calls).toEqual([["mcp", "add", "ast", "--", "/node", "/package/dist/index.js"]]);
+    expect(calls).toEqual([
+      [
+        "mcp",
+        "add",
+        "ast",
+        "--env",
+        "AST_MCP_APPLY_GUARD=allow",
+        "--",
+        "/node",
+        "/package/dist/index.js",
+      ],
+    ]);
   });
 
   it("describes executable discovery and MCP registration per target", () => {

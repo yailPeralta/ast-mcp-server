@@ -109,15 +109,24 @@ describe("DeepSeek Harness adapter patch", () => {
 });
 
 describe("deny-by-default apply guard", () => {
-  it("parses the guard only from the closed 'deny' vocabulary", () => {
-    expect(parseRuntimePolicy({}).denyApply).toBe(false);
+  it("denies apply for every value except the explicit allow", () => {
+    // unset → deny (fail-closed default)
+    expect(parseRuntimePolicy({}).denyApply).toBe(true);
+    expect(parseRuntimePolicy({}).reasons.AST_MCP_APPLY_GUARD).toBe("default");
+    // deny → deny
     expect(parseRuntimePolicy({ AST_MCP_APPLY_GUARD: "deny" }).denyApply).toBe(true);
     expect(parseRuntimePolicy({ AST_MCP_APPLY_GUARD: "deny" }).reasons.AST_MCP_APPLY_GUARD).toBe(
       "configured",
     );
-    for (const hostile of ["", "off", "allow", "1", "deny $(touch pwned)", null, 7]) {
+    // allow → allow (the only documented enabling value)
+    expect(parseRuntimePolicy({ AST_MCP_APPLY_GUARD: "allow" }).denyApply).toBe(false);
+    expect(parseRuntimePolicy({ AST_MCP_APPLY_GUARD: "allow" }).reasons.AST_MCP_APPLY_GUARD).toBe(
+      "configured",
+    );
+    // invalid → deny (fail-closed)
+    for (const hostile of ["", "off", "1", "Allow", "deny $(touch pwned)", null, 7]) {
       const policy = parseRuntimePolicy({ AST_MCP_APPLY_GUARD: hostile });
-      expect(policy.denyApply).toBe(false);
+      expect(policy.denyApply).toBe(true);
       expect(policy.reasons.AST_MCP_APPLY_GUARD).toBe("invalid_mode");
       if (hostile !== "" && hostile !== null) {
         expect(Object.values(policy)).not.toContain(hostile);

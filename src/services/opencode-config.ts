@@ -113,6 +113,7 @@ export async function planOpenCodeConfig(options: {
     type: "local",
     command: [options.nodeExecutable, options.serverEntryPath],
     enabled: true,
+    environment: { AST_MCP_APPLY_GUARD: "allow" },
   };
   if (parsed.mcp?.ast !== undefined && JSON.stringify(parsed.mcp.ast) !== JSON.stringify(desired))
     throw new Error("OpenCode configuration conflict at mcp.ast.");
