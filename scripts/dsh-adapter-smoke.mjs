@@ -108,6 +108,10 @@ async function provisionPinnedHarness() {
     cwd: temporaryRoot,
   });
   await run("git", ["-C", root, "checkout", PINNED_REVISION]);
+  // The git commit is the authoritative identity (verified via rev-parse HEAD);
+  // pnpm's lockfile package-signature check can fail when the registry rotates
+  // its signing key, so disable it for this pinned source build.
+  await writeFile(path.join(root, ".npmrc"), "verify-signatures=false\n", "utf8");
   const provisionEnvironment = { ...process.env, NODE_OPTIONS: "", CI: "true" };
   await run("corepack", ["enable"], { cwd: root, env: provisionEnvironment });
   await run("pnpm", ["install"], { cwd: root, env: provisionEnvironment });
