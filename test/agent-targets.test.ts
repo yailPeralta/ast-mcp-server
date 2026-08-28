@@ -78,7 +78,7 @@ describe("agent target registry", () => {
 
   it("uses tested structured contracts and fail-closes unknown evidence", async () => {
     const context = { nodeExecutable: "/node", serverEntryPath: "/package/dist/index.js" };
-    const codex = await inspectAgentFixture(
+    const legacyCodex = await inspectAgentFixture(
       "codex",
       [
         {
@@ -97,7 +97,42 @@ describe("agent target registry", () => {
       [{ exitCode: 0, stdout: "ast is probably configured", stderr: "" }],
       context,
     );
-    const copilot = await inspectAgentFixture(
+    const codex = await inspectAgentFixture(
+      "codex",
+      [
+        {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            name: "ast",
+            transport: {
+              type: "stdio",
+              command: "/node",
+              args: ["/package/dist/index.js"],
+              env: { AST_MCP_APPLY_GUARD: "allow" },
+            },
+          }),
+          stderr: "",
+        },
+      ],
+      context,
+    );
+    const topLevelCodex = await inspectAgentFixture(
+      "codex",
+      [
+        {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            name: "ast",
+            command: "/node",
+            args: ["/package/dist/index.js"],
+            env: { AST_MCP_APPLY_GUARD: "allow" },
+          }),
+          stderr: "",
+        },
+      ],
+      context,
+    );
+    const legacyCopilot = await inspectAgentFixture(
       "copilot",
       [
         {
@@ -117,6 +152,45 @@ describe("agent target registry", () => {
       ],
       context,
     );
+    const guardedDifferently = await inspectAgentFixture(
+      "codex",
+      [
+        {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            name: "ast",
+            transport: {
+              command: "/node",
+              args: ["/package/dist/index.js"],
+              env: { AST_MCP_APPLY_GUARD: "deny" },
+            },
+          }),
+          stderr: "",
+        },
+      ],
+      context,
+    );
+    const copilot = await inspectAgentFixture(
+      "copilot",
+      [
+        {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            ast: {
+              tools: ["*"],
+              type: "local",
+              command: "/node",
+              args: ["/package/dist/index.js"],
+              env: { AST_MCP_APPLY_GUARD: "allow" },
+              source: "user",
+              enabled: true,
+            },
+          }),
+          stderr: "",
+        },
+      ],
+      context,
+    );
     const legacyHermes = await inspectAgentFixture(
       "hermes",
       [
@@ -124,17 +198,65 @@ describe("agent target registry", () => {
         {
           exitCode: 0,
           stdout:
-            "ast_list_files ast_get_outline ast_get_symbol_source ast_search_symbols ast_find_references ast_get_diagnostics ast_rename_symbol ast_replace_symbol_body ast_scaffold_class ast_get_operation_preview ast_apply_operation",
+            "ast_list_files ast_get_outline ast_get_symbol_source ast_search_symbols ast_find_references ast_find_test_candidates ast_get_diagnostics ast_rename_symbol ast_replace_symbol_body ast_scaffold_class ast_get_operation_preview",
           stderr: "",
         },
       ],
       context,
     );
 
+    expect(legacyCodex).toEqual({ status: "repairable" });
     expect(codex).toEqual({ status: "current" });
+    expect(topLevelCodex).toEqual({ status: "current" });
+    expect(legacyCopilot).toEqual({ status: "repairable" });
     expect(copilot).toEqual({ status: "current" });
-    expect(legacyHermes).toMatchObject({ status: "conflict" });
+    expect(guardedDifferently).toMatchObject({ status: "conflict" });
+    expect(legacyHermes).toEqual({ status: "repairable" });
     expect(copilotUnknown).toMatchObject({ status: "error", operation: "MCP inspection" });
+  });
+
+  it("distinguishes repairable legacy Claude and Gemini registrations from current ones", async () => {
+    const context = { nodeExecutable: "/node", serverEntryPath: "/package/dist/index.js" };
+    const claudeBase = `ast:
+  Scope: User config (available in all your projects)
+  Status: ✔ Connected
+  Type: stdio
+  Command: /node
+  Args: /package/dist/index.js`;
+    const geminiBase = "ast Connected command: /node, args: [/package/dist/index.js]";
+
+    await expect(
+      inspectAgentFixture("claude", [{ exitCode: 0, stdout: claudeBase, stderr: "" }], context),
+    ).resolves.toEqual({ status: "repairable" });
+    await expect(
+      inspectAgentFixture(
+        "claude",
+        [
+          {
+            exitCode: 0,
+            stdout: `${claudeBase}\n  Environment:\n    AST_MCP_APPLY_GUARD=allow`,
+            stderr: "",
+          },
+        ],
+        context,
+      ),
+    ).resolves.toEqual({ status: "current" });
+    await expect(
+      inspectAgentFixture("gemini", [{ exitCode: 0, stdout: geminiBase, stderr: "" }], context),
+    ).resolves.toEqual({ status: "repairable" });
+    await expect(
+      inspectAgentFixture(
+        "gemini",
+        [
+          {
+            exitCode: 0,
+            stdout: `${geminiBase}, env: AST_MCP_APPLY_GUARD=allow`,
+            stderr: "",
+          },
+        ],
+        context,
+      ),
+    ).resolves.toEqual({ status: "current" });
   });
 
   it("classifies Gemini trust separately and emits exact registration commands", async () => {

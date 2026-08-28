@@ -16,7 +16,7 @@ export interface AgentTargetMcpContext {
 }
 
 export type AgentTargetMcpInspection =
-  | { status: "missing" | "current"; detail?: undefined }
+  | { status: "missing" | "current" | "repairable"; detail?: undefined }
   | { status: "conflict" | "blocked_untrusted_folder"; detail: string }
   | { status: "error"; operation: string; result: AgentTargetCommandResult };
 
@@ -29,7 +29,13 @@ export interface AgentTargetMcpAdapter {
     runtime: AgentTargetRuntime,
     context: AgentTargetMcpContext,
   ): Promise<AgentTargetCommandResult>;
+  unregister(runtime: AgentTargetRuntime): Promise<AgentTargetCommandResult>;
+  registerLegacy(
+    runtime: AgentTargetRuntime,
+    context: AgentTargetMcpContext,
+  ): Promise<AgentTargetCommandResult>;
   registrationAccepted(result: AgentTargetCommandResult): boolean;
+  removalAccepted(result: AgentTargetCommandResult): boolean;
 }
 
 export type SkillTarget = "claude" | "hermes" | "agents";
@@ -47,6 +53,7 @@ export type Compatibility =
 
 export const MCP_SERVER_NAME = "ast";
 const EXPECTED_TOOLS = toolCatalog.compatibility.required;
+const APPLY_TOOL = "ast_apply_operation";
 /** Ambient agent surfaces opt into the apply-effect tool (fail-closed guard default is deny). */
 const APPLY_GUARD_ALLOW_ENV = "AST_MCP_APPLY_GUARD=allow";
 
@@ -85,6 +92,39 @@ function expected(context: AgentTargetMcpContext, command: unknown, args: unknow
   );
 }
 
+function structuredGuardStatus(...values: unknown[]): "current" | "repairable" | "conflict" {
+  const records = values.filter(
+    (value): value is Record<string, unknown> =>
+      value !== null && typeof value === "object" && !Array.isArray(value),
+  );
+  if (records.length === 0 || records.every((record) => Object.keys(record).length === 0)) {
+    return "repairable";
+  }
+  return records.length === 1 &&
+    Object.keys(records[0]).length === 1 &&
+    records[0].AST_MCP_APPLY_GUARD === "allow"
+    ? "current"
+    : "conflict";
+}
+
+function matchingRegistration(
+  hasExpectedCommand: boolean,
+  guardStatus: "current" | "repairable" | "conflict",
+) {
+  if (!hasExpectedCommand) {
+    return {
+      status: "conflict" as const,
+      detail: "The existing 'ast' registration does not match this package.",
+    };
+  }
+  return guardStatus === "conflict"
+    ? {
+        status: "conflict" as const,
+        detail: "The existing 'ast' registration has unsupported environment settings.",
+      }
+    : { status: guardStatus };
+}
+
 function parseJson(result: AgentTargetCommandResult): unknown {
   try {
     return JSON.parse(result.stdout);
@@ -106,12 +146,10 @@ function structuredInspection(
   if (!value || value.name !== MCP_SERVER_NAME)
     return { status: "error", operation: "MCP inspection", result };
   const transport = (value.transport ?? value) as Record<string, unknown>;
-  return expected(context, transport.command, transport.args)
-    ? { status: "current" }
-    : {
-        status: "conflict",
-        detail: "The existing 'ast' registration does not match this package.",
-      };
+  return matchingRegistration(
+    expected(context, transport.command, transport.args),
+    structuredGuardStatus(transport.env, transport.environment),
+  );
 }
 
 function copilotStructuredInspection(
@@ -129,18 +167,44 @@ function copilotStructuredInspection(
     return { status: "error", operation: "MCP inspection", result };
   }
   const configuration = server as Record<string, unknown>;
-  return configuration.type === "local" &&
+  const matches =
+    configuration.type === "local" &&
     configuration.source === "user" &&
     configuration.enabled === true &&
     Array.isArray(configuration.tools) &&
     configuration.tools.length === 1 &&
     configuration.tools[0] === "*" &&
-    expected(context, configuration.command, configuration.args)
-    ? { status: "current" }
-    : {
-        status: "conflict",
+    expected(context, configuration.command, configuration.args);
+  const inspection = matchingRegistration(
+    matches,
+    structuredGuardStatus(configuration.env, configuration.environment),
+  );
+  return inspection.status === "conflict"
+    ? {
+        ...inspection,
         detail: "The existing user-scoped 'ast' registration does not match this package.",
-      };
+      }
+    : inspection;
+}
+
+function claudeRegister(
+  runtime: AgentTargetRuntime,
+  context: AgentTargetMcpContext,
+  guarded: boolean,
+) {
+  return runtime.run([
+    "mcp",
+    "add",
+    "--scope",
+    "user",
+    ...(guarded ? ["--env", APPLY_GUARD_ALLOW_ENV] : []),
+    "--transport",
+    "stdio",
+    MCP_SERVER_NAME,
+    "--",
+    context.nodeExecutable,
+    context.serverEntryPath,
+  ]);
 }
 
 const claudeMcp: AgentTargetMcpAdapter = {
@@ -156,32 +220,52 @@ const claudeMcp: AgentTargetMcpAdapter = {
       const match = line.match(/^\s*(Status|Type|Command|Args):\s*(.*)$/i);
       if (match) fields.set(match[1].toLowerCase(), match[2].trim());
     }
-    return /connected/i.test(fields.get("status") ?? "") &&
+    const matches =
+      /connected/i.test(fields.get("status") ?? "") &&
       fields.get("type")?.toLowerCase() === "stdio" &&
-      expected(context, fields.get("command"), [fields.get("args")])
-      ? { status: "current" }
-      : {
-          status: "conflict",
+      expected(context, fields.get("command"), [fields.get("args")]);
+    const hasEnvironment = /^\s*Environment:\s*$/im.test(result.stdout);
+    const inspection = matchingRegistration(
+      matches,
+      /(?:^|\s)AST_MCP_APPLY_GUARD\s*=\s*allow(?:\s|$)/m.test(result.stdout)
+        ? "current"
+        : hasEnvironment
+          ? "conflict"
+          : "repairable",
+    );
+    return inspection.status === "conflict"
+      ? {
+          ...inspection,
           detail: "The existing user-scoped 'ast' registration does not match this package.",
-        };
+        }
+      : inspection;
   },
-  register: (runtime, context) =>
-    runtime.run([
+  register: (runtime, context) => claudeRegister(runtime, context, true),
+  unregister: (runtime) => runtime.run(["mcp", "remove", MCP_SERVER_NAME, "--scope", "user"]),
+  registerLegacy: (runtime, context) => claudeRegister(runtime, context, false),
+  registrationAccepted: (result) => result.exitCode === 0,
+  removalAccepted: (result) => result.exitCode === 0,
+};
+
+function hermesRegister(
+  runtime: AgentTargetRuntime,
+  context: AgentTargetMcpContext,
+  guarded: boolean,
+) {
+  return runtime.run(
+    [
       "mcp",
       "add",
-      "--scope",
-      "user",
-      "--env",
-      APPLY_GUARD_ALLOW_ENV,
-      "--transport",
-      "stdio",
       MCP_SERVER_NAME,
-      "--",
+      "--command",
       context.nodeExecutable,
+      ...(guarded ? ["--env", APPLY_GUARD_ALLOW_ENV] : []),
+      "--args",
       context.serverEntryPath,
-    ]),
-  registrationAccepted: (result) => result.exitCode === 0,
-};
+    ],
+    "\n",
+  );
+}
 
 const hermesMcp: AgentTargetMcpAdapter = {
   async inspect(runtime) {
@@ -189,30 +273,42 @@ const hermesMcp: AgentTargetMcpAdapter = {
     if (listed.exitCode !== 0) return { status: "error", operation: "MCP list", result: listed };
     if (!/^\s*ast(?:\s|$)/im.test(listed.stdout)) return { status: "missing" };
     const tested = await runtime.run(["mcp", "test", MCP_SERVER_NAME]);
-    return tested.exitCode === 0 && EXPECTED_TOOLS.every((tool) => tested.stdout.includes(tool))
-      ? { status: "current" }
-      : {
-          status: "conflict",
-          detail: "The existing 'ast' registration does not expose the expected structural tools.",
-        };
+    const expectedWithoutApply = EXPECTED_TOOLS.filter((tool) => tool !== APPLY_TOOL);
+    if (
+      tested.exitCode === 0 &&
+      expectedWithoutApply.every((tool) => tested.stdout.includes(tool))
+    ) {
+      return !EXPECTED_TOOLS.includes(APPLY_TOOL) || tested.stdout.includes(APPLY_TOOL)
+        ? { status: "current" }
+        : { status: "repairable" };
+    }
+    return {
+      status: "conflict",
+      detail: "The existing 'ast' registration does not expose the expected structural tools.",
+    };
   },
-  register: (runtime, context) =>
-    runtime.run(
-      [
-        "mcp",
-        "add",
-        MCP_SERVER_NAME,
-        "--command",
-        context.nodeExecutable,
-        "--env",
-        APPLY_GUARD_ALLOW_ENV,
-        "--args",
-        context.serverEntryPath,
-      ],
-      "\n",
-    ),
+  register: (runtime, context) => hermesRegister(runtime, context, true),
+  unregister: (runtime) => runtime.run(["mcp", "remove", MCP_SERVER_NAME]),
+  registerLegacy: (runtime, context) => hermesRegister(runtime, context, false),
   registrationAccepted: (result) => result.exitCode === 0 && /saved\s+'ast'/i.test(result.stdout),
+  removalAccepted: (result) => result.exitCode === 0,
 };
+
+function separatorRegister(
+  runtime: AgentTargetRuntime,
+  context: AgentTargetMcpContext,
+  guarded: boolean,
+) {
+  return runtime.run([
+    "mcp",
+    "add",
+    MCP_SERVER_NAME,
+    ...(guarded ? ["--env", APPLY_GUARD_ALLOW_ENV] : []),
+    "--",
+    context.nodeExecutable,
+    context.serverEntryPath,
+  ]);
+}
 
 const codexMcp: AgentTargetMcpAdapter = {
   async inspect(runtime, context) {
@@ -221,18 +317,11 @@ const codexMcp: AgentTargetMcpAdapter = {
       context,
     );
   },
-  register: (runtime, context) =>
-    runtime.run([
-      "mcp",
-      "add",
-      MCP_SERVER_NAME,
-      "--env",
-      APPLY_GUARD_ALLOW_ENV,
-      "--",
-      context.nodeExecutable,
-      context.serverEntryPath,
-    ]),
+  register: (runtime, context) => separatorRegister(runtime, context, true),
+  unregister: (runtime) => runtime.run(["mcp", "remove", MCP_SERVER_NAME]),
+  registerLegacy: (runtime, context) => separatorRegister(runtime, context, false),
   registrationAccepted: (result) => result.exitCode === 0,
+  removalAccepted: (result) => result.exitCode === 0,
 };
 
 const copilotMcp: AgentTargetMcpAdapter = {
@@ -242,19 +331,29 @@ const copilotMcp: AgentTargetMcpAdapter = {
       context,
     );
   },
-  register: (runtime, context) =>
-    runtime.run([
-      "mcp",
-      "add",
-      MCP_SERVER_NAME,
-      "--env",
-      APPLY_GUARD_ALLOW_ENV,
-      "--",
-      context.nodeExecutable,
-      context.serverEntryPath,
-    ]),
+  register: (runtime, context) => separatorRegister(runtime, context, true),
+  unregister: (runtime) => runtime.run(["mcp", "remove", MCP_SERVER_NAME]),
+  registerLegacy: (runtime, context) => separatorRegister(runtime, context, false),
   registrationAccepted: (result) => result.exitCode === 0,
+  removalAccepted: (result) => result.exitCode === 0,
 };
+
+function geminiRegister(
+  runtime: AgentTargetRuntime,
+  context: AgentTargetMcpContext,
+  guarded: boolean,
+) {
+  return runtime.run([
+    "mcp",
+    "add",
+    MCP_SERVER_NAME,
+    ...(guarded ? ["--env", APPLY_GUARD_ALLOW_ENV] : []),
+    context.nodeExecutable,
+    context.serverEntryPath,
+    "--scope",
+    "user",
+  ]);
+}
 
 const geminiMcp: AgentTargetMcpAdapter = {
   async inspect(runtime, context) {
@@ -275,30 +374,31 @@ const geminiMcp: AgentTargetMcpAdapter = {
     const pattern = /ast[^\n]*Connected[^\n]*command:\s*([^,\n]+),\s*args:\s*\[([^\]]*)\]/i;
     const match = result.stdout.match(pattern);
     if (!match) return { status: "error", operation: "MCP inspection", result };
-    return expected(
+    const matches = expected(
       context,
       match[1]?.trim(),
       match[2]?.split(",").map((item) => item.trim()),
-    )
-      ? { status: "current" }
-      : {
+    );
+    const inspection = matchingRegistration(
+      matches,
+      /(?:^|\s|,)AST_MCP_APPLY_GUARD\s*=\s*allow(?:\s|$|,)/m.test(result.stdout)
+        ? "current"
+        : /\benv(?:ironment)?\s*:/i.test(result.stdout)
+          ? "conflict"
+          : "repairable",
+    );
+    return inspection.status === "conflict"
+      ? {
           status: "conflict",
           detail: "The existing Gemini 'ast' registration does not match this package.",
-        };
+        }
+      : inspection;
   },
-  register: (runtime, context) =>
-    runtime.run([
-      "mcp",
-      "add",
-      MCP_SERVER_NAME,
-      "--env",
-      APPLY_GUARD_ALLOW_ENV,
-      context.nodeExecutable,
-      context.serverEntryPath,
-      "--scope",
-      "user",
-    ]),
+  register: (runtime, context) => geminiRegister(runtime, context, true),
+  unregister: (runtime) => runtime.run(["mcp", "remove", MCP_SERVER_NAME, "--scope", "user"]),
+  registerLegacy: (runtime, context) => geminiRegister(runtime, context, false),
   registrationAccepted: (result) => result.exitCode === 0,
+  removalAccepted: (result) => result.exitCode === 0,
 };
 
 const opencodeMcp: AgentTargetMcpAdapter = {
@@ -316,7 +416,14 @@ const opencodeMcp: AgentTargetMcpAdapter = {
   async register() {
     return { exitCode: 1, stdout: "", stderr: "OpenCode CLI registration is disabled." };
   },
+  async unregister() {
+    return { exitCode: 1, stdout: "", stderr: "OpenCode CLI removal is disabled." };
+  },
+  async registerLegacy() {
+    return { exitCode: 1, stdout: "", stderr: "OpenCode CLI registration is disabled." };
+  },
   registrationAccepted: () => false,
+  removalAccepted: () => false,
 };
 
 export const AGENT_TARGETS = [

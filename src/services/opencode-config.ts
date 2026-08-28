@@ -23,6 +23,47 @@ export interface OpenCodeConfigPlan {
   status: "installed" | "unchanged";
 }
 
+export type OpenCodeAstRegistrationStatus = "missing" | "current" | "repairable" | "conflict";
+
+function desiredAst(nodeExecutable: string, serverEntryPath: string) {
+  return {
+    type: "local",
+    command: [nodeExecutable, serverEntryPath],
+    enabled: true,
+    environment: { AST_MCP_APPLY_GUARD: "allow" },
+  };
+}
+
+export function classifyOpenCodeAstRegistration(
+  value: unknown,
+  nodeExecutable: string,
+  serverEntryPath: string,
+): OpenCodeAstRegistrationStatus {
+  if (value === undefined) return "missing";
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return "conflict";
+  const registration = value as Record<string, unknown>;
+  const command = registration.command;
+  const baseMatches =
+    registration.type === "local" &&
+    registration.enabled === true &&
+    Array.isArray(command) &&
+    command.length === 2 &&
+    command[0] === nodeExecutable &&
+    command[1] === serverEntryPath;
+  if (!baseMatches) return "conflict";
+  const keys = Object.keys(registration).sort().join(",");
+  if (keys === "command,enabled,type") return "repairable";
+  if (keys !== "command,enabled,environment,type") return "conflict";
+  const environment = registration.environment;
+  return environment !== null &&
+    typeof environment === "object" &&
+    !Array.isArray(environment) &&
+    Object.keys(environment).length === 1 &&
+    (environment as Record<string, unknown>).AST_MCP_APPLY_GUARD === "allow"
+    ? "current"
+    : "conflict";
+}
+
 function hash(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -109,16 +150,16 @@ export async function planOpenCodeConfig(options: {
   }
   if (!parsed || typeof parsed !== "object")
     throw new Error("OpenCode configuration must contain an object.");
-  const desired = {
-    type: "local",
-    command: [options.nodeExecutable, options.serverEntryPath],
-    enabled: true,
-    environment: { AST_MCP_APPLY_GUARD: "allow" },
-  };
-  if (parsed.mcp?.ast !== undefined && JSON.stringify(parsed.mcp.ast) !== JSON.stringify(desired))
+  const desired = desiredAst(options.nodeExecutable, options.serverEntryPath);
+  const registrationStatus = classifyOpenCodeAstRegistration(
+    parsed.mcp?.ast,
+    options.nodeExecutable,
+    options.serverEntryPath,
+  );
+  if (registrationStatus === "conflict")
     throw new Error("OpenCode configuration conflict at mcp.ast.");
   const content =
-    parsed.mcp?.ast === undefined
+    registrationStatus === "missing" || registrationStatus === "repairable"
       ? applyEdits(
           before,
           modify(before, ["mcp", "ast"], desired, {

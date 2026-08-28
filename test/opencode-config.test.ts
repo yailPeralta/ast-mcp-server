@@ -59,6 +59,54 @@ describe("OpenCode routed configuration", () => {
     expect((await stat(file)).mode & 0o777).toBe(0o640);
   });
 
+  it("migrates the exact pre-guard registration without replacing unrelated config", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "opencode.json");
+    await writeFile(
+      file,
+      `{
+  "theme": "dark",
+  "mcp": {
+    "ast": {
+      "type": "local",
+      "command": ["/node", "/pkg/dist/index.js"],
+      "enabled": true
+    }
+  }
+}
+`,
+    );
+
+    const plan = await planOpenCodeConfig({
+      filePath: file,
+      nodeExecutable: "/node",
+      serverEntryPath: "/pkg/dist/index.js",
+    });
+    await applyOpenCodeConfigPlan(plan);
+
+    expect(plan.status).toBe("installed");
+    expect(await readFile(file, "utf8")).toContain('"AST_MCP_APPLY_GUARD": "allow"');
+    expect(await readFile(file, "utf8")).toContain('"theme": "dark"');
+  });
+
+  it("recognizes the exact legacy OpenCode shape independent of JSON key order", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "opencode.json");
+    await writeFile(
+      file,
+      '{"mcp":{"ast":{"enabled":true,"command":["/node","/pkg/dist/index.js"],"type":"local"}}}\n',
+    );
+
+    const plan = await planOpenCodeConfig({
+      filePath: file,
+      nodeExecutable: "/node",
+      serverEntryPath: "/pkg/dist/index.js",
+    });
+
+    expect(plan.status).toBe("installed");
+    expect(plan.content).toContain('"AST_MCP_APPLY_GUARD": "allow"');
+  });
+
   it("isolates distinct explicit-file and config-directory authorities without merging bytes", async () => {
     const root = await temporaryDirectory();
     const selected = path.join(root, "selected", "custom.json");

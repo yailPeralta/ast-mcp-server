@@ -20,6 +20,10 @@ if (!statePath) {
 const readState = () =>
   fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, "utf8")) : null;
 const writeState = (value) => fs.writeFileSync(statePath, JSON.stringify(value));
+const guardFromArgs = () => {
+  const index = args.indexOf("--env");
+  return index >= 0 ? args[index + 1]?.split("=")[1] : undefined;
+};
 
 const configuredRoot = (value, fallback) => path.resolve(process.cwd(), value ?? fallback);
 const nonEmptyFile = (filePath) => {
@@ -109,14 +113,22 @@ if (executableName === "claude" && args[0] === "mcp" && args[1] === "get") {
   Status: ✔ Connected
   Type: stdio
   Command: ${state.command}
-  Args: ${state.entry}`);
+  Args: ${state.entry}${
+    state.guard ? `\n  Environment:\n    AST_MCP_APPLY_GUARD=${state.guard}` : ""
+  }`);
   process.exit(0);
 }
 
 if (executableName === "claude" && args[0] === "mcp" && args[1] === "add") {
   const separator = args.indexOf("--");
-  writeState({ command: args[separator + 1], entry: args[separator + 2] });
+  writeState({ command: args[separator + 1], entry: args[separator + 2], guard: guardFromArgs() });
   console.log("Added stdio MCP server ast");
+  process.exit(0);
+}
+
+if (executableName === "claude" && args[0] === "mcp" && args[1] === "remove") {
+  fs.rmSync(statePath, { force: true });
+  console.log("Removed MCP server ast");
   process.exit(0);
 }
 
@@ -133,7 +145,7 @@ if (executableName === "hermes" && args[0] === "mcp" && args[1] === "test") {
   }
   console.log(`Testing 'ast'...
   ✓ Connected
-  ✓ Tools discovered: 16
+  ✓ Tools discovered: ${state.guard === "allow" ? 16 : 15}
   ast_list_files
   ast_get_project_status
   ast_explore
@@ -148,16 +160,25 @@ if (executableName === "hermes" && args[0] === "mcp" && args[1] === "test") {
   ast_rename_symbol
   ast_replace_symbol_body
   ast_scaffold_class
-  ast_get_operation_preview
-  ast_apply_operation`);
+  ast_get_operation_preview${state.guard === "allow" ? "\n  ast_apply_operation" : ""}`);
   process.exit(0);
 }
 
 if (executableName === "hermes" && args[0] === "mcp" && args[1] === "add") {
   const commandIndex = args.indexOf("--command");
   const argsIndex = args.indexOf("--args");
-  writeState({ command: args[commandIndex + 1], entry: args[argsIndex + 1] });
+  writeState({
+    command: args[commandIndex + 1],
+    entry: args[argsIndex + 1],
+    guard: guardFromArgs(),
+  });
   console.log("✓ Saved 'ast' (16/16 tools enabled)");
+  process.exit(0);
+}
+
+if (executableName === "hermes" && args[0] === "mcp" && args[1] === "remove") {
+  fs.rmSync(statePath, { force: true });
+  console.log("Removed MCP server ast");
   process.exit(0);
 }
 
@@ -170,7 +191,12 @@ if (executableName === "codex" && args[0] === "mcp" && args[1] === "get") {
   console.log(
     JSON.stringify({
       name: "ast",
-      transport: { type: "stdio", command: state.command, args: [state.entry] },
+      transport: {
+        type: "stdio",
+        command: state.command,
+        args: [state.entry],
+        ...(state.guard ? { env: { AST_MCP_APPLY_GUARD: state.guard } } : {}),
+      },
     }),
   );
   process.exit(0);
@@ -189,6 +215,7 @@ if (executableName === "copilot" && args[0] === "mcp" && args[1] === "get") {
         type: "local",
         command: state.command,
         args: [state.entry],
+        ...(state.guard ? { env: { AST_MCP_APPLY_GUARD: state.guard } } : {}),
         source: "user",
         enabled: true,
       },
@@ -209,8 +236,18 @@ if (
     console.error("Unsupported Copilot MCP add syntax.");
     process.exit(2);
   }
-  writeState({ command: args[separator + 1], entry: args[separator + 2] });
+  writeState({ command: args[separator + 1], entry: args[separator + 2], guard: guardFromArgs() });
   console.log("Added MCP server ast");
+  process.exit(0);
+}
+
+if (
+  (executableName === "codex" || executableName === "copilot") &&
+  args[0] === "mcp" &&
+  args[1] === "remove"
+) {
+  fs.rmSync(statePath, { force: true });
+  console.log("Removed MCP server ast");
   process.exit(0);
 }
 
@@ -218,7 +255,9 @@ if (executableName === "gemini" && args[0] === "mcp" && args[1] === "list") {
   const state = readState();
   console.log(
     state
-      ? `ast Connected command: ${state.command}, args: [${state.entry}]`
+      ? `ast Connected command: ${state.command}, args: [${state.entry}]${
+          state.guard ? `, env: AST_MCP_APPLY_GUARD=${state.guard}` : ""
+        }`
       : "No MCP servers configured.",
   );
   process.exit(0);
@@ -234,8 +273,13 @@ if (executableName === "gemini" && args[0] === "mcp" && args[1] === "add") {
     }
     positionals.push(args[index]);
   }
-  writeState({ command: positionals[0], entry: positionals[1] });
+  writeState({ command: positionals[0], entry: positionals[1], guard: guardFromArgs() });
   console.log("MCP server ast added.");
+  process.exit(0);
+}
+if (executableName === "gemini" && args[0] === "mcp" && args[1] === "remove") {
+  fs.rmSync(statePath, { force: true });
+  console.log("MCP server ast removed.");
   process.exit(0);
 }
 
