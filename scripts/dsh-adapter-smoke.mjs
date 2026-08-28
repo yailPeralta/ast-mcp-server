@@ -88,7 +88,13 @@ async function resolvePinnedHarness() {
 /** Pack @deepseek-ai/dsh-mcp-client from the pinned source into an installable tarball. */
 async function packPinnedMcpClient(source) {
   const cwd = path.join(source, "packages", "mcp", "mcp-client");
-  const environment = { ...process.env, NODE_OPTIONS: "", CI: "true" };
+  const environment = {
+    ...process.env,
+    NODE_OPTIONS: "",
+    CI: "true",
+    COREPACK_INTEGRITY_CHECK: "0",
+    COREPACK_USE_LATEST: "0",
+  };
   await run("pnpm", ["pack", "--pack-destination", temporaryRoot], { cwd, env: environment });
   const archive = path.join(temporaryRoot, `deepseek-ai-dsh-mcp-client-${PINNED_VERSION}.tgz`);
   assert(
@@ -109,10 +115,15 @@ async function provisionPinnedHarness() {
   });
   await run("git", ["-C", root, "checkout", PINNED_REVISION]);
   // The git commit is the authoritative identity (verified via rev-parse HEAD);
-  // pnpm's lockfile package-signature check can fail when the registry rotates
-  // its signing key, so disable it for this pinned source build.
-  await writeFile(path.join(root, ".npmrc"), "verify-signatures=false\n", "utf8");
-  const provisionEnvironment = { ...process.env, NODE_OPTIONS: "", CI: "true" };
+  // corepack verifies the pnpm download signature, which fails when the registry
+  // rotates its signing key, so disable that check for the pinned source build.
+  const provisionEnvironment = {
+    ...process.env,
+    NODE_OPTIONS: "",
+    CI: "true",
+    COREPACK_INTEGRITY_CHECK: "0",
+    COREPACK_USE_LATEST: "0",
+  };
   await run("corepack", ["enable"], { cwd: root, env: provisionEnvironment });
   await run("pnpm", ["install"], { cwd: root, env: provisionEnvironment });
   await run("pnpm", ["build"], { cwd: root, env: provisionEnvironment });
@@ -413,7 +424,12 @@ try {
   const { source, cliBin } = await resolvePinnedHarness();
   const mcpClientArchive = await packPinnedMcpClient(source);
   await mkdir(dshHome, { recursive: true });
-  const dshEnvironment = { ...process.env, DSH_HOME: dshHome };
+  const dshEnvironment = {
+    ...process.env,
+    DSH_HOME: dshHome,
+    COREPACK_INTEGRITY_CHECK: "0",
+    COREPACK_USE_LATEST: "0",
+  };
   await run(process.execPath, [cliBin, "plugin", "--profile", "smoke", "add", archiveReference], {
     cwd: temporaryRoot,
     env: dshEnvironment,
