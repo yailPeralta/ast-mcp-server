@@ -71,9 +71,10 @@ Statuses express sequencing, not implementation authorization.
 
 The **H-01a native agent/session result visibility** chain merged through PRs [#95](https://github.com/yailPeralta/ast-mcp-server/pull/95)–[#99](https://github.com/yailPeralta/ast-mcp-server/pull/99). Its mandatory gate preserves the immutable public v0.13.0 empty-result RED and binds one candidate value across raw capture, native presentation, the next model request, durable storage, cold Agent resume/replay, and owned teardown.
 
+**H-02 schema fidelity** merged in PR [#104](https://github.com/yailPeralta/ast-mcp-server/pull/104). The gate binds direct MCP, scoped registry, and native schemas; preserves all three cross-field failures; and keeps multi-format output exceptions honest.
+
 Continue with separate bounded work units:
 
-- deliver H-02 issues [#100](https://github.com/yailPeralta/ast-mcp-server/issues/100)–[#102](https://github.com/yailPeralta/ast-mcp-server/issues/102): exact scoped schemas, executable `ast_explore` inputs, and honest multi-format output publication;
 - prove H-03 transport timeout outside the complete server queue/execution budget;
 - complete H-05 cancellation, reconnect, removal, public-error, shutdown, and GUI lifecycle evidence.
 
@@ -214,4 +215,4 @@ Pinned upstream evidence remains DeepSeek Harness `dsh-v0.1.2-alpha.1` at `cd5ef
 
 ## Next decision
 
-Deliver the candidate-verified **H-02 schema fidelity** correction for issues #100–#102 against the same pinned host identity. Preserve the public empty `ast_explore` schema as RED evidence, require registry/native schema parity, and keep timeout, remaining lifecycle, UI, Code Mode, output-vocabulary projection, and apply work separate. After H-02 merges, proceed to H-03 timeout ownership.
+Execute only **H-03 timeout ownership** against the same pinned host identity: a slow fixture must end with AST's bounded operational error rather than a generic bridge timeout, with cancellation preserved across cold, queued, and recycled-worker cases. Keep remaining lifecycle, UI, Code Mode, output-vocabulary projection (#103), and apply work separate.

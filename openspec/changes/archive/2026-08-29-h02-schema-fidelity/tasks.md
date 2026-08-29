@@ -6,7 +6,7 @@
 - [x] 2. GREEN: publish the object schema and apply refinements inside the registered handler.
 - [x] 3. REFACTOR: prove all other schemas are identical and retain bounded hashes/evidence.
 - [x] 4. VERIFY: focused tests, exact A/B/C/D Harness, format, lint, typecheck, full suite, package gates.
-- [ ] 5. DELIVER: update roadmap/evidence, adversarial review, one issue-linked PR.
+- [x] 5. DELIVER: update roadmap/evidence, adversarial review, one issue-linked PR.
 
 ## Forecast
 
