@@ -2,11 +2,19 @@ import { Buffer } from "node:buffer";
 import { isDeepStrictEqual } from "node:util";
 import { decode, encode } from "@toon-format/toon";
 import { z } from "zod";
+import {
+  COMPILER_WORKER_MAX_RESULT_BYTES,
+  fitsCompilerWorkerResponseResult,
+} from "../services/compiler-worker-protocol.js";
 import { createProjectIdentity, type ProjectIdentity } from "../services/project-status.js";
 import { renderPublicError } from "../services/public-errors.js";
 import { emitToolFailureEvent } from "../services/runtime-logger.js";
 
 export const MAX_TOON_RESULT_BYTES = 10 * 1024 * 1024;
+// Leave room for the unchanged structured value plus JSON-RPC framing under
+// the supervised worker's 256 KiB line limit.
+export const MAX_TEXT_PROJECTION_BYTES = 112 * 1024;
+export const MAX_PROJECTED_RESULT_BYTES = COMPILER_WORKER_MAX_RESULT_BYTES;
 
 export const ToolOutputFormatSchema = z.enum(["json", "toon"]).default("json");
 export type ToolOutputFormat = z.infer<typeof ToolOutputFormatSchema>;
@@ -41,6 +49,61 @@ type StructuredToolResult<T extends Record<string, unknown>> = {
   content: [];
   structuredContent: T;
 };
+
+type ProjectableToolResult = {
+  readonly content: readonly unknown[];
+  readonly structuredContent?: unknown;
+  readonly isError?: boolean;
+};
+
+/**
+ * Add a deterministic model-visible JSON projection without replacing the
+ * canonical structured value. Existing content wins, and oversized values get
+ * an explicit bounded marker when the complete framed result has room for it;
+ * otherwise the unchanged structured-only result remains authoritative.
+ */
+export function projectStructuredContentAsText<T extends ProjectableToolResult>(
+  result: T,
+  enabled: boolean,
+  maxBytes = MAX_TEXT_PROJECTION_BYTES,
+): T {
+  if (
+    !enabled ||
+    result.isError === true ||
+    result.content.length > 0 ||
+    result.structuredContent === undefined
+  ) {
+    return result;
+  }
+
+  let text: string;
+  try {
+    text =
+      JSON.stringify(result.structuredContent) ??
+      "(structured result is not JSON-serializable for model-visible projection)";
+  } catch {
+    text = "(structured result is not JSON-serializable for model-visible projection)";
+  }
+  const byteLength = Buffer.byteLength(text, "utf8");
+  if (byteLength > maxBytes) {
+    text = `(structured result exceeds the ${maxBytes}-byte model-visible projection limit; canonical structuredContent remains available)`;
+  }
+  let projected = {
+    ...result,
+    content: [{ type: "text", text }],
+  } as T;
+  if (fitsCompilerWorkerResponseResult(projected)) return projected;
+  projected = {
+    ...result,
+    content: [
+      {
+        type: "text",
+        text: `(structured result exceeds the ${MAX_PROJECTED_RESULT_BYTES}-byte complete projection limit; canonical structuredContent remains available)`,
+      },
+    ],
+  } as T;
+  return fitsCompilerWorkerResponseResult(projected) ? projected : result;
+}
 
 export function structuredResult<T extends Record<string, unknown>>(
   structuredContent: T,

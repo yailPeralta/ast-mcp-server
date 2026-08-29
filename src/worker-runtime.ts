@@ -52,7 +52,12 @@ export async function runStdioServer(
   runtimeActivity.prepareForStartup();
   const runtimePolicy = options.runtimePolicy ?? readRuntimePolicy();
   const server =
-    options.server ?? createServer({ runtimeActivity, denyApply: runtimePolicy.denyApply });
+    options.server ??
+    createServer({
+      runtimeActivity,
+      denyApply: runtimePolicy.denyApply,
+      projectStructuredContentAsText: runtimePolicy.projectStructuredContentAsText,
+    });
   const transport = options.transport ?? new StdioServerTransport();
   const send = transport.send.bind(transport);
   transport.send = (message, sendOptions) =>

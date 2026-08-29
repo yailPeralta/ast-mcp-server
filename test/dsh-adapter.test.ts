@@ -1,10 +1,17 @@
+import { Buffer } from "node:buffer";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import yaml from "yaml";
 import { createServer } from "../src/server.js";
+import {
+  COMPILER_WORKER_JSONRPC_ENVELOPE_RESERVE_BYTES,
+  COMPILER_WORKER_MAX_FRAME_BYTES,
+  fitsCompilerWorkerResponseResult,
+} from "../src/services/compiler-worker-protocol.js";
 import { RUNTIME_POLICY_ENV_KEYS, parseRuntimePolicy } from "../src/services/runtime-policy.js";
 import { toolCatalog } from "../src/tools/catalog.js";
+import { MAX_PROJECTED_RESULT_BYTES, projectStructuredContentAsText } from "../src/tools/result.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const PATCH_PATH = path.join(repositoryRoot, "cordis.patch.yml");
@@ -116,7 +123,10 @@ describe("DeepSeek Harness adapter patch", () => {
     const patch = await parsePatch();
     const config = patch[0]!.insert![0]!.config;
 
-    expect(config.env).toMatchObject({ AST_MCP_APPLY_GUARD: "deny" });
+    expect(config.env).toMatchObject({
+      AST_MCP_APPLY_GUARD: "deny",
+      AST_MCP_TEXT_PROJECTION: "canonical_json",
+    });
     expect(config.failOnStartupError).toBe(true);
   });
 });
@@ -157,6 +167,102 @@ describe("pinned Harness smoke contract", () => {
     expect(readme).toContain("yarn pack --out ast-mcp-server-%v.tgz");
     expect(readme).toContain("--env AST_MCP_APPLY_GUARD=allow");
     expect(patch).not.toContain("ast-mcp-server@0.13.0");
+  });
+});
+
+describe("Harness canonical text projection", () => {
+  it("projects empty successful content losslessly only for the explicit opt-in", () => {
+    const structuredContent = {
+      compiler: { ready: true },
+      freshness: { state: "fresh" },
+    };
+    const result = { content: [] as [], structuredContent };
+
+    expect(projectStructuredContentAsText(result, false)).toBe(result);
+    expect(projectStructuredContentAsText(result, true)).toEqual({
+      content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+      structuredContent,
+    });
+    expect(
+      projectStructuredContentAsText(
+        { content: [{ type: "text", text: "already visible" }], structuredContent },
+        true,
+      ),
+    ).toEqual({
+      content: [{ type: "text", text: "already visible" }],
+      structuredContent,
+    });
+    expect(projectStructuredContentAsText(result, true, 1)).toEqual({
+      content: [
+        {
+          type: "text",
+          text: expect.stringContaining("exceeds the 1-byte model-visible projection limit"),
+        },
+      ],
+      structuredContent,
+    });
+  });
+
+  it("keeps the projected result below the supervised worker line budget", () => {
+    const result = {
+      content: [] as [],
+      structuredContent: { data: "x".repeat(113 * 1024) },
+    };
+
+    const projected = projectStructuredContentAsText(result, true);
+
+    expect(projected.content).toEqual([
+      {
+        type: "text",
+        text: expect.stringContaining("model-visible projection limit"),
+      },
+    ]);
+    expect(Buffer.byteLength(JSON.stringify(projected))).toBeLessThan(256 * 1024);
+  });
+
+  it("accounts for escape amplification in the complete projected frame", () => {
+    const result = {
+      content: [] as [],
+      structuredContent: { data: '"\\'.repeat(25 * 1024) },
+    };
+
+    const projected = projectStructuredContentAsText(result, true);
+
+    expect(projected.content).toEqual([
+      {
+        type: "text",
+        text: expect.stringContaining("complete projection limit"),
+      },
+    ]);
+    expect(Buffer.byteLength(JSON.stringify(projected))).toBeLessThanOrEqual(
+      MAX_PROJECTED_RESULT_BYTES,
+    );
+    expect(MAX_PROJECTED_RESULT_BYTES + COMPILER_WORKER_JSONRPC_ENVELOPE_RESERVE_BYTES).toBe(
+      COMPILER_WORKER_MAX_FRAME_BYTES,
+    );
+    const completeFrame = JSON.stringify({
+      jsonrpc: "2.0",
+      id: "x".repeat(8 * 1024 - 2),
+      result: projected,
+    });
+    expect(fitsCompilerWorkerResponseResult(projected)).toBe(true);
+    expect(Buffer.byteLength(completeFrame)).toBeLessThanOrEqual(COMPILER_WORKER_MAX_FRAME_BYTES);
+  });
+
+  it("selects the projection only by its closed runtime-policy value", () => {
+    const defaults = parseRuntimePolicy({});
+    expect(defaults.projectStructuredContentAsText).toBe(false);
+    expect(defaults.reasons.AST_MCP_TEXT_PROJECTION).toBe("default");
+
+    const configured = parseRuntimePolicy({ AST_MCP_TEXT_PROJECTION: "canonical_json" });
+    expect(configured.projectStructuredContentAsText).toBe(true);
+    expect(configured.reasons.AST_MCP_TEXT_PROJECTION).toBe("configured");
+
+    const hostile = "canonical_json $(touch nope)";
+    const invalid = parseRuntimePolicy({ AST_MCP_TEXT_PROJECTION: hostile });
+    expect(invalid.projectStructuredContentAsText).toBe(false);
+    expect(invalid.reasons.AST_MCP_TEXT_PROJECTION).toBe("invalid_mode");
+    expect(JSON.stringify(invalid)).not.toContain(hostile);
   });
 });
 

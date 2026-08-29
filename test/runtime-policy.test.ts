@@ -57,6 +57,7 @@ describe("runtime policy", () => {
       shutdownDrainTimeoutMs: 10_000,
       compilerWorkerIdleTtlMs: 60_000,
       denyApply: true,
+      projectStructuredContentAsText: false,
     });
     expect(policy.reasons).toEqual(
       Object.fromEntries(RUNTIME_POLICY_ENV_KEYS.map((key) => [key, "default"])),
@@ -130,6 +131,7 @@ describe("runtime policy", () => {
       "compilerWorkerMode",
       "compilerWorkerIdleTtlMs",
       "denyApply",
+      "projectStructuredContentAsText",
       "reasons",
     ]);
     expect(Object.isFrozen(RUNTIME_POLICY_ENV_KEYS)).toBe(true);
@@ -167,6 +169,7 @@ describe("runtime policy", () => {
       "AST_COMPILER_WORKER_MODE",
       "AST_COMPILER_WORKER_IDLE_TTL_MS",
       "AST_MCP_APPLY_GUARD",
+      "AST_MCP_TEXT_PROJECTION",
     ] satisfies RuntimePolicyEnvironmentKey[]);
   });
 
@@ -205,6 +208,7 @@ describe("runtime policy", () => {
       NODE_OPTIONS: "--import=/tmp/hostile.mjs",
       LD_PRELOAD: "/tmp/inject.so",
       AST_COMPILER_WORKER_MODE: "supervised",
+      AST_MCP_TEXT_PROJECTION: "canonical_json",
     });
     expect(result).toMatchObject({
       ok: true,
@@ -216,6 +220,7 @@ describe("runtime policy", () => {
           XDG_CACHE_HOME: "/tmp/cache;echo data",
           AST_MAX_PROJECT_SESSIONS: "12",
           AST_MCP_APPLY_GUARD: "deny",
+          AST_MCP_TEXT_PROJECTION: "canonical_json",
         },
       },
     });
