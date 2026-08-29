@@ -38,8 +38,11 @@ import {
 } from "./agent-targets.js";
 import {
   applyOpenCodeConfigPlan,
+  classifyOpenCodeAstRegistration,
   planOpenCodeConfig,
   resolveOpenCodeConfigPath,
+  OpenCodeConfigRecoveryError,
+  runOpenCodeConfigTransaction,
   withIsolatedOpenCodeConfig,
   type OpenCodeConfigPlan,
 } from "./opencode-config.js";
@@ -57,7 +60,7 @@ interface CommandResult {
 
 interface McpInspection {
   agent: AgentId;
-  status: "missing" | "current" | "conflict" | "blocked_untrusted_folder";
+  status: "missing" | "current" | "repairable" | "conflict" | "blocked_untrusted_folder";
   detail?: string;
 }
 
@@ -421,11 +424,13 @@ async function verifyOpenCode(
         );
       }
       const command = config?.mcp?.ast?.command;
+      const guard = config?.mcp?.ast?.environment?.AST_MCP_APPLY_GUARD;
       if (
         !Array.isArray(command) ||
         command.length !== 2 ||
         command[0] !== context.nodeExecutable ||
-        command[1] !== context.serverEntryPath
+        command[1] !== context.serverEntryPath ||
+        guard !== "allow"
       ) {
         throw new AgentSetupError(
           "OpenCode resolved configuration does not contain the expected ast server.",
@@ -476,6 +481,89 @@ async function configureMcp(
       "AGENT_VERIFICATION_FAILED",
       { agent, inspection: verified },
     );
+  }
+}
+
+async function repairMcp(
+  agent: AgentId,
+  detection: AgentDetection,
+  serverEntryPath: string,
+  nodeExecutable: string,
+  environment: NodeJS.ProcessEnv,
+  timeoutMs: number,
+): Promise<void> {
+  const target = getAgentTarget(agent);
+  const runtime = targetRuntime(detection, environment, timeoutMs);
+  const context = { serverEntryPath, nodeExecutable };
+  const authenticated = await target.mcp.inspect(runtime, context);
+  if (authenticated.status !== "repairable") {
+    throw new AgentSetupError(
+      `${target.label} legacy registration changed before repair and was not removed.`,
+      "AGENT_MCP_CONFLICT",
+      { agent, inspection: authenticated },
+    );
+  }
+
+  const recover = async (cause: unknown): Promise<void> => {
+    const durable = await target.mcp.inspect(runtime, context);
+    if (durable.status === "current") return;
+    if (durable.status === "repairable") throw cause;
+    if (durable.status !== "missing") {
+      throw new AgentSetupError(
+        `${target.label} migration outcome conflicts with the authenticated registration; it was preserved.`,
+        "AGENT_MCP_CONFLICT",
+        { agent, inspection: durable },
+      );
+    }
+
+    // The authenticated preimage is absent. Add it directly: never unregister
+    // here, because a concurrent replacement must make this add fail harmlessly.
+    const restored = await target.mcp.registerLegacy(runtime, context);
+    const afterRestore = await target.mcp.inspect(runtime, context);
+    if (afterRestore.status === "current") return;
+    if (afterRestore.status === "repairable") throw cause;
+    if (!target.mcp.registrationAccepted(restored) && afterRestore.status === "conflict") {
+      throw new AgentSetupError(
+        `${target.label} changed concurrently during migration recovery; the replacement was preserved.`,
+        "AGENT_MCP_CONFLICT",
+        { agent, inspection: afterRestore },
+      );
+    }
+    throw new AgentSetupError(
+      `${target.label} migration failed and its authenticated legacy registration is missing.`,
+      "AGENT_VERIFICATION_FAILED",
+      { agent, cause: cause instanceof Error ? cause.message : String(cause), afterRestore },
+    );
+  };
+
+  try {
+    let removalError: unknown;
+    try {
+      const removed = await target.mcp.unregister(runtime);
+      if (!target.mcp.removalAccepted(removed)) {
+        removalError = commandFailure(agent, "legacy MCP removal", removed);
+      }
+    } catch (error) {
+      removalError = error;
+    }
+    if (removalError !== undefined) {
+      return recover(removalError);
+    }
+
+    const added = await target.mcp.register(runtime, context);
+    if (!target.mcp.registrationAccepted(added)) {
+      throw commandFailure(agent, "MCP registration repair", added);
+    }
+    const verified = await target.mcp.inspect(runtime, context);
+    if (verified.status !== "current") {
+      throw new AgentSetupError(
+        `${target.label} saved the repaired MCP registration but verification did not match.`,
+        "AGENT_VERIFICATION_FAILED",
+        { agent, inspection: verified },
+      );
+    }
+  } catch (error) {
+    return recover(error);
   }
 }
 
@@ -618,20 +706,19 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
         { agent: "opencode", correlation_id: correlationId },
       );
     }
-    const effectiveAst = effectiveConfig?.mcp?.ast;
-    const desiredAst = {
-      type: "local",
-      command: [nodeExecutable, options.serverEntryPath],
-      enabled: true,
-    };
-    if (effectiveAst !== undefined && JSON.stringify(effectiveAst) !== JSON.stringify(desiredAst)) {
+    const effectiveAstStatus = classifyOpenCodeAstRegistration(
+      effectiveConfig?.mcp?.ast,
+      nodeExecutable,
+      options.serverEntryPath,
+    );
+    if (effectiveAstStatus === "conflict") {
       throw new AgentSetupError(
         "OpenCode effective configuration conflict at mcp.ast.",
         "AGENT_MCP_CONFLICT",
         { agent: "opencode", correlation_id: correlationId },
       );
     }
-    if (effectiveAst !== undefined && openCodePlan.status === "installed") {
+    if (effectiveAstStatus === "current" && openCodePlan.status === "installed") {
       openCodePlan = { ...openCodePlan, status: "unchanged" };
     }
   }
@@ -727,21 +814,41 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
     const inspection = inspections.find((item) => item.agent === agent)!;
     try {
       await verifyManagedAssetPlans(skillPlan, guidancePlan, applyContext);
-      if (inspection.status === "missing") {
+      if (inspection.status === "missing" || inspection.status === "repairable") {
         if (agent === "opencode") {
-          await applyOpenCodeConfigPlan(openCodePlan!);
-          if (openCodePlan!.status === "installed") {
+          try {
+            await runOpenCodeConfigTransaction(openCodePlan!, async () => {
+              await applyOpenCodeConfigPlan(openCodePlan!);
+              await verifyOpenCode(detection, environment, timeoutMs, {
+                nodeExecutable,
+                serverEntryPath: options.serverEntryPath,
+              });
+            });
+          } catch (error) {
+            if (error instanceof OpenCodeConfigRecoveryError)
+              throw new AgentSetupError(
+                "OpenCode configuration outcome could not be restored safely.",
+                "AGENT_VERIFICATION_FAILED",
+                { cause: error.message },
+              );
+            throw error;
+          }
+          if (openCodePlan!.status === "installed")
             physicalWrites.push({
               path: openCodePlan!.filePath,
               asset: "mcp_config",
               status: "installed",
             });
-          }
-          await verifyOpenCode(detection, environment, timeoutMs, {
+        } else if (inspection.status === "repairable") {
+          await repairMcp(
+            agent,
+            detection,
+            options.serverEntryPath,
             nodeExecutable,
-            serverEntryPath: options.serverEntryPath,
-          });
-        } else
+            environment,
+            timeoutMs,
+          );
+        } else {
           await configureMcp(
             agent,
             detection,
@@ -750,6 +857,7 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
             environment,
             timeoutMs,
           );
+        }
       } else if (agent === "opencode") {
         await verifyOpenCode(detection, environment, timeoutMs, {
           nodeExecutable,

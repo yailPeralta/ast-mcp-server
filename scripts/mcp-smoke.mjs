@@ -24,6 +24,7 @@ const serverEnvironment = {
   ...process.env,
   HOME: serverHome,
   XDG_CACHE_HOME: serverCacheHome,
+  AST_MCP_APPLY_GUARD: "allow",
 };
 delete serverEnvironment.AST_SYMBOL_INDEX_PERSISTENCE;
 delete serverEnvironment.AST_SYMBOL_INDEX_CACHE_ROOT;

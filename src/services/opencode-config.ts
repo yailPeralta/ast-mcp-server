@@ -18,9 +18,58 @@ export interface OpenCodeConfigPlan {
   filePath: string;
   beforeHash: string;
   beforeExists: boolean;
+  beforeContent: string;
   mode: number;
   content: string;
   status: "installed" | "unchanged";
+}
+
+export type OpenCodeAstRegistrationStatus = "missing" | "current" | "repairable" | "conflict";
+
+export class OpenCodeConfigRecoveryError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "OpenCodeConfigRecoveryError";
+  }
+}
+
+function desiredAst(nodeExecutable: string, serverEntryPath: string) {
+  return {
+    type: "local",
+    command: [nodeExecutable, serverEntryPath],
+    enabled: true,
+    environment: { AST_MCP_APPLY_GUARD: "allow" },
+  };
+}
+
+export function classifyOpenCodeAstRegistration(
+  value: unknown,
+  nodeExecutable: string,
+  serverEntryPath: string,
+): OpenCodeAstRegistrationStatus {
+  if (value === undefined) return "missing";
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return "conflict";
+  const registration = value as Record<string, unknown>;
+  const command = registration.command;
+  const baseMatches =
+    registration.type === "local" &&
+    registration.enabled === true &&
+    Array.isArray(command) &&
+    command.length === 2 &&
+    command[0] === nodeExecutable &&
+    command[1] === serverEntryPath;
+  if (!baseMatches) return "conflict";
+  const keys = Object.keys(registration).sort().join(",");
+  if (keys === "command,enabled,type") return "repairable";
+  if (keys !== "command,enabled,environment,type") return "conflict";
+  const environment = registration.environment;
+  return environment !== null &&
+    typeof environment === "object" &&
+    !Array.isArray(environment) &&
+    Object.keys(environment).length === 1 &&
+    (environment as Record<string, unknown>).AST_MCP_APPLY_GUARD === "allow"
+    ? "current"
+    : "conflict";
 }
 
 function hash(value: string): string {
@@ -109,15 +158,16 @@ export async function planOpenCodeConfig(options: {
   }
   if (!parsed || typeof parsed !== "object")
     throw new Error("OpenCode configuration must contain an object.");
-  const desired = {
-    type: "local",
-    command: [options.nodeExecutable, options.serverEntryPath],
-    enabled: true,
-  };
-  if (parsed.mcp?.ast !== undefined && JSON.stringify(parsed.mcp.ast) !== JSON.stringify(desired))
+  const desired = desiredAst(options.nodeExecutable, options.serverEntryPath);
+  const registrationStatus = classifyOpenCodeAstRegistration(
+    parsed.mcp?.ast,
+    options.nodeExecutable,
+    options.serverEntryPath,
+  );
+  if (registrationStatus === "conflict")
     throw new Error("OpenCode configuration conflict at mcp.ast.");
   const content =
-    parsed.mcp?.ast === undefined
+    registrationStatus === "missing" || registrationStatus === "repairable"
       ? applyEdits(
           before,
           modify(before, ["mcp", "ast"], desired, {
@@ -129,6 +179,7 @@ export async function planOpenCodeConfig(options: {
     filePath: options.filePath,
     beforeHash: hash(beforeExists ? before : ""),
     beforeExists,
+    beforeContent: beforeExists ? before : "",
     mode,
     content,
     status: content === before ? "unchanged" : "installed",
@@ -170,5 +221,44 @@ export async function applyOpenCodeConfigPlan(plan: OpenCodeConfigPlan): Promise
     } else await rename(temporary, plan.filePath);
   } finally {
     await rm(temporary, { force: true });
+  }
+}
+
+async function inspectOpenCodeConfigPlanState(
+  plan: OpenCodeConfigPlan,
+): Promise<"preimage" | "postimage" | "conflict"> {
+  let content = "";
+  let exists = true;
+  let mode: number | undefined;
+  try {
+    content = await readFile(plan.filePath, "utf8");
+    mode = (await stat(plan.filePath)).mode & 0o777;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") exists = false;
+    else throw error;
+  }
+  if (!plan.beforeExists && !exists) return "preimage";
+  if (plan.beforeExists && exists && content === plan.beforeContent && mode === plan.mode)
+    return "preimage";
+  if (exists && content === plan.content && mode === plan.mode) return "postimage";
+  return "conflict";
+}
+
+export async function runOpenCodeConfigTransaction(
+  plan: OpenCodeConfigPlan,
+  operation: () => Promise<void>,
+): Promise<void> {
+  try {
+    return await operation();
+  } catch (error) {
+    const state = await inspectOpenCodeConfigPlanState(plan);
+    if (state === "postimage") return undefined;
+    if (state === "conflict") {
+      throw new OpenCodeConfigRecoveryError(
+        "OpenCode configuration changed concurrently after an ambiguous write outcome; the concurrent bytes were preserved.",
+        { cause: error },
+      );
+    }
+    throw error;
   }
 }

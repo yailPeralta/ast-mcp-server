@@ -1580,4 +1580,55 @@ export function formatValue(value: number): string { return String(value); }
       'throw new Error("Not implemented: ValueService.render")',
     );
   });
+
+  it("denies the apply tool while keeping reads, prepare and preview under the guard", async () => {
+    const guardedServer = createServer({ denyApply: true });
+    const guardedClient = new Client({ name: "ast-mcp-guard-test-client", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([
+      guardedServer.connect(serverTransport),
+      guardedClient.connect(clientTransport),
+    ]);
+
+    const names = (await guardedClient.listTools()).tools.map((tool) => tool.name).sort();
+    expect(names).toHaveLength(15);
+    expect(names).not.toContain("ast_apply_operation");
+    expect(names).toEqual(
+      [...toolInventory.names].filter((name) => name !== "ast_apply_operation").sort(),
+    );
+
+    // Reads, prepare, and preview still work on the guarded surface.
+    const read = structured(
+      await guardedClient.callTool({
+        name: "ast_get_project_status",
+        arguments: { project_root: fixture.root },
+      }),
+    );
+    expect(read).toMatchObject({ compiler: { state: "ready" } });
+
+    const prepared = structured(
+      await guardedClient.callTool({
+        name: "ast_rename_symbol",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          new_name: "formatValueRenamed",
+          dry_run: true,
+        },
+      }),
+    );
+    expect(prepared.operation_id).toEqual(expect.any(String));
+
+    const preview = structured(
+      await guardedClient.callTool({
+        name: "ast_get_operation_preview",
+        arguments: {
+          operation_id: prepared.operation_id,
+          file: "src/value.ts",
+        },
+      }),
+    );
+    expect(preview).toMatchObject({ plan_hash: expect.any(String) });
+  });
 });

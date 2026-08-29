@@ -449,6 +449,7 @@ function privateEnvironment(home, temp, npmUserconfig, registry, authorityPath) 
     NPM_CONFIG_USERCONFIG: npmUserconfig,
     NPM_CONFIG_CACHE: path.join(temp, "npm-cache"),
     NPM_CONFIG_REGISTRY: registry,
+    AST_MCP_APPLY_GUARD: "allow",
   };
 }
 

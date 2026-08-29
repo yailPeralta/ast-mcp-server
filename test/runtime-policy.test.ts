@@ -56,6 +56,7 @@ describe("runtime policy", () => {
       operationDeadlineMs: 120_000,
       shutdownDrainTimeoutMs: 10_000,
       compilerWorkerIdleTtlMs: 60_000,
+      denyApply: true,
     });
     expect(policy.reasons).toEqual(
       Object.fromEntries(RUNTIME_POLICY_ENV_KEYS.map((key) => [key, "default"])),
@@ -107,7 +108,12 @@ describe("runtime policy", () => {
 
       expect(policy.maxProjectSessions).toBe(8);
       expect(policy.reasons.AST_MAX_PROJECT_SESSIONS).toBe("invalid_integer");
-      expect(Object.values(policy)).not.toContain(value);
+      // `denyApply` is a legitimate boolean, so exclude booleans before asserting
+      // the hostile value did not leak into the integer-valued policy fields.
+      const integerPolicyValues = Object.values(policy).filter(
+        (entry) => typeof entry !== "boolean",
+      );
+      expect(integerPolicyValues).not.toContain(value);
       expect(Object.values(policy.reasons)).not.toContain(value);
     }
   });
@@ -123,6 +129,7 @@ describe("runtime policy", () => {
       "shutdownDrainTimeoutMs",
       "compilerWorkerMode",
       "compilerWorkerIdleTtlMs",
+      "denyApply",
       "reasons",
     ]);
     expect(Object.isFrozen(RUNTIME_POLICY_ENV_KEYS)).toBe(true);
@@ -159,6 +166,7 @@ describe("runtime policy", () => {
       "AST_SHUTDOWN_DRAIN_TIMEOUT_MS",
       "AST_COMPILER_WORKER_MODE",
       "AST_COMPILER_WORKER_IDLE_TTL_MS",
+      "AST_MCP_APPLY_GUARD",
     ] satisfies RuntimePolicyEnvironmentKey[]);
   });
 
@@ -204,7 +212,11 @@ describe("runtime policy", () => {
       args: ["/app/dist/compiler-worker-entry.js"],
       options: {
         shell: false,
-        env: { XDG_CACHE_HOME: "/tmp/cache;echo data", AST_MAX_PROJECT_SESSIONS: "12" },
+        env: {
+          XDG_CACHE_HOME: "/tmp/cache;echo data",
+          AST_MAX_PROJECT_SESSIONS: "12",
+          AST_MCP_APPLY_GUARD: "deny",
+        },
       },
     });
     expect(JSON.stringify(result)).not.toMatch(/NODE_OPTIONS|LD_PRELOAD|AST_COMPILER_WORKER_MODE/);

@@ -7,6 +7,7 @@ export const RUNTIME_POLICY_ENV_KEYS = Object.freeze([
   "AST_SHUTDOWN_DRAIN_TIMEOUT_MS",
   "AST_COMPILER_WORKER_MODE",
   "AST_COMPILER_WORKER_IDLE_TTL_MS",
+  "AST_MCP_APPLY_GUARD",
 ] as const);
 
 export type RuntimePolicyEnvironmentKey = (typeof RUNTIME_POLICY_ENV_KEYS)[number];
@@ -26,6 +27,8 @@ export interface RuntimePolicy {
   readonly shutdownDrainTimeoutMs: number;
   readonly compilerWorkerMode: "in_process" | "supervised";
   readonly compilerWorkerIdleTtlMs: number;
+  /** Deny every apply-effect MCP tool at registration (deny-by-default apply guard). */
+  readonly denyApply: boolean;
   readonly reasons: RuntimePolicyReasons;
 }
 
@@ -95,6 +98,16 @@ export function parseRuntimePolicy(environment: RuntimePolicyEnvironment): Runti
     0,
     86_400_000,
   );
+  const rawApplyGuard = environment.AST_MCP_APPLY_GUARD;
+  // Fail-closed: only an explicit `allow` permits the apply-effect MCP tool on
+  // this surface. A missing value, `deny`, or any invalid value denies apply.
+  const denyApply = rawApplyGuard !== "allow";
+  const applyGuardReason: RuntimePolicyReason =
+    rawApplyGuard === undefined
+      ? "default"
+      : rawApplyGuard === "allow" || rawApplyGuard === "deny"
+        ? "configured"
+        : "invalid_mode";
 
   const reasons: RuntimePolicyReasons = Object.freeze({
     AST_MAX_PROJECT_SESSIONS: maxProjectSessions.reason,
@@ -104,6 +117,7 @@ export function parseRuntimePolicy(environment: RuntimePolicyEnvironment): Runti
     AST_SHUTDOWN_DRAIN_TIMEOUT_MS: shutdownDrainTimeoutMs.reason,
     AST_COMPILER_WORKER_MODE: compilerWorkerModeReason,
     AST_COMPILER_WORKER_IDLE_TTL_MS: compilerWorkerIdleTtlMs.reason,
+    AST_MCP_APPLY_GUARD: applyGuardReason,
   });
 
   return Object.freeze({
@@ -114,6 +128,7 @@ export function parseRuntimePolicy(environment: RuntimePolicyEnvironment): Runti
     shutdownDrainTimeoutMs: shutdownDrainTimeoutMs.value,
     compilerWorkerMode,
     compilerWorkerIdleTtlMs: compilerWorkerIdleTtlMs.value,
+    denyApply,
     reasons,
   });
 }
@@ -164,6 +179,9 @@ export function createCompilerWorkerSpawnSpec(
     AST_QUEUE_WAIT_TIMEOUT_MS: String(policy.queueWaitTimeoutMs),
     AST_OPERATION_DEADLINE_MS: String(policy.operationDeadlineMs),
     AST_SHUTDOWN_DRAIN_TIMEOUT_MS: String(policy.shutdownDrainTimeoutMs),
+    // Forward the parent's resolved apply-guard policy so the supervised worker
+    // registers the same tool surface (deny-by-default fail-closed, allow opt-in).
+    AST_MCP_APPLY_GUARD: policy.denyApply ? "deny" : "allow",
   });
   return {
     ok: true,

@@ -2706,6 +2706,7 @@ function childEnvironment(overrides = {}) {
     LANG: "C.UTF-8",
     LC_ALL: "C.UTF-8",
     TZ: "UTC",
+    AST_MCP_APPLY_GUARD: "allow",
     ...overrides,
   };
 }
@@ -3296,6 +3297,7 @@ function projectEnvironment(policy, cacheRoot, extra = {}) {
   return {
     ...(policy === undefined ? {} : { AST_SYMBOL_INDEX_PERSISTENCE: policy }),
     AST_SYMBOL_INDEX_CACHE_ROOT: cacheRoot,
+    AST_MCP_APPLY_GUARD: "allow",
     ...extra,
     AST_OPERATION_DEADLINE_MS: String(CANARY_OPERATION_DEADLINE_MS),
   };
@@ -3304,6 +3306,7 @@ function projectEnvironment(policy, cacheRoot, extra = {}) {
 function defaultProjectEnvironment(xdgCacheHome, extra = {}) {
   return {
     XDG_CACHE_HOME: xdgCacheHome,
+    AST_MCP_APPLY_GUARD: "allow",
     ...extra,
     AST_OPERATION_DEADLINE_MS: String(CANARY_OPERATION_DEADLINE_MS),
   };

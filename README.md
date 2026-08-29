@@ -261,7 +261,7 @@ Claude Code supports local stdio MCP servers. After building this repository, re
 
 ```bash
 AST_MCP_DIR="$(pwd)"
-claude mcp add --scope user --transport stdio ast -- \
+claude mcp add --scope user --env AST_MCP_APPLY_GUARD=allow --transport stdio ast -- \
   node "$AST_MCP_DIR/dist/index.js"
 claude mcp get ast
 ```
@@ -316,11 +316,43 @@ Use `/mcp` inside Claude Code to inspect server status and tools. Outside the se
 Hermes Agent:
 
 ```bash
-hermes mcp add ast --command node --args /absolute/path/to/ast-mcp-server/dist/index.js
+hermes mcp add ast --command node --env AST_MCP_APPLY_GUARD=allow --args /absolute/path/to/ast-mcp-server/dist/index.js
 hermes mcp test ast
 ```
 
 Project-scoped tools accept `project_root`, either the project directory or an explicit `tsconfig.json` path. The server contains no repository-specific paths.
+
+### DeepSeek Harness (Developer Preview)
+
+A thin adapter ships inside this package: `cordis.patch.yml` mounts the packaged
+`ast-mcp-server` stdio command through the official
+[`@deepseek-ai/dsh-mcp-client`](https://github.com/deepseek-ai/deepseek-harness/blob/cd5ef8148158c3a752a658978873241fdf8e2bbc/packages/mcp/mcp-client/README.md)
+bridge, declared through exactly `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`.
+This is a Developer Preview against a pinned, **source-built** Harness revision
+(`dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a752a658978873241fdf8e2bbc`); that revision
+is validated from source, and `ast-mcp-server@0.13.0` is not published yet. Install a
+locally packed tarball instead:
+
+```bash
+yarn pack --out ast-mcp-server-%v.tgz
+dsh plugin --profile web add ./ast-mcp-server-0.13.0.tgz
+```
+
+The first supported surface is **reads + prepare + preview**. Every apply path is
+denied by a fail-closed guard: `ast_apply_operation` is not registered unless
+`AST_MCP_APPLY_GUARD=allow` is set explicitly (the shipped patch instead pins `deny`,
+so the Harness surface stays deny-by-default; an unset or invalid value also denies). Known upstream
+gaps apply and are never safety authority: the official bridge drops MCP tool
+annotations (`readOnlyHint`/`destructiveHint`) and launches the stdio child outside
+the Harness sandbox.
+
+`yarn test:dsh-adapter` is the mandatory verification: it packs the exact tarball,
+installs it into an isolated profile on the pinned Harness, proves `--dump-config`
+composition including effective `tools.mode: native`, and — through the Harness registry
+itself — invokes the server-qualified read, dry-run rename prepare, and preview tools.
+It separately proves `mcp__ast__ast_apply_operation` is absent and that a bounded direct
+registry invocation is rejected. The smoke fails (never skips) if the pinned Harness
+revision, tag, CLI/client version, clean source identity, or a prerequisite is missing.
 
 ## MCP tools
 

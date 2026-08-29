@@ -6,6 +6,7 @@ import {
   applyOpenCodeConfigPlan,
   planOpenCodeConfig,
   resolveOpenCodeConfigPath,
+  runOpenCodeConfigTransaction,
   withIsolatedOpenCodeConfig,
 } from "../src/services/opencode-config.js";
 
@@ -53,8 +54,58 @@ describe("OpenCode routed configuration", () => {
     expect(content).toContain('"theme": "dark"');
     expect(content).toContain('"other"');
     expect(content).toContain('"command": [');
+    expect(content).toContain('"environment"');
+    expect(content).toContain('"AST_MCP_APPLY_GUARD"');
     expect(content).not.toContain("opencode mcp add");
     expect((await stat(file)).mode & 0o777).toBe(0o640);
+  });
+
+  it("migrates the exact pre-guard registration without replacing unrelated config", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "opencode.json");
+    await writeFile(
+      file,
+      `{
+  "theme": "dark",
+  "mcp": {
+    "ast": {
+      "type": "local",
+      "command": ["/node", "/pkg/dist/index.js"],
+      "enabled": true
+    }
+  }
+}
+`,
+    );
+
+    const plan = await planOpenCodeConfig({
+      filePath: file,
+      nodeExecutable: "/node",
+      serverEntryPath: "/pkg/dist/index.js",
+    });
+    await applyOpenCodeConfigPlan(plan);
+
+    expect(plan.status).toBe("installed");
+    expect(await readFile(file, "utf8")).toContain('"AST_MCP_APPLY_GUARD": "allow"');
+    expect(await readFile(file, "utf8")).toContain('"theme": "dark"');
+  });
+
+  it("recognizes the exact legacy OpenCode shape independent of JSON key order", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "opencode.json");
+    await writeFile(
+      file,
+      '{"mcp":{"ast":{"enabled":true,"command":["/node","/pkg/dist/index.js"],"type":"local"}}}\n',
+    );
+
+    const plan = await planOpenCodeConfig({
+      filePath: file,
+      nodeExecutable: "/node",
+      serverEntryPath: "/pkg/dist/index.js",
+    });
+
+    expect(plan.status).toBe("installed");
+    expect(plan.content).toContain('"AST_MCP_APPLY_GUARD": "allow"');
   });
 
   it("isolates distinct explicit-file and config-directory authorities without merging bytes", async () => {
@@ -116,5 +167,73 @@ describe("OpenCode routed configuration", () => {
       planOpenCodeConfig({ filePath: file, nodeExecutable: "/node", serverEntryPath: "/server" }),
     ).rejects.toThrow(/parseable/i);
     expect(await readFile(file, "utf8")).toBe(malformed);
+  });
+
+  it("treats the exact modern postimage as committed after an acknowledgement exception", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "opencode.json");
+    const original =
+      '{\n  // preimage\n  "mcp":{"ast":{"type":"local","command":["/node","/server"],"enabled":true}}\n}\n';
+    await writeFile(file, original);
+    await chmod(file, 0o640);
+    const plan = await planOpenCodeConfig({
+      filePath: file,
+      nodeExecutable: "/node",
+      serverEntryPath: "/server",
+    });
+
+    await expect(
+      runOpenCodeConfigTransaction(plan, async () => {
+        await applyOpenCodeConfigPlan(plan);
+        throw new Error("publish acknowledgement lost");
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(await readFile(file, "utf8")).toBe(plan.content);
+    expect((await stat(file)).mode & 0o777).toBe(0o640);
+  });
+
+  it("does not restore or replace the authenticated preimage when publication never happened", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "opencode.json");
+    const original = "{}\n";
+    await writeFile(file, original);
+    const before = await stat(file);
+    const plan = await planOpenCodeConfig({
+      filePath: file,
+      nodeExecutable: "/node",
+      serverEntryPath: "/server",
+    });
+
+    await expect(
+      runOpenCodeConfigTransaction(plan, async () => {
+        throw new Error("write rejected before publication");
+      }),
+    ).rejects.toThrow(/before publication/i);
+
+    expect(await readFile(file, "utf8")).toBe(original);
+    expect((await stat(file)).ino).toBe(before.ino);
+  });
+
+  it("fails closed and preserves concurrent bytes instead of attempting rollback", async () => {
+    const root = await temporaryDirectory();
+    const file = path.join(root, "opencode.json");
+    await writeFile(file, "{}\n");
+    const plan = await planOpenCodeConfig({
+      filePath: file,
+      nodeExecutable: "/node",
+      serverEntryPath: "/server",
+    });
+    const concurrent = '{"concurrent":true}\n';
+
+    await expect(
+      runOpenCodeConfigTransaction(plan, async () => {
+        await applyOpenCodeConfigPlan(plan);
+        await writeFile(file, concurrent);
+        throw new Error("ambiguous acknowledgement");
+      }),
+    ).rejects.toThrow(/concurrently/i);
+
+    expect(await readFile(file, "utf8")).toBe(concurrent);
   });
 });

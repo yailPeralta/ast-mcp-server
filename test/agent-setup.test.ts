@@ -75,6 +75,9 @@ if (args[0] === "--version") {
 if (isClaude && args[0] === "mcp" && args[1] === "get") {
   const state = readState();
   if (!state) {
+    if (process.env.FAKE_CONCURRENT_AFTER_MISSING_INSPECTION === "1") {
+      writeState({ command: "/concurrent/node", entry: "/concurrent/server.js", guard: "deny" });
+    }
     console.error('No MCP server named "ast".');
     process.exit(1);
   }
@@ -83,19 +86,63 @@ if (isClaude && args[0] === "mcp" && args[1] === "get") {
   Status: ✔ Connected
   Type: stdio
   Command: \${state.command}
-  Args: \${state.entry}\`);
+  Args: \${state.entry}\${state.guard ? "\\n  Environment:\\n    AST_MCP_APPLY_GUARD=" + state.guard : ""}\`);
   process.exit(0);
 }
 
 if (isClaude && args[0] === "mcp" && args[1] === "add") {
+  if (readState()) {
+    console.error("MCP server ast already exists in user config");
+    process.exit(1);
+  }
   const separator = args.indexOf("--");
-  writeState({ command: args[separator + 1], entry: args[separator + 2] });
+  const environmentIndex = args.indexOf("--env");
+  const guard = environmentIndex >= 0 ? args[environmentIndex + 1]?.split("=")[1] : undefined;
+  if (guard === "allow" && process.env.FAKE_FAIL_GUARDED_ADD === "1") {
+    console.error("simulated guarded registration failure");
+    process.exit(1);
+  }
+  writeState({ command: args[separator + 1], entry: args[separator + 2], guard });
+  if (guard === "allow" && process.env.FAKE_GUARDED_ADD_MUTATE_THEN_HANG === "1") {
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+  }
   console.log("Added stdio MCP server ast");
+  process.exit(0);
+}
+
+if (isClaude && args[0] === "mcp" && args[1] === "remove") {
+  if (process.env.FAKE_UNREGISTER_MUTATE_THEN_HANG === "1") {
+    fs.rmSync(statePath, { force: true });
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+  }
+  if (process.env.FAKE_UNREGISTER_NO_MUTATION_THEN_HANG === "1") {
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+  }
+  if (!readState() && process.env.FAKE_FAIL_EMPTY_REMOVE === "1") {
+    console.error("simulated cleanup failure");
+    process.exit(1);
+  }
+  fs.rmSync(statePath, { force: true });
+  console.log("Removed MCP server ast");
   process.exit(0);
 }
 
 if (!isClaude && args[0] === "mcp" && args[1] === "list") {
   console.log(readState() ? "ast  stdio  all  ✓ enabled" : "No MCP servers configured.");
+  process.exit(0);
+}
+
+if (!isClaude && args[0] === "config" && args[1] === "get") {
+  const state = readState();
+  if (!state) process.exit(1);
+  console.log(JSON.stringify({
+    command: state.command,
+    args: [state.entry],
+    ...(state.guard ? { env: { AST_MCP_APPLY_GUARD: state.guard } } : {}),
+  }));
   process.exit(0);
 }
 
@@ -107,7 +154,7 @@ if (!isClaude && args[0] === "mcp" && args[1] === "test") {
   }
   console.log(\`Testing 'ast'...
   ✓ Connected
-  ✓ Tools discovered: 16
+  ✓ Tools discovered: \${state.guard === "allow" ? 16 : 15}
   ast_list_files
   ast_get_project_status
   ast_explore
@@ -122,23 +169,37 @@ if (!isClaude && args[0] === "mcp" && args[1] === "test") {
   ast_rename_symbol
   ast_replace_symbol_body
   ast_scaffold_class
-  ast_get_operation_preview
-  ast_apply_operation\`);
+  ast_get_operation_preview\${state.guard === "allow" ? "\\n  ast_apply_operation" : ""}\`);
   process.exit(0);
 }
 
 if (!isClaude && args[0] === "mcp" && args[1] === "add") {
+  if (readState()) {
+    console.error("MCP server ast already exists");
+    process.exit(1);
+  }
   const commandIndex = args.indexOf("--command");
   const argsIndex = args.indexOf("--args");
-  writeState({ command: args[commandIndex + 1], entry: args[argsIndex + 1] });
+  const environmentIndex = args.indexOf("--env");
+  const guard = environmentIndex >= 0 ? args[environmentIndex + 1]?.split("=")[1] : undefined;
+  if (guard === "allow" && process.env.FAKE_FAIL_GUARDED_ADD === "1") {
+    console.error("simulated guarded registration failure");
+    process.exit(1);
+  }
+  writeState({ command: args[commandIndex + 1], entry: args[argsIndex + 1], guard });
   console.log("✓ Saved 'ast' (16/16 tools enabled)");
+  process.exit(0);
+}
+
+if (!isClaude && args[0] === "mcp" && args[1] === "remove") {
+  fs.rmSync(statePath, { force: true });
+  console.log("Removed MCP server ast");
   process.exit(0);
 }
 
 console.error(\`Unsupported fake command: \${name} \${args.join(" ")}\`);
 process.exit(2);
 `;
-
   for (const name of ["claude", "hermes"]) {
     const executable = path.join(bin, name);
     await writeFile(executable, fakeAgent, "utf8");
@@ -178,7 +239,6 @@ describe("agent setup", () => {
     const fake = await createFakeAgents(root);
     const detections = await detectInstalledAgents({ environment: fake.environment });
     const byId = detectionById(detections);
-
     expect(byId.claude.installed).toBe(true);
     expect(byId.claude.executable).toBe(path.join(fake.bin, "claude"));
     expect(byId.claude.version).toContain("2.1.201");
@@ -264,6 +324,243 @@ describe("agent setup", () => {
       await readFile(path.join(fake.environment.CLAUDE_CONFIG_DIR!, "CLAUDE.md"), "utf8"),
     ).toContain("ast-tool:structural-code-editing guidance v1 begin");
   });
+
+  it("repairs exact legacy registrations that predate the explicit apply opt-in", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const serverEntryPath = path.join(root, "package", "dist", "index.js");
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "", "utf8");
+    const legacy = { command: process.execPath, entry: serverEntryPath };
+    await writeFile(fake.claudeState, JSON.stringify(legacy), "utf8");
+    await writeFile(fake.hermesState, JSON.stringify(legacy), "utf8");
+    const detections = await detectInstalledAgents({ environment: fake.environment });
+
+    const result = await runAgentSetup({
+      agents: ["claude", "hermes"],
+      detections,
+      environment: fake.environment,
+      ...bundledAssets,
+      serverEntryPath,
+      nodeExecutable: process.execPath,
+    });
+
+    expect(result.agents.map((item) => [item.agent, item.mcp])).toEqual([
+      ["claude", "configured"],
+      ["hermes", "configured"],
+    ]);
+    expect(JSON.parse(await readFile(fake.claudeState, "utf8"))).toEqual({
+      ...legacy,
+      guard: "allow",
+    });
+    expect(JSON.parse(await readFile(fake.hermesState, "utf8"))).toEqual({
+      ...legacy,
+      guard: "allow",
+    });
+  });
+
+  it("restores an exact legacy registration when guarded re-registration fails", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const serverEntryPath = path.join(root, "package", "dist", "index.js");
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "", "utf8");
+    const legacy = { command: process.execPath, entry: serverEntryPath };
+    await writeFile(fake.claudeState, JSON.stringify(legacy), "utf8");
+    const detections = await detectInstalledAgents({ environment: fake.environment });
+
+    await expect(
+      runAgentSetup({
+        agents: ["claude"],
+        detections,
+        environment: { ...fake.environment, FAKE_FAIL_GUARDED_ADD: "1" },
+        ...bundledAssets,
+        serverEntryPath,
+        nodeExecutable: process.execPath,
+      }),
+    ).rejects.toMatchObject({ code: "AGENT_COMMAND_FAILED" });
+
+    expect(JSON.parse(await readFile(fake.claudeState, "utf8"))).toEqual(legacy);
+  });
+
+  it("attempts and verifies rollback even when failed-repair cleanup also fails", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "");
+    const legacy = { command: process.execPath, entry: serverEntryPath };
+    await writeFile(fake.claudeState, JSON.stringify(legacy));
+    const detections = await detectInstalledAgents({ environment: fake.environment });
+
+    await expect(
+      runAgentSetup({
+        agents: ["claude"],
+        detections,
+        environment: {
+          ...fake.environment,
+          FAKE_FAIL_GUARDED_ADD: "1",
+          FAKE_FAIL_EMPTY_REMOVE: "1",
+        },
+        ...bundledAssets,
+        serverEntryPath,
+        nodeExecutable: process.execPath,
+      }),
+    ).rejects.toMatchObject({ code: "AGENT_COMMAND_FAILED" });
+    expect(JSON.parse(await readFile(fake.claudeState, "utf8"))).toEqual(legacy);
+  });
+
+  it.each([
+    ["FAKE_UNREGISTER_MUTATE_THEN_HANG", true],
+    ["FAKE_UNREGISTER_NO_MUTATION_THEN_HANG", false],
+  ] as const)(
+    "inspects ambiguous unregister outcome %s before deciding whether to restore",
+    async (failureFlag, mutated) => {
+      const root = await makeTemporaryDirectory();
+      const fake = await createFakeAgents(root);
+      const serverEntryPath = path.join(root, "dist", "index.js");
+      await mkdir(path.dirname(serverEntryPath), { recursive: true });
+      await writeFile(serverEntryPath, "");
+      const legacy = { command: process.execPath, entry: serverEntryPath };
+      await writeFile(fake.claudeState, JSON.stringify(legacy));
+      const detections = await detectInstalledAgents({ environment: fake.environment });
+
+      await expect(
+        runAgentSetup({
+          agents: ["claude"],
+          detections,
+          environment: { ...fake.environment, [failureFlag]: "1" },
+          commandTimeoutMs: 150,
+          ...bundledAssets,
+          serverEntryPath,
+          nodeExecutable: process.execPath,
+        }),
+      ).rejects.toMatchObject({ code: "AGENT_COMMAND_TIMEOUT" });
+
+      expect(JSON.parse(await readFile(fake.claudeState, "utf8"))).toEqual(legacy);
+      if (!mutated) {
+        // A duplicate legacy add would fail because the authenticated preimage still exists,
+        // replacing the original timeout with AGENT_VERIFICATION_FAILED.
+        expect(await readFile(fake.claudeState, "utf8")).toBe(JSON.stringify(legacy));
+      }
+    },
+  );
+
+  it("preserves a concurrent replacement installed after missing recovery classification", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "");
+    await writeFile(
+      fake.claudeState,
+      JSON.stringify({ command: process.execPath, entry: serverEntryPath }),
+    );
+    const detections = await detectInstalledAgents({ environment: fake.environment });
+
+    await expect(
+      runAgentSetup({
+        agents: ["claude"],
+        detections,
+        environment: {
+          ...fake.environment,
+          FAKE_UNREGISTER_MUTATE_THEN_HANG: "1",
+          FAKE_CONCURRENT_AFTER_MISSING_INSPECTION: "1",
+        },
+        commandTimeoutMs: 150,
+        ...bundledAssets,
+        serverEntryPath,
+        nodeExecutable: process.execPath,
+      }),
+    ).rejects.toMatchObject({ code: "AGENT_MCP_CONFLICT" });
+    expect(JSON.parse(await readFile(fake.claudeState, "utf8"))).toEqual({
+      command: "/concurrent/node",
+      entry: "/concurrent/server.js",
+      guard: "deny",
+    });
+  });
+
+  it("treats an exact modern postimage as committed after guarded-add acknowledgement is lost", async () => {
+    const root = await makeTemporaryDirectory();
+    const fake = await createFakeAgents(root);
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "");
+    await writeFile(
+      fake.claudeState,
+      JSON.stringify({ command: process.execPath, entry: serverEntryPath }),
+    );
+    const detections = await detectInstalledAgents({ environment: fake.environment });
+
+    const result = await runAgentSetup({
+      agents: ["claude"],
+      detections,
+      environment: { ...fake.environment, FAKE_GUARDED_ADD_MUTATE_THEN_HANG: "1" },
+      commandTimeoutMs: 150,
+      ...bundledAssets,
+      serverEntryPath,
+      nodeExecutable: process.execPath,
+    });
+
+    expect(result.agents[0]?.mcp).toBe("configured");
+    expect(JSON.parse(await readFile(fake.claudeState, "utf8"))).toEqual({
+      command: process.execPath,
+      entry: serverEntryPath,
+      guard: "allow",
+    });
+  });
+
+  it.each(["codex", "gemini", "copilot"] as const)(
+    "restores an authenticated legacy %s registration after guarded add fails",
+    async (agent) => {
+      const root = await makeTemporaryDirectory();
+      const bin = path.join(root, "bin");
+      const executable = path.join(bin, agent);
+      const state = path.join(root, `${agent}-state.json`);
+      const serverEntryPath = path.join(root, "dist", "index.js");
+      await mkdir(bin, { recursive: true });
+      await mkdir(path.dirname(serverEntryPath), { recursive: true });
+      await writeFile(serverEntryPath, "");
+      await writeFile(state, JSON.stringify({ command: process.execPath, entry: serverEntryPath }));
+      await writeFile(executable, await readFile(path.resolve("scripts/fixtures/fake-agent.mjs")));
+      await chmod(executable, 0o755);
+      const environment = {
+        ...process.env,
+        HOME: root,
+        PATH: `${bin}${path.delimiter}${path.dirname(process.execPath)}`,
+        [`FAKE_${agent.toUpperCase()}_STATE`]: state,
+        FAKE_FAIL_GUARDED_ADD: "1",
+      };
+
+      await expect(
+        runAgentSetup({
+          agents: [agent],
+          detections: [
+            {
+              id: agent,
+              label: agent,
+              installed: true,
+              executable,
+              compatibility: {
+                status: "compatible",
+                contract: `${agent}-mcp-v1`,
+                version: "1.0.0",
+              },
+            },
+          ],
+          environment,
+          ...bundledAssets,
+          serverEntryPath,
+          nodeExecutable: process.execPath,
+        }),
+      ).rejects.toMatchObject({ code: "AGENT_COMMAND_FAILED" });
+
+      expect(JSON.parse(await readFile(state, "utf8"))).toEqual({
+        command: process.execPath,
+        entry: serverEntryPath,
+      });
+    },
+  );
 
   it("fails preflight on a conflicting MCP registration before any write", async () => {
     const root = await makeTemporaryDirectory();
@@ -423,6 +720,130 @@ describe("agent setup", () => {
       );
     });
     await expect(access(fake.claudeState)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("migrates an exact legacy OpenCode registration through the setup flow", async () => {
+    const root = await makeTemporaryDirectory();
+    const selectedConfig = path.join(root, "config", "opencode.json");
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    const executable = path.join(root, "opencode");
+    await mkdir(path.dirname(selectedConfig), { recursive: true });
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "");
+    await writeFile(
+      selectedConfig,
+      `${JSON.stringify({
+        theme: "dark",
+        mcp: {
+          ast: { type: "local", command: [process.execPath, serverEntryPath], enabled: true },
+        },
+      })}\n`,
+    );
+    await writeFile(
+      executable,
+      `#!/usr/bin/env node
+const fs = require("node:fs");
+if (process.argv[2] === "debug" && process.argv[3] === "config") {
+  console.log(fs.readFileSync(process.env.OPENCODE_CONFIG, "utf8"));
+} else if (process.argv[2] === "mcp" && process.argv[3] === "list") {
+  console.log("ast connected");
+} else console.log("1.18.18");
+`,
+    );
+    await chmod(executable, 0o755);
+    const environment = {
+      ...process.env,
+      HOME: root,
+      OPENCODE_CONFIG: selectedConfig,
+      OPENCODE_CONFIG_DIR: path.dirname(selectedConfig),
+    };
+
+    const result = await runAgentSetup({
+      agents: ["opencode"],
+      detections: [
+        {
+          id: "opencode",
+          label: "OpenCode",
+          installed: true,
+          executable,
+          compatibility: {
+            status: "compatible",
+            contract: "opencode-mcp-v1",
+            version: "1.18.18",
+          },
+        },
+      ],
+      environment,
+      ...bundledAssets,
+      serverEntryPath,
+      nodeExecutable: process.execPath,
+    });
+
+    expect(result.agents[0]?.mcp).toBe("configured");
+    const updated = JSON.parse(await readFile(selectedConfig, "utf8"));
+    expect(updated.theme).toBe("dark");
+    expect(updated.mcp.ast.environment).toEqual({ AST_MCP_APPLY_GUARD: "allow" });
+  });
+
+  it("keeps an exact committed OpenCode postimage when acknowledgement verification fails", async () => {
+    const root = await makeTemporaryDirectory();
+    const selectedConfig = path.join(root, "config", "opencode.json");
+    const serverEntryPath = path.join(root, "dist", "index.js");
+    const executable = path.join(root, "opencode");
+    const counter = path.join(root, "debug-count");
+    const original = `${JSON.stringify({
+      marker: "preserve",
+      mcp: { ast: { type: "local", command: [process.execPath, serverEntryPath], enabled: true } },
+    })}\n`;
+    await mkdir(path.dirname(selectedConfig), { recursive: true });
+    await mkdir(path.dirname(serverEntryPath), { recursive: true });
+    await writeFile(serverEntryPath, "");
+    await writeFile(selectedConfig, original);
+    await writeFile(
+      executable,
+      `#!/usr/bin/env node
+const fs = require("node:fs");
+if (process.argv[2] === "debug" && process.argv[3] === "config") {
+  const count = fs.existsSync(process.env.FAKE_COUNTER) ? Number(fs.readFileSync(process.env.FAKE_COUNTER, "utf8")) : 0;
+  fs.writeFileSync(process.env.FAKE_COUNTER, String(count + 1));
+  if (count === 0) console.log(fs.readFileSync(process.env.OPENCODE_CONFIG, "utf8"));
+  else console.log(JSON.stringify({mcp:{ast:{type:"local",command:["/wrong"],enabled:true}}}));
+} else if (process.argv[2] === "mcp") console.log("ast connected");
+else console.log("1.18.18");
+`,
+    );
+    await chmod(executable, 0o755);
+    const environment = {
+      ...process.env,
+      HOME: root,
+      OPENCODE_CONFIG: selectedConfig,
+      OPENCODE_CONFIG_DIR: path.dirname(selectedConfig),
+      FAKE_COUNTER: counter,
+    };
+
+    const result = await runAgentSetup({
+      agents: ["opencode"],
+      detections: [
+        {
+          id: "opencode",
+          label: "OpenCode",
+          installed: true,
+          executable,
+          compatibility: {
+            status: "compatible",
+            contract: "opencode-mcp-v1",
+            version: "1.18.18",
+          },
+        },
+      ],
+      environment,
+      ...bundledAssets,
+      serverEntryPath,
+      nodeExecutable: process.execPath,
+    });
+    expect(result.agents[0]?.mcp).toBe("configured");
+    expect(await readFile(selectedConfig, "utf8")).not.toBe(original);
+    expect(await readFile(selectedConfig, "utf8")).toContain("AST_MCP_APPLY_GUARD");
   });
 
   it("rejects an effective OpenCode conflict before skill or config writes", async () => {

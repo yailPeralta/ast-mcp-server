@@ -1281,6 +1281,7 @@ describe("production-readiness-sqlite-default-v5 canary contract", () => {
     ).toEqual({
       AST_SYMBOL_INDEX_PERSISTENCE: "canary",
       AST_SYMBOL_INDEX_CACHE_ROOT: "/tmp/canary-cache",
+      AST_MCP_APPLY_GUARD: "allow",
       AST_MAX_PROJECT_SESSIONS: "1",
       AST_OPERATION_DEADLINE_MS: "300000",
     });

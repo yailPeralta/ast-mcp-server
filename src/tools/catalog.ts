@@ -35,6 +35,13 @@ export type ToolDescriptor<N extends ToolName = ToolName> = Base<N> &
   );
 
 type NamesWith<T extends readonly ToolDescriptor[], P> = Extract<T[number], P>["name"];
+
+/** Registration-time projection options for {@link Catalog.registerAll}. */
+export interface RegisterAllOptions {
+  /** Deny every apply-effect tool (deny-by-default apply guard). */
+  readonly denyApply?: boolean;
+}
+
 type Catalog<T extends readonly ToolDescriptor[]> = Readonly<{
   descriptors: Readonly<T>;
   batch: Readonly<{
@@ -52,7 +59,7 @@ type Catalog<T extends readonly ToolDescriptor[]> = Readonly<{
     apply: readonly NamesWith<T, { effect: "apply" }>[];
   }>;
   directToon: readonly NamesWith<T, { directOutputFormats: readonly ["json", "toon"] }>[];
-  registerAll(server: McpServer): void;
+  registerAll(server: McpServer, options?: RegisterAllOptions): void;
 }>;
 
 function validateDescriptor(descriptor: ToolDescriptor): void {
@@ -105,8 +112,11 @@ export function defineToolCatalog<const T extends readonly ToolDescriptor[]>(inp
     directToon: names<{ directOutputFormats: readonly ["json", "toon"] }>(
       (item) => item.directOutputFormats.length === 2,
     ),
-    registerAll(server: McpServer) {
-      for (const descriptor of descriptors) descriptor.register(server);
+    registerAll(server: McpServer, options: RegisterAllOptions = {}) {
+      for (const descriptor of descriptors) {
+        if (options.denyApply === true && descriptor.effect === "apply") continue;
+        descriptor.register(server);
+      }
     },
   });
 }

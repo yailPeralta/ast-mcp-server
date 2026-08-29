@@ -50,12 +50,13 @@ export async function runStdioServer(
   prepareProjectRuntimeForStartup();
   const runtimeActivity = options.runtimeActivity ?? new RuntimeActivityTracker();
   runtimeActivity.prepareForStartup();
-  const server = options.server ?? createServer({ runtimeActivity });
+  const runtimePolicy = options.runtimePolicy ?? readRuntimePolicy();
+  const server =
+    options.server ?? createServer({ runtimeActivity, denyApply: runtimePolicy.denyApply });
   const transport = options.transport ?? new StdioServerTransport();
   const send = transport.send.bind(transport);
   transport.send = (message, sendOptions) =>
     runtimeActivity.trackSend(() => send(message, sendOptions));
-  const runtimePolicy = options.runtimePolicy ?? readRuntimePolicy();
   const installProcessHandlers = options.installProcessHandlers ?? true;
   const exit = options.exit ?? ((code: number): void => process.exit(code));
   const protocol = server.server;

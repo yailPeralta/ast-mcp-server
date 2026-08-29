@@ -1,6 +1,6 @@
 {
   "name": "ast-mcp-server",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Structural code MCP server and batch CLI for compact TypeScript/JavaScript reads and hash-bound AST edits.",
   "keywords": [
     "mcp",
@@ -26,6 +26,16 @@
   },
   "type": "module",
   "packageManager": "yarn@4.15.0",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "deepseekHarness": {
+    "revision": "cd5ef8148158c3a752a658978873241fdf8e2bbc",
+    "tag": "dsh-v0.1.2-alpha.1",
+    "mcpClientVersion": "0.1.2-alpha.1"
+  },
   "main": "dist/index.js",
   "bin": {
     "ast-mcp-server": "dist/index.js",
@@ -34,6 +44,7 @@
   "files": [
     "dist",
     "skills",
+    "cordis.patch.yml",
     "README.md",
     "CHANGELOG.md",
     "SECURITY.md",
@@ -56,6 +67,7 @@
     "test:cli": "yarn build && node scripts/cli-smoke.mjs",
     "test:errors": "yarn build && node scripts/public-error-smoke.mjs",
     "test:package": "node scripts/package-smoke.mjs",
+    "test:dsh-adapter": "node scripts/dsh-adapter-smoke.mjs",
     "test:local-registry": "node scripts/local-registry-consumer-smoke.mjs",
     "test:installed-agents": "yarn build && node scripts/installed-agent-guidance-smoke.mjs",
     "test:agent-fixtures": "node scripts/admit-agent-fixtures.mjs --check",
@@ -95,6 +107,7 @@
     "prettier": "^3.9.6",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.65.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "yaml": "^2.9.0"
   }
 }
