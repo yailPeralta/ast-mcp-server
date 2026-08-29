@@ -8,7 +8,7 @@ PASS for issues #100–#102. Residual Harness output-vocabulary projection is is
 
 - Focused MCP matrix and invalid combinations: 3/3 passed.
 - Main Vitest suite: 901/901 passed; supervised parity after the inventory update: 2/2 passed.
-- Exact pinned Harness A/B/C/D: passed on `cd5ef814…`; public explore schema `8243f0af…`, candidate/registry `41deb923…`, unaffected tools `428d0ab3…`, invalid invocation rejected, cleanup complete.
+- Exact pinned Harness A/B/C/D: passed on `cd5ef814…`; public explore schema `8243f0af…`, candidate/registry `41deb923…`, unaffected tools `428d0ab3…`, all three invalid combinations rejected, cleanup complete.
 - Format, lint, typecheck, build, MCP, errors, lifecycle, CLI, package, audit, pack dry-run, workflow policy, and diff hygiene: passed.
 - One unrelated agent-setup timeout occurred under the loaded full-suite run; the exact case passed 1/1 on immediate focused rerun and the subsequent main suite passed.
 

@@ -1080,7 +1080,15 @@ export function formatValue(value: number): string { return String(value); }
       project_root: { type: "string" },
       detail: { enum: ["selectors", "summary", "context", "full"], default: "summary" },
       max_bytes: { type: "integer", minimum: 1024 },
-      call_spines: { type: "object" },
+      call_spines: {
+        type: "object",
+        properties: {
+          direction: { enum: ["incoming", "outgoing"], default: "outgoing" },
+          max_depth: { minimum: 0, maximum: 32, default: 3 },
+          max_nodes: { minimum: 1, maximum: 1000, default: 100 },
+          max_edges: { minimum: 1, maximum: 5000, default: 200 },
+        },
+      },
     });
 
     const dualFormat = tools.filter((tool) =>
@@ -1499,6 +1507,22 @@ export function formatValue(value: number): string { return String(value); }
     expect(references.references).toEqual(
       expect.arrayContaining([expect.objectContaining({ file: "src/use.ts" })]),
     );
+
+    const impact = toon(
+      await client.callTool({
+        name: "ast_get_impact",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          output_format: "toon",
+        },
+      }),
+    );
+    expect(impact).toMatchObject({
+      root: { file: "src/value.ts", symbol_path: "formatValue" },
+      freshness: { state: "fresh" },
+    });
 
     const diagnostics = toon(
       await client.callTool({

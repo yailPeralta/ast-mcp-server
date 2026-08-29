@@ -128,7 +128,7 @@ The public v0.13.0 package returns `content: []` plus `structuredContent`. Issue
 
 `ast_explore` uses cross-field refinements, and other schemas reuse components or publish keywords that the pinned bridge may not preserve. Exact `tools/list` and scoped Harness schemas are the boundary evidence; Zod source shape alone is not.
 
-The public package deterministically publishes `ast_explore` as `{"type":"object","properties":{}}` (SHA-256 `8243f0af…`). The candidate registers the direct object schema, reapplies all three refinements inside the handler, and removes the false universal `ast_get_impact` output schema. Its scoped-registry and native-model schema hashes match (`41deb923…`), all other model tool definitions retain hash `428d0ab3…`, and the Harness registry rejects the isolated invalid symbol/file combination.
+The public package deterministically publishes `ast_explore` as `{"type":"object","properties":{}}` (SHA-256 `8243f0af…`). The candidate registers the direct object schema, reapplies all three refinements inside the handler, and removes the false universal `ast_get_impact` output schema. Its scoped-registry and native-model schema hashes match (`41deb923…`), all other model tool definitions retain hash `428d0ab3…`, and the Harness registry rejects all three cross-field invalid combinations.
 
 **Acceptance gate:** required inputs remain visible, invalid combinations still fail closed, no relevant field degrades silently to `any`/`{}`, and multi-format output exceptions are explicit. Native mode intentionally carries input schemas only; global projection of MCP output vocabularies into Harness remains the separate contract tracked by [#103](https://github.com/yailPeralta/ast-mcp-server/issues/103).
 
