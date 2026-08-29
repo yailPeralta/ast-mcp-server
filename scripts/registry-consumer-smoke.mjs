@@ -59,7 +59,7 @@ const EXPECTED_TOOLS = Object.freeze([
   "ast_apply_operation",
 ]);
 const EXPECTED_TOOLS_LIST_SHA256 =
-  "e0a86578aeca0f738e0ae39c543353962e51c9c17183b730149bb190b86e6bf9";
+  "1f5de12c6f683600740fdfccfe978355dfe981938a6652a1f0ec7fa0afc74e25";
 
 export async function copyRegistryConsumerRunner(targetRoot) {
   const copiedRunner = path.join(targetRoot, "registry-consumer-smoke.mjs");
