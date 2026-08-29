@@ -46,6 +46,8 @@ const summaryReportAuthority = new WeakSet();
 let terminalContext;
 let terminalPublishAttempted = false;
 
+export const RELEASE_CANDIDATE_PACKAGE_VERSION = "0.13.0";
+
 export const RELEASE_CANDIDATE_COMMAND_IDS = Object.freeze([
   "install",
   "format",
@@ -58,6 +60,7 @@ export const RELEASE_CANDIDATE_COMMAND_IDS = Object.freeze([
   "lifecycle",
   "cli",
   "package",
+  "dsh-adapter",
   "local-registry",
   "audit",
   "pack",
@@ -77,6 +80,7 @@ const yarnCommands = Object.freeze([
   ["lifecycle", ["test:lifecycle"]],
   ["cli", ["test:cli"]],
   ["package", ["test:package"]],
+  ["dsh-adapter", ["test:dsh-adapter"]],
   ["audit", ["audit"]],
   ["pack", ["pack", "--dry-run", "--json"]],
 ]);
@@ -173,7 +177,9 @@ export function createRuntimeCommandPlan(
 ) {
   const yarnPlan = yarnCommands.map(([id, args]) => {
     const authority =
-      id === "install" ? packageManager : { nodeBinary: runtime.nodeBinary, yarnEntry };
+      id === "install" || id === "dsh-adapter"
+        ? packageManager
+        : { nodeBinary: runtime.nodeBinary, yarnEntry };
     return Object.freeze({
       id,
       file: authority.nodeBinary,
@@ -182,7 +188,7 @@ export function createRuntimeCommandPlan(
   });
   if (localRegistry === undefined) fail("local-registry command authority is required.");
   yarnPlan.splice(
-    11,
+    12,
     0,
     Object.freeze({
       id: "local-registry",
@@ -247,7 +253,7 @@ export function createCommandEnvironment(
   workTree = undefined,
 ) {
   if (commandId === "diff-check") return createGitEnvironment({}, workTree);
-  if (commandId !== "install") return runtimeEnvironment;
+  if (commandId !== "install" && commandId !== "dsh-adapter") return runtimeEnvironment;
   if (packageManagerEnvironment.NODE_OPTIONS !== "") {
     fail("package-manager NODE_OPTIONS must be explicitly empty.");
   }
@@ -1246,7 +1252,9 @@ async function main() {
   const packageMetadata = JSON.parse(
     await readFile(path.join(repositoryRoot, "package.json"), "utf8"),
   );
-  if (packageMetadata.version !== "0.12.0") fail("package version must be exactly 0.12.0.");
+  if (packageMetadata.version !== RELEASE_CANDIDATE_PACKAGE_VERSION) {
+    fail(`package version must be exactly ${RELEASE_CANDIDATE_PACKAGE_VERSION}.`);
+  }
   const identity = Object.freeze({
     head,
     head_tree: headTree,

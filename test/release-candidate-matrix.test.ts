@@ -18,6 +18,7 @@ import { describe, expect, it } from "vitest";
 const matrixModule = await import("../scripts/release-candidate-matrix.mjs");
 const {
   RELEASE_CANDIDATE_COMMAND_IDS,
+  RELEASE_CANDIDATE_PACKAGE_VERSION,
   TRUSTED_GIT_BINARY,
   assertNoAmbientGitControls,
   assertRuntimeCacheSentinel,
@@ -161,6 +162,7 @@ function fakeNodeSource(
   options: {
     installCountFile?: string;
     node24StartedFile?: string;
+    failDshAdapter?: boolean;
     failLint?: boolean;
   } = {},
 ): string {
@@ -187,6 +189,14 @@ function fakeNodeSource(
         "fi",
       ].join("\n")
     : "";
+  const dshAdapterFailure = options.failDshAdapter
+    ? [
+        'if [ "$2" = "test:dsh-adapter" ]; then',
+        "  printf '%s\\n' 'DSH adapter failure details must remain private' >&2",
+        "  exit 24",
+        "fi",
+      ].join("\n")
+    : "";
   return [
     "#!/bin/sh",
     'if [ "$1" = "--version" ]; then',
@@ -195,6 +205,7 @@ function fakeNodeSource(
     "fi",
     installControl,
     lintFailure,
+    dshAdapterFailure,
     'case "$1" in',
     '  */workflow-policy-check.mjs) printf \'{"status":"pass"}\\n\' ;;',
     "esac",
@@ -204,7 +215,11 @@ function fakeNodeSource(
 }
 
 async function createMatrixFixture(
-  options: { failNode24Lint?: boolean; packageBytes?: string } = {},
+  options: {
+    failNode24DshAdapter?: boolean;
+    failNode24Lint?: boolean;
+    packageBytes?: string;
+  } = {},
 ): Promise<MatrixFixture> {
   const root = await mkdtemp(path.join(os.tmpdir(), "ast-matrix-public-boundary-"));
   const repository = path.join(root, "repository");
@@ -229,7 +244,7 @@ async function createMatrixFixture(
     writeFile(path.join(scriptsDirectory, "workflow-policy-check.mjs"), "process.exitCode = 99;\n"),
     writeFile(
       path.join(repository, "package.json"),
-      options.packageBytes ?? `${JSON.stringify({ name: "matrix-fixture", version: "0.12.0" })}\n`,
+      options.packageBytes ?? `${JSON.stringify({ name: "matrix-fixture", version: "0.13.0" })}\n`,
     ),
   ]);
 
@@ -242,6 +257,7 @@ async function createMatrixFixture(
       fakeNodeSource("v24.16.0", {
         installCountFile,
         node24StartedFile,
+        failDshAdapter: options.failNode24DshAdapter,
         failLint: options.failNode24Lint,
       }),
       { mode: 0o700 },
@@ -351,6 +367,14 @@ describe("release candidate matrix", () => {
     expect(packageMetadata.engines).toEqual({ node: ">=22.13.0" });
   });
 
+  it("keeps the independent release candidate pin synchronized with package.json", async () => {
+    const packageMetadata = JSON.parse(
+      await readFile(path.join(repositoryRoot, "package.json"), "utf8"),
+    );
+    expect(RELEASE_CANDIDATE_PACKAGE_VERSION).toBe("0.13.0");
+    expect(RELEASE_CANDIDATE_PACKAGE_VERSION).toBe(packageMetadata.version);
+  });
+
   it("requires exact Node 22.13.0 while retaining the governed Node 24 line", () => {
     expect(validateRuntimeVersion("node22.13", "v22.13.0\n")).toMatchObject({
       raw: "v22.13.0",
@@ -394,13 +418,18 @@ describe("release candidate matrix", () => {
       localRegistry,
     );
     expect(plan.map(({ id }: { id: string }) => id)).toEqual(RELEASE_CANDIDATE_COMMAND_IDS);
-    expect(plan).toHaveLength(16);
+    expect(plan).toHaveLength(17);
     expect(plan[0]).toEqual({
       id: "install",
       file: packageManager.nodeBinary,
       args: [packageManager.yarnEntry, "install", "--immutable"],
     });
     expect(plan[11]).toEqual({
+      id: "dsh-adapter",
+      file: packageManager.nodeBinary,
+      args: [packageManager.yarnEntry, "test:dsh-adapter"],
+    });
+    expect(plan[12]).toEqual({
       id: "local-registry",
       file: runtime.nodeBinary,
       args: [
@@ -424,17 +453,17 @@ describe("release candidate matrix", () => {
         localRegistry.expectedNpmSha256,
       ],
     });
-    expect(plan[13]).toEqual({
+    expect(plan[14]).toEqual({
       id: "pack",
       file: runtime.nodeBinary,
       args: [yarnEntry, "pack", "--dry-run", "--json"],
     });
-    expect(plan[14]).toMatchObject({
+    expect(plan[15]).toMatchObject({
       id: "workflow-policy",
       file: runtime.nodeBinary,
       args: ["/tmp/candidate/scripts/workflow-policy-check.mjs"],
     });
-    expect(plan[15]).toEqual({
+    expect(plan[16]).toEqual({
       id: "diff-check",
       file: TRUSTED_GIT_BINARY,
       args: ["diff", "--no-ext-diff", "--check", "HEAD^", "HEAD"],
@@ -622,7 +651,7 @@ describe("release candidate matrix", () => {
     expect(ambient).toHaveProperty("NODE_OPTIONS", "--inspect");
   });
 
-  it("uses a closed private environment only for immutable dependency installation", () => {
+  it("uses a closed private environment only for package-manager authority commands", () => {
     const runtimeEnvironment = {
       PATH: "/opt/node22/bin:/usr/bin",
       NODE_OPTIONS: "",
@@ -657,6 +686,9 @@ describe("release candidate matrix", () => {
       NODE_OPTIONS: "",
       TMPDIR: "/private/tmp",
     });
+    expect(
+      createCommandEnvironment(runtimeEnvironment, "dsh-adapter", closedPackageManagerEnvironment),
+    ).toBe(closedPackageManagerEnvironment);
     expect(closedPackageManagerEnvironment).not.toHaveProperty("YARN_NPM_AUTH_TOKEN");
     expect(closedPackageManagerEnvironment).not.toHaveProperty("COREPACK_HOME");
     expect(closedPackageManagerEnvironment).not.toHaveProperty("NPM_TOKEN");
@@ -1015,7 +1047,7 @@ describe("release candidate matrix", () => {
       expect(summary).toMatchObject({
         schema_version: 1,
         status: "pass",
-        package_version: "0.12.0",
+        package_version: "0.13.0",
         package_manager_node_version: "v24.16.0",
       });
       expect(summary.runtimes).toEqual([
@@ -1024,14 +1056,14 @@ describe("release candidate matrix", () => {
           node_version: "v22.13.0",
           report: "node22.13.json",
           status: "pass",
-          command_count: 16,
+          command_count: 17,
         },
         {
           id: "node24",
           node_version: "v24.16.0",
           report: "node24.json",
           status: "pass",
-          command_count: 16,
+          command_count: 17,
         },
       ]);
 
@@ -1053,7 +1085,7 @@ describe("release candidate matrix", () => {
           cleanup_status: "pass",
           cleanup_failure_code: null,
         });
-        expect(report.commands).toHaveLength(16);
+        expect(report.commands).toHaveLength(17);
         for (const command of report.commands) {
           expect(exactKeys(command)).toEqual(commandReportKeys);
         }
@@ -1132,6 +1164,39 @@ describe("release candidate matrix", () => {
       }
     } finally {
       if (completion !== undefined) await completion.catch(() => undefined);
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("records an exact bounded Harness gate failure and stops the runtime", async () => {
+    const fixture = await createMatrixFixture({ failNode24DshAdapter: true });
+    try {
+      const result = await runMatrixFixture(fixture);
+      expect(result.exitCode).not.toBe(0);
+
+      const summary = JSON.parse(
+        await readFile(path.join(fixture.outputDir, "summary.json"), "utf8"),
+      );
+      expect(summary).toMatchObject({
+        status: "fail",
+        failed_runtime: "node22.13",
+        failed_phase: "dsh-adapter",
+        runtime_failure_code: "command-failed",
+      });
+
+      const failedReport = JSON.parse(
+        await readFile(path.join(fixture.outputDir, "node22.13.json"), "utf8"),
+      );
+      expect(failedReport.commands.at(-1)).toMatchObject({
+        id: "dsh-adapter",
+        status: "fail",
+        command_failure_code: "nonzero-exit",
+        exit_code: 24,
+        timed_out: false,
+      });
+      expect(failedReport.commands).toHaveLength(12);
+      expect(JSON.stringify(failedReport)).not.toContain("DSH adapter failure details");
+    } finally {
       await rm(fixture.root, { recursive: true, force: true });
     }
   }, 20_000);
