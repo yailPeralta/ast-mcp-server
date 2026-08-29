@@ -24,7 +24,7 @@ const idleChild = {
   mutation_history: false,
 } as const;
 // prettier-ignore
-async function fixturePath(ignoreShutdown = false, criticalDelay = 0, acknowledge = false, readyDelay = 0, acknowledgeReplay = false) { const root = await mkdtemp(path.join(os.tmpdir(), "ast-worker-host-")), file = path.join(root, "worker.mjs"); roots.push(root); await writeFile(file, `import{createInterface}from"node:readline";let generation=0,sequence=0,writes=0,critical=${criticalDelay > 0};const send=(type,payload)=>process.send({v:1,generation,sequence:++sequence,type,payload});process.on("message",frame=>{if(frame.type==="handshake"){generation=frame.generation;setTimeout(()=>send("ready",{}),${readyDelay});}if(frame.type==="snapshot")send("snapshot",{runtime_admission:"open",project_admission:"open",active_requests:0,active_sends:0,active_operations:critical?1:0,queued_operations:0,completion_critical_operations:critical?1:0,mutation_history:false});if(frame.type==="shutdown"&&!${ignoreShutdown})setTimeout(()=>{critical=false;process.disconnect()},${criticalDelay});});createInterface({input:process.stdin}).on("line",line=>{const message=JSON.parse(line),write=++writes;if(${acknowledgeReplay}&&write<=2)send("settled",{write_sequence:write});if(${acknowledge}&&message.method==="notify-ack")setTimeout(()=>send("settled",{write_sequence:write}),50);if(message.method==="crash")process.exit(17);if(message.id===undefined)return;console.log(JSON.stringify(message.method==="error"?{jsonrpc:"2.0",id:message.id,error:{code:-32001,message:"bounded"}}:{jsonrpc:"2.0",id:message.id,result:{method:message.method}}));});`); return file; }
+async function fixturePath(ignoreShutdown = false, criticalDelay = 0, acknowledge = false, readyDelay = 0, acknowledgeReplay = false) { const root = await mkdtemp(path.join(os.tmpdir(), "ast-worker-host-")), file = path.join(root, "worker.mjs"); roots.push(root); await writeFile(file, `import{createInterface}from"node:readline";let generation=0,sequence=0,writes=0,critical=${criticalDelay > 0};const send=(type,payload)=>process.send({v:1,generation,sequence:++sequence,type,payload});process.on("message",frame=>{if(frame.type==="handshake"){generation=frame.generation;setTimeout(()=>send("ready",{}),${readyDelay});}if(frame.type==="snapshot")send("snapshot",{runtime_admission:"open",project_admission:"open",active_requests:0,active_sends:0,active_operations:critical?1:0,queued_operations:0,completion_critical_operations:critical?1:0,mutation_history:false});if(frame.type==="shutdown"&&!${ignoreShutdown})setTimeout(()=>{critical=false;process.disconnect()},${criticalDelay});});createInterface({input:process.stdin}).on("line",line=>{const message=JSON.parse(line),write=++writes;if(${acknowledgeReplay}&&write<=2)send("settled",{write_sequence:write});if(${acknowledge}&&message.method==="notify-ack")setTimeout(()=>send("settled",{write_sequence:write}),50);if(message.method==="crash")process.exit(17);if(message.method==="notify-first")console.log(JSON.stringify({jsonrpc:"2.0",method:"notifications/progress",params:{progress:1}}));if(message.id===undefined)return;console.log(JSON.stringify(message.method==="error"?{jsonrpc:"2.0",id:message.id,error:{code:-32001,message:"bounded",extension:true}}:{jsonrpc:"2.0",id:message.id,result:{method:message.method}}));});`); return file; }
 // prettier-ignore
 async function host(beforeWrite?: (message: JSONRPCMessage) => void) { const workerEntryPath = await fixturePath(); return new CompilerWorkerHost((generation) => spawnCompilerWorkerProcess({ generation, workerEntryPath, environment: {}, beforeWrite }), 500); }
 // prettier-ignore
@@ -45,6 +45,27 @@ it("routes production cancellation through its generation-safe host method", asy
   expect([cancel.mock.calls.length, forward.mock.calls.length]).toEqual([1, 0]);
   input.end();
 });
+it("bounds supervisor errors without echoing an oversized request id", async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  let written = "";
+  output.on("data", (chunk) => {
+    written += chunk.toString();
+  });
+  vi.spyOn(process, "stdin", "get").mockReturnValue(input as unknown as typeof process.stdin);
+  vi.spyOn(process, "stdout", "get").mockReturnValue(output as unknown as typeof process.stdout);
+  vi.spyOn(CompilerWorkerHost.prototype, "forward").mockRejectedValue(
+    new CompilerWorkerHostError("protocol"),
+  );
+  await runSupervisedStdioServer();
+
+  input.write(`${JSON.stringify({ jsonrpc: "2.0", id: "x".repeat(8 * 1024), method: "ping" })}\n`);
+  await vi.waitFor(() => expect(written).not.toBe(""));
+  const response = JSON.parse(written);
+  expect(response).toMatchObject({ jsonrpc: "2.0", id: null, error: { code: -32603 } });
+  expect(Buffer.byteLength(written)).toBeLessThanOrEqual(256 * 1024);
+  input.end();
+});
 it("spawns through private IPC and relays bounded JSON-RPC result and error payloads", async () => {
   let causal: string | undefined;
   const worker = await host((message) => {
@@ -54,10 +75,16 @@ it("spawns through private IPC and relays bounded JSON-RPC result and error payl
   // prettier-ignore
   expect(await worker.forward({ jsonrpc: "2.0", id: "ok", method: "read" })).toMatchObject({ result: { method: "read" } });
   expect(causal).toBe("forwarded");
+  // A bounded server notification must not fail unrelated pending requests.
+  await expect(
+    worker.forward({ jsonrpc: "2.0", id: "notify", method: "notify-first" }),
+  ).resolves.toMatchObject({ result: { method: "notify-first" } });
   // prettier-ignore
-  expect(await worker.forward({ jsonrpc: "2.0", id: 2, method: "error" })).toMatchObject({ error: { code: -32001, message: "bounded" } });
+  expect(await worker.forward({ jsonrpc: "2.0", id: 2, method: "error" })).toMatchObject({ error: { code: -32001, message: "bounded", extension: true } });
   // prettier-ignore
   await expect(worker.forward({ jsonrpc: "2.0", id: 3, method: "x", params: { value: "x".repeat(300_000) } })).rejects.toMatchObject({ kind: "protocol" });
+  // prettier-ignore
+  await expect(worker.forward({ jsonrpc: "2.0", id: "x".repeat(8 * 1024 - 1), method: "read" })).rejects.toMatchObject({ kind: "protocol" });
   await worker.shutdown("requested");
 });
 it("maps before write, targets cancellation to its generation, and rejects stale settlement", async () => {

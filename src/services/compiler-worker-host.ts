@@ -5,7 +5,13 @@ import { createInterface } from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import type { JSONRPCMessage, RequestId } from "@modelcontextprotocol/sdk/types.js";
-import { decodeCompilerWorkerEnvelope, startCompilerWorker } from "./compiler-worker-protocol.js";
+import {
+  COMPILER_WORKER_MAX_FRAME_BYTES,
+  decodeCompilerWorkerEnvelope,
+  decodeCompilerWorkerResponse,
+  isCompilerWorkerRequestIdWithinBudget,
+  startCompilerWorker,
+} from "./compiler-worker-protocol.js";
 import {
   createCompilerWorkerSpawnSpec,
   readRuntimePolicy,
@@ -23,7 +29,8 @@ export class CompilerWorkerHostError extends Error {
     super("Compiler worker request failed.");
   }
 }
-const bounded = (value: unknown) => Buffer.byteLength(JSON.stringify(value)) <= 256 * 1024;
+const bounded = (value: unknown) =>
+  Buffer.byteLength(JSON.stringify(value)) <= COMPILER_WORKER_MAX_FRAME_BYTES;
 const within = <T>(promise: Promise<T>, ms: number) =>
   Promise.race([
     promise,
@@ -93,14 +100,10 @@ export function spawnCompilerWorkerProcess(options: {
     } else snapshots.shift()?.resolve(decoded.value);
   });
   createInterface({ input: child.stdout! }).on("line", (line) => {
-    if (Buffer.byteLength(line) > 256 * 1024) return fail(new CompilerWorkerHostError("protocol"));
-    let message: JSONRPCMessage;
-    try {
-      message = JSON.parse(line) as JSONRPCMessage;
-    } catch {
-      return fail(new CompilerWorkerHostError("protocol"));
-    }
-    if (!("id" in message) || message.id === undefined) return;
+    const decoded = decodeCompilerWorkerResponse(line);
+    if (!decoded.ok) return fail(new CompilerWorkerHostError("protocol"));
+    if (decoded.kind === "notification") return;
+    const message = decoded.value as JSONRPCMessage & { readonly id: RequestId };
     const request = pending.get(message.id);
     if (!request) return;
     pending.delete(message.id);
@@ -111,7 +114,11 @@ export function spawnCompilerWorkerProcess(options: {
     });
   });
   const write = (message: JSONRPCMessage, acknowledge = false) => {
-    if (!bounded(message) || !child.stdin?.writable)
+    const requestIdWithinBudget =
+      !("id" in message) ||
+      message.id === undefined ||
+      isCompilerWorkerRequestIdWithinBudget(message.id);
+    if (!requestIdWithinBudget || !bounded(message) || !child.stdin?.writable)
       return Promise.reject(new CompilerWorkerHostError("protocol"));
     options.beforeWrite?.(message);
     const writeSequence = ++writes,
@@ -394,9 +401,24 @@ export async function runSupervisedStdioServer() {
               ambiguous.correlation_id,
             ).envelope.error
           : undefined;
-        process.stdout.write(
-          `${JSON.stringify({ jsonrpc: "2.0", id: message.id, error: { code: -32603, message: rendered?.message ?? "Compiler worker request failed.", ...(ambiguous ? { data: { code: "AMBIGUOUS_APPLY", ...ambiguous } } : {}) } })}\n`,
-        );
+        const responseId = isCompilerWorkerRequestIdWithinBudget(message.id) ? message.id : null;
+        const candidate = {
+          jsonrpc: "2.0",
+          id: responseId,
+          error: {
+            code: -32603,
+            message: rendered?.message ?? "Compiler worker request failed.",
+            ...(ambiguous ? { data: { code: "AMBIGUOUS_APPLY", ...ambiguous } } : {}),
+          },
+        };
+        const response = bounded(candidate)
+          ? candidate
+          : {
+              jsonrpc: "2.0",
+              id: null,
+              error: { code: -32603, message: "Compiler worker request failed." },
+            };
+        process.stdout.write(`${JSON.stringify(response)}\n`);
       }
     }
   };
