@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  COMPILER_WORKER_MAX_REQUEST_ID_BYTES,
   decodeCompilerWorkerEnvelope,
+  decodeCompilerWorkerResponse,
+  fitsCompilerWorkerResponseResult,
+  isCompilerWorkerRequestIdWithinBudget,
   startCompilerWorker,
   validateInitializationReplay,
 } from "../src/services/compiler-worker-protocol.js";
@@ -36,6 +40,32 @@ describe("compiler worker protocol", () => {
     ] as const)
       expect(decodeCompilerWorkerEnvelope(frame)).toEqual({ ok: false, reason });
   });
+  it("decodes bounded responses and ignores compatible worker notifications", () => {
+    expect(decodeCompilerWorkerResponse('{"jsonrpc":"2.0","id":1,"result":null}')).toMatchObject({
+      ok: true,
+      kind: "response",
+    });
+    expect(
+      decodeCompilerWorkerResponse(
+        '{"jsonrpc":"2.0","id":"a","error":{"code":-32001,"message":"bounded","extension":true}}',
+      ),
+    ).toMatchObject({ ok: true, kind: "response" });
+    expect(
+      decodeCompilerWorkerResponse(
+        '{"jsonrpc":"2.0","method":"notifications/progress","params":{"progress":1}}',
+      ),
+    ).toMatchObject({ ok: true, kind: "notification" });
+    for (const [frame, reason] of [
+      ["null", "invalid_response"],
+      ["1", "invalid_response"],
+      ['{"jsonrpc":"2.0","id":1}', "invalid_response"],
+      ['{"jsonrpc":"2.0","id":1,"result":{},"error":{}}', "invalid_response"],
+      ['{"jsonrpc":"2.0","id":null,"result":{}}', "invalid_id"],
+      ['{"jsonrpc":"2.0","id":1,"error":{"code":"x","message":1}}', "invalid_error"],
+    ] as const) {
+      expect(decodeCompilerWorkerResponse(frame)).toEqual({ ok: false, reason });
+    }
+  });
   it("retains exactly initialize and initialized within 256 KiB", () => {
     expect(validateInitializationReplay([initialize, initialized]).ok).toBe(true);
     for (const [frames, reason] of [
@@ -47,6 +77,18 @@ describe("compiler worker protocol", () => {
       ],
     ] as const)
       expect(validateInitializationReplay(frames)).toEqual({ ok: false, reason });
+  });
+  it("shares exact request-id and complete response-frame budgets", () => {
+    expect(
+      isCompilerWorkerRequestIdWithinBudget("x".repeat(COMPILER_WORKER_MAX_REQUEST_ID_BYTES - 2)),
+    ).toBe(true);
+    expect(
+      isCompilerWorkerRequestIdWithinBudget("x".repeat(COMPILER_WORKER_MAX_REQUEST_ID_BYTES - 1)),
+    ).toBe(false);
+    expect(fitsCompilerWorkerResponseResult({ content: [], structuredContent: { ok: true } })).toBe(
+      true,
+    );
+    expect(fitsCompilerWorkerResponseResult({ value: "x".repeat(256 * 1024) })).toBe(false);
   });
   it("kills and reaps both timed-out pre-request attempts", async () => {
     vi.useFakeTimers();

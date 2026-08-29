@@ -1,11 +1,82 @@
 import { Buffer } from "node:buffer";
+export const COMPILER_WORKER_MAX_FRAME_BYTES = 256 * 1024;
+export const COMPILER_WORKER_MAX_REQUEST_ID_BYTES = 8 * 1024;
+export const COMPILER_WORKER_JSONRPC_ENVELOPE_RESERVE_BYTES = 16 * 1024;
+export const COMPILER_WORKER_MAX_RESULT_BYTES =
+  COMPILER_WORKER_MAX_FRAME_BYTES - COMPILER_WORKER_JSONRPC_ENVELOPE_RESERVE_BYTES;
 const FIELDS = new Set(["v", "generation", "sequence", "type", "payload"]);
 const TYPES = new Set(["handshake", "snapshot", "shutdown", "ready", "settled", "lease", "exit"]);
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+export function isCompilerWorkerRequestIdWithinBudget(id: unknown): boolean {
+  try {
+    return Buffer.byteLength(JSON.stringify(id)) <= COMPILER_WORKER_MAX_REQUEST_ID_BYTES;
+  } catch {
+    return false;
+  }
+}
+export function fitsCompilerWorkerResponseResult(result: unknown): boolean {
+  try {
+    const frame = JSON.stringify({
+      jsonrpc: "2.0",
+      id: "x".repeat(COMPILER_WORKER_MAX_REQUEST_ID_BYTES - 2),
+      result,
+    });
+    return Buffer.byteLength(frame) <= COMPILER_WORKER_MAX_FRAME_BYTES;
+  } catch {
+    return false;
+  }
+}
+export function decodeCompilerWorkerResponse(frame: string) {
+  if (Buffer.byteLength(frame) > COMPILER_WORKER_MAX_FRAME_BYTES) {
+    return { ok: false as const, reason: "oversized" };
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(frame);
+  } catch {
+    return { ok: false as const, reason: "malformed" };
+  }
+  if (!isRecord(value) || value.jsonrpc !== "2.0") {
+    return { ok: false as const, reason: "invalid_response" };
+  }
+  if (Object.hasOwn(value, "method") && !Object.hasOwn(value, "id")) {
+    if (
+      typeof value.method !== "string" ||
+      Object.keys(value).some((key) => !["jsonrpc", "method", "params"].includes(key))
+    ) {
+      return { ok: false as const, reason: "invalid_notification" };
+    }
+    return { ok: true as const, kind: "notification" as const, value };
+  }
+  if (Object.keys(value).some((key) => !["jsonrpc", "id", "result", "error"].includes(key))) {
+    return { ok: false as const, reason: "unknown_field" };
+  }
+  if (
+    !(typeof value.id === "string" || typeof value.id === "number") ||
+    !isCompilerWorkerRequestIdWithinBudget(value.id)
+  ) {
+    return { ok: false as const, reason: "invalid_id" };
+  }
+  const hasResult = Object.hasOwn(value, "result");
+  const hasError = Object.hasOwn(value, "error");
+  if (hasResult === hasError) return { ok: false as const, reason: "invalid_response" };
+  if (hasError) {
+    const error = value.error;
+    if (
+      !isRecord(error) ||
+      typeof error.code !== "number" ||
+      !Number.isSafeInteger(error.code) ||
+      typeof error.message !== "string"
+    ) {
+      return { ok: false as const, reason: "invalid_error" };
+    }
+  }
+  return { ok: true as const, kind: "response" as const, value };
+}
 export function decodeCompilerWorkerEnvelope(frame: string) {
-  if (Buffer.byteLength(frame) > 256 * 1024) {
+  if (Buffer.byteLength(frame) > COMPILER_WORKER_MAX_FRAME_BYTES) {
     return { ok: false as const, reason: "oversized" };
   }
   let value: unknown;
@@ -46,7 +117,7 @@ export function validateInitializationReplay(frames: readonly unknown[]) {
   ) {
     return { ok: false as const, reason: "missing_replay" };
   }
-  if (Buffer.byteLength(JSON.stringify(frames)) > 256 * 1024) {
+  if (Buffer.byteLength(JSON.stringify(frames)) > COMPILER_WORKER_MAX_FRAME_BYTES) {
     return { ok: false as const, reason: "oversized_replay" };
   }
   return { ok: true as const, frames: [request, notification] as readonly [unknown, unknown] };
