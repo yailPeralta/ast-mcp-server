@@ -29,6 +29,7 @@ import path from "node:path";
 import process from "node:process";
 import { clearInterval, clearTimeout, setInterval, setTimeout } from "node:timers";
 import { URL, fileURLToPath, pathToFileURL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import yaml from "yaml";
 import { parseProbeMarker, runBoundedCommand, terminateProcessTree } from "./runtime-process.mjs";
 
@@ -45,6 +46,8 @@ const HARNESS_REPOSITORY = "https://github.com/deepseek-ai/deepseek-harness.git"
 const PUBLIC_PACKAGE_INTEGRITY =
   "sha512-vbna6hhjX+VlayTnrgWQ/EitxkBmhVza0az6J/MCpE14M4Yn50D4yTQZrrcjfCi05sVhJhWFGPnzv6VE3V9KIw==";
 const PUBLIC_PACKAGE_SHASUM = "166f95121a72f0b03c325cef586a211cd9107a24";
+const H01_TOOL_NAME = "mcp__ast__ast_get_project_status";
+const PUBLIC_EMPTY_RESULT_MARKER = "(ast_get_project_status returned no model-visible content)";
 let ownedTransportSequence = 0;
 
 class OwnedStdioClientTransport extends StdioClientTransport {
@@ -120,6 +123,14 @@ async function digestFile(filePath, algorithm, encoding) {
 
 function hashJson(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function classifyText(text) {
+  return {
+    bytes: Buffer.byteLength(text, "utf8"),
+    sha256: createHash("sha256").update(text).digest("hex"),
+    useful: text.length > 0 && !text.includes("returned no model-visible content"),
+  };
 }
 
 function pidExists(pid) {
@@ -538,6 +549,363 @@ function probeSource() {
 `;
 }
 
+function captureSource() {
+  return `import { writeFileSync } from "node:fs";
+export default function apply(ctx) {
+  ctx.on("tools/result", (exec, result) => {
+    if (exec.name !== ${JSON.stringify(H01_TOOL_NAME)}) return;
+    writeFileSync(process.env.AST_H01_CAPTURE_PATH, JSON.stringify({
+      callId: exec.callId,
+      arguments: exec.arguments,
+      value: result.value,
+      content: result.content,
+      isError: result.isError,
+    }), "utf8");
+  });
+}
+`;
+}
+
+function replaySource() {
+  return `export default function apply(ctx) {
+  const marker = { callId: null, content: null, isError: null, matches: 0, error: null };
+  async function run() {
+    await ctx.get("loader")?.await();
+    const handle = await ctx.agents.resume({
+      resumeSessionId: process.env.AST_H01_SESSION_ID,
+    });
+    try {
+      const messages = handle.agent.session
+        .deriveMessages()
+        .filter((entry) => entry.source?.kind === "tool" && entry.source.callId === process.env.AST_H01_CALL_ID);
+      const message = messages[0];
+      marker.matches = messages.length;
+      marker.callId = message?.source?.callId ?? null;
+      marker.content = message?.content?.[0]?.content ?? null;
+      marker.isError = message?.content?.[0]?.isError ?? null;
+    } finally {
+      await handle.dispose();
+    }
+    process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n");
+    ctx.get("appExit")?.(0);
+  }
+  void run().catch((error) => {
+    marker.error = String(error).slice(0, 240);
+    process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n");
+    ctx.get("appExit")?.(1);
+  });
+}
+`;
+}
+
+function profilePatch({ replay = false } = {}) {
+  return `- id: tools
+  config:
+    mode: native
+- id: session-persistence-jsonl
+  config:
+    root: !!js dshHomePath('sessions')
+    compression: none
+    packChunks: false
+${replay ? "- id: headless-runner\n  disabled: true\n" : ""}- insert:
+    - id: h01-capture
+      name: '@ast-mcp/h01-capture'
+${
+  replay
+    ? "    - id: h01-replay\n      name: './h01-replay.mjs'\n      inject: ['agents', 'sessionPersistence']\n"
+    : ""
+}`;
+}
+
+function textFromCoreContent(content) {
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((block) => block && block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n");
+}
+
+function normalizedStatusHash(status) {
+  const value = JSON.parse(JSON.stringify(status));
+  value.last_successful_sync_at = null;
+  value.last_successful_index_at = null;
+  value.operation_queue.max_queue_wait_ms = 0;
+  value.operation_queue.max_execution_ms = 0;
+  value.index_observability.last_successful_persistence_at = null;
+  return hashJson(value);
+}
+
+async function fixtureSha256(root) {
+  return hashJson(
+    await Promise.all(
+      ["tsconfig.json", "src/escaped.ts", "src/value.ts"].map((file) =>
+        readFile(path.join(root, file), "utf8"),
+      ),
+    ),
+  );
+}
+
+async function findSingleSessionLog(root) {
+  const found = [];
+  async function visit(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) await visit(target);
+      if (entry.isFile() && entry.name === "session.jsonl") found.push(target);
+    }
+  }
+  await visit(root);
+  assert(found.length === 1, `expected one durable session log, found ${found.length}`);
+  return found[0];
+}
+
+async function installJourneyProfile({ cliBin, nodeBin, environment, archive, mcpClientArchive }) {
+  for (const dependency of [archive, mcpClientArchive]) {
+    await run(nodeBin, [cliBin, "plugin", "--profile", "headless", "add", `file:${dependency}`], {
+      cwd: temporaryRoot,
+      env: environment,
+    });
+  }
+  const profileDir = path.join(environment.DSH_HOME, "profiles", "headless");
+  const capturePackageDir = path.join(profileDir, "node_modules", "@ast-mcp", "h01-capture");
+  await mkdir(capturePackageDir, { recursive: true });
+  await writeFile(
+    path.join(capturePackageDir, "package.json"),
+    JSON.stringify({
+      name: "@ast-mcp/h01-capture",
+      version: "1.0.0",
+      type: "module",
+      exports: "./index.mjs",
+    }),
+    "utf8",
+  );
+  await writeFile(path.join(capturePackageDir, "index.mjs"), captureSource(), "utf8");
+  await writeFile(path.join(profileDir, "cordis.patch.yml"), profilePatch(), "utf8");
+  return profileDir;
+}
+
+async function replayDurableSession({
+  cliBin,
+  nodeBin,
+  environment,
+  profileDir,
+  sessionId,
+  callId,
+}) {
+  await writeFile(path.join(profileDir, "h01-replay.mjs"), replaySource(), "utf8");
+  await writeFile(
+    path.join(profileDir, "cordis.patch.yml"),
+    profilePatch({ replay: true }),
+    "utf8",
+  );
+  const replayed = await run(nodeBin, [cliBin, "--profile", "headless", "replay"], {
+    cwd: temporaryRoot,
+    env: { ...environment, AST_H01_SESSION_ID: sessionId, AST_H01_CALL_ID: callId },
+  });
+  const parsed = parseProbeMarker(replayed.stderr);
+  assert(parsed.status === "found", "cold replay produced no result marker");
+  assert(parsed.value.error === null, `cold replay failed: ${parsed.value.error}`);
+  assert(parsed.value.matches === 1, "cold replay did not resolve exactly one correlated result");
+  return {
+    callId: parsed.value.callId,
+    content: parsed.value.content,
+    isError: parsed.value.isError,
+    text: textFromCoreContent(parsed.value.content),
+  };
+}
+
+async function runNativeAgentJourney({
+  label,
+  archive,
+  mcpClientArchive,
+  harness,
+  fixtureProject,
+  expectedWorkspaceSha256,
+  expectUseful,
+}) {
+  const home = path.join(temporaryRoot, `h01-${label}-home`);
+  const capturePath = path.join(temporaryRoot, `h01-${label}-capture.json`);
+  await mkdir(home, { recursive: true });
+  const environment = {
+    ...process.env,
+    DSH_HOME: home,
+    DSH_TOOLS_MODE: "native",
+    DSH_TELEMETRY_DISABLED: "1",
+    COREPACK_INTEGRITY_KEYS: "0",
+    COREPACK_USE_LATEST: "0",
+  };
+  const profileDir = await installJourneyProfile({
+    cliBin: harness.cliBin,
+    nodeBin: harness.nodeBin,
+    environment,
+    archive,
+    mcpClientArchive,
+  });
+  const mockModulePath = path.join(
+    harness.source,
+    "packages",
+    "test-support",
+    "llm-mock-server",
+    "lib",
+    "index.js",
+  );
+  const { startMockLlmServer } = await import(pathToFileURL(mockModulePath).href);
+  const apiKey = `h01-${label}-key`;
+  const mock = await startMockLlmServer({
+    sequence: ["tool_call_success", "success"],
+    repeatLast: true,
+    apiKey,
+    toolName: H01_TOOL_NAME,
+    toolArguments: JSON.stringify({ project_root: fixtureProject }),
+    successText: `H01_${label.toUpperCase()}_DONE`,
+  });
+  try {
+    const runResult = await run(
+      harness.nodeBin,
+      [harness.cliBin, "--profile", "headless", "Inspect the project status with the AST tool."],
+      {
+        cwd: fixtureProject,
+        env: {
+          ...environment,
+          AST_H01_CAPTURE_PATH: capturePath,
+          DEEPSEEK_API_KEY: apiKey,
+          DEEPSEEK_BASE_URL: mock.baseURL,
+        },
+      },
+    );
+    assert(
+      runResult.stdout.trim() === `H01_${label.toUpperCase()}_DONE`,
+      `${label} agent did not finish`,
+    );
+    assert(
+      mock.requests.length >= 2 && mock.requests.length <= 3,
+      `${label} journey expected the tool turn and at most one auxiliary request`,
+    );
+
+    const firstBody = mock.requests[0]?.body;
+    const tools = Array.isArray(firstBody?.tools) ? firstBody.tools : [];
+    const toolNames = tools
+      .map((tool) => tool?.function?.name)
+      .filter((name) => typeof name === "string");
+    const astNames = toolNames.filter((name) => name.startsWith("mcp__ast__")).sort();
+    assert(astNames.length === 15, `${label} model catalog exposed ${astNames.length} AST tools`);
+    assert(
+      !astNames.includes("mcp__ast__ast_apply_operation"),
+      `${label} model catalog exposed apply`,
+    );
+
+    const modelRequest = mock.requests.find((request) =>
+      request.body?.messages?.some((message) => message?.role === "tool"),
+    );
+    const secondMessages = Array.isArray(modelRequest?.body?.messages)
+      ? modelRequest.body.messages
+      : [];
+    const modelToolMessage = secondMessages.findLast((message) => message?.role === "tool");
+    const modelText = typeof modelToolMessage?.content === "string" ? modelToolMessage.content : "";
+    const capture = JSON.parse(await readFile(capturePath, "utf8"));
+    assert(capture.isError === false, `${label} native tool call failed`);
+    assert(
+      typeof capture.callId === "string" && modelToolMessage?.tool_call_id === capture.callId,
+      `${label} native and provider call IDs differ`,
+    );
+    assert(
+      isDeepStrictEqual(capture.arguments, { project_root: fixtureProject }),
+      `${label} captured tool arguments differ`,
+    );
+    const rawStructured = capture.value?.structuredContent;
+    assert(
+      rawStructured && typeof rawStructured === "object",
+      `${label} raw structured value is missing`,
+    );
+    const nativeText = textFromCoreContent(capture.content);
+    assert(nativeText === modelText, `${label} native and next-request tool results differ`);
+    let projectedStructured;
+    if (expectUseful) {
+      projectedStructured = JSON.parse(modelText);
+      assert(
+        isDeepStrictEqual(projectedStructured, rawStructured),
+        `${label} model projection differs from its exact raw structured value`,
+      );
+      assert(
+        /^project_[0-9a-f]{20}$/u.test(projectedStructured?.project?.project_id) &&
+          typeof projectedStructured?.compiler?.state === "string" &&
+          typeof projectedStructured?.source_count === "number",
+        `${label} model projection is not a project-status result`,
+      );
+    } else {
+      assert(
+        modelText === PUBLIC_EMPTY_RESULT_MARKER &&
+          capture.content?.length === 1 &&
+          capture.content[0]?.type === "text",
+        `${label} public baseline did not reproduce the exact H-01 marker`,
+      );
+    }
+    assert(
+      classifyText(modelText).useful === expectUseful,
+      `${label} visibility classification mismatch`,
+    );
+
+    const logPath = await findSingleSessionLog(path.join(home, "sessions"));
+    const rows = (await readFile(logPath, "utf8"))
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    const header = rows[0];
+    const durableEvents = rows.filter(
+      (row) => row.type === "tool/result" && row.data?.message?.source?.callId === capture.callId,
+    );
+    assert(durableEvents.length === 1, `${label} durable correlated tool/result is not unique`);
+    const durableBlock = durableEvents[0].data.message.content[0];
+    const durableText = textFromCoreContent(durableBlock.content);
+    assert(
+      durableBlock.isError === false &&
+        durableText === modelText &&
+        isDeepStrictEqual(durableBlock.content, capture.content),
+      `${label} durable result differs from the correlated native result`,
+    );
+    const replay = await replayDurableSession({
+      cliBin: harness.cliBin,
+      nodeBin: harness.nodeBin,
+      environment,
+      profileDir,
+      sessionId: header.id,
+      callId: capture.callId,
+    });
+    assert(
+      replay.callId === capture.callId &&
+        replay.isError === false &&
+        replay.text === durableText &&
+        isDeepStrictEqual(replay.content, durableBlock.content),
+      `${label} cold replay differs from its correlated durable result`,
+    );
+
+    const workspaceSha256 = await fixtureSha256(fixtureProject);
+    assert(workspaceSha256 === expectedWorkspaceSha256, `${label} journey mutated the fixture`);
+    return {
+      projectedStructured:
+        projectedStructured === undefined
+          ? null
+          : {
+              bytes: Buffer.byteLength(JSON.stringify(projectedStructured)),
+              sha256: hashJson(projectedStructured),
+            },
+      rawStructured: {
+        bytes: Buffer.byteLength(JSON.stringify(rawStructured)),
+        sha256: hashJson(rawStructured),
+        normalizedSha256: normalizedStatusHash(rawStructured),
+      },
+      native: classifyText(nativeText),
+      model: classifyText(modelText),
+      durable: classifyText(durableText),
+      replay: classifyText(replay.text),
+      scopedCatalogSha256: hashJson(astNames),
+      workspaceSha256,
+    };
+  } finally {
+    await mock.close();
+  }
+}
+
 const packageDirectory = path.join(temporaryRoot, "package");
 const archivePath = path.join(packageDirectory, "ast-mcp-server.tgz");
 const consumerDirectory = path.join(temporaryRoot, "consumer");
@@ -927,6 +1295,36 @@ try {
   assert(probe.applyRejected?.ok === true, "harness accepted a denied apply invocation");
   assert(probe.error === null, `harness probe failed: ${probe.error ?? "unknown"}`);
   summary.phases.c = "ok";
+
+  // ── Phase D: native agent/session visibility + durable cold replay (H-01a) ──
+  const harness = { source, cliBin, nodeBin };
+  const expectedWorkspaceSha256 = await fixtureSha256(fixtureProject);
+  const publicBaseline = await runNativeAgentJourney({
+    label: "public",
+    archive: publicArchivePath,
+    mcpClientArchive,
+    harness,
+    fixtureProject,
+    expectedWorkspaceSha256,
+    expectUseful: false,
+  });
+  const correctedCandidate = await runNativeAgentJourney({
+    label: "candidate",
+    archive: archivePath,
+    mcpClientArchive,
+    harness,
+    fixtureProject,
+    expectedWorkspaceSha256,
+    expectUseful: true,
+  });
+  assert(
+    publicBaseline.rawStructured.normalizedSha256 ===
+      correctedCandidate.rawStructured.normalizedSha256 &&
+      publicBaseline.scopedCatalogSha256 === correctedCandidate.scopedCatalogSha256,
+    "public and candidate journeys differ beyond the projection correction",
+  );
+  summary.h01a = { publicBaseline, correctedCandidate };
+  summary.phases.d = "ok";
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });
   const remains = await lstat(temporaryRoot).then(
