@@ -149,14 +149,21 @@ describe("pinned Harness smoke contract", () => {
     expect(source).toContain('detached: process.platform !== "win32"');
     expect(source).toContain("terminateProcessTree(child)");
     expect(source).toContain("closeMcpSession");
-    expect(source).toContain("await transport.close().catch");
-    expect(source).not.toContain("await client.close();");
+    expect(source).toContain("else await transport.close()");
+    expect(source).toContain("collectOwnedProcessTree(pid)");
+    expect(source).toContain("terminateOwnedPids(ownedPids)");
+    expect(source).toContain("exited.every(Boolean)");
+    expect(source).toContain('rejected.error?.info?.code === "UNKNOWN_TOOL"');
+    expect(source).toContain("supervisedNames.length === 15");
     expect(source).toContain("await rm(temporaryRoot, { recursive: true, force: true })");
     expect(source).toContain("materializePinnedHarness");
     expect(source).toContain('"--no-hardlinks"');
     expect(source).not.toContain("const source = process.env.DSH_HARNESS_SOURCE");
     expect(source).toContain("observedCliSha256");
-    expect(source).toContain("closeMcpSession");
+    expect(source).toContain("PUBLIC_PACKAGE_INTEGRITY");
+    expect(source).toContain("BLOCKED:");
+    expect(source).toContain('cleanup: "ok"');
+    expect(source).toContain("AST_H01_PROCESS_OWNER");
     expect(source).not.toContain("execFileAsync");
   });
 

@@ -18,11 +18,12 @@
 // revision. Teardown always runs via `finally`.
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { Buffer } from "node:buffer";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { spawn } from "node:child_process";
 import console from "node:console";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -41,9 +42,43 @@ const PINNED_REVISION = "cd5ef8148158c3a752a658978873241fdf8e2bbc";
 const PINNED_TAG = "dsh-v0.1.2-alpha.1";
 const PINNED_VERSION = "0.1.2-alpha.1";
 const HARNESS_REPOSITORY = "https://github.com/deepseek-ai/deepseek-harness.git";
+const PUBLIC_PACKAGE_INTEGRITY =
+  "sha512-vbna6hhjX+VlayTnrgWQ/EitxkBmhVza0az6J/MCpE14M4Yn50D4yTQZrrcjfCi05sVhJhWFGPnzv6VE3V9KIw==";
+const PUBLIC_PACKAGE_SHASUM = "166f95121a72f0b03c325cef586a211cd9107a24";
+let ownedTransportSequence = 0;
+
+class OwnedStdioClientTransport extends StdioClientTransport {
+  constructor(parameters) {
+    const ownerToken = `${process.pid}-${Date.now()}-${++ownedTransportSequence}`;
+    super({
+      ...parameters,
+      env: { ...parameters.env, AST_H01_PROCESS_OWNER: ownerToken },
+    });
+    this.ownerToken = ownerToken;
+    this.ownedPid = null;
+  }
+
+  start() {
+    const started = super.start();
+    this.ownedPid = this.pid;
+    return started;
+  }
+}
 
 function fail(message) {
   throw new Error(`dsh-adapter-smoke: ${message}`);
+}
+
+function blocked(message) {
+  throw new Error(`dsh-adapter-smoke: BLOCKED: ${message}`);
+}
+
+async function requirePrerequisite(label, operation) {
+  try {
+    return await operation();
+  } catch (error) {
+    blocked(`${label}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 function assert(condition, message) {
@@ -58,18 +93,133 @@ async function run(command, args, options = {}) {
   });
 }
 
+async function preflightRequiredExecutables() {
+  for (const [command, args] of [
+    [process.execPath, ["--version"]],
+    [yarnExecutable, ["--version"]],
+    ["npm", ["--version"]],
+    ["corepack", ["--version"]],
+    ["git", ["--version"]],
+    ["tar", ["--version"]],
+  ]) {
+    await run(command, args, { timeout: 30_000 });
+  }
+}
+
 async function sha256(filePath) {
   return createHash("sha256")
     .update(await readFile(filePath))
     .digest("hex");
 }
 
-async function closeMcpSession(client, transport, connected) {
-  if (connected) {
-    await client.close().catch(() => undefined);
-  } else {
-    await transport.close().catch(() => undefined);
+async function digestFile(filePath, algorithm, encoding) {
+  return createHash(algorithm)
+    .update(await readFile(filePath))
+    .digest(encoding);
+}
+
+function hashJson(value) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function pidExists(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
+}
+
+async function waitForPidExit(pid, timeoutMs = 7_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (pidExists(pid) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return !pidExists(pid);
+}
+
+async function collectOwnedProcessTree(rootPid) {
+  const owned = new Set([rootPid]);
+  if (process.platform !== "linux") return [...owned];
+  const pending = [rootPid];
+  while (pending.length > 0) {
+    const parent = pending.pop();
+    const children = await readFile(`/proc/${parent}/task/${parent}/children`, "utf8").catch(
+      (error) => {
+        if (error?.code === "ENOENT") return "";
+        throw error;
+      },
+    );
+    for (const token of children.trim().split(/\s+/u).filter(Boolean)) {
+      const child = Number(token);
+      if (!Number.isSafeInteger(child) || child <= 0 || owned.has(child)) continue;
+      owned.add(child);
+      pending.push(child);
+    }
+  }
+  return [...owned];
+}
+
+async function collectOwnerTokenPids(ownerToken) {
+  if (process.platform !== "linux") return [];
+  const entries = await readdir("/proc", { withFileTypes: true });
+  const matches = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory() && /^\d+$/u.test(entry.name))
+      .map(async (entry) => {
+        const environment = await readFile(`/proc/${entry.name}/environ`, "utf8").catch(() => "");
+        return environment.split("\0").includes(`AST_H01_PROCESS_OWNER=${ownerToken}`)
+          ? Number(entry.name)
+          : null;
+      }),
+  );
+  return matches.filter((pid) => Number.isSafeInteger(pid));
+}
+
+async function terminateOwnedPids(ownedPids) {
+  let survivors = ownedPids.filter(pidExists);
+  for (const signal of ["SIGTERM", "SIGKILL"]) {
+    for (const ownedPid of [...survivors].reverse()) {
+      try {
+        process.kill(ownedPid, signal);
+      } catch {
+        // Already exited between observation and containment.
+      }
+    }
+    await Promise.all(survivors.map((ownedPid) => waitForPidExit(ownedPid, 2_000)));
+    survivors = survivors.filter(pidExists);
+    if (survivors.length === 0) return true;
+  }
+  return false;
+}
+
+async function closeMcpSession(client, transport, connected) {
+  const pid = transport.ownedPid ?? transport.pid;
+  const beforeClose =
+    Number.isSafeInteger(pid) && pid > 0 ? await collectOwnedProcessTree(pid) : [];
+  let closeError;
+  try {
+    if (connected) await client.close();
+    else await transport.close();
+  } catch (error) {
+    closeError = error;
+  }
+  if (connected) {
+    assert(Number.isSafeInteger(pid) && pid > 0, "connected MCP transport exposed no child pid");
+  }
+  const ownedPids = [
+    ...new Set([...beforeClose, ...(await collectOwnerTokenPids(transport.ownerToken))]),
+  ];
+  const exited = await Promise.all(ownedPids.map((ownedPid) => waitForPidExit(ownedPid, 500)));
+  if (!exited.every(Boolean)) {
+    assert(await terminateOwnedPids(ownedPids), "MCP process tree survived bounded termination");
+  }
+  assert(
+    (await collectOwnerTokenPids(transport.ownerToken)).length === 0,
+    "MCP owner-token process survived transport close",
+  );
+  if (closeError !== undefined) throw closeError;
 }
 
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ast-dsh-adapter-"));
@@ -115,6 +265,11 @@ async function resolveHarnessNode() {
 async function resolvePinnedHarness() {
   const { nodeBin, nodeBinDir } = await resolveHarnessNode();
   const source = await materializePinnedHarness(nodeBinDir);
+  const nodeVersion = (await run(nodeBin, ["--version"])).stdout.trim();
+  assert(
+    satisfiesHarnessEngine(nodeVersion),
+    "resolved Harness Node no longer satisfies its engine",
+  );
   const head = (await run("git", ["-C", source, "rev-parse", "HEAD"])).stdout.trim();
   assert(head === PINNED_REVISION, `harness HEAD ${head} != pinned ${PINNED_REVISION}`);
   const taggedRevision = (
@@ -145,6 +300,8 @@ async function resolvePinnedHarness() {
       tag: PINNED_TAG,
       cliVersion,
       mcpClientVersion,
+      nodeVersion,
+      observedNodeSha256: await sha256(nodeBin),
       observedCliSha256: await sha256(cliBin),
     },
   };
@@ -160,7 +317,10 @@ async function packPinnedMcpClient(source) {
     COREPACK_INTEGRITY_KEYS: "0",
     COREPACK_USE_LATEST: "0",
   };
-  await run("pnpm", ["pack", "--pack-destination", temporaryRoot], { cwd, env: environment });
+  await run("corepack", ["pnpm", "pack", "--pack-destination", temporaryRoot], {
+    cwd,
+    env: environment,
+  });
   const archive = path.join(temporaryRoot, `deepseek-ai-dsh-mcp-client-${PINNED_VERSION}.tgz`);
   assert(
     await readFile(archive, "utf8").then(
@@ -169,6 +329,30 @@ async function packPinnedMcpClient(source) {
     ),
     `pinned mcp-client tarball missing at ${archive}`,
   );
+  return archive;
+}
+
+/** Fetch and verify the immutable public v0.13.0 tarball used for the RED baseline. */
+async function fetchPublicPackage() {
+  const destination = path.join(temporaryRoot, "public-package");
+  await mkdir(destination, { recursive: true });
+  const packed = await run(
+    "npm",
+    ["pack", `ast-mcp-server@${expectedVersion}`, "--pack-destination", destination, "--json"],
+    { cwd: temporaryRoot },
+  );
+  const records = JSON.parse(packed.stdout);
+  const record = records[0];
+  assert(record?.integrity === PUBLIC_PACKAGE_INTEGRITY, "public package integrity mismatch");
+  assert(record?.shasum === PUBLIC_PACKAGE_SHASUM, "public package shasum mismatch");
+  const archive = path.join(destination, record.filename);
+  const observedIntegrity = `sha512-${await digestFile(archive, "sha512", "base64")}`;
+  const observedShasum = await digestFile(archive, "sha1", "hex");
+  assert(
+    observedIntegrity === PUBLIC_PACKAGE_INTEGRITY,
+    "downloaded public package integrity mismatch",
+  );
+  assert(observedShasum === PUBLIC_PACKAGE_SHASUM, "downloaded public package shasum mismatch");
   return archive;
 }
 
@@ -212,9 +396,9 @@ async function materializePinnedHarness(nodeBinDir) {
     COREPACK_INTEGRITY_KEYS: "0",
     COREPACK_USE_LATEST: "0",
   };
-  await run("corepack", ["enable"], { cwd: root, env: provisionEnvironment });
-  await run("pnpm", ["install"], { cwd: root, env: provisionEnvironment });
-  await run("pnpm", ["build"], { cwd: root, env: provisionEnvironment });
+  await run("corepack", ["pnpm", "--version"], { cwd: root, env: provisionEnvironment });
+  await run("corepack", ["pnpm", "install"], { cwd: root, env: provisionEnvironment });
+  await run("corepack", ["pnpm", "build"], { cwd: root, env: provisionEnvironment });
   return root;
 }
 
@@ -245,7 +429,7 @@ async function bootWithProbe(cliBin, nodeBin, environment, fixtureProject, dshHo
         if (parsed.status === "found") finish(parsed.value);
         if (parsed.status === "invalid") finish({ parseError: parsed.detail });
       }
-      const deadline = setTimeout(() => finish(undefined), 45_000);
+      const deadline = setTimeout(() => finish(undefined), 90_000);
       const interval = setInterval(check, 250);
       child.on("exit", () => {
         const parsed = parseProbeMarker(stderr);
@@ -325,13 +509,13 @@ function probeSource() {
               signal: AbortSignal.timeout(10000),
             });
             marker.applyRejected = {
-              ok: rejected.isError === true,
-              kind: rejected.isError === true ? "registry-error" : "unexpected-success",
+              ok: rejected.isError === true && rejected.error?.info?.code === "UNKNOWN_TOOL",
+              kind: rejected.error?.info?.code ?? "unexpected-success",
             };
           } catch (error) {
             marker.applyRejected = {
-              ok: true,
-              kind: "registry-exception",
+              ok: false,
+              kind: "unexpected-exception",
               detail: String(error).slice(0, 240),
             };
           }
@@ -362,6 +546,7 @@ const dshHome = path.join(temporaryRoot, "dsh-home");
 const summary = { version: packageMetadata.version, phases: {} };
 
 try {
+  await requirePrerequisite("required executable preflight", preflightRequiredExecutables);
   // ── Phase A: packed artifact fixture ────────────────────────────────────────
   if (packageMetadata.version !== expectedVersion) {
     fail(
@@ -387,6 +572,15 @@ try {
   await mkdir(packageDirectory, { recursive: true });
   await run(yarnExecutable, ["pack", "--out", archivePath], { cwd: repositoryRoot });
   summary.observedTarballSha256 = await sha256(archivePath);
+  const publicArchivePath = await requirePrerequisite(
+    "public v0.13.0 package identity",
+    fetchPublicPackage,
+  );
+  summary.publicPackage = {
+    integrity: PUBLIC_PACKAGE_INTEGRITY,
+    shasum: PUBLIC_PACKAGE_SHASUM,
+    observedSha256: await sha256(publicArchivePath),
+  };
   const { stdout: archiveListing } = await run("tar", ["-tzf", archivePath]);
   const archiveFiles = archiveListing
     .split("\n")
@@ -411,6 +605,10 @@ try {
   assert(rowConfig?.transport === "stdio", "patch transport must be stdio");
   assert(rowConfig?.failOnStartupError === true, "patch must fail loud on startup errors");
   assert(rowConfig?.env?.AST_MCP_APPLY_GUARD === "deny", "patch must set AST_MCP_APPLY_GUARD=deny");
+  assert(
+    rowConfig?.env?.AST_MCP_TEXT_PROJECTION === "canonical_json",
+    "patch must request the canonical JSON text projection",
+  );
   const entrypointExpression = rowConfig?.args?.[0]?.__jsExpr ?? "";
   assert(
     entrypointExpression.includes("node_modules/ast-mcp-server/dist/index.js") &&
@@ -474,6 +672,11 @@ try {
   await mkdir(path.join(fixtureProject, "src"), { recursive: true });
   await writeFile(path.join(fixtureProject, "tsconfig.json"), "{}\n", "utf8");
   await writeFile(path.join(fixtureProject, "src/value.ts"), "export const value = 1;\n", "utf8");
+  await writeFile(
+    path.join(fixtureProject, "src/escaped.ts"),
+    `// ${'"\\'.repeat(25 * 1024)}\nexport const escaped = true;\n`,
+    "utf8",
+  );
 
   async function listTools(guardValue) {
     const childEnvironment = {
@@ -486,7 +689,7 @@ try {
     } else {
       childEnvironment.AST_MCP_APPLY_GUARD = guardValue;
     }
-    const transport = new StdioClientTransport({
+    const transport = new OwnedStdioClientTransport({
       command: process.execPath,
       args: [resolvedEntrypoint],
       env: childEnvironment,
@@ -522,7 +725,22 @@ try {
     "guard allow: ast_apply_operation must be present",
   );
 
-  const guardedTransport = new StdioClientTransport({
+  const failedPidPath = path.join(temporaryRoot, "failed-connect-child.pid");
+  const failedSource = `const{spawn}=require("node:child_process"),{writeFileSync}=require("node:fs"),child=spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{stdio:"ignore"});child.unref();writeFileSync(process.argv[1],String(child.pid));setTimeout(()=>process.kill(process.pid,"SIGKILL"),25);`;
+  const failedTransport = new OwnedStdioClientTransport({
+    command: process.execPath,
+    args: ["-e", failedSource, failedPidPath],
+  });
+  const failedClient = new Client({ name: "ast-failed-connect", version: "1.0.0" });
+  const connectFailure = await failedClient.connect(failedTransport).catch((error) => error);
+  assert(connectFailure instanceof Error, "failed-connect fixture unexpectedly initialized");
+  await closeMcpSession(failedClient, failedTransport, false);
+  assert(
+    !pidExists(Number(await readFile(failedPidPath, "utf8"))),
+    "failed-connect child survived",
+  );
+
+  const guardedTransport = new OwnedStdioClientTransport({
     command: process.execPath,
     args: [resolvedEntrypoint],
     env: {
@@ -545,7 +763,20 @@ try {
       }
       return result.structuredContent;
     };
-    await call("ast_get_project_status", { project_root: fixtureProject });
+    const rawStatus = await guardedClient.callTool({
+      name: "ast_get_project_status",
+      arguments: { project_root: fixtureProject },
+    });
+    assert(rawStatus.isError !== true, "raw project-status call failed");
+    assert(
+      Array.isArray(rawStatus.content) && rawStatus.content.length === 0,
+      "raw status text changed",
+    );
+    summary.rawResult = {
+      structuredBytes: Buffer.byteLength(JSON.stringify(rawStatus.structuredContent)),
+      structuredSha256: hashJson(rawStatus.structuredContent),
+      textBlocks: rawStatus.content.length,
+    };
     const prepared = await call("ast_rename_symbol", {
       project_root: fixtureProject,
       file_path: "src/value.ts",
@@ -562,11 +793,67 @@ try {
   } finally {
     await closeMcpSession(guardedClient, guardedTransport, guardedConnected);
   }
+
+  const supervisedTransport = new OwnedStdioClientTransport({
+    command: process.execPath,
+    args: [resolvedEntrypoint],
+    env: {
+      ...process.env,
+      AST_COMPILER_WORKER_MODE: "supervised",
+      AST_MCP_APPLY_GUARD: "deny",
+      AST_MCP_TEXT_PROJECTION: "canonical_json",
+      HOME: path.join(temporaryRoot, "supervised-flow"),
+      XDG_CACHE_HOME: path.join(temporaryRoot, "supervised-flow", "cache"),
+    },
+    cwd: consumerDirectory,
+  });
+  const supervisedClient = new Client({
+    name: "ast-dsh-adapter-supervised-frame",
+    version: "1.0.0",
+  });
+  let supervisedConnected = false;
+  try {
+    await supervisedClient.connect(supervisedTransport);
+    supervisedConnected = true;
+    const supervisedNames = (await supervisedClient.listTools()).tools
+      .map((tool) => tool.name)
+      .sort();
+    assert(supervisedNames.length === 15, "supervised deny guard did not preserve 15 tools");
+    assert(
+      !supervisedNames.includes("ast_apply_operation"),
+      "supervised deny guard exposed ast_apply_operation",
+    );
+    const result = await supervisedClient.callTool({
+      name: "ast_get_file",
+      arguments: {
+        project_root: fixtureProject,
+        file_path: "src/escaped.ts",
+        limit: 2,
+      },
+    });
+    assert(result.isError !== true, "supervised projected result exceeded the worker frame");
+    const marker = result.content?.[0]?.text;
+    assert(
+      typeof marker === "string" && marker.includes("complete projection limit"),
+      "supervised projection did not exercise escape-aware frame fallback",
+    );
+    summary.supervisedProjection = {
+      resultBytes: Buffer.byteLength(JSON.stringify(result)),
+      markerSha256: createHash("sha256").update(marker).digest("hex"),
+    };
+  } finally {
+    await closeMcpSession(supervisedClient, supervisedTransport, supervisedConnected);
+  }
   summary.phases.b = "ok";
 
   // ── Phase C: pinned-Harness proof (mandatory) ──────────────────────────────
-  const { source, cliBin, nodeBin, identity } = await resolvePinnedHarness();
-  const mcpClientArchive = await packPinnedMcpClient(source);
+  const { source, cliBin, nodeBin, identity } = await requirePrerequisite(
+    "pinned Harness identity",
+    resolvePinnedHarness,
+  );
+  const mcpClientArchive = await requirePrerequisite("pinned MCP bridge artifact", () =>
+    packPinnedMcpClient(source),
+  );
   summary.harness = {
     ...identity,
     observedMcpClientTarballSha256: await sha256(mcpClientArchive),
@@ -606,6 +893,7 @@ try {
     "serverName: ast",
     "transport: stdio",
     "AST_MCP_APPLY_GUARD",
+    "AST_MCP_TEXT_PROJECTION",
     "node_modules/ast-mcp-server/dist/index.js",
   ]) {
     assert(dumpConfig.includes(required), `dump-config is missing ${required}`);
@@ -639,8 +927,16 @@ try {
   assert(probe.applyRejected?.ok === true, "harness accepted a denied apply invocation");
   assert(probe.error === null, `harness probe failed: ${probe.error ?? "unknown"}`);
   summary.phases.c = "ok";
-
-  console.log(`DSH_ADAPTER_SMOKE_OK:${JSON.stringify(summary)}`);
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });
+  const remains = await lstat(temporaryRoot).then(
+    () => true,
+    (error) => {
+      if (error?.code === "ENOENT") return false;
+      throw error;
+    },
+  );
+  assert(!remains, "temporary Harness profile/workspace state survived teardown");
 }
+
+console.log(`DSH_ADAPTER_SMOKE_OK:${JSON.stringify({ ...summary, cleanup: "ok" })}`);
