@@ -466,7 +466,7 @@ function probeSource() {
   return `export default function apply(ctx) {
   const projectRoot = process.env.AST_PROBE_PROJECT_ROOT;
   const deadline = Date.now() + 30000;
-  const marker = { discovered: [], applyAbsent: null, calls: {}, applyRejected: null, error: null };
+  const marker = { discovered: [], applyAbsent: null, calls: {}, exploreSchema: null, invalidExplore: null, applyRejected: null, error: null };
   async function execute(name, arguments_, callId) {
     const result = await ctx.tools.execute({
       callId,
@@ -479,11 +479,12 @@ function probeSource() {
   }
   async function run() {
     while (Date.now() < deadline) {
-      const names = ctx.tools.schemas().map((s) => s.name);
-      const ast = names.filter((n) => n.startsWith("mcp__ast__")).sort();
+      const schemas = ctx.tools.schemas();
+      const ast = schemas.filter((schema) => schema.name.startsWith("mcp__ast__"));
       if (ast.length > 0) {
-        marker.discovered = ast;
-        marker.applyAbsent = !ast.includes("mcp__ast__ast_apply_operation");
+        marker.discovered = ast.map((schema) => schema.name).sort();
+        marker.exploreSchema = ast.find((schema) => schema.name === "mcp__ast__ast_explore")?.parameters;
+        marker.applyAbsent = !marker.discovered.includes("mcp__ast__ast_apply_operation");
         try {
           const status = await execute(
             "mcp__ast__ast_get_project_status",
@@ -512,6 +513,13 @@ function probeSource() {
             "probe-preview",
           );
           marker.calls.preview = { ok: typeof preview?.plan_hash === "string" };
+          const invalidExplore = await ctx.tools.execute({
+            callId: "probe-invalid-explore",
+            name: "mcp__ast__ast_explore",
+            arguments: { project_root: projectRoot, query: "value", symbol_path: "value" },
+            signal: AbortSignal.timeout(10000),
+          });
+          marker.invalidExplore = invalidExplore.isError === true;
           try {
             const rejected = await ctx.tools.execute({
               callId: "probe-apply-rejection",
@@ -784,10 +792,10 @@ async function runNativeAgentJourney({
 
     const firstBody = mock.requests[0]?.body;
     const tools = Array.isArray(firstBody?.tools) ? firstBody.tools : [];
-    const toolNames = tools
-      .map((tool) => tool?.function?.name)
-      .filter((name) => typeof name === "string");
-    const astNames = toolNames.filter((name) => name.startsWith("mcp__ast__")).sort();
+    const astTools = tools
+      .filter((tool) => tool?.function?.name?.startsWith("mcp__ast__"))
+      .sort((left, right) => left.function.name.localeCompare(right.function.name));
+    const astNames = astTools.map((tool) => tool.function.name);
     assert(astNames.length === 15, `${label} model catalog exposed ${astNames.length} AST tools`);
     assert(
       !astNames.includes("mcp__ast__ast_apply_operation"),
@@ -881,6 +889,9 @@ async function runNativeAgentJourney({
 
     const workspaceSha256 = await fixtureSha256(fixtureProject);
     assert(workspaceSha256 === expectedWorkspaceSha256, `${label} journey mutated the fixture`);
+    const exploreParameters = astTools.find(
+      (tool) => tool.function.name === "mcp__ast__ast_explore",
+    )?.function.parameters;
     return {
       projectedStructured:
         projectedStructured === undefined
@@ -899,6 +910,15 @@ async function runNativeAgentJourney({
       durable: classifyText(durableText),
       replay: classifyText(replay.text),
       scopedCatalogSha256: hashJson(astNames),
+      schemaEvidence: {
+        catalogSha256: hashJson(astTools),
+        unaffectedSha256: hashJson(
+          astTools.filter((tool) => tool.function.name !== "mcp__ast__ast_explore"),
+        ),
+        exploreSha256: hashJson(exploreParameters),
+        exploreRequired: exploreParameters?.required ?? [],
+        exploreProperties: Object.keys(exploreParameters?.properties ?? {}).sort(),
+      },
       workspaceSha256,
     };
   } finally {
@@ -1292,6 +1312,7 @@ try {
   assert(probe.calls?.read?.ok === true, "harness read invocation failed");
   assert(probe.calls?.prepare?.ok === true, "harness prepare invocation failed");
   assert(probe.calls?.preview?.ok === true, "harness preview invocation failed");
+  assert(probe.invalidExplore === true, "harness accepted an invalid ast_explore invocation");
   assert(probe.applyRejected?.ok === true, "harness accepted a denied apply invocation");
   assert(probe.error === null, `harness probe failed: ${probe.error ?? "unknown"}`);
   summary.phases.c = "ok";
@@ -1323,6 +1344,32 @@ try {
       publicBaseline.scopedCatalogSha256 === correctedCandidate.scopedCatalogSha256,
     "public and candidate journeys differ beyond the projection correction",
   );
+  assert(
+    publicBaseline.schemaEvidence.exploreRequired.length === 0 &&
+      publicBaseline.schemaEvidence.exploreProperties.length === 0,
+    "public baseline did not reproduce the empty ast_explore schema",
+  );
+  assert(
+    isDeepStrictEqual(correctedCandidate.schemaEvidence.exploreRequired, ["project_root"]) &&
+      correctedCandidate.schemaEvidence.exploreProperties.includes("call_spines") &&
+      correctedCandidate.schemaEvidence.unaffectedSha256 ===
+        publicBaseline.schemaEvidence.unaffectedSha256,
+    "candidate schema correction changed the wrong model contract",
+  );
+  assert(
+    hashJson(probe.exploreSchema) === correctedCandidate.schemaEvidence.exploreSha256 &&
+      probe.exploreSchema?.properties?.detail?.default === "summary" &&
+      probe.exploreSchema?.properties?.max_bytes?.minimum === 1024 &&
+      probe.exploreSchema?.properties?.call_spines?.type === "object",
+    "Harness registry and native ast_explore schemas differ",
+  );
+  summary.h02 = {
+    publicExploreSha256: publicBaseline.schemaEvidence.exploreSha256,
+    candidateExploreSha256: correctedCandidate.schemaEvidence.exploreSha256,
+    unaffectedSha256: correctedCandidate.schemaEvidence.unaffectedSha256,
+    registryExploreSha256: hashJson(probe.exploreSchema),
+    invalidExploreRejected: probe.invalidExplore,
+  };
   summary.h01a = { publicBaseline, correctedCandidate };
   summary.phases.d = "ok";
 } finally {

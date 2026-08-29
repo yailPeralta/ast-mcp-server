@@ -359,8 +359,11 @@ the official bridge drops MCP tool annotations
 
 `yarn test:dsh-adapter` is the mandatory verification. It binds the public 0.13.0 npm
 integrity, packs the candidate, builds the pinned Harness and bridge from source, and proves
-`tools.mode: native`, the 15-tool scoped catalog, read/prepare/preview, apply absence, and
-rejected direct apply. A deterministic two-step model then invokes
+`tools.mode: native`, the 15-tool scoped catalog, complete executable input schemas,
+read/prepare/preview, invalid `ast_explore` rejection, apply absence, and rejected direct apply.
+The schema gate freezes the public empty `ast_explore` contract as RED, requires the candidate
+registry/native definitions to match, and hashes all 14 unaffected model schemas. A deterministic
+two-step model then invokes
 `mcp__ast__ast_get_project_status` through a real headless Agent/Session: the public baseline
 must reproduce the empty-result marker, while the corrected candidate must deliver lossless
 canonical JSON to the next model request, the durable `tool/result`, and a cold Agent

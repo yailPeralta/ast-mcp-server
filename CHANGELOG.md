@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - The DeepSeek Harness adapter now opts into a bounded canonical-JSON text projection when a successful MCP result has structured data but no ordinary text, preserving lossless `structuredContent` while making native Agent/Session results useful and durable. The mandatory pinned-host smoke freezes the public 0.13.0 RED baseline and verifies the corrected candidate across the next model request, persisted `tool/result`, cold replay, guarded catalog, and cleanup readback.
+- `ast_explore` now publishes its complete object input schema while retaining all cross-field runtime rejection, and `ast_get_impact` no longer advertises one false output shape across JSON and TOON. The pinned Harness gate binds the public empty-schema RED to candidate registry/native parity and unchanged hashes for the other 14 model schemas.
 
 ## [0.13.0] — published to `latest` and `next`, registry verified (2026-08-29)
 

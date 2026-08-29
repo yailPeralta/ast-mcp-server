@@ -1065,6 +1065,42 @@ export function formatValue(value: number): string { return String(value); }
     expect(JSON.stringify(status)).not.toContain(fixture.root);
   });
 
+  it("publishes executable explore inputs and explicit multi-format outputs", async () => {
+    const tools = (await client.listTools()).tools;
+    for (const tool of tools) {
+      expect(tool.inputSchema.type).toBe("object");
+      expect(Object.keys(tool.inputSchema.properties ?? {}).length).toBeGreaterThan(0);
+      for (const required of tool.inputSchema.required ?? []) {
+        expect(tool.inputSchema.properties).toHaveProperty(required);
+      }
+    }
+    const explore = tools.find((tool) => tool.name === "ast_explore");
+    expect(explore?.inputSchema.required).toEqual(["project_root"]);
+    expect(explore?.inputSchema.properties).toMatchObject({
+      project_root: { type: "string" },
+      detail: { enum: ["selectors", "summary", "context", "full"], default: "summary" },
+      max_bytes: { type: "integer", minimum: 1024 },
+      call_spines: { type: "object" },
+    });
+
+    const dualFormat = tools.filter((tool) =>
+      Object.hasOwn(tool.inputSchema.properties ?? {}, "output_format"),
+    );
+    expect(dualFormat.map((tool) => tool.name).sort()).toEqual([
+      "ast_find_references",
+      "ast_get_diagnostics",
+      "ast_get_impact",
+      "ast_search_symbols",
+    ]);
+    for (const tool of dualFormat) {
+      expect(tool.inputSchema.properties?.output_format).toMatchObject({
+        enum: ["json", "toon"],
+        default: "json",
+      });
+      expect(tool.outputSchema).toBeUndefined();
+    }
+  });
+
   it("composes search-to-source exploration with bounded evidence", async () => {
     const explored = structured(
       await client.callTool({
@@ -1118,11 +1154,14 @@ export function formatValue(value: number): string { return String(value); }
       ]),
     );
 
-    const invalid = await client.callTool({
-      name: "ast_explore",
-      arguments: { project_root: fixture.root },
-    });
-    expect(invalid.isError).toBe(true);
+    for (const arguments_ of [
+      { project_root: fixture.root },
+      { project_root: fixture.root, query: "formatValue", symbol_path: "formatValue" },
+      { project_root: fixture.root, query: "formatValue", call_spines: {} },
+    ]) {
+      const invalid = await client.callTool({ name: "ast_explore", arguments: arguments_ });
+      expect(invalid.isError).toBe(true);
+    }
   });
 
   it("exposes exact compiler call spines and bounded omission metadata", async () => {

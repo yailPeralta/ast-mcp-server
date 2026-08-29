@@ -1,0 +1,38 @@
+{
+  "schema": "dsh-sdd-apply-progress",
+  "change": "2026-08-29-h02-schema-fidelity",
+  "tasks": [
+    { "id": "1", "name": "Probar matriz de schemas y RED público", "status": "completed" },
+    {
+      "id": "2",
+      "name": "Corregir publicación y validación de ast_explore",
+      "status": "completed"
+    },
+    {
+      "id": "3",
+      "name": "Normalizar excepción JSON/TOON de ast_get_impact",
+      "status": "completed"
+    },
+    { "id": "4", "name": "Verificar Harness fijado y gates", "status": "completed" },
+    { "id": "5", "name": "Actualizar evidencia y entregar PR", "status": "in_progress" }
+  ],
+  "tdd": {
+    "red": [],
+    "green": [],
+    "refactored": [
+      {
+        "id": "t1",
+        "name": "publica inputs ejecutables y salidas multi-formato explícitas",
+        "file": "test/mcp.integration.test.ts",
+        "taskId": "1"
+      },
+      {
+        "id": "t2",
+        "name": "reproduce schema vacío público y exige paridad candidate/registry/native",
+        "file": "scripts/dsh-adapter-smoke.mjs",
+        "taskId": "1"
+      }
+    ]
+  },
+  "updatedAt": "2026-08-29T19:50:30Z"
+}

@@ -1,16 +1,16 @@
 # AST MCP Server v0.13.0 Harness Hardening Evidence Annex
 
-> **Decision:** keep the published DeepSeek Harness surface at reads, prepare, and preview with apply denied. The next delivery must first reproduce one model-visible result failure through the exact pinned Harness agent/session path. Core authority findings remain separate AST-owned blockers and must be proved by their own RED tests before implementation.
+> **Decision:** keep the published DeepSeek Harness surface at reads, prepare, and preview with apply denied. H-01a merged with an exact pinned agent/session gate; H-02 schema fidelity is the only active Harness work unit. Core authority findings remain separate AST-owned blockers and require their own RED tests.
 
 This annex records detailed evidence and acceptance gates for the [project roadmap](roadmap.md). The roadmap owns priority and sequencing; this document owns the supporting observations, open questions, and proof requirements.
 
 ## Quick continuation path
 
-H-01a reproduced the native result-visibility defect against the immutable public baseline and verified an adapter-only correction in issue [#84](https://github.com/yailPeralta/ast-mcp-server/issues/84). Its implementation remains a delivery candidate until the chained review slices merge.
+H-01a merged through PRs [#95](https://github.com/yailPeralta/ast-mcp-server/pull/95)–[#99](https://github.com/yailPeralta/ast-mcp-server/pull/99). Its mandatory gate preserves the immutable public RED and same-invocation raw/model/durable/replay evidence.
 
-1. Deliver the bounded projection and exact-host lifecycle gate without widening the guarded surface.
-2. Preserve the immutable public RED baseline and same-invocation raw/model/durable/replay evidence.
-3. After H-01a merges, execute H-02 schema fidelity against the same pinned host identity.
+1. Deliver H-02 issues [#100](https://github.com/yailPeralta/ast-mcp-server/issues/100)–[#102](https://github.com/yailPeralta/ast-mcp-server/issues/102) against the same pinned host identity.
+2. Require an executable `ast_explore` schema at MCP, scoped registry, and native model boundaries.
+3. Keep multi-format output exceptions explicit and retain complete unaffected-schema hashes.
 4. Keep H-03 timeout ownership and the remaining H-05 lifecycle cases separate.
 
 Do not begin with apply enablement, UI presentation, broad refactoring, or a newer unpinned Harness build.
@@ -62,11 +62,11 @@ That baseline does **not** prove that successful results reach the model, that r
 | M-01 | P0       | Apply publication has a TOCTOU window against external writers.                              | Static-v0.13; deterministic RED required                       | AST                                       |
 | M-02 | P0       | Diagnostic delta identity omits edit location.                                               | Static-v0.13; RED required                                     | AST                                       |
 | R-01 | P0       | Public `call`/`contains` impact requests can have no scoped producer.                        | Static-v0.13; RED required                                     | AST                                       |
-| H-01 | P0       | Successful structured results may not become model-visible native content.                   | Candidate-verified in #84; delivery pending                    | Harness bridge; AST mitigation prepared   |
-| H-02 | P0/P1    | Refined/reused schemas may degrade through the pinned bridge.                                | Static-v0.13; exact-host schema RED required                   | Harness bridge + AST                      |
+| H-01 | P0       | Successful structured results may not become model-visible native content.                   | Merged on main; exact public RED remains mandatory             | Harness bridge; AST mitigation merged     |
+| H-02 | P0/P1    | Refined/reused schemas may degrade through the pinned bridge.                                | Candidate-verified in #100–#102; delivery pending              | Harness bridge + AST                      |
 | C-01 | P0       | Embedded compiler behavior may differ from the project compiler.                             | Static dependency drift; differential RED required             | AST                                       |
 | S-01 | P0       | The adapter does not enforce an authorized workspace root.                                   | Static-v0.13; exact-host escape RED required                   | AST mitigation; Harness sandbox preferred |
-| F-01 | P1       | `ast_get_impact` registers one output schema but can return a TOON envelope.                 | Static-v0.13; MCP execution RED required                       | AST                                       |
+| F-01 | P1       | `ast_get_impact` registers one output schema but can return a TOON envelope.                 | Candidate-verified in #102; delivery pending                   | AST                                       |
 | C-02 | P1       | Semantic package boundaries are absent from workspace identity.                              | Static-v0.13; freshness/conflict RED required                  | AST                                       |
 | H-03 | P1       | Harness transport timeout is shorter than AST's default queue plus execution budget.         | Static configuration; exact-host slow RED required             | Adapter                                   |
 | H-04 | P1       | Prepare and preview have no approved Harness continuation to apply.                          | Release-verified product gap                                   | Product + Harness authorization           |
@@ -128,7 +128,9 @@ The public v0.13.0 package returns `content: []` plus `structuredContent`. Issue
 
 `ast_explore` uses cross-field refinements, and other schemas reuse components or publish keywords that the pinned bridge may not preserve. Exact `tools/list` and scoped Harness schemas are the boundary evidence; Zod source shape alone is not.
 
-**Acceptance gate:** required inputs remain visible, invalid combinations still fail closed, no relevant field degrades silently to `any`/`{}`, and multi-format output exceptions are explicit.
+The public package deterministically publishes `ast_explore` as `{"type":"object","properties":{}}` (SHA-256 `8243f0af…`). The candidate registers the direct object schema, reapplies all three refinements inside the handler, and removes the false universal `ast_get_impact` output schema. Its scoped-registry and native-model schema hashes match (`41deb923…`), all other model tool definitions retain hash `428d0ab3…`, and the Harness registry rejects the isolated invalid symbol/file combination.
+
+**Acceptance gate:** required inputs remain visible, invalid combinations still fail closed, no relevant field degrades silently to `any`/`{}`, and multi-format output exceptions are explicit. Native mode intentionally carries input schemas only; global projection of MCP output vocabularies into Harness remains the separate contract tracked by [#103](https://github.com/yailPeralta/ast-mcp-server/issues/103).
 
 ### H-03 — Timeout ownership
 

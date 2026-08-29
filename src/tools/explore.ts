@@ -40,7 +40,7 @@ const CallSpinesInputSchema = z.object({
   max_edges: z.number().int().min(1).max(MAX_IMPACT_EDGES).default(DEFAULT_IMPACT_MAX_EDGES),
 });
 
-const ExploreInputSchema = z
+const ExploreInputObjectSchema = z
   .object({
     project_root: z
       .string()
@@ -94,10 +94,15 @@ const ExploreInputSchema = z
       .default(EXPLORE_DEFAULT_OMISSION_DETAIL_LIMIT)
       .describe("Maximum deterministic omission detail records; exact counts are always retained."),
   })
-  .refine((input) => Boolean(input.query || input.file_path), {
+  .strip();
+
+const ExploreInputSchema = ExploreInputObjectSchema.refine(
+  (input) => Boolean(input.query || input.file_path),
+  {
     message: "Provide query, file_path, or both file_path and symbol_path.",
     path: ["query"],
-  })
+  },
+)
   .refine((input) => !input.symbol_path || Boolean(input.file_path), {
     message: "symbol_path requires file_path so the exact declaration can be resolved.",
     path: ["symbol_path"],
@@ -250,7 +255,7 @@ export function registerExplore(server: McpServer): void {
       title: "Explore project context",
       description:
         "Composes bounded structural search, exact selectors, source evidence and compiler references without weakening the primitive AST tools. Returns bounded session freshness metadata for fresh, pending, stale, rebuilding or degraded state.",
-      inputSchema: ExploreInputSchema,
+      inputSchema: ExploreInputObjectSchema,
       outputSchema: ExploreOutputSchema,
       annotations: {
         readOnlyHint: true,
@@ -282,6 +287,7 @@ export function registerExplore(server: McpServer): void {
     ) => {
       const requestContext = createRequestContext(extra.signal);
       try {
+        ExploreInputSchema.parse({ project_root, query, file_path, symbol_path, call_spines });
         const output = await withProject(
           project_root,
           (context, operationContext) =>
