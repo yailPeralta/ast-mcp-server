@@ -14,7 +14,7 @@
       "status": "completed"
     },
     { "id": "4", "name": "Verificar Harness fijado y gates", "status": "completed" },
-    { "id": "5", "name": "Actualizar evidencia y entregar PR", "status": "in_progress" }
+    { "id": "5", "name": "Actualizar evidencia y entregar PR", "status": "completed" }
   ],
   "tdd": {
     "red": [],
@@ -34,5 +34,5 @@
       }
     ]
   },
-  "updatedAt": "2026-08-29T19:50:30Z"
+  "updatedAt": "2026-08-29T20:20:00Z"
 }

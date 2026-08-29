@@ -8,10 +8,11 @@ This annex records detailed evidence and acceptance gates for the [project roadm
 
 H-01a merged through PRs [#95](https://github.com/yailPeralta/ast-mcp-server/pull/95)–[#99](https://github.com/yailPeralta/ast-mcp-server/pull/99). Its mandatory gate preserves the immutable public RED and same-invocation raw/model/durable/replay evidence.
 
-1. Deliver H-02 issues [#100](https://github.com/yailPeralta/ast-mcp-server/issues/100)–[#102](https://github.com/yailPeralta/ast-mcp-server/issues/102) against the same pinned host identity.
-2. Require an executable `ast_explore` schema at MCP, scoped registry, and native model boundaries.
-3. Keep multi-format output exceptions explicit and retain complete unaffected-schema hashes.
-4. Keep H-03 timeout ownership and the remaining H-05 lifecycle cases separate.
+H-02 issues [#100](https://github.com/yailPeralta/ast-mcp-server/issues/100)–[#102](https://github.com/yailPeralta/ast-mcp-server/issues/102) merged in PR [#104](https://github.com/yailPeralta/ast-mcp-server/pull/104). Direct MCP, scoped registry, and native model schemas are hash-bound; all three invalid combinations fail closed.
+
+1. Execute H-03 timeout ownership against the same pinned host identity.
+2. Preserve H-01a/H-02 public RED baselines and exact candidate gates.
+3. Keep the remaining H-05 lifecycle cases and output-vocabulary projection #103 separate.
 
 Do not begin with apply enablement, UI presentation, broad refactoring, or a newer unpinned Harness build.
 
@@ -63,10 +64,10 @@ That baseline does **not** prove that successful results reach the model, that r
 | M-02 | P0       | Diagnostic delta identity omits edit location.                                               | Static-v0.13; RED required                                     | AST                                       |
 | R-01 | P0       | Public `call`/`contains` impact requests can have no scoped producer.                        | Static-v0.13; RED required                                     | AST                                       |
 | H-01 | P0       | Successful structured results may not become model-visible native content.                   | Merged on main; exact public RED remains mandatory             | Harness bridge; AST mitigation merged     |
-| H-02 | P0/P1    | Refined/reused schemas may degrade through the pinned bridge.                                | Candidate-verified in #100–#102; delivery pending              | Harness bridge + AST                      |
+| H-02 | P0/P1    | Refined/reused schemas may degrade through the pinned bridge.                                | Merged in #104; exact public RED remains mandatory             | Harness bridge + AST                      |
 | C-01 | P0       | Embedded compiler behavior may differ from the project compiler.                             | Static dependency drift; differential RED required             | AST                                       |
 | S-01 | P0       | The adapter does not enforce an authorized workspace root.                                   | Static-v0.13; exact-host escape RED required                   | AST mitigation; Harness sandbox preferred |
-| F-01 | P1       | `ast_get_impact` registers one output schema but can return a TOON envelope.                 | Candidate-verified in #102; delivery pending                   | AST                                       |
+| F-01 | P1       | `ast_get_impact` registers one output schema but can return a TOON envelope.                 | Merged in #104; JSON/TOON runtime gate retained                | AST                                       |
 | C-02 | P1       | Semantic package boundaries are absent from workspace identity.                              | Static-v0.13; freshness/conflict RED required                  | AST                                       |
 | H-03 | P1       | Harness transport timeout is shorter than AST's default queue plus execution budget.         | Static configuration; exact-host slow RED required             | Adapter                                   |
 | H-04 | P1       | Prepare and preview have no approved Harness continuation to apply.                          | Release-verified product gap                                   | Product + Harness authorization           |
