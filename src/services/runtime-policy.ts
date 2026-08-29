@@ -8,6 +8,7 @@ export const RUNTIME_POLICY_ENV_KEYS = Object.freeze([
   "AST_COMPILER_WORKER_MODE",
   "AST_COMPILER_WORKER_IDLE_TTL_MS",
   "AST_MCP_APPLY_GUARD",
+  "AST_MCP_TEXT_PROJECTION",
 ] as const);
 
 export type RuntimePolicyEnvironmentKey = (typeof RUNTIME_POLICY_ENV_KEYS)[number];
@@ -29,6 +30,8 @@ export interface RuntimePolicy {
   readonly compilerWorkerIdleTtlMs: number;
   /** Deny every apply-effect MCP tool at registration (deny-by-default apply guard). */
   readonly denyApply: boolean;
+  /** Add canonical JSON text for hosts that do not render structured MCP success values. */
+  readonly projectStructuredContentAsText: boolean;
   readonly reasons: RuntimePolicyReasons;
 }
 
@@ -108,6 +111,14 @@ export function parseRuntimePolicy(environment: RuntimePolicyEnvironment): Runti
       : rawApplyGuard === "allow" || rawApplyGuard === "deny"
         ? "configured"
         : "invalid_mode";
+  const rawTextProjection = environment.AST_MCP_TEXT_PROJECTION;
+  const projectStructuredContentAsText = rawTextProjection === "canonical_json";
+  const textProjectionReason: RuntimePolicyReason =
+    rawTextProjection === undefined
+      ? "default"
+      : projectStructuredContentAsText
+        ? "configured"
+        : "invalid_mode";
 
   const reasons: RuntimePolicyReasons = Object.freeze({
     AST_MAX_PROJECT_SESSIONS: maxProjectSessions.reason,
@@ -118,6 +129,7 @@ export function parseRuntimePolicy(environment: RuntimePolicyEnvironment): Runti
     AST_COMPILER_WORKER_MODE: compilerWorkerModeReason,
     AST_COMPILER_WORKER_IDLE_TTL_MS: compilerWorkerIdleTtlMs.reason,
     AST_MCP_APPLY_GUARD: applyGuardReason,
+    AST_MCP_TEXT_PROJECTION: textProjectionReason,
   });
 
   return Object.freeze({
@@ -129,6 +141,7 @@ export function parseRuntimePolicy(environment: RuntimePolicyEnvironment): Runti
     compilerWorkerMode,
     compilerWorkerIdleTtlMs: compilerWorkerIdleTtlMs.value,
     denyApply,
+    projectStructuredContentAsText,
     reasons,
   });
 }
@@ -182,6 +195,7 @@ export function createCompilerWorkerSpawnSpec(
     // Forward the parent's resolved apply-guard policy so the supervised worker
     // registers the same tool surface (deny-by-default fail-closed, allow opt-in).
     AST_MCP_APPLY_GUARD: policy.denyApply ? "deny" : "allow",
+    ...(policy.projectStructuredContentAsText ? { AST_MCP_TEXT_PROJECTION: "canonical_json" } : {}),
   });
   return {
     ok: true,

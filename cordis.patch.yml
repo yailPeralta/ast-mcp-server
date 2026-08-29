@@ -13,6 +13,8 @@
 # - the official bridge drops MCP tool.annotations, incl. readOnlyHint and
 #   destructiveHint, so the guard enumerates tool names instead of hints;
 # - the stdio child runs outside the Harness sandbox.
+# Harness native presentation reads text content, so this adapter explicitly
+# requests a lossless canonical JSON projection while preserving structuredContent.
 - insert:
     - id: mcp-ast
       name: "@deepseek-ai/dsh-mcp-client"
@@ -27,5 +29,6 @@
             )
         env:
           AST_MCP_APPLY_GUARD: "deny"
+          AST_MCP_TEXT_PROJECTION: "canonical_json"
         cwd: !!js process.cwd()
         failOnStartupError: true
