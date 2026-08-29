@@ -76,6 +76,34 @@ describe("bounded subprocess runtime", () => {
   );
 
   it.skipIf(process.platform === "win32")(
+    "terminates a successful command's surviving grandchild before resolving",
+    async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "ast-process-success-"));
+      roots.push(root);
+      const pidFile = path.join(root, "grandchild.pid");
+      const source = `
+        const { spawn } = require("node:child_process");
+        const fs = require("node:fs");
+        const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+          stdio: ["ignore", process.stdout, process.stderr],
+        });
+        child.unref();
+        fs.writeFileSync(process.argv[1], String(child.pid));
+      `;
+
+      await expect(
+        runBoundedCommand(process.execPath, ["-e", source, pidFile], { timeout: 2_000 }),
+      ).resolves.toEqual({
+        stdout: "",
+        stderr: "",
+      });
+      const pid = Number(await readFile(pidFile, "utf8"));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(() => process.kill(pid, 0)).toThrow();
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
     "terminates a nonzero command's surviving grandchild before rejecting with evidence",
     async () => {
       const root = await mkdtemp(path.join(os.tmpdir(), "ast-process-nonzero-"));

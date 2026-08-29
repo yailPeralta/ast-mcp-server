@@ -98,12 +98,14 @@ export function runBoundedCommand(command, args, options = {}) {
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let exitCleanup;
+    const cleanup = () => (exitCleanup ??= terminateProcessTree(child));
     const finishError = async (error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       try {
-        await terminateProcessTree(child);
+        await cleanup();
       } catch (cleanupError) {
         error.message += `; cleanup failed: ${cleanupError.message}`;
       }
@@ -120,12 +122,23 @@ export function runBoundedCommand(command, args, options = {}) {
     child.stdout.on("data", (chunk) => append("stdout", chunk));
     child.stderr.on("data", (chunk) => append("stderr", chunk));
     child.once("error", (error) => void finishError(error));
+    child.once("exit", () => {
+      if (!settled) void cleanup().catch(() => undefined);
+    });
     child.once("close", (exitCode, signal) => {
       if (settled) return;
       if (exitCode === 0) {
         settled = true;
         clearTimeout(timer);
-        resolve({ stdout, stderr });
+        void cleanup().then(
+          () => resolve({ stdout, stderr }),
+          (cleanupError) =>
+            reject(
+              new Error(
+                `${command} exited successfully but cleanup failed: ${cleanupError.message}`,
+              ),
+            ),
+        );
       } else {
         const error = new Error(
           `${command} exited with ${exitCode ?? `signal ${signal ?? "unknown"}`}`,
