@@ -24,13 +24,14 @@ describe("bounded subprocess runtime", () => {
       const source = `
         const { spawn } = require("node:child_process");
         const fs = require("node:fs");
+        const pidFile = process.argv[1];
         const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
-        fs.writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));
+        fs.writeFileSync(pidFile, String(child.pid));
         setInterval(() => {}, 1000);
       `;
 
       await expect(
-        runBoundedCommand(process.execPath, ["-e", source], { timeout: 250 }),
+        runBoundedCommand(process.execPath, ["-e", source, pidFile], { timeout: 250 }),
       ).rejects.toThrow(/timed out/i);
       const pid = Number(await readFile(pidFile, "utf8"));
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -59,7 +60,8 @@ describe("bounded subprocess runtime", () => {
         process.execPath,
         [
           "-e",
-          `const {spawn}=require("node:child_process"); const fs=require("node:fs"); const child=spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{stdio:"ignore"}); child.unref(); fs.writeFileSync(${JSON.stringify(pidFile)},String(child.pid));`,
+          'const {spawn}=require("node:child_process"); const fs=require("node:fs"); const child=spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{stdio:"ignore"}); child.unref(); fs.writeFileSync(process.argv[1],String(child.pid));',
+          pidFile,
         ],
         { detached: true, stdio: "ignore" },
       );
@@ -82,9 +84,10 @@ describe("bounded subprocess runtime", () => {
       const source = `
         const { spawn } = require("node:child_process");
         const fs = require("node:fs");
+        const pidFile = process.argv[1];
         const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
         child.unref();
-        fs.writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));
+        fs.writeFileSync(pidFile, String(child.pid));
         console.log("captured stdout");
         console.error("captured stderr");
         process.exit(7);
@@ -92,7 +95,7 @@ describe("bounded subprocess runtime", () => {
 
       let rejection: unknown;
       try {
-        await runBoundedCommand(process.execPath, ["-e", source]);
+        await runBoundedCommand(process.execPath, ["-e", source, pidFile]);
       } catch (error) {
         rejection = error;
       }
