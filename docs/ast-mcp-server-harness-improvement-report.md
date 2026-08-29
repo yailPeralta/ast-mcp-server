@@ -1,6 +1,6 @@
 # AST MCP Server v0.13.0 Harness Hardening Evidence Annex
 
-> **Decision:** keep the published DeepSeek Harness surface at reads, prepare, and preview with apply denied. H-01a merged with an exact pinned agent/session gate; H-02 schema fidelity is the only active Harness work unit. Core authority findings remain separate AST-owned blockers and require their own RED tests.
+> **Decision:** keep the published DeepSeek Harness surface at reads, prepare, and preview with apply denied. H-01a and H-02 merged with exact pinned gates; H-03 timeout ownership is the next Harness work unit. Core authority findings remain separate AST-owned blockers and require their own RED tests.
 
 This annex records detailed evidence and acceptance gates for the [project roadmap](roadmap.md). The roadmap owns priority and sequencing; this document owns the supporting observations, open questions, and proof requirements.
 
