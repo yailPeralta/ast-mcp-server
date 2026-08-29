@@ -6,7 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.13.0] — local release candidate, pending release (2026-08-27)
+### Fixed
+
+- The DeepSeek Harness adapter now opts into a bounded canonical-JSON text projection when a successful MCP result has structured data but no ordinary text, preserving lossless `structuredContent` while making native Agent/Session results useful and durable. The mandatory pinned-host smoke freezes the public 0.13.0 RED baseline and verifies the corrected candidate across the next model request, persisted `tool/result`, cold replay, guarded catalog, and cleanup readback.
+
+## [0.13.0] — published to `latest` and `next`, registry verified (2026-08-29)
 
 ### Added
 

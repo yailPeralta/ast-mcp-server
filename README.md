@@ -329,9 +329,14 @@ A thin adapter ships inside this package: `cordis.patch.yml` mounts the packaged
 [`@deepseek-ai/dsh-mcp-client`](https://github.com/deepseek-ai/deepseek-harness/blob/cd5ef8148158c3a752a658978873241fdf8e2bbc/packages/mcp/mcp-client/README.md)
 bridge, declared through exactly `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`.
 This is a Developer Preview against a pinned, **source-built** Harness revision
-(`dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a752a658978873241fdf8e2bbc`); that revision
-is validated from source, and `ast-mcp-server@0.13.0` is not published yet. Install a
-locally packed tarball instead:
+(`dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a752a658978873241fdf8e2bbc`). The published
+`ast-mcp-server@0.13.0` package is the compatibility baseline:
+
+```bash
+dsh plugin --profile web add ast-mcp-server@0.13.0
+```
+
+For a local candidate, pack and install its tarball instead:
 
 ```bash
 yarn pack --out ast-mcp-server-%v.tgz
@@ -341,18 +346,27 @@ dsh plugin --profile web add ./ast-mcp-server-0.13.0.tgz
 The first supported surface is **reads + prepare + preview**. Every apply path is
 denied by a fail-closed guard: `ast_apply_operation` is not registered unless
 `AST_MCP_APPLY_GUARD=allow` is set explicitly (the shipped patch instead pins `deny`,
-so the Harness surface stays deny-by-default; an unset or invalid value also denies). Known upstream
-gaps apply and are never safety authority: the official bridge drops MCP tool
-annotations (`readOnlyHint`/`destructiveHint`) and launches the stdio child outside
-the Harness sandbox.
+so the Harness surface stays deny-by-default; an unset or invalid value also denies).
+The adapter also sets `AST_MCP_TEXT_PROJECTION=canonical_json`: successful structured
+results keep their lossless `structuredContent` and gain canonical JSON text only when
+ordinary MCP text is empty, because the pinned native presenter otherwise exposes only a
+non-useful empty-result marker. The projection is adapter-specific, never replaces existing
+text, and reports an explicit size-limit marker when the complete supervised frame has room.
+If even the unchanged structured-only result exceeds the existing worker frame, supervised mode
+fails closed rather than truncating or corrupting it. Known upstream gaps remain non-authoritative:
+the official bridge drops MCP tool annotations
+(`readOnlyHint`/`destructiveHint`) and launches the stdio child outside the Harness sandbox.
 
-`yarn test:dsh-adapter` is the mandatory verification: it packs the exact tarball,
-installs it into an isolated profile on the pinned Harness, proves `--dump-config`
-composition including effective `tools.mode: native`, and — through the Harness registry
-itself — invokes the server-qualified read, dry-run rename prepare, and preview tools.
-It separately proves `mcp__ast__ast_apply_operation` is absent and that a bounded direct
-registry invocation is rejected. The smoke fails (never skips) if the pinned Harness
-revision, tag, CLI/client version, clean source identity, or a prerequisite is missing.
+`yarn test:dsh-adapter` is the mandatory verification. It binds the public 0.13.0 npm
+integrity, packs the candidate, builds the pinned Harness and bridge from source, and proves
+`tools.mode: native`, the 15-tool scoped catalog, read/prepare/preview, apply absence, and
+rejected direct apply. A deterministic two-step model then invokes
+`mcp__ast__ast_get_project_status` through a real headless Agent/Session: the public baseline
+must reproduce the empty-result marker, while the corrected candidate must deliver lossless
+canonical JSON to the next model request, the durable `tool/result`, and a cold Agent
+resume/replay reconstructed from persistence. The smoke removes and read-backs its disposable
+profile/workspace state and fails
+(never skips) on an identity mismatch, missing prerequisite, lifecycle leak, or evidence gap.
 
 ## MCP tools
 
