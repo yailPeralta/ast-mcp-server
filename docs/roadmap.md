@@ -1,6 +1,6 @@
 # AST MCP Server Roadmap
 
-> **Recommendation:** treat v0.13.0 as the published baseline, recover the core authority guarantees challenged by the v0.13 audit, and prove model-visible DeepSeek Harness behavior through the exact pinned host before adding more surface area. Keep apply denied in Harness until native approval and session/workspace binding exist.
+> **Recommendation:** treat v0.13.0 as the published baseline, recover the core authority guarantees challenged by the v0.13 audit, and finish the ordered DeepSeek Harness hardening units against the exact pinned host before adding more surface area. H-03's three implementation slices are merged and candidate-verified; closure PR #115 remains open, and apply stays denied until native approval and session/workspace binding exist.
 
 This roadmap owns product status, sequencing, gates, and non-goals. The detailed findings, static evidence, and exact-host continuation contract live in the [v0.13 Harness hardening evidence annex](ast-mcp-server-harness-improvement-report.md).
 
@@ -39,7 +39,7 @@ Released describes immutable product history, not proof that every intended inva
 | Status                   | Direction                                                                                      | Decision posture                                                                     |
 | ------------------------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | **Shipped**              | v0.13.0 baseline and guarded Harness first slice                                               | Preserve release history; correct documentation drift without rewriting evidence.    |
-| **Next**                 | v0.13 correctness and Harness hardening                                                        | Recover core authority, then prove exact-host model visibility and schemas.          |
+| **Next**                 | v0.13 correctness and Harness hardening                                                        | Recover core authority; finish the remaining exact-host lifecycle evidence.          |
 | **Parallel**             | Supervised rollout measurement                                                                 | Measure independently; do not promote supervised mode by default without evidence.   |
 | **Then**                 | Optional MCP synchronization progress                                                          | Begin only after hardening gates are green; progress remains observational.          |
 | **Later**                | Bounded syntax-pattern discovery; multi-language capability/evidence architecture              | Prototype read-only discovery first and negotiate capabilities explicitly.           |
@@ -73,10 +73,13 @@ The **H-01a native agent/session result visibility** chain merged through PRs [#
 
 **H-02 schema fidelity** merged in PR [#104](https://github.com/yailPeralta/ast-mcp-server/pull/104). The gate binds direct MCP, scoped registry, and native schemas; preserves all three cross-field failures; and keeps multi-format output exceptions honest.
 
-Continue with separate bounded work units:
+The **H-03 timeout ownership** implementation chain is merged on `main` in order: budget PR [#109](https://github.com/yailPeralta/ast-mcp-server/pull/109) at `d0cf9417b9fd0e23ddda568f2df2872b47aaa253`, closed-seam PR [#111](https://github.com/yailPeralta/ast-mcp-server/pull/111) at `b5850296e09ccf93958211070ef6d96ba09cbb2f`, and exact-host PR [#113](https://github.com/yailPeralta/ast-mcp-server/pull/113) at `3d31fb38a2b29b7ef40d879bbd356414fcfacb1d`. Approved issue [#114](https://github.com/yailPeralta/ast-mcp-server/issues/114) is linked to open `type:docs` PR [#115](https://github.com/yailPeralta/ast-mcp-server/pull/115), the final closure slice; PR #115 is not merged.
 
-- prove H-03 transport timeout outside the complete server queue/execution budget;
-- complete H-05 cancellation, reconnect, removal, public-error, shutdown, and GUI lifecycle evidence.
+The candidate contract pins Harness `dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a752a658978873241fdf8e2bbc` and bridge `0.1.2-alpha.1`. Its sole shipped tuple is queue `30000`, execution `120000`, margin `15000`, and outer `180000` milliseconds, with strict ownership ordering `180000 > 30000 + 120000 + 15000`.
+
+Exact-host evidence preserves the 15-tool guarded catalog and request-local joins. Cold work ends `OPERATION_DEADLINE_EXCEEDED`; queued work ends `QUEUE_WAIT_TIMEOUT` with no late start; recycled work ends `REQUEST_CANCELLED` across generation `1 → 2`. `ToolTimeoutError`/`TOOL_TIMEOUT` is forbidden. Cleanup readback reports zero active/held/listener state and owned processes, drains two events, and removes the profile/control state; the current raw marker digest is `a42076a676cce36c0166e106abff8f56cbbf2e93ce258b729ee888dab028d7f0`, and the post-`finally` cleanup-evidence digest is `cfcf12cf078e4066857cc68d0dc22bb3da3cc9f08fe9a80605cc445e29b8e5de`.
+
+After PR #115 passes verification/archive and is merged as the post-verify release action, continue only with the already ordered H-05 lifecycle evidence: reconnect, removal, remaining cancellation/public-error, shutdown, and GUI lifecycle. This roadmap update does not implement H-05.
 
 **Entry:** the exact public registry artifact and source-built pinned host are available in an isolated profile. Missing prerequisites block rather than skip.
 
@@ -215,4 +218,6 @@ Pinned upstream evidence remains DeepSeek Harness `dsh-v0.1.2-alpha.1` at `cd5ef
 
 ## Next decision
 
-Execute only **H-03 timeout ownership** against the same pinned host identity: a slow fixture must end with AST's bounded operational error rather than a generic bridge timeout, with cancellation preserved across cold, queued, and recycled-worker cases. Keep remaining lifecycle, UI, Code Mode, output-vocabulary projection (#103), and apply work separate.
+Run strict verification and archive for H-03, then merge open PR #115 as the remaining release action; PRs #109, #111, and #113 are already merged on ordered `main` ancestry. If a delivered H-03 slice must be rolled back, run `git revert <PR-sha>` for that slice and rerun `yarn build && yarn test:dsh-adapter`; do not weaken the timeout tuple or relabel bridge-owned timeout evidence as AST-owned.
+
+Once H-03 is merged, the next explicit roadmap unit is **H-05 lifecycle evidence**. Keep UI specialization, Code Mode, output-vocabulary projection (#103), and apply work separate.
