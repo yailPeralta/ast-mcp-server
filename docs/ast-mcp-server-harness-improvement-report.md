@@ -1,6 +1,6 @@
 # AST MCP Server v0.13.0 Harness Hardening Evidence Annex
 
-> **Decision:** keep the published DeepSeek Harness surface at reads, prepare, and preview with apply denied. H-01a and H-02 merged with exact pinned gates; H-03's three implementation slices are merged and candidate-verified, while closure PR #115 remains open and must not be called merged or released. Core authority findings remain separate AST-owned blockers and require their own RED tests.
+> **Decision:** keep the published DeepSeek Harness surface at reads, prepare, and preview with apply denied. H-01a, H-02, and archived H-03 are merged with exact pinned gates; H-03 closure PR #115 merged at `7ab04c29a274156c78c470eb7bc3488ce057b928` with final main CI and Security green, but no v0.13.1 release exists. H-05 is next. Core authority findings remain separate AST-owned blockers requiring their own RED tests.
 
 This annex records detailed evidence and acceptance gates for the [project roadmap](roadmap.md). The roadmap owns priority and sequencing; this document owns the supporting observations, open questions, and proof requirements.
 
@@ -10,9 +10,9 @@ H-01a merged through PRs [#95](https://github.com/yailPeralta/ast-mcp-server/pul
 
 H-02 issues [#100](https://github.com/yailPeralta/ast-mcp-server/issues/100)–[#102](https://github.com/yailPeralta/ast-mcp-server/issues/102) merged in PR [#104](https://github.com/yailPeralta/ast-mcp-server/pull/104). Direct MCP, scoped registry, and native model schemas are hash-bound; all three invalid combinations fail closed.
 
-1. Run strict verification and archive, then merge open closure PR [#115](https://github.com/yailPeralta/ast-mcp-server/pull/115); implementation PRs [#109](https://github.com/yailPeralta/ast-mcp-server/pull/109), [#111](https://github.com/yailPeralta/ast-mcp-server/pull/111), and [#113](https://github.com/yailPeralta/ast-mcp-server/pull/113) are already merged in order.
-2. Preserve H-01a/H-02 public RED baselines and exact candidate gates.
-3. After PR #115 merges as the post-verify release action, continue with the already ordered H-05 lifecycle evidence while keeping output-vocabulary projection #103 separate.
+1. Use archived H-03 and merged closure PR [#115](https://github.com/yailPeralta/ast-mcp-server/pull/115) as the candidate baseline; v0.13.0 remains the published release.
+2. Preserve H-01a/H-02/H-03 public RED baselines and exact candidate gates.
+3. Continue with H-05 lifecycle evidence while keeping output-vocabulary projection #103 separate.
 
 Do not begin with apply enablement, UI presentation, broad refactoring, or a newer unpinned Harness build.
 
@@ -69,7 +69,7 @@ That baseline does **not** prove that successful results reach the model, that r
 | S-01 | P0       | The adapter does not enforce an authorized workspace root.                                   | Static-v0.13; exact-host escape RED required                   | AST mitigation; Harness sandbox preferred |
 | F-01 | P1       | `ast_get_impact` registers one output schema but can return a TOON envelope.                 | Merged in #104; JSON/TOON runtime gate retained                | AST                                       |
 | C-02 | P1       | Semantic package boundaries are absent from workspace identity.                              | Static-v0.13; freshness/conflict RED required                  | AST                                       |
-| H-03 | P1       | Harness transport timeout is shorter than AST's default queue plus execution budget.         | Implementation merged; closure PR #115 remains open            | Adapter                                   |
+| H-03 | P1       | Harness transport timeout is shorter than AST's default queue plus execution budget.         | Archived and merged through #115; unreleased as v0.13.1        | Adapter                                   |
 | H-04 | P1       | Prepare and preview have no approved Harness continuation to apply.                          | Release-verified product gap                                   | Product + Harness authorization           |
 | H-05 | P1       | The shipped smoke does not prove agent/session visibility, durable replay, or GUI lifecycle. | Native visibility/replay candidate-verified; lifecycle remains | AST gate + Harness                        |
 | T-01 | P1       | Affected-test proof reconstruction traverses relationships in both directions.               | Static-v0.13; cyclic graph RED required                        | AST                                       |
@@ -137,9 +137,9 @@ The public package deterministically publishes `ast_explore` as `{"type":"object
 
 The published v0.13.0 patch does not set `toolCallTimeoutMs`. The candidate establishes one machine-readable tuple: queue `30000`, execution `120000`, margin `15000`, and outer `180000` milliseconds. Validation requires the strict order `180000 > 30000 + 120000 + 15000`; equality, missing values, non-integers, or a non-positive margin fail closed.
 
-The evidence identity remains Harness `dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a752a658978873241fdf8e2bbc` with bridge `0.1.2-alpha.1`. The implementation chain merged in order on `main`: PR #109 at `d0cf9417b9fd0e23ddda568f2df2872b47aaa253`, PR #111 at `b5850296e09ccf93958211070ef6d96ba09cbb2f`, and PR #113 at `3d31fb38a2b29b7ef40d879bbd356414fcfacb1d`. Approved issue #114 links open `type:docs` PR #115, which owns the closure slice and is not merged or released.
+The evidence identity remains Harness `dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a752a658978873241fdf8e2bbc` with bridge `0.1.2-alpha.1`. The ordered `main` chain is PR #109 at `d0cf9417b9fd0e23ddda568f2df2872b47aaa253`, PR #111 at `b5850296e09ccf93958211070ef6d96ba09cbb2f`, PR #113 at `3d31fb38a2b29b7ef40d879bbd356414fcfacb1d`, and closure PR #115 at `7ab04c29a274156c78c470eb7bc3488ce057b928`. H-03 is archived, and final main CI and Security were green; the candidate is not released as v0.13.1.
 
-**Delivered exact-host outcome (release closure pending)**
+**Delivered exact-host outcome**
 
 | Path     | AST-owned terminal evidence   | Correlation and exclusion evidence                                                              |
 | -------- | ----------------------------- | ----------------------------------------------------------------------------------------------- |

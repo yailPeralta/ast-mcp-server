@@ -1,0 +1,19 @@
+{
+  "schema": "dsh-sdd-apply-progress",
+  "change": "2026-08-30-h05-harness-lifecycle",
+  "workUnit": "Phase 0 / PR1 docs baseline",
+  "delivery": "stacked-to-main PR1; approved issue #117; tracker #116",
+  "stage": "phase-0-complete-next-phase-pending",
+  "attemptToken": "sha256:b7bfcc20bf4c57a2ffc9d237da6559dd4d6c19081e94d67c8dd7b28a96078829",
+  "completedTasks": ["0.1", "0.2", "0.3", "0.4"],
+  "tdd": {
+    "red": "Static truth check exit 1: roadmap and annex claimed PR #115 open/unmerged.",
+    "green": "Static truth check exit 0 for both docs: merged SHA, archived H-03, final main CI/Security green, unreleased v0.13.1, H-05 next.",
+    "refactor": "Compacted exploration/proposal/spec/design/tasks/state while retaining 6 requirements, 12 scenarios, 18 tasks, risks, rollback, four PRs, and pinned identity."
+  },
+  "evidence": {
+    "focusedTest": "Node static truth check: exit 0, 2/2 docs passed.",
+    "runtimeHarness": "N/A — Phase 0 changes documentation/OpenSpec only and crosses no runtime/product boundary.",
+    "rollback": "Revert docs/roadmap.md, docs/ast-mcp-server-harness-improvement-report.md, and this change's OpenSpec Phase 0 artifacts only."
+  }
+}
