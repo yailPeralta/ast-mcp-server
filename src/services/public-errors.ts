@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { types as utilTypes } from "node:util";
+import { emitConfiguredH03ErrorEvidence } from "./h03-timeout-fixture.js";
 
 export const PUBLIC_ERROR_CODES = Object.freeze([
   "INVALID_INPUT",
@@ -304,10 +305,13 @@ export function renderPublicError(
   correlationId: string = randomUUID(),
 ): RenderedPublicError {
   const classified = classifyPublicError(error);
+  const emitted = (value: RenderedPublicError) => (
+    emitConfiguredH03ErrorEvidence(value.text, error),
+    value
+  );
   const initial = serializePublicError(classified.code, classified.message, correlationId);
-  if (Buffer.byteLength(initial.text, "utf8") <= MAX_PUBLIC_ERROR_RESPONSE_BYTES) {
-    return initial;
-  }
+  if (Buffer.byteLength(initial.text, "utf8") <= MAX_PUBLIC_ERROR_RESPONSE_BYTES)
+    return emitted(initial);
 
   let lowerBudget = Buffer.byteLength(TRUNCATION_SUFFIX, "utf8");
   let upperBudget = Buffer.byteLength(classified.message, "utf8") - 1;
@@ -326,5 +330,5 @@ export function renderPublicError(
       upperBudget = candidateBudget - 1;
     }
   }
-  return best;
+  return emitted(best);
 }

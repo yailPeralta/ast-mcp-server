@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { H03TimeoutFixtureController } from "../src/services/h03-timeout-fixture.js";
+// prettier-ignore
+import { bindConfiguredH03Error, captureConfiguredH03Command, emitConfiguredH03ErrorEvidence, H03TimeoutFixtureController } from "../src/services/h03-timeout-fixture.js";
 import { ProjectOperationScheduler } from "../src/services/project-operation-scheduler.js";
 import {
   createCompilerWorkerSpawnSpec,
@@ -61,6 +62,9 @@ describe("H-03 timeout fixture seam", () => {
       createCompilerWorkerSpawnSpec("/app/worker.js", { AST_H03_FIXTURE: "{}" }),
     ).toMatchObject({ ok: false, reason: "invalid_environment" });
   });
+
+  // prettier-ignore
+  it("binds queued error evidence to immutable pre-enqueue context without a start", () => { const prior = process.env.AST_H03_FIXTURE; process.env.AST_H03_FIXTURE = JSON.stringify(descriptor); const commandPath = path.join(controlDirectory, "command.json"); writeFileSync(commandPath, JSON.stringify({ callId: "old-call", fixtureId: "old", mode: "hold", nonce: descriptor.nonce })); const captured = captureConfiguredH03Command(); writeFileSync(commandPath, JSON.stringify({ callId: "new-call", fixtureId: "new", mode: "hold", nonce: descriptor.nonce })); const error = new Error("deadline"); bindConfiguredH03Error(error, captured); emitConfiguredH03ErrorEvidence('{"error":{}}', error); const evidence = readFileSync(path.join(controlDirectory, "events.jsonl"), "utf8"); expect(evidence).toContain('"callId":"old-call","fixtureId":"old","generation":1'); expect(evidence).not.toContain('"callId":"old-call","fixtureId":"old","generation":1,"nonce":"n-0123456789abcdef","phase":"started"'); expect(evidence).not.toContain('"callId":"new-call"'); if (prior === undefined) delete process.env.AST_H03_FIXTURE; else process.env.AST_H03_FIXTURE = prior; });
 
   it("aborts active work on recycle and rejects ignored post-await completion", async () => {
     const { controller, run } = harness();

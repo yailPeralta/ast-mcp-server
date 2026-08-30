@@ -12,6 +12,19 @@ export function runBoundedCommand(
   args: readonly string[],
   options?: BoundedCommandOptions,
 ): Promise<{ stdout: string; stderr: string }>;
+// prettier-ignore
+export function createH03CleanupEvidence(h03: { rawMarkerSha256: string; readback: unknown } | undefined): { rawMarkerSha256: string; controllerReadback: unknown; ownedProcesses: 0; profileAndControlRemoved: true } | undefined;
+export function requireExactIdentity<T extends Record<string, unknown>>(
+  observed: T,
+  expected: Readonly<Partial<T>>,
+): T;
+export function classifyExactHostToolError(result: unknown): {
+  code: "QUEUE_WAIT_TIMEOUT" | "OPERATION_DEADLINE_EXCEEDED" | "REQUEST_CANCELLED";
+  correlationId: string;
+  message: string;
+  envelopeBytes: number;
+  name: unknown;
+};
 export function parseProbeMarker(
   stderr: string,
 ):

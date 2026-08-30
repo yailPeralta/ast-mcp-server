@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  classifyExactHostToolError,
+  createH03CleanupEvidence,
   parseProbeMarker,
+  requireExactIdentity,
   runBoundedCommand,
   terminateProcessTree,
 } from "../scripts/runtime-process.mjs";
@@ -12,6 +15,64 @@ import {
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+describe("exact-host evidence guards", () => {
+  it("blocks missing or drifted immutable identity before fixtures", () => {
+    const expected = {
+      hostRevision: "c".repeat(40),
+      bridgeVersion: "0.1.2-alpha.1",
+      nativeMode: "native",
+    };
+    expect(requireExactIdentity(expected, expected)).toEqual(expected);
+    expect(() => requireExactIdentity({ ...expected, hostRevision: "" }, expected)).toThrow(
+      /BLOCKED.*hostRevision/i,
+    );
+    let blocked: unknown;
+    // prettier-ignore
+    try { requireExactIdentity({ ...expected, bridgeVersion: "0.1.2-alpha.2" }, expected); } catch (error) { blocked = error; } finally { expect(createH03CleanupEvidence(undefined)).toBeUndefined(); }
+    expect(blocked).toMatchObject({ message: expect.stringMatching(/BLOCKED.*bridgeVersion/i) });
+  });
+
+  it("accepts only exact bounded AST-owned error envelopes", () => {
+    const operational = (code: string, name = "Error", message = "bounded") => ({
+      isError: true,
+      error: {
+        info: { name },
+        message: JSON.stringify({
+          error: {
+            code,
+            message,
+            correlation_id: "123e4567-e89b-42d3-a456-426614174000",
+          },
+        }),
+      },
+    });
+    const codes = ["OPERATION_DEADLINE_EXCEEDED", "QUEUE_WAIT_TIMEOUT", "REQUEST_CANCELLED"];
+    expect(codes.map((code) => classifyExactHostToolError(operational(code)).code)).toEqual(codes);
+    expect(classifyExactHostToolError(operational(codes[0]!))).toMatchObject({
+      correlationId: "123e4567-e89b-42d3-a456-426614174000",
+      message: "bounded",
+    });
+    expect(() => classifyExactHostToolError({ ...operational(codes[0]!), isError: false })).toThrow(
+      /isError/i,
+    );
+    expect(() =>
+      classifyExactHostToolError(operational(codes[0]!, "Error", "x".repeat(4097))),
+    ).toThrow(/bounded/i);
+    const extra = operational(codes[0]!);
+    extra.error.message = extra.error.message.replace(
+      '"message":"bounded"',
+      '"message":"bounded","extra":1',
+    );
+    expect(() => classifyExactHostToolError(extra)).toThrow(/keys/i);
+    expect(() =>
+      classifyExactHostToolError(operational("TOOL_TIMEOUT", "ToolTimeoutError")),
+    ).toThrow(/generic Harness timeout/i);
+    expect(() =>
+      classifyExactHostToolError(operational("REQUEST_CANCELLED", "AbortError")),
+    ).toThrow(/unrelated AbortError/i);
+  });
 });
 
 describe("bounded subprocess runtime", () => {

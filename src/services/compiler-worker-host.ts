@@ -12,8 +12,10 @@ import {
   isCompilerWorkerRequestIdWithinBudget,
   startCompilerWorker,
 } from "./compiler-worker-protocol.js";
+import { emitConfiguredH03HostEvent } from "./h03-timeout-fixture.js";
 import {
   createCompilerWorkerSpawnSpec,
+  parseH03FixtureDescriptor,
   readRuntimePolicy,
   type RuntimePolicyEnvironment,
 } from "./runtime-policy.js";
@@ -53,7 +55,14 @@ export function spawnCompilerWorkerProcess(options: {
   environment: RuntimePolicyEnvironment;
   beforeWrite?: (message: JSONRPCMessage) => void;
 }) {
-  const spec = createCompilerWorkerSpawnSpec(options.workerEntryPath, options.environment);
+  const fixture = parseH03FixtureDescriptor(options.environment.AST_H03_FIXTURE);
+  const environment = fixture
+    ? {
+        ...options.environment,
+        AST_H03_FIXTURE: JSON.stringify({ ...fixture, generation: options.generation }),
+      }
+    : options.environment;
+  const spec = createCompilerWorkerSpawnSpec(options.workerEntryPath, environment);
   if (!spec.ok || !spec.command) throw new CompilerWorkerHostError("startup");
   const child = spawn(spec.command, spec.args, {
     ...spec.options,
@@ -227,7 +236,7 @@ export class CompilerWorkerHost {
   // prettier-ignore
   private static quiescent(value: Record<string, unknown>) { return value.runtime_admission === "open" && value.project_admission === "open" && ["active_requests", "active_sends", "active_operations", "queued_operations", "completion_critical_operations"].every((key) => value[key] === 0) && value.mutation_history === false; }
   // prettier-ignore
-  private async recycle(activity: number) { this.pruneLeases(); const child = this.child, generation = this.generation, sequence = this.sequence; if (!child || this.parentWork || this.leases.size || child.generation !== generation) return this.scheduleIdle(); const first = await child.snapshot(); if (!CompilerWorkerHost.quiescent(first) || activity !== this.activity || sequence !== this.sequence) return this.scheduleIdle(); this.parentAdmission = "closed"; const second = await child.snapshot(); if (child !== this.child || generation !== this.generation || sequence !== this.sequence || activity !== this.activity || !CompilerWorkerHost.quiescent(second)) { this.parentAdmission = "open"; return this.scheduleIdle(); } await this.stopChild(child, "requested"); emitCompilerWorkerEvent({ kind: "idle", generation }); this.parentAdmission = "open"; }
+  private async recycle(activity: number) { this.pruneLeases(); const child = this.child, generation = this.generation, sequence = this.sequence; if (!child || this.parentWork || this.leases.size || child.generation !== generation) return this.scheduleIdle(); const first = await child.snapshot(); if (!CompilerWorkerHost.quiescent(first) || activity !== this.activity || sequence !== this.sequence) return this.scheduleIdle(); this.parentAdmission = "closed"; const second = await child.snapshot(); if (child !== this.child || generation !== this.generation || sequence !== this.sequence || activity !== this.activity || !CompilerWorkerHost.quiescent(second)) { this.parentAdmission = "open"; return this.scheduleIdle(); } await this.stopChild(child, "requested"); emitCompilerWorkerEvent({ kind: "idle", generation }); emitConfiguredH03HostEvent("recycled", generation); this.parentAdmission = "open"; }
   // prettier-ignore
   private async stopChild(child: ReturnType<typeof spawnCompilerWorkerProcess>, trigger: Trigger): Promise<"complete" | "forced"> { const completion = child.shutdown(trigger); try { await within(completion, this.timeoutMs); if (this.child === child) this.child = undefined; return "complete"; } catch { const snapshot = await child.snapshot().catch(() => undefined); if (snapshot?.completion_critical_operations) { await completion; if (this.child === child) this.child = undefined; return "complete"; } child.terminate(); await child.reap().catch(() => undefined); if (this.child === child) this.child = undefined; return "forced"; } }
   async start(initialization: readonly unknown[]): Promise<Ready> {
