@@ -3,7 +3,7 @@ schemaVersion: 1
 changeName: 2026-08-29-h03-timeout-ownership
 artifactStore: openspec
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-08-29-h03-timeout-ownership
-nextRecommended: apply
+nextRecommended: verify
 lastPhase: apply
 artifacts:
   proposal: done
@@ -13,6 +13,8 @@ artifacts:
   verifyReport: missing
 taskProgress:
   total: 17
-  completed: 5
+  completed: 17
+  pending: 0
+  allComplete: true
 risks:
-  - Existing-seam viability must be proven by the first RED before any visible fixture surface is considered.
+  - PR #115 remains open and CI may still be pending; merge is a post-verify/archive release action.

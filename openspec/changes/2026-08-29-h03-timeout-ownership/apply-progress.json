@@ -1,9 +1,9 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-08-29-h03-timeout-ownership",
-  "workUnit": "Phase 4 task 4.3 full CI and workflow gate remediation",
-  "delivery": "stacked-to-main(branch=docs/h03-timeout-closure,pr4-budget=400)",
-  "stage": "task-4.3-complete",
+  "workUnit": "Phase 4 task 4.4 ordered issue-linked delivery closure",
+  "delivery": "stacked-to-main(pr109+pr111+pr113=merged,pr115=open-to-main,pr4-budget=400)",
+  "stage": "all-tasks-complete-ready-for-verify",
   "tasks": [
     { "id": "1.1", "name": "RED budget contract", "status": "completed" },
     { "id": "1.2", "name": "GREEN package and patch budget", "status": "completed" },
@@ -19,7 +19,7 @@
     { "id": "4.1", "name": "Roadmap and evidence closure docs", "status": "completed" },
     { "id": "4.2", "name": "Blind adversarial review", "status": "completed" },
     { "id": "4.3", "name": "Full CI and workflow gate", "status": "completed" },
-    { "id": "4.4", "name": "Ordered issue-linked delivery", "status": "pending" }
+    { "id": "4.4", "name": "Ordered issue-linked delivery", "status": "completed" }
   ],
   "tdd": {
     "red": [
@@ -208,7 +208,15 @@
       "diffBudget": "Against test/h03-exact-timeout-ownership after this evidence update: 375 authored changed lines (315 additions, 60 deletions), within the PR4 limit of 400.",
       "rollback": "Revert only the task 4.3 checkbox and task43Remediation/apply-progress stage delta; no product or test file was modified for the inherited environment.",
       "attemptAuthority": "The supplied same-attempt token could not be authenticated or settled because gentle-ai is unavailable (exit 127); fallback OpenSpec status remained authoritative for this executor run."
+    },
+    "task44Delivery": {
+      "focusedCheck": "GitHub inspection confirmed approved issues #108/#110/#112/#114 and exactly one type label per linked PR; ordered main ancestry check exited 0",
+      "slices": "#109 merged d0cf9417b9fd0e23ddda568f2df2872b47aaa253; #111 merged b5850296e09ccf93958211070ef6d96ba09cbb2f; #113 merged 3d31fb38a2b29b7ef40d879bbd356414fcfacb1d; #115 remains open against main with type:docs and CI pending",
+      "runtimeHarness": "N/A: task 4.4 persists delivery metadata only; task 4.3 retains the exact-host runtime receipt",
+      "diffBudget": "PR #115 authored diff was 375 lines before status-only replacements and is 395 lines (330 additions, 65 deletions) after final persistence, within the 400-line limit",
+      "rollback": "Revert only task 4.4 status, roadmap/evidence delivery-status replacements, state routing, and this task44Delivery record; retain all task/test history",
+      "successor": "Strict verify, then archive; merging PR #115 is a post-verify/archive release action"
     }
   },
-  "updatedAt": "2026-08-30T18:08:33Z"
+  "updatedAt": "2026-08-30T18:14:54Z"
 }
