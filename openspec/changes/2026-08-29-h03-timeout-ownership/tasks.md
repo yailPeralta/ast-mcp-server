@@ -50,6 +50,6 @@ Chain strategy: stacked-to-main (approved by user); tracker: https://github.com/
 ## Phase 4: Docs, Review, CI, Delivery
 
 - [x] 4.1 Update `docs/roadmap.md` with H-03 evidence/exclusions and rollback: `git revert <PR-sha>`, then focused command.
-- [ ] 4.2 Run blind adversarial review of scenarios, fixture invisibility, drift, classification, cleanup, and budget; fix findings RED-first.
+- [x] 4.2 Run blind adversarial review of scenarios, fixture invisibility, drift, classification, cleanup, and budget; fix findings RED-first.
 - [ ] 4.3 Run `yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build`; confirm `.github/workflows/ci.yml` keeps `yarn test:dsh-adapter` mandatory.
 - [ ] 4.4 Deliver ordered issue-linked PRs with evidence, rollback boundary, and successor base.

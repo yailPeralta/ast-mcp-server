@@ -3,7 +3,7 @@
   "change": "2026-08-29-h03-timeout-ownership",
   "workUnit": "Judgment Day correction JD-H03-001",
   "delivery": "stacked-to-main(branch=docs/h03-timeout-closure,correction-budget=200)",
-  "stage": "judgment-day-round-1-correction-complete",
+  "stage": "judgment-day-approved",
   "tasks": [
     { "id": "1.1", "name": "RED budget contract", "status": "completed" },
     { "id": "1.2", "name": "GREEN package and patch budget", "status": "completed" },
@@ -17,7 +17,7 @@
     { "id": "3.3", "name": "GREEN exact-host hook wiring", "status": "completed" },
     { "id": "3.4", "name": "REFACTOR bounded runtime helpers", "status": "completed" },
     { "id": "4.1", "name": "Roadmap and evidence closure docs", "status": "completed" },
-    { "id": "4.2", "name": "Blind adversarial review", "status": "pending" },
+    { "id": "4.2", "name": "Blind adversarial review", "status": "completed" },
     { "id": "4.3", "name": "Full CI and workflow gate", "status": "pending" },
     { "id": "4.4", "name": "Ordered issue-linked delivery", "status": "pending" }
   ],
@@ -105,7 +105,8 @@
     "docsWorkUnit": "yarn format:check: exit 0; yarn lint: exit 0; local markdown links valid for 2 changed docs; git diff --check: exit 0",
     "docsRuntimeHarness": "N/A: task 4.1 changes roadmap/evidence prose only and preserves the prior exact-host runtime receipt",
     "docsRollback": "Revert docs/roadmap.md, docs/ast-mcp-server-harness-improvement-report.md, tasks.md task 4.1, and this Phase 4 progress delta without removing Phase 1-3 evidence",
-    "judgmentDayCorrection": "JD-H03-001: independent pre-boot expected identity vs re-observed host/bridge/AST/adapter/config/Node/native fields; gate precedes H-03 control creation; focused 26/26, format/lint/typecheck, build+test:dsh-adapter, and diff check exit 0; rollback scripts/dsh-adapter-smoke.mjs plus focused tests"
+    "judgmentDayCorrection": "JD-H03-001: independent pre-boot expected identity vs re-observed host/bridge/AST/adapter/config/Node/native fields; gate precedes H-03 control creation; focused 26/26, format/lint/typecheck, build+test:dsh-adapter, and diff check exit 0; rollback scripts/dsh-adapter-smoke.mjs plus focused tests",
+    "judgmentDayVerdict": "APPROVED: 2/2 scoped re-judges closed JD-H03-001; 0 open severe and 0 fix-caused severe; correction 186/200 lines"
   },
-  "updatedAt": "2026-08-30T17:51:08Z"
+  "updatedAt": "2026-08-30T17:57:59Z"
 }

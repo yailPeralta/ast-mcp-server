@@ -1,0 +1,32 @@
+{
+  "schema": "dsh-sdd-judgment-day",
+  "change": "2026-08-29-h03-timeout-ownership",
+  "originalTarget": "58a6c6ca206eeee393984ec3da17b202f70ff1cf",
+  "correctionTarget": "33be7654226cbb3206210fbd17c79bd3fd7117e9",
+  "round": 1,
+  "status": "approved",
+  "initialJudgment": {
+    "judges": 2,
+    "confirmedSevere": 1,
+    "warningsAsInfo": 2,
+    "recommendation": "REJECTED"
+  },
+  "correction": {
+    "findingIds": ["JD-H03-001"],
+    "budgetLines": 200,
+    "changedLines": 186,
+    "summary": "Authenticate all normative host, bridge, AST, adapter, effective-config, Node, and native-mode identities before H-03 fixture state; preserve bounded BLOCKED on drift."
+  },
+  "rejudgment": {
+    "judges": 2,
+    "closedSevere": 1,
+    "openSevere": 0,
+    "fixCausedSevere": 0,
+    "recommendation": "APPROVED"
+  },
+  "info": [
+    "Phase 1 used the maintainer-approved 450-line exception; later slices remain within 400 lines.",
+    "Recorded nonce-bearing marker hashes are historical run evidence, not reproducible constants."
+  ],
+  "verdict": "APPROVED"
+}
