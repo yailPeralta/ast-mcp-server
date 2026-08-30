@@ -34,7 +34,13 @@
   "deepseekHarness": {
     "revision": "cd5ef8148158c3a752a658978873241fdf8e2bbc",
     "tag": "dsh-v0.1.2-alpha.1",
-    "mcpClientVersion": "0.1.2-alpha.1"
+    "mcpClientVersion": "0.1.2-alpha.1",
+    "timeoutBudget": {
+      "queueWaitMs": 30000,
+      "executionDeadlineMs": 120000,
+      "marginMs": 15000,
+      "outerToolCallMs": 180000
+    }
   },
   "main": "dist/index.js",
   "bin": {

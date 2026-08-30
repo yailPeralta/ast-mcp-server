@@ -31,4 +31,8 @@
           AST_MCP_APPLY_GUARD: "deny"
           AST_MCP_TEXT_PROJECTION: "canonical_json"
         cwd: !!js process.cwd()
+        toolCallTimeoutMs: !!js >-
+          JSON.parse(process.getBuiltinModule('node:fs').readFileSync(
+            new URL('node_modules/ast-mcp-server/package.json', baseUrl), 'utf8'
+          )).deepseekHarness.timeoutBudget.outerToolCallMs
         failOnStartupError: true

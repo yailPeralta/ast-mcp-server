@@ -1,8 +1,11 @@
 import { Buffer } from "node:buffer";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import yaml from "yaml";
+import { validateTimeoutBudget } from "../scripts/harness-timeout-budget.mjs";
 import { createServer } from "../src/server.js";
 import {
   COMPILER_WORKER_JSONRPC_ENVELOPE_RESERVE_BYTES,
@@ -45,6 +48,7 @@ async function parsePatch(): Promise<
         args?: unknown[];
         env?: Record<string, unknown>;
         cwd?: unknown;
+        toolCallTimeoutMs?: unknown;
         failOnStartupError?: unknown;
       };
     }>;
@@ -69,6 +73,7 @@ async function parsePatch(): Promise<
         args?: unknown[];
         env?: Record<string, unknown>;
         cwd?: unknown;
+        toolCallTimeoutMs?: unknown;
         failOnStartupError?: unknown;
       };
     }>;
@@ -84,6 +89,12 @@ describe("DeepSeek Harness adapter patch", () => {
       revision: "cd5ef8148158c3a752a658978873241fdf8e2bbc",
       tag: "dsh-v0.1.2-alpha.1",
       mcpClientVersion: "0.1.2-alpha.1",
+      timeoutBudget: {
+        queueWaitMs: 30_000,
+        executionDeadlineMs: 120_000,
+        marginMs: 15_000,
+        outerToolCallMs: 180_000,
+      },
     });
   });
 
@@ -129,6 +140,53 @@ describe("DeepSeek Harness adapter patch", () => {
     });
     expect(config.failOnStartupError).toBe(true);
   });
+
+  it("derives an ordered timeout from the sole package budget", async () => {
+    const metadata = JSON.parse(await readFile(PACKAGE_PATH, "utf8"));
+    const budget = validateTimeoutBudget(metadata.deepseekHarness?.timeoutBudget);
+    expect(budget).toEqual({
+      queueWaitMs: 30_000,
+      executionDeadlineMs: 120_000,
+      marginMs: 15_000,
+      outerToolCallMs: 180_000,
+    });
+    const runtimePolicy = parseRuntimePolicy({});
+    expect(runtimePolicy.queueWaitTimeoutMs).toBe(budget.queueWaitMs);
+    expect(runtimePolicy.operationDeadlineMs).toBe(budget.executionDeadlineMs);
+
+    const patch = await parsePatch();
+    const configured = patch[0]!.insert![0]!.config.toolCallTimeoutMs;
+    expect(isJsExpr(configured)).toBe(true);
+    const profileRoot = await mkdtemp(path.join(os.tmpdir(), "ast-budget-patch-"));
+    try {
+      const installedRoot = path.join(profileRoot, "node_modules", "ast-mcp-server");
+      await mkdir(installedRoot, { recursive: true });
+      await writeFile(path.join(installedRoot, "package.json"), JSON.stringify(metadata));
+      const baseUrl = pathToFileURL(`${profileRoot}${path.sep}`).href;
+      const evaluated = Function("baseUrl", `return (${(configured as JsExpr).__jsExpr})`)(baseUrl);
+      expect(evaluated).toBe(budget.outerToolCallMs);
+    } finally {
+      await rm(profileRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects malformed or unordered timeout budgets", () => {
+    const valid = {
+      queueWaitMs: 30_000,
+      executionDeadlineMs: 120_000,
+      marginMs: 15_000,
+      outerToolCallMs: 180_000,
+    };
+    for (const key of Object.keys(valid)) {
+      expect(() => validateTimeoutBudget({ ...valid, [key]: undefined })).toThrow();
+      expect(() => validateTimeoutBudget({ ...valid, [key]: 1.5 })).toThrow();
+    }
+    for (const marginMs of [0, -1]) {
+      expect(() => validateTimeoutBudget({ ...valid, marginMs })).toThrow();
+    }
+    expect(() => validateTimeoutBudget({ ...valid, outerToolCallMs: 165_000 })).toThrow();
+    expect(() => validateTimeoutBudget({ ...valid, outerToolCallMs: 164_999 })).toThrow();
+  });
 });
 
 describe("pinned Harness smoke contract", () => {
@@ -161,6 +219,9 @@ describe("pinned Harness smoke contract", () => {
     expect(source).not.toContain("const source = process.env.DSH_HARNESS_SOURCE");
     expect(source).toContain("observedCliSha256");
     expect(source).toContain("PUBLIC_PACKAGE_INTEGRITY");
+    expect(source).toContain(
+      "validateTimeoutBudget(packageMetadata.deepseekHarness?.timeoutBudget)",
+    );
     expect(source).toContain("BLOCKED:");
     expect(source).toContain('cleanup: "ok"');
     expect(source).toContain("AST_H01_PROCESS_OWNER");
