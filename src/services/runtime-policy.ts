@@ -1,4 +1,5 @@
 import path from "node:path";
+import packageMetadata from "../../package.json" with { type: "json" };
 export const RUNTIME_POLICY_ENV_KEYS = Object.freeze([
   "AST_MAX_PROJECT_SESSIONS",
   "AST_MAX_QUEUED_OPERATIONS_PER_PROJECT",
@@ -71,13 +72,13 @@ export function parseRuntimePolicy(environment: RuntimePolicyEnvironment): Runti
   );
   const queueWaitTimeoutMs = parseBoundedInteger(
     environment.AST_QUEUE_WAIT_TIMEOUT_MS,
-    30_000,
+    packageMetadata.deepseekHarness.timeoutBudget.queueWaitMs,
     100,
     300_000,
   );
   const operationDeadlineMs = parseBoundedInteger(
     environment.AST_OPERATION_DEADLINE_MS,
-    120_000,
+    packageMetadata.deepseekHarness.timeoutBudget.executionDeadlineMs,
     1_000,
     900_000,
   );

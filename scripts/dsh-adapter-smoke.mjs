@@ -31,6 +31,7 @@ import { clearInterval, clearTimeout, setInterval, setTimeout } from "node:timer
 import { URL, fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import yaml from "yaml";
+import { validateTimeoutBudget } from "./harness-timeout-budget.mjs";
 import { parseProbeMarker, runBoundedCommand, terminateProcessTree } from "./runtime-process.mjs";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
@@ -38,6 +39,7 @@ const packageMetadata = JSON.parse(
   await readFile(path.join(repositoryRoot, "package.json"), "utf8"),
 );
 const expectedVersion = "0.13.0";
+const timeoutBudget = validateTimeoutBudget(packageMetadata.deepseekHarness?.timeoutBudget);
 const yarnExecutable = process.platform === "win32" ? "yarn.cmd" : "yarn";
 const PINNED_REVISION = "cd5ef8148158c3a752a658978873241fdf8e2bbc";
 const PINNED_TAG = "dsh-v0.1.2-alpha.1";
@@ -960,6 +962,8 @@ try {
     pinned?.mcpClientVersion === PINNED_VERSION,
     "deepseekHarness.mcpClientVersion must equal the pinned mcp-client version",
   );
+  assert(timeoutBudget.outerToolCallMs === 180_000, "shipped outer timeout budget changed");
+  summary.timeoutBudget = timeoutBudget;
   if (!packageMetadata.files.includes("cordis.patch.yml")) {
     fail("cordis.patch.yml must be listed in package.json files");
   }

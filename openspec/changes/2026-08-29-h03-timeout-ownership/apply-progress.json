@@ -1,0 +1,54 @@
+{
+  "schema": "dsh-sdd-apply-progress",
+  "change": "2026-08-29-h03-timeout-ownership",
+  "workUnit": "Phase 1 Budget Contract",
+  "delivery": "size:exception(450, user-approved, Phase1-only)",
+  "stage": "refactored",
+  "tasks": [
+    { "id": "1.1", "name": "RED budget contract", "status": "completed" },
+    { "id": "1.2", "name": "GREEN package and patch budget", "status": "completed" },
+    { "id": "1.3", "name": "REFACTOR shared validator", "status": "completed" }
+  ],
+  "tdd": {
+    "red": [
+      {
+        "id": "budget-contract",
+        "file": "test/dsh-adapter.test.ts",
+        "command": "yarn vitest run test/dsh-adapter.test.ts",
+        "exitCode": 1,
+        "failure": "Cannot find module ../scripts/harness-timeout-budget.mjs"
+      },
+      {
+        "id": "shared-smoke-validator",
+        "file": "test/dsh-adapter.test.ts",
+        "command": "yarn vitest run test/dsh-adapter.test.ts",
+        "exitCode": 1,
+        "failure": "smoke source did not call validateTimeoutBudget"
+      }
+    ],
+    "green": [
+      {
+        "id": "budget-contract",
+        "file": "test/dsh-adapter.test.ts",
+        "command": "yarn vitest run test/dsh-adapter.test.ts",
+        "exitCode": 0,
+        "result": "17 tests passed"
+      }
+    ],
+    "refactored": [
+      {
+        "id": "budget-contract",
+        "file": "scripts/dsh-adapter-smoke.mjs",
+        "command": "yarn vitest run test/dsh-adapter.test.ts",
+        "exitCode": 0,
+        "result": "17 passed; runtime defaults equal package budget"
+      }
+    ]
+  },
+  "evidence": {
+    "safetyNet": "yarn vitest run test/dsh-adapter.test.ts: exit 0, 17 tests passed",
+    "runtimeHarness": "N/A: Phase 1 is a static metadata/patch contract",
+    "rollback": "package.json, cordis.patch.yml, scripts/harness-timeout-budget.{mjs,d.mts}, scripts/dsh-adapter-smoke.mjs, test/dsh-adapter.test.ts, tasks.md, and apply-progress.json"
+  },
+  "updatedAt": "2026-08-30T03:04:00Z"
+}

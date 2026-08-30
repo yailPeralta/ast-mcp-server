@@ -1,0 +1,18 @@
+schemaName: gentle-ai.sdd-status
+schemaVersion: 1
+changeName: 2026-08-29-h03-timeout-ownership
+artifactStore: openspec
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-08-29-h03-timeout-ownership
+nextRecommended: apply
+lastPhase: apply
+artifacts:
+  proposal: done
+  specs: done
+  design: done
+  tasks: done
+  verifyReport: missing
+taskProgress:
+  total: 17
+  completed: 5
+risks:
+  - Existing-seam viability must be proven by the first RED before any visible fixture surface is considered.
