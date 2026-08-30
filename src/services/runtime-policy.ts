@@ -159,18 +159,23 @@ export interface H03FixtureDescriptor {
   readonly nonce: string;
   readonly generation: number;
 }
-export function parseH03FixtureDescriptor(raw: unknown): H03FixtureDescriptor | undefined {
+function parseClosedFixtureRecord(
+  raw: unknown,
+  expectedKeys: string,
+): Record<string, unknown> | undefined {
   if (typeof raw !== "string" || raw.length > 1024 || raw.includes("\0")) return undefined;
-  let value: unknown;
   try {
-    value = JSON.parse(raw);
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+    const record = value as Record<string, unknown>;
+    return Object.keys(record).sort().join(",") === expectedKeys ? record : undefined;
   } catch {
     return undefined;
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  if (Object.keys(record).sort().join(",") !== "controlDirectory,generation,nonce")
-    return undefined;
+}
+export function parseH03FixtureDescriptor(raw: unknown): H03FixtureDescriptor | undefined {
+  const record = parseClosedFixtureRecord(raw, "controlDirectory,generation,nonce");
+  if (!record) return undefined;
   const { controlDirectory, nonce, generation } = record;
   if (
     typeof controlDirectory !== "string" ||
@@ -184,6 +189,18 @@ export function parseH03FixtureDescriptor(raw: unknown): H03FixtureDescriptor | 
   )
     return undefined;
   return Object.freeze({ controlDirectory, nonce, generation: generation as number });
+}
+export interface H05FixtureDescriptor extends H03FixtureDescriptor {
+  readonly ownerToken: string;
+}
+export function parseH05FixtureDescriptor(raw: unknown): H05FixtureDescriptor | undefined {
+  const record = parseClosedFixtureRecord(raw, "controlDirectory,generation,nonce,ownerToken");
+  if (!record) return undefined;
+  const { ownerToken, ...baseValue } = record;
+  if (typeof ownerToken !== "string" || !/^[A-Za-z0-9_-]{16,64}$/.test(ownerToken))
+    return undefined;
+  const base = parseH03FixtureDescriptor(JSON.stringify(baseValue));
+  return base ? Object.freeze({ ...base, ownerToken }) : undefined;
 }
 function validEnvironmentString(value: unknown): value is string {
   return (
@@ -222,6 +239,12 @@ export function createCompilerWorkerSpawnSpec(
     const descriptor = parseH03FixtureDescriptor(fixture);
     if (!descriptor) return { ok: false, reason: "invalid_environment" as const };
     projected.AST_H03_FIXTURE = JSON.stringify(descriptor);
+  }
+  const lifecycleFixture = environment.AST_H05_FIXTURE;
+  if (lifecycleFixture !== undefined) {
+    const descriptor = parseH05FixtureDescriptor(lifecycleFixture);
+    if (!descriptor) return { ok: false, reason: "invalid_environment" as const };
+    projected.AST_H05_FIXTURE = JSON.stringify(descriptor);
   }
   const policy = parseRuntimePolicy(environment);
   Object.assign(projected, {
