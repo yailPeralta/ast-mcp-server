@@ -18,20 +18,27 @@ afterEach(async () => {
 });
 
 describe("exact-host evidence guards", () => {
-  it("blocks missing or drifted immutable identity before fixtures", () => {
-    const expected = {
-      hostRevision: "c".repeat(40),
-      bridgeVersion: "0.1.2-alpha.1",
-      nativeMode: "native",
-    };
+  it("blocks exact adapter and Node executable drift", () => {
+    const expected = { adapterSha256: "adapter-pinned", nodeSha256: "node-pinned" };
     expect(requireExactIdentity(expected, expected)).toEqual(expected);
-    expect(() => requireExactIdentity({ ...expected, hostRevision: "" }, expected)).toThrow(
-      /BLOCKED.*hostRevision/i,
-    );
+    for (const field of Object.keys(expected)) {
+      expect(() => requireExactIdentity({ ...expected, [field]: "drift" }, expected)).toThrow(
+        new RegExp(`BLOCKED.*${field}`, "i"),
+      );
+    }
+  });
+
+  it("classifies early revision drift as BLOCKED while final cleanup remains armed", () => {
+    const expected = { hostRevision: "c".repeat(40) };
     let blocked: unknown;
-    // prettier-ignore
-    try { requireExactIdentity({ ...expected, bridgeVersion: "0.1.2-alpha.2" }, expected); } catch (error) { blocked = error; } finally { expect(createH03CleanupEvidence(undefined)).toBeUndefined(); }
-    expect(blocked).toMatchObject({ message: expect.stringMatching(/BLOCKED.*bridgeVersion/i) });
+    try {
+      requireExactIdentity({ hostRevision: "d".repeat(40) }, expected);
+    } catch (error) {
+      blocked = error;
+    } finally {
+      expect(createH03CleanupEvidence(undefined)).toBeUndefined();
+    }
+    expect(blocked).toMatchObject({ message: expect.stringMatching(/BLOCKED.*hostRevision/i) });
   });
 
   it("accepts only exact bounded AST-owned error envelopes", () => {

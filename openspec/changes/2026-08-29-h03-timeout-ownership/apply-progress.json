@@ -1,9 +1,9 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-08-29-h03-timeout-ownership",
-  "workUnit": "Phase 4 Task 4.1 Roadmap and Evidence Docs",
-  "delivery": "stacked-to-main(parent=test/h03-exact-timeout-ownership,budget=400)",
-  "stage": "roadmap-evidence-docs-complete",
+  "workUnit": "Judgment Day correction JD-H03-001",
+  "delivery": "stacked-to-main(branch=docs/h03-timeout-closure,correction-budget=200)",
+  "stage": "judgment-day-round-1-correction-complete",
   "tasks": [
     { "id": "1.1", "name": "RED budget contract", "status": "completed" },
     { "id": "1.2", "name": "GREEN package and patch budget", "status": "completed" },
@@ -52,6 +52,12 @@
         "failure": "Authoritative correction RED: 2 failed/12 on queued terminal without started and BLOCKED-safe cleanup",
         "green": "yarn build && yarn test:dsh-adapter: exit 0; queued request-local generation 1, recycle REQUEST_CANCELLED generation 2",
         "refactor": "29/29 focused plus format, lint, typecheck, and diff check: exit 0"
+      },
+      {
+        "id": "JD-H03-001",
+        "command": "yarn vitest run test/dsh-adapter.test.ts test/runtime-process.test.ts",
+        "exitCode": 1,
+        "failure": "RED: complete expected identity fields were absent before H-03 control creation; 1 failed, 25 passed"
       }
     ],
     "green": [
@@ -68,6 +74,12 @@
         "command": "yarn vitest run test/h03-timeout-fixture.test.ts",
         "exitCode": 0,
         "result": "4 tests passed"
+      },
+      {
+        "id": "JD-H03-001",
+        "command": "yarn vitest run test/dsh-adapter.test.ts test/runtime-process.test.ts",
+        "exitCode": 0,
+        "result": "26 tests passed; adapterSha256, nodeSha256, and early host revision drift classify BLOCKED"
       }
     ],
     "refactored": [
@@ -92,7 +104,8 @@
     "rollback": "scripts/runtime-process.*, scripts/dsh-adapter-smoke.mjs, src/services/{compiler-worker-host,h03-timeout-fixture,project,public-errors}.ts, focused tests, and Phase 3 OpenSpec edits",
     "docsWorkUnit": "yarn format:check: exit 0; yarn lint: exit 0; local markdown links valid for 2 changed docs; git diff --check: exit 0",
     "docsRuntimeHarness": "N/A: task 4.1 changes roadmap/evidence prose only and preserves the prior exact-host runtime receipt",
-    "docsRollback": "Revert docs/roadmap.md, docs/ast-mcp-server-harness-improvement-report.md, tasks.md task 4.1, and this Phase 4 progress delta without removing Phase 1-3 evidence"
+    "docsRollback": "Revert docs/roadmap.md, docs/ast-mcp-server-harness-improvement-report.md, tasks.md task 4.1, and this Phase 4 progress delta without removing Phase 1-3 evidence",
+    "judgmentDayCorrection": "JD-H03-001: independent pre-boot expected identity vs re-observed host/bridge/AST/adapter/config/Node/native fields; gate precedes H-03 control creation; focused 26/26, format/lint/typecheck, build+test:dsh-adapter, and diff check exit 0; rollback scripts/dsh-adapter-smoke.mjs plus focused tests"
   },
-  "updatedAt": "2026-08-30T17:05:35Z"
+  "updatedAt": "2026-08-30T17:51:08Z"
 }

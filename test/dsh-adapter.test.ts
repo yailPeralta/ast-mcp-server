@@ -240,6 +240,33 @@ describe("pinned Harness smoke contract", () => {
     expect(source).not.toContain("execFileAsync");
   });
 
+  it("authenticates the complete identity before creating H-03 fixture state", async () => {
+    const source = await readFile(SMOKE_PATH, "utf8");
+    const gate = source.slice(
+      source.indexOf("const expectedIdentity ="),
+      source.indexOf("summary.h03Identity"),
+    );
+    for (const field of [
+      "hostCliSha256",
+      "bridgeTarballSha256",
+      "astTarballSha256",
+      "astEntrypointSha256",
+      "adapterSha256",
+      "effectiveConfigSha256",
+      "nodeVersion",
+      "nodeSha256",
+    ]) {
+      expect(gate).toContain(field);
+    }
+    expect(source.indexOf("requireExactIdentity(exactIdentity")).toBeLessThan(
+      source.indexOf('const h03Control = path.join(temporaryRoot, "h03-control")'),
+    );
+    expect(source).not.toContain("assert(head === PINNED_REVISION");
+    expect(source.indexOf("requireExactIdentity(exactIdentity")).toBeLessThan(
+      source.lastIndexOf("await rm(temporaryRoot"),
+    );
+  });
+
   it("keeps installation guidance executable and free of unpublished registry claims", async () => {
     const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
     const patch = await readFile(PATCH_PATH, "utf8");

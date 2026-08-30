@@ -287,14 +287,14 @@ async function resolvePinnedHarness() {
     "resolved Harness Node no longer satisfies its engine",
   );
   const head = (await run("git", ["-C", source, "rev-parse", "HEAD"])).stdout.trim();
-  assert(head === PINNED_REVISION, `harness HEAD ${head} != pinned ${PINNED_REVISION}`);
+  requireExactIdentity({ hostRevision: head }, { hostRevision: PINNED_REVISION });
   const taggedRevision = (
     await run("git", ["-C", source, "rev-list", "-n", "1", PINNED_TAG])
   ).stdout.trim();
-  assert(taggedRevision === head, `harness tag ${PINNED_TAG} does not resolve to pinned HEAD`);
+  requireExactIdentity({ hostTagRevision: taggedRevision }, { hostTagRevision: PINNED_REVISION });
   const cliBin = path.join(source, "apps", "cli", "lib", "bin.js");
   const cliVersion = (await run(nodeBin, [cliBin, "--version"])).stdout.trim();
-  assert(cliVersion === PINNED_VERSION, `harness CLI ${cliVersion} != pinned ${PINNED_VERSION}`);
+  requireExactIdentity({ hostCliVersion: cliVersion }, { hostCliVersion: PINNED_VERSION });
   const mcpClientVersion = (
     await run(nodeBin, [
       "-p",
@@ -303,10 +303,7 @@ async function resolvePinnedHarness() {
       )}).version`,
     ])
   ).stdout.trim();
-  assert(
-    mcpClientVersion === PINNED_VERSION,
-    `mcp-client ${mcpClientVersion} != pinned ${PINNED_VERSION}`,
-  );
+  requireExactIdentity({ bridgeVersion: mcpClientVersion }, { bridgeVersion: PINNED_VERSION });
   return {
     source,
     cliBin,
@@ -384,7 +381,7 @@ async function materializePinnedHarness(nodeBinDir) {
     const tag = (
       await run("git", ["-C", suppliedEvidence, "rev-parse", `${PINNED_TAG}^{commit}`])
     ).stdout.trim();
-    assert(tag === PINNED_REVISION, `supplied harness tag ${PINNED_TAG} is not pinned`);
+    requireExactIdentity({ hostTagRevision: tag }, { hostTagRevision: PINNED_REVISION });
   }
   await run(
     "git",
@@ -976,23 +973,22 @@ const summary = { version: packageMetadata.version, phases: {} };
 try {
   await requirePrerequisite("required executable preflight", preflightRequiredExecutables);
   // ── Phase A: packed artifact fixture ────────────────────────────────────────
-  if (packageMetadata.version !== expectedVersion) {
-    fail(
-      `package.json version ${packageMetadata.version} does not match the pinned adapter fixture ${expectedVersion}`,
-    );
-  }
+  requireExactIdentity({ astVersion: packageMetadata.version }, { astVersion: expectedVersion });
   if (JSON.stringify(packageMetadata.dsh) !== '{"bundle":{"patch":"./cordis.patch.yml"}}') {
     fail(`package.json must declare exactly "dsh": {"bundle": {"patch": "./cordis.patch.yml"}}`);
   }
   const pinned = packageMetadata.deepseekHarness;
-  assert(
-    pinned?.revision === PINNED_REVISION,
-    "deepseekHarness.revision must equal the pinned revision",
-  );
-  assert(pinned?.tag === PINNED_TAG, "deepseekHarness.tag must equal the pinned tag");
-  assert(
-    pinned?.mcpClientVersion === PINNED_VERSION,
-    "deepseekHarness.mcpClientVersion must equal the pinned mcp-client version",
+  requireExactIdentity(
+    {
+      hostRevision: pinned?.revision,
+      hostTag: pinned?.tag,
+      bridgeVersion: pinned?.mcpClientVersion,
+    },
+    {
+      hostRevision: PINNED_REVISION,
+      hostTag: PINNED_TAG,
+      bridgeVersion: PINNED_VERSION,
+    },
   );
   assert(timeoutBudget.outerToolCallMs === 180_000, "shipped outer timeout budget changed");
   summary.timeoutBudget = timeoutBudget;
@@ -1002,6 +998,11 @@ try {
   await mkdir(packageDirectory, { recursive: true });
   await run(yarnExecutable, ["pack", "--out", archivePath], { cwd: repositoryRoot });
   summary.observedTarballSha256 = await sha256(archivePath);
+  const expectedAstTarballSha256 = summary.observedTarballSha256;
+  const expectedAdapterSha256 = await sha256(path.join(repositoryRoot, "cordis.patch.yml"));
+  const expectedAstEntrypointSha256 = createHash("sha256")
+    .update((await run("tar", ["-xOzf", archivePath, "package/dist/index.js"])).stdout)
+    .digest("hex");
   const publicArchivePath = await requirePrerequisite(
     "public v0.13.0 package identity",
     fetchPublicPackage,
@@ -1289,9 +1290,13 @@ try {
   const mcpClientArchive = await requirePrerequisite("pinned MCP bridge artifact", () =>
     packPinnedMcpClient(source),
   );
+  const expectedHostCliSha256 = identity.observedCliSha256;
+  const expectedBridgeTarballSha256 = await sha256(mcpClientArchive);
+  const expectedNodeVersion = identity.nodeVersion;
+  const expectedNodeSha256 = identity.observedNodeSha256;
   summary.harness = {
     ...identity,
-    observedMcpClientTarballSha256: await sha256(mcpClientArchive),
+    observedMcpClientTarballSha256: expectedBridgeTarballSha256,
   };
   await mkdir(dshHome, { recursive: true });
   const dshEnvironment = {
@@ -1367,15 +1372,59 @@ try {
   assert(probe.error === null, `harness probe failed: ${probe.error ?? "unknown"}`);
   summary.phases.c = "ok";
 
+  // Restore and independently re-resolve the normative pre-fixture configuration.
+  await writeFile(path.join(profileDir, "cordis.patch.yml"), nativeModePatch, "utf8");
+  const observedDumpConfig = (
+    await run(nodeBin, [cliBin, "--profile", "smoke", "--dump-config"], {
+      cwd: temporaryRoot,
+      env: dshEnvironment,
+    })
+  ).stdout;
+  const observedBridgeMetadata = JSON.parse(
+    await readFile(path.join(source, "packages", "mcp", "mcp-client", "package.json"), "utf8"),
+  );
+  const exactIdentity = {
+    hostRevision: (await run("git", ["-C", source, "rev-parse", "HEAD"])).stdout.trim(),
+    hostTag: (
+      await run("git", ["-C", source, "describe", "--tags", "--exact-match", "HEAD"])
+    ).stdout.trim(),
+    hostCliVersion: (await run(nodeBin, [cliBin, "--version"])).stdout.trim(),
+    hostCliSha256: await sha256(cliBin),
+    bridgeVersion: observedBridgeMetadata.version,
+    bridgeSourceRevision: (await run("git", ["-C", source, "rev-parse", "HEAD"])).stdout.trim(),
+    bridgeTarballSha256: await sha256(mcpClientArchive),
+    astVersion: installedMetadata.version,
+    astTarballSha256: await sha256(archivePath),
+    astEntrypointSha256: await sha256(resolvedEntrypoint),
+    adapterSha256: await sha256(path.join(installedPackageRoot, "cordis.patch.yml")),
+    effectiveConfigSha256: createHash("sha256").update(observedDumpConfig).digest("hex"),
+    nodeVersion: (await run(nodeBin, ["--version"])).stdout.trim(),
+    nodeSha256: await sha256(nodeBin),
+    nativeMode: /[ \t]+mode:\s*native\b/mu.test(observedDumpConfig) ? "native" : "",
+  };
+  const expectedIdentity = {
+    hostRevision: PINNED_REVISION,
+    hostTag: PINNED_TAG,
+    hostCliVersion: PINNED_VERSION,
+    hostCliSha256: expectedHostCliSha256,
+    bridgeVersion: PINNED_VERSION,
+    bridgeSourceRevision: PINNED_REVISION,
+    bridgeTarballSha256: expectedBridgeTarballSha256,
+    astVersion: expectedVersion,
+    astTarballSha256: expectedAstTarballSha256,
+    astEntrypointSha256: expectedAstEntrypointSha256,
+    adapterSha256: expectedAdapterSha256,
+    effectiveConfigSha256: createHash("sha256").update(dumpConfig).digest("hex"),
+    nodeVersion: expectedNodeVersion,
+    nodeSha256: expectedNodeSha256,
+    nativeMode: "native",
+  };
+  requireExactIdentity(exactIdentity, expectedIdentity);
+  summary.h03Identity = { authenticated: exactIdentity };
+
   const h03Control = path.join(temporaryRoot, "h03-control");
   const h03Nonce = `h03-${createHash("sha256").update(archivePath).digest("hex").slice(0, 24)}`;
   await mkdir(h03Control, { recursive: true });
-  // prettier-ignore
-  const exactIdentity = { hostRevision: identity.revision, hostTag: identity.tag, hostCliVersion: identity.cliVersion, hostCliSha256: identity.observedCliSha256, bridgeVersion: identity.mcpClientVersion, bridgeSourceRevision: identity.revision, bridgeTarballSha256: summary.harness.observedMcpClientTarballSha256, astVersion: installedMetadata.version, astTarballSha256: summary.observedTarballSha256, astEntrypointSha256: await sha256(resolvedEntrypoint), adapterSha256: await sha256(path.join(repositoryRoot, "cordis.patch.yml")), effectiveConfigSha256: createHash("sha256").update(dumpConfig).digest("hex"), nodeVersion: identity.nodeVersion, nodeSha256: identity.observedNodeSha256, nativeMode: summary.effectiveToolsMode };
-  // prettier-ignore
-  requireExactIdentity(exactIdentity, { hostRevision: PINNED_REVISION, hostTag: PINNED_TAG, hostCliVersion: PINNED_VERSION, bridgeVersion: PINNED_VERSION, bridgeSourceRevision: PINNED_REVISION, astVersion: expectedVersion, nativeMode: "native" });
-  // prettier-ignore
-  summary.h03Identity = { authenticated: { hostRevision: exactIdentity.hostRevision, hostTag: exactIdentity.hostTag, hostCliVersion: exactIdentity.hostCliVersion, bridgeVersion: exactIdentity.bridgeVersion, bridgeSourceRevision: exactIdentity.bridgeSourceRevision, astVersion: exactIdentity.astVersion, nativeMode: exactIdentity.nativeMode }, observations: { hostCliSha256: exactIdentity.hostCliSha256, bridgeTarballSha256: exactIdentity.bridgeTarballSha256, astTarballSha256: exactIdentity.astTarballSha256, astEntrypointSha256: exactIdentity.astEntrypointSha256, adapterSha256: exactIdentity.adapterSha256, effectiveConfigSha256: exactIdentity.effectiveConfigSha256, nodeVersion: exactIdentity.nodeVersion, nodeSha256: exactIdentity.nodeSha256 } };
   // prettier-ignore
   const descriptor = JSON.stringify({ controlDirectory: h03Control, nonce: h03Nonce, generation: 1 });
   const h03Patch = `${nativeModePatch}- id: mcp-ast
