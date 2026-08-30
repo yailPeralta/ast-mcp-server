@@ -53,8 +53,8 @@ The exact-host evidence suite MUST cover cold, queued, and recycled-worker paths
 
 #### Scenario: Recycled-worker cancellation rejects stale generation effects
 
-- GIVEN supervised execution deterministically crosses a worker recycle boundary
-- WHEN the correlated slow invocation reaches its AST-owned terminal condition
+- GIVEN a quiescent warm generation is recycled before slow work starts in its successor
+- WHEN that correlated successor-generation invocation is cancelled after admission
 - THEN cancellation and terminal evidence identify the owning invocation and worker generation
 - AND no stale completion, owned process, or temporary state survives cleanup
 

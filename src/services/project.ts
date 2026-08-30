@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { Project, type Node, type SourceFile } from "ts-morph";
 import type { FileFingerprint } from "./file-fingerprints.js";
+// prettier-ignore
+import { bindConfiguredH03Error, captureConfiguredH03Command, runConfiguredH03Fixture } from "./h03-timeout-fixture.js";
 import {
   InMemorySymbolIndex,
   SYMBOL_INDEX_SCHEMA_VERSION,
@@ -871,9 +873,12 @@ async function runSessionWithSyncPolicy<T>(
   operation: (context: ProjectContext, requestContext: ProjectOperationContext) => Promise<T> | T,
   allowSynchronizationFailure: boolean,
   requestContext: RequestContext,
+  h03Fixture = false,
 ): Promise<T> {
   requestContext.checkpoint();
-  return session.scheduler.run(
+  const h03Command = h03Fixture ? captureConfiguredH03Command() : undefined;
+  // prettier-ignore
+  try { return await session.scheduler.run(
     async (operationContext) => {
       operationContext.checkpoint();
       try {
@@ -884,10 +889,10 @@ async function runSessionWithSyncPolicy<T>(
       operationContext.checkpoint();
       operationContext.markExecuting();
       session.lastAccessSequence = nextProjectSessionAccessSequence();
-      return operation(session.context, operationContext);
-    },
-    { signal: requestContext.signal },
-  );
+      const execute = (context: ProjectOperationContext) => operation(session.context, context);
+      return h03Command ? runConfiguredH03Fixture(operationContext, execute, h03Command) : execute(operationContext);
+    }, { signal: requestContext.signal },
+  ); } catch (error) { bindConfiguredH03Error(error, h03Command); throw error; }
 }
 
 export async function withProject<T>(
@@ -960,6 +965,7 @@ function readProjectStatus(
     },
     true,
     requestContext,
+    true,
   );
 }
 

@@ -192,7 +192,6 @@ describe("DeepSeek Harness adapter patch", () => {
 describe("pinned Harness smoke contract", () => {
   it("proves every promised class, native presentation and bounded apply denial", async () => {
     const source = await readFile(SMOKE_PATH, "utf8");
-
     for (const qualifiedName of [
       "mcp__ast__ast_get_project_status",
       "mcp__ast__ast_rename_symbol",
@@ -224,6 +223,19 @@ describe("pinned Harness smoke contract", () => {
     );
     expect(source).toContain("BLOCKED:");
     expect(source).toContain('cleanup: "ok"');
+    expect(source.indexOf('command("h03-cold", "cold", "hold")')).toBeLessThan(
+      source.indexOf('command("h03-blocker", "blocker", "hold")'),
+    );
+    expect(source).toContain("recycleAbort.abort()");
+    expect(source).not.toContain('command("recycle", "cancel")');
+    expect(source).toContain('event.phase === "stale"');
+    expect(source).toContain("eventsDrained");
+    expect(source).toContain("rawMarkerSha256");
+    expect(source).not.toContain('origin("h03-queued", "queued", blockerStart.generation)');
+    expect(source).toContain('event.fixtureId === "queued" && event.phase === "error"');
+    // prettier-ignore
+    expect(source.indexOf("await rm(temporaryRoot")).toBeLessThan(source.indexOf("cleanupEvidenceSha256"));
+    expect(source).toContain("createH03CleanupEvidence(summary.h03)");
     expect(source).toContain("AST_H01_PROCESS_OWNER");
     expect(source).not.toContain("execFileAsync");
   });

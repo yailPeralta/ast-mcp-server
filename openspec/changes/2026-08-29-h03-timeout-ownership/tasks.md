@@ -42,10 +42,10 @@ Chain strategy: stacked-to-main (approved by user); tracker: https://github.com/
 
 ## Phase 3: Exact-Host Evidence (RED → GREEN → REFACTOR)
 
-- [ ] 3.1 RED — In `scripts/dsh-adapter-smoke.mjs`, require host/bridge/AST/adapter/Node identities; mismatch returns `BLOCKED` before fixtures.
-- [ ] 3.2 RED — Add cold deadline, queued no-late-start, and recycle stale-generation assertions; reject `ToolTimeoutError`, `TOOL_TIMEOUT`, and unrelated `AbortError`.
-- [ ] 3.3 GREEN — Use `100/1000/100/1500`, events, call/correlation/generation joins, bounded JSON errors, and `finally` cleanup readback.
-- [ ] 3.4 REFACTOR — Deduplicate bounded helpers in `scripts/runtime-process.mjs`; run `yarn build && yarn test:dsh-adapter`.
+- [x] 3.1 RED — In `scripts/dsh-adapter-smoke.mjs`, require host/bridge/AST/adapter/Node identities; mismatch returns `BLOCKED` before fixtures.
+- [x] 3.2 RED — Add cold deadline, queued no-late-start, and recycle stale-generation assertions; reject `ToolTimeoutError`, `TOOL_TIMEOUT`, and unrelated `AbortError`.
+- [x] 3.3 GREEN — Use `100/1000/100/1500`, events, call/correlation/generation joins, bounded JSON errors, and `finally` cleanup readback.
+- [x] 3.4 REFACTOR — Deduplicate bounded helpers in `scripts/runtime-process.mjs`; run `yarn build && yarn test:dsh-adapter`.
 
 ## Phase 4: Docs, Review, CI, Delivery
 

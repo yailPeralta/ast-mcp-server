@@ -155,6 +155,13 @@ export function runBoundedCommand(command, args, options = {}) {
   });
 }
 
+// prettier-ignore
+export function requireExactIdentity(observed, expected) { for (const [key, value] of Object.entries(expected)) { if (value === undefined || value === null || value === "") throw new Error(`BLOCKED: expected identity ${key} is missing`); if (observed?.[key] === undefined || observed[key] === null || observed[key] === "") throw new Error(`BLOCKED: observed identity ${key} is missing`); if (observed[key] !== value) throw new Error(`BLOCKED: identity ${key} differs from the pinned value`); } return observed; }
+// prettier-ignore
+export function createH03CleanupEvidence(h03) { return h03 ? { rawMarkerSha256: h03.rawMarkerSha256, controllerReadback: h03.readback, ownedProcesses: 0, profileAndControlRemoved: true } : undefined; }
+// prettier-ignore
+export function classifyExactHostToolError(result) { const name = result?.error?.info?.name, hostCode = result?.error?.info?.code; if (name === "ToolTimeoutError" || hostCode === "TOOL_TIMEOUT") throw new Error("generic Harness timeout won ownership"); if (name === "AbortError") throw new Error("unrelated AbortError classified as AST cancellation"); if (result?.isError !== true) throw new Error("exact-host failure must set isError true"); const text = result?.error?.message; if (typeof text !== "string" || Buffer.byteLength(text) > 4096) throw new Error("exact-host tool error did not contain a bounded AST JSON envelope"); let envelope; try { envelope = JSON.parse(text); } catch { throw new Error("exact-host tool error did not contain a bounded AST JSON envelope"); } const detail = envelope?.error; if (Object.keys(envelope ?? {}).join() !== "error" || Object.keys(detail ?? {}).sort().join() !== "code,correlation_id,message") throw new Error("exact-host error envelope has unexpected keys"); const { code, correlation_id: correlationId, message } = detail; if (!["QUEUE_WAIT_TIMEOUT", "OPERATION_DEADLINE_EXCEEDED", "REQUEST_CANCELLED"].includes(code)) throw new Error(`unexpected exact-host error code ${String(code)}`); if (!/^[0-9a-f-]{36}$/u.test(correlationId)) throw new Error("exact-host error omitted its correlation id"); if (typeof message !== "string" || message.length === 0 || Buffer.byteLength(message) > 1024) throw new Error("exact-host error message was not bounded"); return { code, correlationId, message, name, envelopeBytes: Buffer.byteLength(text) }; }
+
 export function parseProbeMarker(stderr) {
   const match = /DSH_PROBE_RESULT:(\{.*\})\n/u.exec(stderr);
   if (!match) return { status: "missing" };

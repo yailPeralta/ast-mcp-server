@@ -32,7 +32,8 @@ import { URL, fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import yaml from "yaml";
 import { validateTimeoutBudget } from "./harness-timeout-budget.mjs";
-import { parseProbeMarker, runBoundedCommand, terminateProcessTree } from "./runtime-process.mjs";
+// prettier-ignore
+import { classifyExactHostToolError, createH03CleanupEvidence, parseProbeMarker, requireExactIdentity, runBoundedCommand, terminateProcessTree } from "./runtime-process.mjs";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const packageMetadata = JSON.parse(
@@ -49,6 +50,8 @@ const PUBLIC_PACKAGE_INTEGRITY =
   "sha512-vbna6hhjX+VlayTnrgWQ/EitxkBmhVza0az6J/MCpE14M4Yn50D4yTQZrrcjfCi05sVhJhWFGPnzv6VE3V9KIw==";
 const PUBLIC_PACKAGE_SHASUM = "166f95121a72f0b03c325cef586a211cd9107a24";
 const H01_TOOL_NAME = "mcp__ast__ast_get_project_status";
+// prettier-ignore
+const H03_COMPRESSED_BUDGET = validateTimeoutBudget({ queueWaitMs: 100, executionDeadlineMs: 1000, marginMs: 100, outerToolCallMs: 1500 });
 const PUBLIC_EMPTY_RESULT_MARKER = "(ast_get_project_status returned no model-visible content)";
 let ownedTransportSequence = 0;
 
@@ -457,7 +460,8 @@ async function bootWithProbe(cliBin, nodeBin, environment, fixtureProject, dshHo
     });
     assert(marker !== undefined, "harness probe produced no DSH_PROBE_RESULT marker");
     assert(marker.parseError === undefined, marker.parseError ?? "invalid probe marker");
-    return marker;
+    const rawMarker = /DSH_PROBE_RESULT:(\{.*\})\n/u.exec(stderr)?.[0] ?? "";
+    return { ...marker, rawMarkerSha256: createHash("sha256").update(rawMarker).digest("hex") };
   } finally {
     await terminateProcessTree(child);
   }
@@ -561,6 +565,34 @@ function probeSource() {
     marker.error = String(error).slice(0, 240);
     process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n");
   });
+}
+`;
+}
+
+function h03ProbeSource() {
+  return `import { readFileSync, watch, writeFileSync } from "node:fs";
+import path from "node:path";
+export default function apply(ctx) {
+  const root = process.env.AST_PROBE_PROJECT_ROOT, control = process.env.AST_H03_CONTROL_DIRECTORY, nonce = process.env.AST_H03_NONCE;
+  const eventPath = path.join(control, "events.jsonl"), marker = { scenario: "cold-deadline/queued-no-late-start/recycle-stale-generation", calls: {}, events: [], error: null };
+  const events = () => { try { return readFileSync(eventPath, "utf8").trim().split("\\n").filter(Boolean).map(JSON.parse); } catch { return []; } };
+  const command = (callId, fixtureId, mode) => writeFileSync(path.join(control, "command.json"), JSON.stringify({ callId, fixtureId, mode, nonce }));
+  const waitEvent = (predicate) => new Promise((resolve, reject) => { const check = () => { const found = events().find(predicate); if (found) { clearTimeout(timer); observer.close(); resolve(found); } }; const observer = watch(control, { persistent: false }, check); const timer = setTimeout(() => { observer.close(); reject(new Error("H-03 event budget expired")); }, 10000); check(); });
+  const execute = (callId, signal) => ctx.tools.execute({ callId, name: ${JSON.stringify(H01_TOOL_NAME)}, arguments: { project_root: root }, signal });
+  const waitTool = () => new Promise((resolve, reject) => { let stop; const timer = setTimeout(() => { stop?.(); reject(new Error("H-03 tool discovery budget expired")); }, 30000); const check = () => { if (!ctx.tools.schemas().some((tool) => tool.name === ${JSON.stringify(H01_TOOL_NAME)})) return; clearTimeout(timer); stop?.(); resolve(); }; stop = ctx.on("tools/change", check); check(); });
+  async function run() {
+    await waitTool(); command("h03-cold", "cold", "hold"); marker.calls.cold = await execute("h03-cold", new AbortController().signal);
+    command("h03-blocker", "blocker", "hold"); const blocker = execute("h03-blocker", new AbortController().signal);
+    await waitEvent((event) => event.fixtureId === "blocker" && event.phase === "started"); command("h03-queued", "queued", "hold"); marker.calls.queued = await execute("h03-queued", new AbortController().signal); marker.calls.blocker = await blocker;
+    await waitEvent((event) => event.fixtureId === "blocker" && event.phase === "terminal"); command("h03-warm", "warm", "pass"); marker.calls.warm = await execute("h03-warm", new AbortController().signal);
+    const warm = await waitEvent((event) => event.fixtureId === "warm" && event.phase === "started"); await waitEvent((event) => event.phase === "recycled" && event.generation === warm.generation);
+    const recycleAbort = new AbortController(); command("h03-recycle", "recycle", "hold"); const recycle = execute("h03-recycle", recycleAbort.signal); const recycled = await waitEvent((event) => event.fixtureId === "recycle" && event.phase === "started");
+    if (recycled.generation !== warm.generation + 1) throw new Error("stale worker generation started"); recycleAbort.abort(); marker.callerAbortAcknowledged = (await recycle).isError === true;
+    await waitEvent((event) => event.fixtureId === "recycle" && event.phase === "terminal"); await waitEvent((event) => event.fixtureId === "recycle" && event.phase === "error");
+    command("h03-readback", "readback", "readback"); marker.calls.readback = await execute("h03-readback", new AbortController().signal); marker.events = events();
+    process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n"); ctx.get("appExit")?.(0);
+  }
+  void run().catch((error) => { marker.error = String(error).slice(0, 240); process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n"); ctx.get("appExit")?.(1); });
 }
 `;
 }
@@ -1335,6 +1367,112 @@ try {
   assert(probe.error === null, `harness probe failed: ${probe.error ?? "unknown"}`);
   summary.phases.c = "ok";
 
+  const h03Control = path.join(temporaryRoot, "h03-control");
+  const h03Nonce = `h03-${createHash("sha256").update(archivePath).digest("hex").slice(0, 24)}`;
+  await mkdir(h03Control, { recursive: true });
+  // prettier-ignore
+  const exactIdentity = { hostRevision: identity.revision, hostTag: identity.tag, hostCliVersion: identity.cliVersion, hostCliSha256: identity.observedCliSha256, bridgeVersion: identity.mcpClientVersion, bridgeSourceRevision: identity.revision, bridgeTarballSha256: summary.harness.observedMcpClientTarballSha256, astVersion: installedMetadata.version, astTarballSha256: summary.observedTarballSha256, astEntrypointSha256: await sha256(resolvedEntrypoint), adapterSha256: await sha256(path.join(repositoryRoot, "cordis.patch.yml")), effectiveConfigSha256: createHash("sha256").update(dumpConfig).digest("hex"), nodeVersion: identity.nodeVersion, nodeSha256: identity.observedNodeSha256, nativeMode: summary.effectiveToolsMode };
+  // prettier-ignore
+  requireExactIdentity(exactIdentity, { hostRevision: PINNED_REVISION, hostTag: PINNED_TAG, hostCliVersion: PINNED_VERSION, bridgeVersion: PINNED_VERSION, bridgeSourceRevision: PINNED_REVISION, astVersion: expectedVersion, nativeMode: "native" });
+  // prettier-ignore
+  summary.h03Identity = { authenticated: { hostRevision: exactIdentity.hostRevision, hostTag: exactIdentity.hostTag, hostCliVersion: exactIdentity.hostCliVersion, bridgeVersion: exactIdentity.bridgeVersion, bridgeSourceRevision: exactIdentity.bridgeSourceRevision, astVersion: exactIdentity.astVersion, nativeMode: exactIdentity.nativeMode }, observations: { hostCliSha256: exactIdentity.hostCliSha256, bridgeTarballSha256: exactIdentity.bridgeTarballSha256, astTarballSha256: exactIdentity.astTarballSha256, astEntrypointSha256: exactIdentity.astEntrypointSha256, adapterSha256: exactIdentity.adapterSha256, effectiveConfigSha256: exactIdentity.effectiveConfigSha256, nodeVersion: exactIdentity.nodeVersion, nodeSha256: exactIdentity.nodeSha256 } };
+  // prettier-ignore
+  const descriptor = JSON.stringify({ controlDirectory: h03Control, nonce: h03Nonce, generation: 1 });
+  const h03Patch = `${nativeModePatch}- id: mcp-ast
+  config:
+    serverName: ast
+    transport: stdio
+    command: !!js process.execPath
+    args:
+      - !!js process.getBuiltinModule('node:url').fileURLToPath(new URL('node_modules/ast-mcp-server/dist/index.js', baseUrl))
+    cwd: !!js process.cwd()
+    failOnStartupError: true
+    toolCallTimeoutMs: ${H03_COMPRESSED_BUDGET.outerToolCallMs}
+    env:
+      AST_MCP_APPLY_GUARD: deny
+      AST_MCP_TEXT_PROJECTION: canonical_json
+      AST_COMPILER_WORKER_MODE: supervised
+      AST_COMPILER_WORKER_IDLE_TTL_MS: '100'
+      AST_QUEUE_WAIT_TIMEOUT_MS: '${H03_COMPRESSED_BUDGET.queueWaitMs}'
+      AST_OPERATION_DEADLINE_MS: '${H03_COMPRESSED_BUDGET.executionDeadlineMs}'
+      AST_H03_FIXTURE: '${descriptor}'
+- insert:
+    - id: h03-probe
+      name: './h03-probe.mjs'
+      inject: ['tools']
+`;
+  await writeFile(path.join(profileDir, "h03-probe.mjs"), h03ProbeSource(), "utf8");
+  await writeFile(path.join(profileDir, "cordis.patch.yml"), h03Patch, "utf8");
+  const h03 = await bootWithProbe(
+    cliBin,
+    nodeBin,
+    { ...dshEnvironment, AST_H03_CONTROL_DIRECTORY: h03Control, AST_H03_NONCE: h03Nonce },
+    fixtureProject,
+    dshHome,
+  );
+  assert(h03.error === null, `H-03 exact-host probe failed: ${h03.error ?? "unknown"}`);
+  const rawH03Errors = JSON.stringify({ calls: h03.calls, events: h03.events });
+  for (const forbidden of ["ToolTimeoutError", "TOOL_TIMEOUT", "AbortError"]) {
+    assert(!rawH03Errors.includes(forbidden), `H-03 observed forbidden ${forbidden} ownership`);
+  }
+  const cold = classifyExactHostToolError(h03.calls?.cold);
+  const queued = classifyExactHostToolError(h03.calls?.queued);
+  const blocker = classifyExactHostToolError(h03.calls?.blocker);
+  // prettier-ignore
+  const queuedError = h03.events.find((event) => event.fixtureId === "queued" && event.phase === "error");
+  const queuedTerminal = classifyExactHostToolError(queuedError?.result);
+  const recycle = classifyExactHostToolError(
+    h03.events.find((event) => event.fixtureId === "recycle" && event.phase === "error")?.result,
+  );
+  assert(cold.code === "OPERATION_DEADLINE_EXCEEDED", "cold deadline was not AST-owned");
+  assert(queued.code === "QUEUE_WAIT_TIMEOUT", "queued timeout was not AST-owned");
+  assert(blocker.code === "OPERATION_DEADLINE_EXCEEDED", "blocker did not settle at AST deadline");
+  assert(recycle.code === "REQUEST_CANCELLED", "recycled call was not cancelled");
+  assert(h03.callerAbortAcknowledged === true, "Harness did not acknowledge caller cancellation");
+  assert(
+    h03.calls?.warm?.isError === false && h03.calls?.readback?.isError === false,
+    "H-03 successful control call failed",
+  );
+  assert(
+    h03.events[0]?.fixtureId === "cold",
+    "cold deadline did not run before any warmed generation",
+  );
+  assert(!h03.events.some((event) => event.phase === "stale"), "exact host accepted a stale phase");
+  const eventsFor = (fixtureId, callId) =>
+    h03.events.filter((event) => event.fixtureId === fixtureId && event.callId === callId);
+  const coldEvents = eventsFor("cold", "h03-cold");
+  const recycleEvents = eventsFor("recycle", "h03-recycle");
+  const warmStart = eventsFor("warm", "h03-warm").find((event) => event.phase === "started");
+  // prettier-ignore
+  for (const [name, allEvents] of [["cold", coldEvents], ["recycle", recycleEvents]]) {
+    const events_ = allEvents.filter((event) => ["started", "terminal"].includes(event.phase));
+    assert(events_.length === 2 && events_[0].phase === "started" && events_[1].phase === "terminal", `${name} did not have one exact terminal path`);
+  }
+  // prettier-ignore
+  const queuedOrigin = queuedError && { callId: queuedError.callId, fixtureId: queuedError.fixtureId, generation: queuedError.generation };
+  // prettier-ignore
+  assert(eventsFor("queued", "h03-queued").filter((event) => event.phase === "started").length === 0, "queued operation started after timeout");
+  // prettier-ignore
+  assert(queuedOrigin?.callId === "h03-queued" && queuedOrigin.fixtureId === "queued" && Number.isSafeInteger(queuedOrigin.generation) && queuedTerminal.code === "QUEUE_WAIT_TIMEOUT" && queuedTerminal.correlationId === queued.correlationId, "queued terminal did not retain request-local submission identity");
+  assert(
+    Number.isSafeInteger(warmStart?.generation) &&
+      recycleEvents.every((event) => event.generation === warmStart.generation + 1),
+    "recycled call accepted a stale-generation effect",
+  );
+  const readback = h03.events.find((event) => event.phase === "readback");
+  assert(
+    readback?.active === 0 &&
+      readback.held === 0 &&
+      readback.abortListeners === 0 &&
+      readback.eventsDrained >= 2,
+    "H-03 worker resources were not drained",
+  );
+  // prettier-ignore
+  const join = (origin, terminal) => ({ ...origin, correlationId: terminal.correlationId });
+  // prettier-ignore
+  summary.h03 = { budget: H03_COMPRESSED_BUDGET, joins: { cold: join({ callId: "h03-cold", fixtureId: "cold", generation: coldEvents[0].generation }, cold), queued: join(queuedOrigin, queued), recycle: join({ callId: "h03-recycle", fixtureId: "recycle", generation: recycleEvents[0].generation }, recycle) }, rawMarkerSha256: h03.rawMarkerSha256, readback };
+  summary.phases.h03 = "ok";
+
   // ── Phase D: native agent/session visibility + durable cold replay (H-01a) ──
   const harness = { source, cliBin, nodeBin };
   const expectedWorkspaceSha256 = await fixtureSha256(fixtureProject);
@@ -1411,6 +1549,9 @@ try {
     },
   );
   assert(!remains, "temporary Harness profile/workspace state survived teardown");
+  const cleanupEvidence = createH03CleanupEvidence(summary.h03);
+  // prettier-ignore
+  if (cleanupEvidence) summary.h03Cleanup = { ...cleanupEvidence, cleanupEvidenceSha256: hashJson(cleanupEvidence) };
 }
 
 console.log(`DSH_ADAPTER_SMOKE_OK:${JSON.stringify({ ...summary, cleanup: "ok" })}`);

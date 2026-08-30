@@ -1,10 +1,12 @@
-import { statSync } from "node:fs";
+import { appendFileSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
 import type { ProjectOperationContext } from "./project-operation-scheduler.js";
-import type { H03FixtureDescriptor } from "./runtime-policy.js";
+import { parseH03FixtureDescriptor, type H03FixtureDescriptor } from "./runtime-policy.js";
 
 const FIXTURE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 export interface H03FixtureEvent {
   readonly fixtureId: string;
+  readonly callId: string;
   readonly generation: number;
   readonly nonce: string;
   readonly phase: "started" | "terminal" | "stale";
@@ -15,6 +17,7 @@ export interface H03FixtureHook {
     generation: number,
     admittedContext: ProjectOperationContext,
     operation: (context: ProjectOperationContext) => Promise<T> | T,
+    callId?: string,
   ): Promise<T>;
 }
 
@@ -80,14 +83,16 @@ export class H03TimeoutFixtureController implements H03FixtureHook {
     generation: number,
     context: ProjectOperationContext,
     operation: (context: ProjectOperationContext) => Promise<T> | T,
+    callId = fixtureId,
   ): Promise<T> {
     this.#assertId(fixtureId);
-    if (generation !== this.#generation) return this.#stale(fixtureId, generation);
+    this.#assertId(callId);
+    if (generation !== this.#generation) return this.#stale(fixtureId, generation, callId);
     const generationSignal = this.#generationAbort.signal;
     const signal = AbortSignal.any([context.signal, generationSignal]);
-    const hooked = this.#context(context, signal, generationSignal, fixtureId, generation);
+    const hooked = this.#context(context, signal, generationSignal, fixtureId, generation, callId);
     this.#active += 1;
-    this.#emit({ fixtureId, generation, nonce: this.#descriptor.nonce, phase: "started" });
+    this.#emit({ callId, fixtureId, generation, nonce: this.#descriptor.nonce, phase: "started" });
     try {
       const gate = this.#gates.get(this.#key(fixtureId, generation));
       if (gate) await this.#awaitGate(this.#key(fixtureId, generation), gate, hooked);
@@ -97,7 +102,13 @@ export class H03TimeoutFixtureController implements H03FixtureHook {
       return result;
     } finally {
       this.#active -= 1;
-      this.#emit({ fixtureId, generation, nonce: this.#descriptor.nonce, phase: "terminal" });
+      this.#emit({
+        callId,
+        fixtureId,
+        generation,
+        nonce: this.#descriptor.nonce,
+        phase: "terminal",
+      });
     }
   }
 
@@ -122,10 +133,11 @@ export class H03TimeoutFixtureController implements H03FixtureHook {
     generationSignal: AbortSignal,
     fixtureId: string,
     generation: number,
+    callId: string,
   ): ProjectOperationContext {
     const checkpoint = () => {
       if (generationSignal.aborted || generation !== this.#generation)
-        this.#stale(fixtureId, generation);
+        this.#stale(fixtureId, generation, callId);
       context.checkpoint();
     };
     return {
@@ -167,14 +179,19 @@ export class H03TimeoutFixtureController implements H03FixtureHook {
     }
   }
 
-  #stale(fixtureId: string, generation: number): never {
+  #stale(fixtureId: string, generation: number, callId: string): never {
     this.#staleSettlements += 1;
-    this.#emit({ fixtureId, generation, nonce: this.#descriptor.nonce, phase: "stale" });
+    this.#emit({ callId, fixtureId, generation, nonce: this.#descriptor.nonce, phase: "stale" });
     throw new H03TimeoutFixtureError();
   }
 
   #emit(event: H03FixtureEvent): void {
     this.#events.push(Object.freeze(event));
+    appendFileSync(
+      path.join(this.#descriptor.controlDirectory, "events.jsonl"),
+      `${JSON.stringify(event)}\n`,
+      { encoding: "utf8", flag: "a" },
+    );
   }
 
   #assertId(fixtureId: string): void {
@@ -185,3 +202,38 @@ export class H03TimeoutFixtureController implements H03FixtureHook {
     return `${generation}:${fixtureId}`;
   }
 }
+
+interface H03FixtureCommand {
+  readonly callId: string;
+  readonly fixtureId: string;
+  readonly nonce: string;
+  readonly mode: "hold" | "pass" | "readback";
+}
+
+let configuredController: H03TimeoutFixtureController | undefined;
+let configuredDescriptor: H03FixtureDescriptor | undefined;
+
+// prettier-ignore
+type ConfiguredFixture = { readonly controller: H03TimeoutFixtureController; readonly descriptor: H03FixtureDescriptor };
+export type H03CommandContext = ConfiguredFixture & { readonly command: H03FixtureCommand };
+const errorCommands = new WeakMap<object, H03CommandContext>();
+// Compact closed test-only wiring preserves PR3's hard review budget.
+// prettier-ignore
+function configuredFixture(): ConfiguredFixture | undefined { const descriptor = parseH03FixtureDescriptor(process.env.AST_H03_FIXTURE); if (!descriptor) return undefined; if (!configuredController || configuredDescriptor?.generation !== descriptor.generation) { configuredDescriptor = descriptor; configuredController = new H03TimeoutFixtureController(descriptor); } return { controller: configuredController, descriptor }; }
+
+// prettier-ignore
+function readCommand(descriptor: H03FixtureDescriptor): H03FixtureCommand { const value = JSON.parse(readFileSync(path.join(descriptor.controlDirectory, "command.json"), "utf8")) as Record<string, unknown>; if (Object.keys(value).sort().join(",") !== "callId,fixtureId,mode,nonce" || typeof value.callId !== "string" || !FIXTURE_ID.test(value.callId) || typeof value.fixtureId !== "string" || !FIXTURE_ID.test(value.fixtureId) || value.nonce !== descriptor.nonce || !["hold", "pass", "readback"].includes(value.mode as string)) throw new Error("Invalid H-03 fixture command."); return value as unknown as H03FixtureCommand; }
+
+// Capture once before scheduler enqueue; later command.json writes cannot relabel this request.
+// prettier-ignore
+export function captureConfiguredH03Command(): H03CommandContext | undefined { const fixture = configuredFixture(); return fixture && Object.freeze({ ...fixture, command: readCommand(fixture.descriptor) }); }
+// prettier-ignore
+export function bindConfiguredH03Error(error: unknown, captured: H03CommandContext | undefined): void { if (captured && typeof error === "object" && error !== null) errorCommands.set(error, captured); }
+// prettier-ignore
+export async function runConfiguredH03Fixture<T>(context: ProjectOperationContext, operation: (context: ProjectOperationContext) => Promise<T> | T, captured: H03CommandContext): Promise<T> { const { controller, descriptor, command } = captured; if (command.mode === "readback") { const snapshot = controller.snapshot(), eventsDrained = controller.drainEvents().length; appendFileSync(path.join(descriptor.controlDirectory, "events.jsonl"), `${JSON.stringify({ ...snapshot, callId: command.callId, eventsDrained, fixtureId: command.fixtureId, generation: descriptor.generation, nonce: descriptor.nonce, phase: "readback" })}\n`); return operation(context); } if (command.mode === "hold") controller.hold(command.fixtureId); return controller.run(command.fixtureId, descriptor.generation, context, operation, command.callId); }
+
+// prettier-ignore
+export function emitConfiguredH03HostEvent(phase: "recycled", generation: number): void { const descriptor = parseH03FixtureDescriptor(process.env.AST_H03_FIXTURE); if (!descriptor) return; appendFileSync(path.join(descriptor.controlDirectory, "events.jsonl"), `${JSON.stringify({ fixtureId: "host", generation, nonce: descriptor.nonce, phase })}\n`, { encoding: "utf8", flag: "a" }); }
+
+// prettier-ignore
+export function emitConfiguredH03ErrorEvidence(text: string, error: unknown): void { const captured = typeof error === "object" && error !== null ? errorCommands.get(error) : undefined; if (!captured) return; const { descriptor, command } = captured; appendFileSync(path.join(descriptor.controlDirectory, "events.jsonl"), `${JSON.stringify({ callId: command.callId, fixtureId: command.fixtureId, generation: descriptor.generation, nonce: descriptor.nonce, phase: "error", result: { isError: true, error: { info: { name: error instanceof Error ? error.name : "Error" }, message: text } } })}\n`); }
