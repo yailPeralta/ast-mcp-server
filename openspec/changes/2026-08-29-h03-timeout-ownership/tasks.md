@@ -35,10 +35,10 @@ Chain strategy: stacked-to-main (approved by user); tracker: https://github.com/
 
 ## Phase 2: Minimal Closed Seam (RED → GREEN → REFACTOR)
 
-- [ ] 2.1 RED — Prove `src/server.ts` still registers exactly 15 guarded tools and malformed fixture descriptors fail closed.
-- [ ] 2.2 RED — Test hold/release, abort, queued-never-started, stale generation, resource counters, and process cleanup.
-- [ ] 2.3 GREEN — Implement `src/services/h03-timeout-fixture.ts` as an `AST_H03_FIXTURE`-gated existing-tool wrapper over `withProjectOperation`; add no tool. Validate absolute control directory/nonce and forward closed fields via `src/services/runtime-policy.ts`.
-- [ ] 2.4 REFACTOR — Isolate test-only code; if this wrapper cannot prove all scenarios, revise design before adding visible surface.
+- [x] 2.1 RED — Prove `src/server.ts` still registers exactly 15 guarded tools and malformed fixture descriptors fail closed.
+- [x] 2.2 RED — Test hold/release, abort, queued-never-started, same-ID regeneration, stale post-await rejection, and in-memory resource cleanup.
+- [x] 2.3 GREEN — Implement an `AST_H03_FIXTURE`-gated hook for use inside an existing tool's scheduler admission; add no tool. Parse/forward the closed descriptor, validate its directory when consumed, and retain nonce/generation in drained events.
+- [x] 2.4 REFACTOR — Expose the explicit Phase-3-consumable hook without exact-host wiring or scheduler re-entry; keep process/disposable-state cleanup assertions in Phase 3.
 
 ## Phase 3: Exact-Host Evidence (RED → GREEN → REFACTOR)
 

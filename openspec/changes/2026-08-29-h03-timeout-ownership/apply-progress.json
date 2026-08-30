@@ -1,13 +1,17 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-08-29-h03-timeout-ownership",
-  "workUnit": "Phase 1 Budget Contract",
-  "delivery": "size:exception(450, user-approved, Phase1-only)",
+  "workUnit": "Phase 2 Minimal Closed Seam",
+  "delivery": "stacked-to-main(parent=fix/h03-budget-contract,budget=400)",
   "stage": "refactored",
   "tasks": [
     { "id": "1.1", "name": "RED budget contract", "status": "completed" },
     { "id": "1.2", "name": "GREEN package and patch budget", "status": "completed" },
-    { "id": "1.3", "name": "REFACTOR shared validator", "status": "completed" }
+    { "id": "1.3", "name": "REFACTOR shared validator", "status": "completed" },
+    { "id": "2.1", "name": "RED catalog and descriptor", "status": "completed" },
+    { "id": "2.2", "name": "RED fixture controller", "status": "completed" },
+    { "id": "2.3", "name": "GREEN admitted-operation hook", "status": "completed" },
+    { "id": "2.4", "name": "REFACTOR closed Phase-3 seam", "status": "completed" }
   ],
   "tdd": {
     "red": [
@@ -24,6 +28,13 @@
         "command": "yarn vitest run test/dsh-adapter.test.ts",
         "exitCode": 1,
         "failure": "smoke source did not call validateTimeoutBudget"
+      },
+      {
+        "id": "phase-2-correction",
+        "file": "test/h03-timeout-fixture.test.ts",
+        "command": "yarn vitest run test/h03-timeout-fixture.test.ts",
+        "exitCode": 1,
+        "failure": "5/5 adversarial tests failed before generation-safe admitted hook"
       }
     ],
     "green": [
@@ -33,6 +44,13 @@
         "command": "yarn vitest run test/dsh-adapter.test.ts",
         "exitCode": 0,
         "result": "17 tests passed"
+      },
+      {
+        "id": "phase-2-correction",
+        "file": "test/h03-timeout-fixture.test.ts",
+        "command": "yarn vitest run test/h03-timeout-fixture.test.ts",
+        "exitCode": 0,
+        "result": "4 tests passed"
       }
     ],
     "refactored": [
@@ -42,13 +60,19 @@
         "command": "yarn vitest run test/dsh-adapter.test.ts",
         "exitCode": 0,
         "result": "17 passed; runtime defaults equal package budget"
+      },
+      {
+        "id": "phase-2-correction",
+        "command": "yarn vitest run test/h03-timeout-fixture.test.ts",
+        "exitCode": 0,
+        "result": "admitted hook; directory/nonce consumed; same-ID generations isolated; events drained"
       }
     ]
   },
   "evidence": {
-    "safetyNet": "yarn vitest run test/dsh-adapter.test.ts: exit 0, 17 tests passed",
-    "runtimeHarness": "N/A: Phase 1 is a static metadata/patch contract",
-    "rollback": "package.json, cordis.patch.yml, scripts/harness-timeout-budget.{mjs,d.mts}, scripts/dsh-adapter-smoke.mjs, test/dsh-adapter.test.ts, tasks.md, and apply-progress.json"
+    "safetyNet": "focused adapter/fixture/runtime/policy/operations: exit 0, 57 tests passed",
+    "runtimeHarness": "N/A: Phase 2 exposes a component hook; Phase 3 owns exact-host wiring and process/disposable-state cleanup",
+    "rollback": "src/services/h03-timeout-fixture.ts, src/services/runtime-policy.ts, tests and Phase 2 OpenSpec edits"
   },
-  "updatedAt": "2026-08-30T03:04:00Z"
+  "updatedAt": "2026-08-30T03:43:09Z"
 }

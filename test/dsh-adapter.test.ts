@@ -377,6 +377,7 @@ describe("deny-by-default apply guard", () => {
 
     expect(registered).toHaveLength(15);
     expect(registered).not.toContain("ast_apply_operation");
+    expect(registered.some((name) => name.includes("h03") || name.includes("fixture"))).toBe(false);
     expect(registered).toEqual(
       expect.arrayContaining([...toolCatalog.byEffect.read, ...toolCatalog.byEffect.prepare]),
     );

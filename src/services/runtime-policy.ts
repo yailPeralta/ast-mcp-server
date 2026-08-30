@@ -154,6 +154,37 @@ const WORKER_ENV_KEYS = [
   "AST_SYMBOL_INDEX_BUSY_TIMEOUT_MS",
 ] as const;
 const MAX_WORKER_ENV_VALUE_LENGTH = 4096;
+export interface H03FixtureDescriptor {
+  readonly controlDirectory: string;
+  readonly nonce: string;
+  readonly generation: number;
+}
+export function parseH03FixtureDescriptor(raw: unknown): H03FixtureDescriptor | undefined {
+  if (typeof raw !== "string" || raw.length > 1024 || raw.includes("\0")) return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).sort().join(",") !== "controlDirectory,generation,nonce")
+    return undefined;
+  const { controlDirectory, nonce, generation } = record;
+  if (
+    typeof controlDirectory !== "string" ||
+    controlDirectory.length > MAX_WORKER_ENV_VALUE_LENGTH ||
+    !path.isAbsolute(controlDirectory) ||
+    path.normalize(controlDirectory) !== controlDirectory ||
+    typeof nonce !== "string" ||
+    !/^[A-Za-z0-9_-]{16,64}$/.test(nonce) ||
+    !Number.isSafeInteger(generation) ||
+    (generation as number) < 1
+  )
+    return undefined;
+  return Object.freeze({ controlDirectory, nonce, generation: generation as number });
+}
 function validEnvironmentString(value: unknown): value is string {
   return (
     typeof value === "string" &&
@@ -185,6 +216,12 @@ export function createCompilerWorkerSpawnSpec(
       return { ok: false, reason: "invalid_environment" as const };
     }
     projected[key] = value;
+  }
+  const fixture = environment.AST_H03_FIXTURE;
+  if (fixture !== undefined) {
+    const descriptor = parseH03FixtureDescriptor(fixture);
+    if (!descriptor) return { ok: false, reason: "invalid_environment" as const };
+    projected.AST_H03_FIXTURE = JSON.stringify(descriptor);
   }
   const policy = parseRuntimePolicy(environment);
   Object.assign(projected, {
