@@ -1,9 +1,9 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-08-29-h03-timeout-ownership",
-  "workUnit": "Judgment Day correction JD-H03-001",
-  "delivery": "stacked-to-main(branch=docs/h03-timeout-closure,correction-budget=200)",
-  "stage": "judgment-day-approved",
+  "workUnit": "Phase 4 task 4.3 full CI and workflow gate remediation",
+  "delivery": "stacked-to-main(branch=docs/h03-timeout-closure,pr4-budget=400)",
+  "stage": "task-4.3-complete",
   "tasks": [
     { "id": "1.1", "name": "RED budget contract", "status": "completed" },
     { "id": "1.2", "name": "GREEN package and patch budget", "status": "completed" },
@@ -18,7 +18,7 @@
     { "id": "3.4", "name": "REFACTOR bounded runtime helpers", "status": "completed" },
     { "id": "4.1", "name": "Roadmap and evidence closure docs", "status": "completed" },
     { "id": "4.2", "name": "Blind adversarial review", "status": "completed" },
-    { "id": "4.3", "name": "Full CI and workflow gate", "status": "pending" },
+    { "id": "4.3", "name": "Full CI and workflow gate", "status": "completed" },
     { "id": "4.4", "name": "Ordered issue-linked delivery", "status": "pending" }
   ],
   "tdd": {
@@ -106,7 +106,109 @@
     "docsRuntimeHarness": "N/A: task 4.1 changes roadmap/evidence prose only and preserves the prior exact-host runtime receipt",
     "docsRollback": "Revert docs/roadmap.md, docs/ast-mcp-server-harness-improvement-report.md, tasks.md task 4.1, and this Phase 4 progress delta without removing Phase 1-3 evidence",
     "judgmentDayCorrection": "JD-H03-001: independent pre-boot expected identity vs re-observed host/bridge/AST/adapter/config/Node/native fields; gate precedes H-03 control creation; focused 26/26, format/lint/typecheck, build+test:dsh-adapter, and diff check exit 0; rollback scripts/dsh-adapter-smoke.mjs plus focused tests",
-    "judgmentDayVerdict": "APPROVED: 2/2 scoped re-judges closed JD-H03-001; 0 open severe and 0 fix-caused severe; correction 186/200 lines"
+    "judgmentDayVerdict": "APPROVED: 2/2 scoped re-judges closed JD-H03-001; 0 open severe and 0 fix-caused severe; correction 186/200 lines",
+    "task43GateFailure": {
+      "ordering": [
+        "yarn format:check",
+        "yarn lint",
+        "yarn typecheck",
+        "yarn test",
+        "yarn build",
+        "yarn test:dsh-adapter"
+      ],
+      "executed": [
+        {
+          "command": "yarn format:check",
+          "exitCode": 0,
+          "durationSeconds": 4.24,
+          "result": "All matched files use Prettier code style"
+        },
+        {
+          "command": "yarn lint",
+          "exitCode": 0,
+          "durationSeconds": 3.25,
+          "result": "No lint diagnostics emitted"
+        },
+        {
+          "command": "yarn typecheck",
+          "exitCode": 0,
+          "durationSeconds": 6.37,
+          "result": "No TypeScript diagnostics emitted"
+        },
+        {
+          "command": "yarn test",
+          "exitCode": 1,
+          "durationSeconds": 48.7,
+          "result": "1 failed and 911 passed across 72 test files; 1 failed and 71 passed files",
+          "failure": "test/canary-local-mcp.test.ts rejected duplicate inputs with ambient Git controls must be unset: GIT_PAGER instead of input paths must be unique"
+        }
+      ],
+      "notRun": [
+        "yarn build",
+        "yarn test:dsh-adapter",
+        "git diff --check and PR4 authored-line budget confirmation"
+      ],
+      "stopReason": "Canonical gate 4 failed; task 4.3 remains pending and later gates/checks were not executed.",
+      "ciInspection": "The mandatory quality job matrix covers Node 22.13.0 and 24 and runs yarn test:dsh-adapter after yarn build.",
+      "attemptAuthority": "gentle-ai was unavailable (command exit 127), so native status and same-attempt token authentication could not run; OpenSpec artifacts were used for fallback status."
+    },
+    "task43Remediation": {
+      "failedEvidenceRevision": "sha256:95856d4be56ed2307783fb484665138b53f0839a790000906732acc57e97e33a",
+      "environmentInspection": "assertNoAmbientGitControls rejects every inherited key whose name starts with GIT_; the runtime exposed only GIT_PAGER=cat, so every canonical and Git evidence command ran as env -u GIT_PAGER <command>.",
+      "ordering": [
+        "env -u GIT_PAGER yarn format:check",
+        "env -u GIT_PAGER yarn lint",
+        "env -u GIT_PAGER yarn typecheck",
+        "env -u GIT_PAGER yarn test",
+        "env -u GIT_PAGER yarn build",
+        "env -u GIT_PAGER yarn test:dsh-adapter",
+        "env -u GIT_PAGER git diff --check",
+        "env -u GIT_PAGER git diff --check test/h03-exact-timeout-ownership"
+      ],
+      "executed": [
+        {
+          "command": "env -u GIT_PAGER yarn format:check",
+          "exitCode": 0,
+          "result": "All matched files use Prettier code style"
+        },
+        {
+          "command": "env -u GIT_PAGER yarn lint",
+          "exitCode": 0,
+          "result": "No lint diagnostics emitted"
+        },
+        {
+          "command": "env -u GIT_PAGER yarn typecheck",
+          "exitCode": 0,
+          "result": "No TypeScript diagnostics emitted"
+        },
+        {
+          "command": "env -u GIT_PAGER yarn test",
+          "exitCode": 0,
+          "result": "73/73 test files and 914/914 tests passed: primary run 72 files and 912 tests in 46.14s; supervised-worker run 1 file and 2 tests in 15.29s"
+        },
+        {
+          "command": "env -u GIT_PAGER yarn build",
+          "exitCode": 0,
+          "result": "Build completed with no diagnostics"
+        },
+        {
+          "command": "env -u GIT_PAGER yarn test:dsh-adapter",
+          "exitCode": 0,
+          "result": "DSH_ADAPTER_SMOKE_OK version 0.13.0; phases a/b/c/h03/d ok; exact Harness cd5ef8148158c3a752a658978873241fdf8e2bbc; H-03 joins generations 1/1/2; cleanup ownedProcesses=0 and profileAndControlRemoved=true; rawMarkerSha256=91e9e02b71a2ac524ea45b67aaedf4b3c48fa1c8909a8bc622ec4a070be22e9b; cleanupEvidenceSha256=01a94250e08506c151b8e06280b8d67c85ac0ecfe9bb9131b5470a17aa18c472"
+        },
+        {
+          "command": "env -u GIT_PAGER git diff --check && env -u GIT_PAGER git diff --check test/h03-exact-timeout-ownership",
+          "exitCode": 0,
+          "result": "No whitespace errors in the working diff or complete PR4 diff"
+        }
+      ],
+      "focusedTest": "env -u GIT_PAGER yarn test: exit 0; 73/73 files and 914/914 tests passed",
+      "runtimeHarness": "env -u GIT_PAGER yarn test:dsh-adapter: exit 0; DSH_ADAPTER_SMOKE_OK with H-03 and cleanup ok",
+      "ciInspection": ".github/workflows/ci.yml quality matrix is mandatory for Node 22.13.0 and 24 and runs yarn test:dsh-adapter after yarn build in each matrix leg.",
+      "diffBudget": "Against test/h03-exact-timeout-ownership after this evidence update: 375 authored changed lines (315 additions, 60 deletions), within the PR4 limit of 400.",
+      "rollback": "Revert only the task 4.3 checkbox and task43Remediation/apply-progress stage delta; no product or test file was modified for the inherited environment.",
+      "attemptAuthority": "The supplied same-attempt token could not be authenticated or settled because gentle-ai is unavailable (exit 127); fallback OpenSpec status remained authoritative for this executor run."
+    }
   },
-  "updatedAt": "2026-08-30T17:57:59Z"
+  "updatedAt": "2026-08-30T18:08:33Z"
 }
