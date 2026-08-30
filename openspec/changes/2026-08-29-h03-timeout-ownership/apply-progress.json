@@ -1,9 +1,9 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-08-29-h03-timeout-ownership",
-  "workUnit": "Phase 3 Exact-Host Evidence",
-  "delivery": "stacked-to-main(parent=fix/h03-closed-seam,budget=400)",
-  "stage": "final-authoritative-corrections-refactored",
+  "workUnit": "Phase 4 Task 4.1 Roadmap and Evidence Docs",
+  "delivery": "stacked-to-main(parent=test/h03-exact-timeout-ownership,budget=400)",
+  "stage": "roadmap-evidence-docs-complete",
   "tasks": [
     { "id": "1.1", "name": "RED budget contract", "status": "completed" },
     { "id": "1.2", "name": "GREEN package and patch budget", "status": "completed" },
@@ -15,7 +15,11 @@
     { "id": "3.1", "name": "RED exact identity drift guard", "status": "completed" },
     { "id": "3.2", "name": "RED exact-host slow-path assertions", "status": "completed" },
     { "id": "3.3", "name": "GREEN exact-host hook wiring", "status": "completed" },
-    { "id": "3.4", "name": "REFACTOR bounded runtime helpers", "status": "completed" }
+    { "id": "3.4", "name": "REFACTOR bounded runtime helpers", "status": "completed" },
+    { "id": "4.1", "name": "Roadmap and evidence closure docs", "status": "completed" },
+    { "id": "4.2", "name": "Blind adversarial review", "status": "pending" },
+    { "id": "4.3", "name": "Full CI and workflow gate", "status": "pending" },
+    { "id": "4.4", "name": "Ordered issue-linked delivery", "status": "pending" }
   ],
   "tdd": {
     "red": [
@@ -85,7 +89,10 @@
   "evidence": {
     "safetyNet": "baseline 29/29; RED 2 failed/12; final focused 29/29; format/lint/typecheck/diff: exit 0",
     "runtimeHarness": "build+exact exit 0; joins gen1/gen1/gen2; queued started=0; rawMarkerSha256=a42076a676cce36c0166e106abff8f56cbbf2e93ce258b729ee888dab028d7f0; post-finally cleanupEvidenceSha256=cfcf12cf078e4066857cc68d0dc22bb3da3cc9f08fe9a80605cc445e29b8e5de; controller readback active/held/listeners=0, eventsDrained=2, ownedProcesses=0, profile/control removed",
-    "rollback": "scripts/runtime-process.*, scripts/dsh-adapter-smoke.mjs, src/services/{compiler-worker-host,h03-timeout-fixture,project,public-errors}.ts, focused tests, and Phase 3 OpenSpec edits"
+    "rollback": "scripts/runtime-process.*, scripts/dsh-adapter-smoke.mjs, src/services/{compiler-worker-host,h03-timeout-fixture,project,public-errors}.ts, focused tests, and Phase 3 OpenSpec edits",
+    "docsWorkUnit": "yarn format:check: exit 0; yarn lint: exit 0; local markdown links valid for 2 changed docs; git diff --check: exit 0",
+    "docsRuntimeHarness": "N/A: task 4.1 changes roadmap/evidence prose only and preserves the prior exact-host runtime receipt",
+    "docsRollback": "Revert docs/roadmap.md, docs/ast-mcp-server-harness-improvement-report.md, tasks.md task 4.1, and this Phase 4 progress delta without removing Phase 1-3 evidence"
   },
-  "updatedAt": "2026-08-30T16:55:20Z"
+  "updatedAt": "2026-08-30T17:05:35Z"
 }

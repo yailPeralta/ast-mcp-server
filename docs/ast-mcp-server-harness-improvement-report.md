@@ -1,6 +1,6 @@
 # AST MCP Server v0.13.0 Harness Hardening Evidence Annex
 
-> **Decision:** keep the published DeepSeek Harness surface at reads, prepare, and preview with apply denied. H-01a and H-02 merged with exact pinned gates; H-03 timeout ownership is the next Harness work unit. Core authority findings remain separate AST-owned blockers and require their own RED tests.
+> **Decision:** keep the published DeepSeek Harness surface at reads, prepare, and preview with apply denied. H-01a and H-02 merged with exact pinned gates; H-03 timeout ownership is candidate-verified on an ordered, partly open PR chain and must not be called merged. Core authority findings remain separate AST-owned blockers and require their own RED tests.
 
 This annex records detailed evidence and acceptance gates for the [project roadmap](roadmap.md). The roadmap owns priority and sequencing; this document owns the supporting observations, open questions, and proof requirements.
 
@@ -10,9 +10,9 @@ H-01a merged through PRs [#95](https://github.com/yailPeralta/ast-mcp-server/pul
 
 H-02 issues [#100](https://github.com/yailPeralta/ast-mcp-server/issues/100)–[#102](https://github.com/yailPeralta/ast-mcp-server/issues/102) merged in PR [#104](https://github.com/yailPeralta/ast-mcp-server/pull/104). Direct MCP, scoped registry, and native model schemas are hash-bound; all three invalid combinations fail closed.
 
-1. Execute H-03 timeout ownership against the same pinned host identity.
+1. Review and merge the remaining H-03 chain in order: open/green PR [#111](https://github.com/yailPeralta/ast-mcp-server/pull/111), then open PR [#113](https://github.com/yailPeralta/ast-mcp-server/pull/113), then issue [#114](https://github.com/yailPeralta/ast-mcp-server/issues/114)'s closure slice; only PR [#109](https://github.com/yailPeralta/ast-mcp-server/pull/109) is already merged.
 2. Preserve H-01a/H-02 public RED baselines and exact candidate gates.
-3. Keep the remaining H-05 lifecycle cases and output-vocabulary projection #103 separate.
+3. After H-03 merges, continue with the already ordered H-05 lifecycle evidence while keeping output-vocabulary projection #103 separate.
 
 Do not begin with apply enablement, UI presentation, broad refactoring, or a newer unpinned Harness build.
 
@@ -135,9 +135,21 @@ The public package deterministically publishes `ast_explore` as `{"type":"object
 
 ### H-03 — Timeout ownership
 
-The published patch does not set `toolCallTimeoutMs`. AST defaults to a 30-second queue wait plus a 120-second execution deadline. The outer transport must exceed the complete server budget plus bounded margin, or the profile must deliberately lower both server budgets.
+The published v0.13.0 patch does not set `toolCallTimeoutMs`. The candidate establishes one machine-readable tuple: queue `30000`, execution `120000`, margin `15000`, and outer `180000` milliseconds. Validation requires the strict order `180000 > 30000 + 120000 + 15000`; equality, missing values, non-integers, or a non-positive margin fail closed.
 
-**Acceptance gate:** a slow fixture ends with AST's bounded operational error, not a generic bridge timeout; cancellation still propagates in cold, queued, and recycled-worker cases.
+The evidence identity remains Harness `dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a752a658978873241fdf8e2bbc` with bridge `0.1.2-alpha.1`. PR #109 merged the budget contract. PR #111 is open with green checks and owns the closed seam; PR #113 is open and owns the exact-host paths. Issue #114 owns only the roadmap/evidence closure slice. Open candidate work is not merged or released behavior.
+
+**Candidate exact-host outcome**
+
+| Path     | AST-owned terminal evidence   | Correlation and exclusion evidence                                                              |
+| -------- | ----------------------------- | ----------------------------------------------------------------------------------------------- |
+| Cold     | `OPERATION_DEADLINE_EXCEEDED` | Request-local call, fixture, correlation, and generation join.                                  |
+| Queued   | `QUEUE_WAIT_TIMEOUT`          | No later `started` event; request-local submission identity survives terminal evidence.         |
+| Recycled | `REQUEST_CANCELLED`           | Warm generation `1` recycles to owning generation `2`; stale-generation settlement is rejected. |
+
+The guarded catalog remains exactly 15 tools. `ToolTimeoutError` and `TOOL_TIMEOUT` are forbidden outcomes, as is an unrelated `AbortError` classification. Cleanup/readback reports active, held, and listener counts at zero; two events drained; zero owned processes; and removed disposable profile/control state. The current `DSH_PROBE_RESULT` raw-marker SHA-256 is `a42076a676cce36c0166e106abff8f56cbbf2e93ce258b729ee888dab028d7f0`; the post-`finally` cleanup-evidence SHA-256 is `cfcf12cf078e4066857cc68d0dc22bb3da3cc9f08fe9a80605cc445e29b8e5de`.
+
+**Acceptance gate:** a slow fixture ends with AST's bounded operational error, not a generic bridge timeout; cancellation still propagates in cold, queued, and recycled-worker cases. Roll back one delivered slice with `git revert <PR-sha>`, then rerun `yarn build && yarn test:dsh-adapter`. Do not relax the tuple or merge H-05 implementation into this closure.
 
 ### H-04 — Prepare/preview continuation
 
