@@ -33,9 +33,7 @@
   },
   "phase3Tdd": {
     "red": "Pinned Chromium first unblocked identity, then exact DOM exposed stale-session selection, Lexical fill, native-mode removal, AST-only zero, and SQLite-backed export defects.",
-    "green": "Exact pinned Web rendered and exported three correlated request/header catalogs with AST counts 15→0→15.",
-    "triangulate": "Both non-empty catalogs are schema-identical while the middle request renders built-ins but zero AST rows.",
-    "refactor": "Event/DOM deadlines, durable correlation-only export, browser/Web/provider/owner/root cleanup, and no install/self-heal remain explicit."
+    "green": "Exact pinned Web rendered and exported three correlated request/header catalogs with AST counts 15→0→15."
   },
   "judgmentDayRound1": {
     "workUnit": "H05-JD-C1 only; task 3.4 remains pending for scoped re-judgment.",
