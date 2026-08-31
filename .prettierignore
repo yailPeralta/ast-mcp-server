@@ -3,6 +3,7 @@ coverage
 node_modules
 package-lock.json
 openspec/archive
+openspec/changes/2026-08-30-h05-harness-lifecycle/judgment-day.json
 benchmark/results/production-readiness/*.json
 benchmark/results/production-readiness-sqlite-default-v1/*.json
 benchmark/results/production-readiness-sqlite-default-v2/*.json

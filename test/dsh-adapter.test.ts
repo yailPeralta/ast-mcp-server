@@ -316,6 +316,55 @@ describe("pinned Harness smoke contract", () => {
     expect(source).toContain("summary.h05");
   });
 
+  it("requires exact rendered Web lifecycle evidence and rejects indirect substitutes", async () => {
+    const source = await readFile(SMOKE_PATH, "utf8");
+    const identity = source.slice(
+      source.indexOf("const exactGuiRuntimeIdentity ="),
+      source.indexOf("requireExactIdentity(exactGuiIdentity"),
+    );
+    // prettier-ignore
+    const identityFields = ["webPackageSha256", "webEntrypointSha256", "playwrightPackageSha256", "playwrightSourceSha256", "browserManifestSha256", "chromiumRevision", "chromiumVersion", "chromiumSha256", "profileSha256"];
+    for (const field of identityFields) expect(identity).toContain(field);
+    expect(source.indexOf("requireExactIdentity(exactGuiIdentity")).toBeLessThan(
+      source.indexOf("await launchPinnedWeb("),
+    );
+    expect(source.indexOf("requireExactIdentity(exactGuiRuntimeIdentity")).toBeLessThan(
+      source.indexOf('const h03Control = path.join(temporaryRoot, "h03-control")'),
+    );
+    expect(source).toContain("PINNED_GUI_IDENTITY");
+    expect(source).toContain("identityBrowser.version()");
+    expect(source).not.toContain('"install", "chromium"');
+    expect(source).not.toContain("PLAYWRIGHT_BROWSERS_PATH");
+    expect(source).not.toContain('name: "New Session"');
+    for (const prerequisite of [
+      "pinned Playwright package",
+      "installed Chromium executable",
+      "authenticated Web launch URL",
+      "rendered Trajectory Tools rows",
+    ])
+      expect(source).toContain(prerequisite);
+    for (const selector of [
+      'locator("button", { hasText: /^Trajectory$/u })',
+      'getByLabel("Trajectory timeline")',
+      'getByRole("button", { name: /Request #/u })',
+      'getByRole("tab", { name: "Tools", exact: true })',
+    ])
+      expect(source).toContain(selector);
+    expect(source).toContain("toolCatalogName");
+    expect(source).toContain("renderedAstNames");
+    expect(source).toContain("headerCatalogSha256");
+    expect(source).toContain("requestHeader.seq");
+    expect(source).toContain("captureRequestHeader");
+    expect(source).toContain('getByRole("dialog", { name: "Session download started" })');
+    expect(source).toContain("headers.length !== requestNumber");
+    expect(source).toContain("requestHeader.seq <= previousSequence");
+    expect(source).toContain("new Set(renderedGuiEvidence.map((row) => row.sequence)).size");
+    expect(source).not.toContain(".slice(-3)");
+    expect(source).toContain("browser?.close()");
+    expect(source).toContain("terminateProcessTree(webChild)");
+    expect(source).not.toMatch(/renderedAstNames\s*=\s*(?:registry|durable|probe|schemas)/u);
+  });
+
   it("keeps installation guidance executable and free of unpublished registry claims", async () => {
     const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
     const patch = await readFile(PATCH_PATH, "utf8");

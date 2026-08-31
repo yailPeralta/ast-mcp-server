@@ -23,7 +23,9 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { spawn } from "node:child_process";
 import console from "node:console";
 import { createHash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { watch } from "node:fs";
+// prettier-ignore
+import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -49,6 +51,8 @@ const HARNESS_REPOSITORY = "https://github.com/deepseek-ai/deepseek-harness.git"
 const PUBLIC_PACKAGE_INTEGRITY =
   "sha512-vbna6hhjX+VlayTnrgWQ/EitxkBmhVza0az6J/MCpE14M4Yn50D4yTQZrrcjfCi05sVhJhWFGPnzv6VE3V9KIw==";
 const PUBLIC_PACKAGE_SHASUM = "166f95121a72f0b03c325cef586a211cd9107a24";
+// prettier-ignore
+const PINNED_GUI_IDENTITY = Object.freeze({ webPackageSha256: "d73d37377783372f27971b0518b62c9cd1cbf03177e5ac402bb2c4fe1f42a3ec", webEntrypointSha256: "069851c0c35055baa63fbd8bca9b833f1d05a4e96613c618ff1ff0c0595c7db0", playwrightVersion: "1.61.1", playwrightPackageSha256: "6b840268612656f0639fb7d68782e8353bdf11518589d30ddf66f283c2670ed5", playwrightSourceSha256: "a0f5715ea22354f922791a9c53dc012d5d5c067ff9cc4cd35ffb7cd272071a9f", browserManifestSha256: "ee39bc924bc3d1bd895626c2910f1292d109bbfeeb5abd113acb45e1951cc942", chromiumRevision: "1228", chromiumVersion: "149.0.7827.55", chromiumSha256: "2d18db9d8608b052b6a552ee00ec1e830f93692e928b65ecc67d693bd33fe801" });
 const H01_TOOL_NAME = "mcp__ast__ast_get_project_status";
 // prettier-ignore
 const H03_COMPRESSED_BUDGET = validateTimeoutBudget({ queueWaitMs: 100, executionDeadlineMs: 1000, marginMs: 100, outerToolCallMs: 1500 });
@@ -436,6 +440,12 @@ async function assertNoTransientResidue(...roots) {
   assert(residue.length === 0, `H-05 transient residue survived shutdown: ${residue.join(",")}`);
 }
 
+// prettier-ignore
+async function waitForJsonLine(filePath, predicate, timeoutMs = 30_000) { return new Promise((resolve, reject) => { let observer; const deadline = setTimeout(() => finish(new Error(`event barrier expired for ${path.basename(filePath)}`)), timeoutMs); const finish = (error, value) => { clearTimeout(deadline); observer?.close(); if (error) reject(error); else resolve(value); }; const check = async () => { const lines = await readFile(filePath, "utf8").then((text) => text.trim().split("\n").filter(Boolean), () => []); for (const line of lines) { const value = JSON.parse(line); if (predicate(value)) return finish(undefined, value); } }; observer = watch(path.dirname(filePath), { persistent: false }, () => void check().catch(finish)); void check().catch(finish); }); }
+
+// prettier-ignore
+async function launchPinnedWeb(cliBin, nodeBin, environment) { const child = spawn(nodeBin, [cliBin, "web", "--no-open", "--host", "127.0.0.1", "--port", "0"], { cwd: temporaryRoot, env: environment, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" }); let output = ""; const launchUrl = await new Promise((resolve, reject) => { const deadline = setTimeout(() => reject(new Error("pinned Web readiness deadline expired")), 90_000); const inspect = (chunk) => { output = `${output}${String(chunk)}`.slice(-100_000); const match = /dsh web: (http:\/\/[^\s]+)/u.exec(output); if (match?.[1]) { clearTimeout(deadline); resolve(match[1]); } }; child.stdout.on("data", inspect); child.stderr.on("data", inspect); child.once("error", reject); child.once("exit", (code) => reject(new Error(`pinned Web exited before readiness (${String(code)})`))); }).catch(async (error) => { await terminateProcessTree(child); throw error; }); return { child, launchUrl, output: () => output }; }
+
 /** Boot the profile with the probe plugin and return its DSH_PROBE_RESULT marker. */
 async function bootWithProbe(
   cliBin,
@@ -641,6 +651,13 @@ export default function apply(ctx) {
   const classifyTransport = (result, callId) => { const encoded = JSON.stringify(result), text = result?.content?.[0]?.text ?? result?.[0]?.content?.[0]?.text ?? "", observed = result?.error?.info?.code ?? (/abort/iu.test(text) ? "ABORTED" : /timeout/iu.test(text) ? "TIMEOUT" : "OTHER"), code = typeof observed === "string" && /^[A-Z][A-Z0-9_-]{0,63}$/u.test(observed) ? observed : "OTHER"; return Object.freeze({ surface: "transport", code, bytes: Buffer.byteLength(encoded), callId, authoritativeAstTerminal: false }); };
   const assertTerminalIdentity = (expected, command, evidenceRows, nativeRows, durableRows) => { const evidence = evidenceRows[0], astAuthority = findPublicError(evidence.result), terminalOrigins = [command.callId === expected.callId, command.fixtureId === expected.fixtureId, command.correlationId === expected.correlationId, command.ownerToken === ownerToken, expected.ownerToken === ownerToken, evidence.callId === expected.callId, evidence.fixtureId === expected.fixtureId, evidence.generation === expected.generation, evidence.correlationId === expected.correlationId, evidence.ownerToken === command.ownerToken, evidence.ownerToken === expected.ownerToken], rejectedAstCodes = ["ABORTED", "ABORTED_BEFORE_DISPATCH", "OPERATION_DEADLINE_EXCEEDED"]; if (evidenceRows.length !== 1 || nativeRows.length !== 1 || nativeRows[0].exec.callId !== expected.callId || nativeRows[0].result.isError !== true || durableRows.length !== 1 || durableRows[0].data.message.source.callId !== expected.callId || !terminalOrigins.every(Boolean) || !astAuthority || astAuthority.code !== "REQUEST_CANCELLED" || astAuthority.correlation_id !== expected.correlationId || rejectedAstCodes.includes(astAuthority.code)) fail("AST authority/join " + JSON.stringify({ e: evidenceRows.length, n: nativeRows.length, d: durableRows.length, origin: terminalOrigins, ast: astAuthority })); const encoded = JSON.stringify({ native: nativeRows[0].result, durable: durableRows[0].data.message.content }); if (Buffer.byteLength(encoded) > 4096 || /Bearer |api-key|token=|ownerToken|nonce|stack|\\/home\\//i.test(encoded)) fail("terminal evidence was unbounded or sensitive"); return Object.freeze({ astAuthority, native: { ...classifyTransport(nativeRows[0].result, nativeRows[0].exec.callId), astCorrelationId: astAuthority.correlation_id }, durable: { ...classifyTransport(durableRows[0].data.message.content, durableRows[0].data.message.source.callId), astCorrelationId: astAuthority.correlation_id } }); };
   const assertNoRetiredEffects = (handle, readNative) => { const retiredEvents = events().filter((event) => event.fixtureId === "retire"), retiredDurable = durableResults(handle, "h05-retire"), retiredNative = readNative(); if (retiredNative.length !== 1 || retiredNative.some((row) => row.result.isError !== true) || retiredDurable.length !== 0 || retiredEvents.some((event) => event.outcome === "succeeded") || retiredEvents.filter((event) => event.phase === "terminal").length !== 1 || new Set(retiredEvents.map(JSON.stringify)).size !== retiredEvents.length) fail("retired generation published a late, duplicate, or durable effect"); };
+  if (process.env.AST_H05_GUI_CONTROL === "1") {
+    const eventPath = path.join(control, "gui-events.jsonl"), commandPath = path.join(control, "gui-command.json"); let activeId;
+    const publish = (id, schemas) => writeFileSync(eventPath, JSON.stringify({ id, count: schemas.length, names: schemas.map((tool) => tool.name) }) + "\\n", { flag: "a" });
+    const command = async () => { let value; try { value = JSON.parse(readFileSync(commandPath, "utf8")); } catch { return; } if (value.id === activeId) return; activeId = value.id; const converged = awaitCatalog(value.count); atomicReplace(Buffer.from(value.patch, "base64").toString()); for (const registration of [...(ctx.get("hmr")?.configs?.values() ?? [])]) registration.watcher.emit("change", patchPath); await ctx.loader.await(); publish(value.id, await converged); };
+    const observer = watch(control, { persistent: false }, () => void command().catch((error) => writeFileSync(eventPath, JSON.stringify({ error: String(error).slice(0, 240) }) + "\\n", { flag: "a" })));
+    ctx.effect(() => () => observer.close()); void ctx.loader.await().then(() => publish("ready", astSchemas())); return;
+  }
   const native = [], shutdownNative = [], catalogHistory = [], bridgeToolResults = [], bridgeAbortResults = [];
   const captureBridge = (handle) => { const scoped = handle.agent.scope.ctx, stopNative = scoped.on("tools/result", (exec, result) => native.push({ exec, result })), stopExecute = scoped.on("tools/execute", async (exec, next) => { const result = await next(); if (exec.callId === "mock-call-1") bridgeToolResults.push({ exec, result, signalAborted: exec.signal.aborted }); return result; }), stopPost = scoped.on("tools/post-execute", async (exec, result, next) => { if (exec.callId === "mock-call-1") bridgeAbortResults.push({ exec, result, signalAborted: exec.signal.aborted }); return next(); }); return () => { stopPost(); stopExecute(); stopNative(); }; };
   const stopResult = ctx.on("tools/result", (exec, result) => { if (exec.callId === "h05-fresh") native.push({ exec, result }); });
@@ -1552,6 +1569,62 @@ try {
   requireExactIdentity(exactIdentity, expectedIdentity);
   summary.h03Identity = { authenticated: exactIdentity };
 
+  // Authenticate the pinned rendered-GUI runtime before any GUI profile or lifecycle state.
+  // Browser installation is deliberately forbidden here: a missing executable is BLOCKED.
+  const playwrightRoot = path.join(source, "apps", "web", "node_modules", "playwright");
+  const playwrightPackagePath = path.join(playwrightRoot, "package.json");
+  const playwrightSourcePath = path.join(playwrightRoot, "index.mjs");
+  const browserManifestPath = path.resolve(
+    await realpath(playwrightRoot),
+    "..",
+    "playwright-core",
+    "browsers.json",
+  );
+  const playwrightMetadata = JSON.parse(
+    await requirePrerequisite("pinned Playwright package", () =>
+      readFile(playwrightPackagePath, "utf8"),
+    ),
+  );
+  const browserManifest = JSON.parse(
+    await requirePrerequisite("pinned Playwright package", () =>
+      readFile(browserManifestPath, "utf8"),
+    ),
+  );
+  const pinnedChromium = browserManifest.browsers?.find((entry) => entry.name === "chromium");
+  const playwright = await requirePrerequisite(
+    "pinned Playwright package",
+    () => import(pathToFileURL(playwrightSourcePath).href),
+  );
+  if (!playwright?.chromium) blocked("pinned Playwright package");
+  const chromiumPath = playwright.chromium.executablePath();
+  const chromiumSha256 = await requirePrerequisite("installed Chromium executable", () =>
+    sha256(chromiumPath),
+  );
+  const exactGuiRuntimeIdentity = {
+    webPackageSha256: await sha256(path.join(source, "apps", "web", "package.json")),
+    webEntrypointSha256: await sha256(path.join(source, "apps", "web", "dist", "index.html")),
+    playwrightVersion: playwrightMetadata.version,
+    playwrightPackageSha256: await sha256(playwrightPackagePath),
+    playwrightSourceSha256: await sha256(playwrightSourcePath),
+    browserManifestSha256: await sha256(browserManifestPath),
+    chromiumRevision: pinnedChromium?.revision,
+    chromiumVersion: pinnedChromium?.browserVersion,
+    chromiumSha256,
+  };
+  requireExactIdentity(exactGuiRuntimeIdentity, PINNED_GUI_IDENTITY);
+  let identityBrowser;
+  try {
+    identityBrowser = await requirePrerequisite("installed Chromium executable", () =>
+      playwright.chromium.launch({ executablePath: chromiumPath, headless: true }),
+    );
+    requireExactIdentity(
+      { chromiumVersion: identityBrowser.version() },
+      { chromiumVersion: PINNED_GUI_IDENTITY.chromiumVersion },
+    );
+  } finally {
+    await identityBrowser?.close();
+  }
+
   const h03Control = path.join(temporaryRoot, "h03-control");
   const h03Nonce = `h03-${createHash("sha256").update(archivePath).digest("hex").slice(0, 24)}`;
   await mkdir(h03Control, { recursive: true });
@@ -1770,6 +1843,239 @@ try {
     rawMarkerSha256: h05.rawMarkerSha256,
   };
   summary.phases.h05 = "ok";
+
+  // ── Phase H-05 GUI: authenticated pinned Web renders request tool catalogs ──
+  const webProfileDir = path.join(dshHome, "profiles", "web");
+  for (const plugin of [archiveReference, `file:${mcpClientArchive}`, `file:${h05Bundle}`])
+    await run(nodeBin, [cliBin, "plugin", "--profile", "web", "add", plugin], {
+      cwd: temporaryRoot,
+      env: dshEnvironment,
+    });
+  const webPatch = `${nativeModePatch}${h05EnablePatch}`;
+  const expectedProfileSha256 = createHash("sha256").update(webPatch).digest("hex");
+  await writeFile(path.join(webProfileDir, "cordis.patch.yml"), webPatch);
+  const exactGuiIdentity = {
+    ...exactGuiRuntimeIdentity,
+    profileSha256: await sha256(path.join(webProfileDir, "cordis.patch.yml")),
+  };
+  requireExactIdentity(exactGuiIdentity, {
+    ...PINNED_GUI_IDENTITY,
+    profileSha256: expectedProfileSha256,
+  });
+  const guiMock = await startMockLlmServer({
+    sequence: ["success"],
+    repeatLast: true,
+    apiKey: "h05-gui-key",
+  });
+  const guiEnvironment = {
+    ...dshEnvironment,
+    AST_H05_CONTROL_DIRECTORY: h05Control,
+    AST_H05_NONCE: h05Nonce,
+    AST_H05_OWNER_TOKEN: h05OwnerToken,
+    AST_H05_PATCH_PATH: path.join(webProfileDir, "cordis.patch.yml"),
+    AST_H05_ENABLE_PATCH: Buffer.from(webPatch).toString("base64"),
+    AST_H05_GUI_CONTROL: "1",
+    DEEPSEEK_API_KEY: "h05-gui-key",
+    DEEPSEEK_BASE_URL: guiMock.baseURL,
+  };
+  let webChild, browser, context, page;
+  try {
+    const running = await launchPinnedWeb(cliBin, nodeBin, guiEnvironment);
+    webChild = running.child;
+    const authenticatedUrl = new URL(running.launchUrl);
+    if (
+      authenticatedUrl.hostname !== "127.0.0.1" ||
+      !/^[A-Za-z0-9_-]{43}$/u.test(authenticatedUrl.searchParams.get("token") ?? "")
+    )
+      blocked("authenticated Web launch URL");
+    await waitForJsonLine(
+      path.join(h05Control, "gui-events.jsonl"),
+      (event) => event.id === "ready" && event.count === 15,
+    );
+    browser = await playwright.chromium.launch({ executablePath: chromiumPath, headless: true });
+    context = await browser.newContext({ locale: "en-US" });
+    page = await context.newPage();
+    const blockUiDrift = async (label) => {
+      const diagnostics = {
+        label,
+        buttons: (await page.getByRole("button").allTextContents()).slice(0, 40),
+        tabs: (await page.getByRole("tab").allTextContents()).slice(0, 20),
+        composer: await page
+          .locator("[data-composer-input]")
+          .first()
+          .evaluate((node) => ({
+            disabled: node.getAttribute("aria-disabled"),
+            editable: node.getAttribute("contenteditable"),
+            text: node.textContent,
+          }))
+          .catch(() => null),
+        mockRequests: guiMock.requests.length,
+        webOutput: running.output().slice(-1200),
+        toolNames: (await page.locator('[class*="toolCatalogName"]').allTextContents()).slice(
+          0,
+          20,
+        ),
+        rows: (await page.getByRole("row").allTextContents()).slice(-12),
+        body: (await page.locator("body").innerText()).slice(0, 1200),
+      };
+      blocked(`rendered Trajectory Tools rows: UI drift ${JSON.stringify(diagnostics)}`);
+    };
+    await page.goto(running.launchUrl);
+    const notice = page.getByRole("dialog", { name: "Internal Testing Notice" });
+    await notice.waitFor({ timeout: 30_000 }).catch(() => blockUiDrift("testing notice"));
+    await notice.getByRole("button", { name: "Continue", exact: true }).click();
+    await page
+      .locator('[data-composer-input][contenteditable="true"]')
+      .waitFor({ timeout: 30_000 })
+      .catch(() => blockUiDrift("composer"));
+    // prettier-ignore
+    const { unzipSync, strFromU8 } = await import(pathToFileURL(path.join(source, "node_modules", ".pnpm", "fflate@0.8.3", "node_modules", "fflate", "esm", "index.mjs")).href);
+    const catalogs = [],
+      prompts = ["H05 rendered baseline", "H05 rendered removal", "H05 rendered reconnect"];
+    let renderedSession,
+      previousSequence = -1;
+    // The rendered Request #N is the session-global request ordinal; each export must contain exactly N headers, making its latest header the selected request's source-backed durable identity.
+    // prettier-ignore
+    const captureRequestHeader = async (requestNumber) => { const downloadReady = page.waitForEvent("download", { timeout: 30_000 }); await page.getByRole("button", { name: "Session log", exact: true }).click(); const download = await downloadReady, dialog = page.getByRole("dialog", { name: "Session download started" }); await dialog.waitFor({ timeout: 30_000 }); await dialog.getByText("Close", { exact: true }).click(); const files = unzipSync(await readFile(await download.path())), headers = strFromU8(files["session.jsonl"]).trim().split("\n").filter(Boolean).map(JSON.parse).filter((row) => row.type === "request/header"), requestHeader = headers.at(-1), session = download.suggestedFilename(); if (headers.length !== requestNumber || !requestHeader || requestHeader.seq <= previousSequence || (renderedSession && renderedSession !== session)) blocked("rendered Trajectory Tools rows: request/header identity"); renderedSession = session; previousSequence = requestHeader.seq; return { requestHeader, session }; };
+    const renderCatalog = async (index, label) => {
+      const input = page.locator('[data-composer-input][contenteditable="true"]').first();
+      await input
+        .waitFor({ state: "visible", timeout: 30_000 })
+        .catch(() => blockUiDrift(`composer ${index}`));
+      await input.click();
+      await page.keyboard.press("ControlOrMeta+A");
+      await page.keyboard.type(prompts[index]);
+      await page.getByRole("button", { name: "Send message", exact: true }).click();
+      await page.waitForFunction(
+        (element) => element.textContent === "",
+        await input.elementHandle(),
+        { timeout: 30_000 },
+      );
+      await page
+        .getByText(prompts[index], { exact: true })
+        .last()
+        .waitFor({ timeout: 30_000 })
+        .catch(() => blockUiDrift(`prompt ${index}`));
+      await page
+        .locator("p")
+        .filter({ hasText: "mock response recovered" })
+        .last()
+        .waitFor({ timeout: 30_000 });
+      const trajectory = page.locator("button", { hasText: /^Trajectory$/u }).first();
+      await trajectory.waitFor({ timeout: 30_000 }).catch(() => blockUiDrift("Trajectory tab"));
+      await trajectory.click();
+      await page
+        .getByLabel("Trajectory timeline")
+        .waitFor({ timeout: 30_000 })
+        .catch(() => blockUiDrift("Trajectory timeline"));
+      const requests = page.getByRole("button", { name: /Request #/u });
+      await requests
+        .last()
+        .waitFor({ timeout: 30_000 })
+        .catch(() => blockUiDrift("request boundary"));
+      const requestLabel = await requests.last().getAttribute("aria-label"),
+        requestNumber = Number(/^Request #(\d+)$/u.exec(requestLabel ?? "")?.[1]);
+      if (requestNumber !== index + 1) blocked("rendered Trajectory Tools rows: request boundary");
+      await requests.last().click();
+      await page
+        .getByRole("tabpanel")
+        .getByText("Completed", { exact: true })
+        .waitFor({ timeout: 30_000 });
+      const row = page.getByRole("row").filter({ hasText: label }).last();
+      await row.waitFor({ timeout: 30_000 }).catch(() => blockUiDrift(`row ${label}`));
+      await row.click();
+      const toolsTab = page.getByRole("tab", { name: "Tools", exact: true });
+      await toolsTab.waitFor({ timeout: 30_000 }).catch(() => blockUiDrift("Tools tab"));
+      await toolsTab.click();
+      const panel = page.getByRole("tabpanel");
+      const names = panel.locator('[class*="toolCatalogName"]');
+      if (index === 1)
+        await page.waitForFunction(
+          (element) =>
+            [...element.querySelectorAll('[class*="toolCatalogName"]')].every(
+              (node) => !node.textContent?.startsWith("mcp__ast__"),
+            ),
+          await panel.elementHandle(),
+          { timeout: 30_000 },
+        );
+      else await names.filter({ hasText: "mcp__ast__" }).first().waitFor({ timeout: 30_000 });
+      const renderedAstNames = (await names.allTextContents())
+        .filter((name) => name.startsWith("mcp__ast__"))
+        .sort();
+      if (
+        renderedAstNames.length !== [15, 0, 15][index] ||
+        new Set(renderedAstNames).size !== renderedAstNames.length
+      )
+        blocked("rendered Trajectory Tools rows");
+      const { requestHeader, session } = await captureRequestHeader(requestNumber),
+        astTools = (requestHeader.data.header.tools ?? []).filter((tool) =>
+          tool.name.startsWith("mcp__ast__"),
+        ),
+        headerNames = astTools.map((tool) => tool.name).sort();
+      if (!isDeepStrictEqual(headerNames, renderedAstNames))
+        blocked("rendered Trajectory Tools rows");
+      catalogs.push({
+        session,
+        sequence: requestHeader.seq,
+        requestLabel,
+        headerCatalogSha256: hashJson(astTools),
+        renderedAstNames,
+      });
+      await page.getByRole("tab", { name: "Chat", exact: true }).click();
+      await page
+        .locator('[data-composer-input][contenteditable="true"]')
+        .first()
+        .waitFor({ timeout: 30_000 });
+    };
+    await renderCatalog(0, "Initial System Prompt");
+    for (const [id, count, patch, label] of [
+      ["removed", 0, `${nativeModePatch}- id: mcp-ast\n  disabled: true\n`, "Tools Updated"],
+      ["reconnected", 15, webPatch, "Tools Updated"],
+    ]) {
+      await writeFile(
+        path.join(h05Control, "gui-command.json"),
+        JSON.stringify({ id, count, patch: Buffer.from(patch).toString("base64") }),
+      );
+      await waitForJsonLine(
+        path.join(h05Control, "gui-events.jsonl"),
+        (event) => event.id === id && event.count === count,
+      );
+      await renderCatalog(catalogs.length, label);
+    }
+    const renderedGuiEvidence = catalogs;
+    assert(
+      renderedGuiEvidence[0].headerCatalogSha256 === renderedGuiEvidence[2].headerCatalogSha256 &&
+        new Set(renderedGuiEvidence.map((row) => row.session)).size === 1 &&
+        new Set(renderedGuiEvidence.map((row) => row.sequence)).size === 3 &&
+        isDeepStrictEqual(
+          renderedGuiEvidence.map((row) => row.requestLabel),
+          ["Request #1", "Request #2", "Request #3"],
+        ) &&
+        isDeepStrictEqual(
+          renderedGuiEvidence.map((row) => row.renderedAstNames.length),
+          [15, 0, 15],
+        ),
+      "rendered GUI request/header identity or catalog sequence diverged",
+    );
+    summary.h05Gui = { identity: exactGuiIdentity, rendered: renderedGuiEvidence };
+  } finally {
+    const cleanup = await Promise.allSettled([
+      page?.close(),
+      context?.close(),
+      browser?.close(),
+      webChild ? terminateProcessTree(webChild) : undefined,
+      guiMock.close(),
+    ]);
+    assert(
+      cleanup.every((result) => result.status === "fulfilled"),
+      "GUI owner cleanup failed",
+    );
+  }
+  assert(
+    (await collectOwnerTokenPids(h05OwnerToken)).length === 0,
+    "GUI AST owner survived closure",
+  );
+  await assertNoTransientResidue(temporaryRoot);
 
   // ── Phase D: native agent/session visibility + durable cold replay (H-01a) ──
   const harness = { source, cliBin, nodeBin };
