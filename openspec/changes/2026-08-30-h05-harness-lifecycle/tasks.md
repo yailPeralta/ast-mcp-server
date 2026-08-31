@@ -32,10 +32,10 @@ Chain strategy: stacked-to-main
 
 ## Phase 2 — PR3 native lifecycle
 
-- [ ] 2.1 RED — Require identity-first failure, HMR `15→0→15`, stale/late rejection, Session cancel, shutdown, and zero residue.
-- [ ] 2.2 GREEN — Add loader barriers, AST terminal/durable joins, and worker/Host cleanup to the smoke.
-- [ ] 2.3 REFACTOR — Extract bounded helpers; forbid sleeps, duplicates, generic aborts, and sensitive errors.
-- [ ] 2.4 Preserve H-01a/H-02/H-03/apply denial; settle, rebase, and merge PR3.
+- [x] 2.1 RED — Require identity-first failure, HMR `15→0→15`, stale/late rejection, Session cancel, shutdown, and zero residue.
+- [x] 2.2 GREEN — Add loader barriers, AST terminal/durable joins, and worker/Host cleanup to the smoke.
+- [x] 2.3 REFACTOR — Extract bounded helpers; forbid sleeps, duplicates, generic aborts, and sensitive errors.
+- [x] 2.4 Preserve H-01a/H-02/H-03/apply denial; settle, rebase, and merge PR3.
 
 ## Phase 3 — PR4 GUI and closure
 

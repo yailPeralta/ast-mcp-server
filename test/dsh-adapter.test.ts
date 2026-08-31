@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import yaml from "yaml";
 import { validateTimeoutBudget } from "../scripts/harness-timeout-budget.mjs";
@@ -265,6 +266,54 @@ describe("pinned Harness smoke contract", () => {
     expect(source.indexOf("requireExactIdentity(exactIdentity")).toBeLessThan(
       source.lastIndexOf("await rm(temporaryRoot"),
     );
+  });
+
+  it("parses the generated native lifecycle probe and requires exact terminal ownership", async () => {
+    const source = await readFile(SMOKE_PATH, "utf8");
+    const outer = ts.createSourceFile("smoke.mjs", source, ts.ScriptTarget.ESNext, true);
+    let generated = "";
+    // prettier-ignore
+    const visit = (node: ts.Node): void => { if (ts.isFunctionDeclaration(node) && node.name?.text === "h05ProbeSource") { const returned = node.body?.statements.find(ts.isReturnStatement)?.expression; expect(returned && ts.isTemplateExpression(returned)).toBe(true); if (returned && ts.isTemplateExpression(returned)) generated = returned.head.text + returned.templateSpans.map((span) => { expect(span.expression.getText(outer)).toBe("JSON.stringify(H01_TOOL_NAME)"); return `${JSON.stringify("mcp__ast__ast_get_project_status")}${span.literal.text}`; }).join(""); } ts.forEachChild(node, visit); };
+    visit(outer);
+    const probe = ts.createSourceFile("h05-probe.mjs", generated, ts.ScriptTarget.ESNext, true);
+    expect(
+      (probe as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics,
+    ).toEqual([]);
+    const calls: string[] = [];
+    const declarations = new Set<string>();
+    // prettier-ignore
+    const inspect = (node: ts.Node): void => { if (ts.isCallExpression(node)) calls.push(node.expression.getText(probe)); if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) declarations.add(node.name.text); ts.forEachChild(node, inspect); };
+    inspect(probe);
+    expect(source.indexOf("requireExactIdentity(exactIdentity)")).toBeLessThan(
+      source.indexOf("const h05Control ="),
+    );
+    // prettier-ignore
+    for (const name of ["cancelCommand", "bridgeAbortResults", "agentAbortReason", "retireSettled", "shutdownHook", "shutdownTerminal", "shutdownResources", "shutdownStopResult", "shutdownResultObserver", "waitShutdownNative"]) expect(declarations.has(name), `missing ${name}`).toBe(true);
+    expect(calls.filter((call) => call === "refreshPatch")).toHaveLength(2);
+    for (const call of ["assertTerminalIdentity", "assertNoRetiredEffects", "ctx.effect"])
+      expect(calls).toContain(call);
+    expect(generated).toMatch(/tools\/post-execute[\s\S]*bridgeAbortResults\.push/u);
+    // prettier-ignore
+    for (const contract of ["astAuthority = findPublicError(evidence.result)", 'surface: "transport"', "authoritativeAstTerminal: false", "astCorrelationId: astAuthority.correlation_id", 'astAuthority.code !== "REQUEST_CANCELLED"', '["ABORTED", "ABORTED_BEFORE_DISPATCH", "OPERATION_DEADLINE_EXCEEDED"]', "shutdownStopResult", "shutdownNative, shutdownDurable", "global: true"]) expect(generated).toContain(contract);
+    expect(generated).toMatch(
+      /evidenceRows\.length\s*!==\s*1[\s\S]*nativeRows\.length\s*!==\s*1[\s\S]*durableRows\.length\s*!==\s*1/u,
+    );
+    expect(generated).not.toMatch(/MCP error|MCP_|nativeRequired/u);
+    expect(generated).toContain("terminalOrigins.every");
+    expect(generated).toContain("evidence.ownerToken === command.ownerToken");
+    expect(generated).toContain("bridgeAbortResults.length !== 1");
+    expect(generated).toContain(
+      "Signal rejection and MCP isError text reduction are distinct transport observations.",
+    );
+    expect(generated).toContain("retiredDurable.length !== 0");
+    expect(source).toContain("await assertNoTransientResidue(temporaryRoot)");
+    expect(source).toContain('!["uv.lock", "yarn.lock"].includes(entry.name)');
+    expect(source).not.toContain("await assertNoTransientResidue(profileDir, h05Control)");
+    expect(generated).not.toMatch(
+      /retiredBeforeReconnect|bridgeAbortAcknowledged:\s*true|map\(findPublicError\)\.filter\(Boolean\)|setTimeout\(resolve|sleep\(|retireHandle\.agent\.cancel|shutdownHandle\.agent\.cancel/u,
+    );
+    expect(source).toContain("assertNoTransientResidue");
+    expect(source).toContain("summary.h05");
   });
 
   it("keeps installation guidance executable and free of unpublished registry claims", async () => {

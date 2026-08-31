@@ -415,8 +415,36 @@ async function materializePinnedHarness(nodeBinDir) {
   return root;
 }
 
+// prettier-ignore
+async function awaitChildExit(child, timeoutMs = 30_000) { if (child.exitCode !== null || child.signalCode !== null) return; await new Promise((resolve, reject) => { const deadline = setTimeout(() => reject(new Error("Harness shutdown budget expired")), timeoutMs); child.once("exit", () => { clearTimeout(deadline); resolve(); }); }); }
+
+async function assertNoTransientResidue(...roots) {
+  const residue = [];
+  const walk = async (root) => {
+    for (const entry of await readdir(root, { withFileTypes: true })) {
+      const target = path.join(root, entry.name);
+      if (entry.isDirectory()) await walk(target);
+      else if (
+        entry.isSocket() ||
+        (/(?:\.sock|\.lock|\.tmp|\.next)$/u.test(entry.name) &&
+          !["uv.lock", "yarn.lock"].includes(entry.name))
+      )
+        residue.push(target);
+    }
+  };
+  for (const root of roots) await walk(root);
+  assert(residue.length === 0, `H-05 transient residue survived shutdown: ${residue.join(",")}`);
+}
+
 /** Boot the profile with the probe plugin and return its DSH_PROBE_RESULT marker. */
-async function bootWithProbe(cliBin, nodeBin, environment, fixtureProject, dshHome) {
+async function bootWithProbe(
+  cliBin,
+  nodeBin,
+  environment,
+  fixtureProject,
+  dshHome,
+  graceful = false,
+) {
   const child = spawn(nodeBin, [cliBin, "--profile", "smoke", "probe"], {
     cwd: temporaryRoot,
     env: { ...environment, AST_PROBE_PROJECT_ROOT: fixtureProject, DSH_HOME: dshHome },
@@ -424,8 +452,13 @@ async function bootWithProbe(cliBin, nodeBin, environment, fixtureProject, dshHo
     detached: process.platform !== "win32",
   });
   let stderr = "";
+  let shutdownRequested = false;
   child.stderr.on("data", (chunk) => {
     stderr += chunk.toString();
+    if (graceful && !shutdownRequested && stderr.includes("DSH_SHUTDOWN_ARMED\n")) {
+      shutdownRequested = true;
+      child.kill("SIGTERM");
+    }
   });
   try {
     const marker = await new Promise((resolve) => {
@@ -458,6 +491,19 @@ async function bootWithProbe(cliBin, nodeBin, environment, fixtureProject, dshHo
     assert(marker !== undefined, "harness probe produced no DSH_PROBE_RESULT marker");
     assert(marker.parseError === undefined, marker.parseError ?? "invalid probe marker");
     const rawMarker = /DSH_PROBE_RESULT:(\{.*\})\n/u.exec(stderr)?.[0] ?? "";
+    if (graceful) {
+      const ownedPids = await collectOwnedProcessTree(child.pid);
+      child.kill("SIGTERM"); // Reject any process still live after its shutdown result.
+      await awaitChildExit(child);
+      assert(
+        child.exitCode === 0 || marker.error !== null,
+        "Harness lifecycle probe did not shut down cleanly",
+      );
+      assert(
+        ownedPids.every((pid) => !pidExists(pid)),
+        "Harness lifecycle process tree survived shutdown",
+      );
+    }
     return { ...marker, rawMarkerSha256: createHash("sha256").update(rawMarker).digest("hex") };
   } finally {
     await terminateProcessTree(child);
@@ -562,6 +608,90 @@ function probeSource() {
     marker.error = String(error).slice(0, 240);
     process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n");
   });
+}
+`;
+}
+
+function h05ProbeSource() {
+  return `import { randomUUID } from "node:crypto";
+import { readFileSync, readdirSync, renameSync, watch, writeFileSync } from "node:fs";
+import path from "node:path";
+export default function apply(ctx) {
+  const root = process.env.AST_PROBE_PROJECT_ROOT, control = process.env.AST_H05_CONTROL_DIRECTORY;
+  const nonce = process.env.AST_H05_NONCE, ownerToken = process.env.AST_H05_OWNER_TOKEN;
+  const patchPath = process.env.AST_H05_PATCH_PATH, enablePatch = Buffer.from(process.env.AST_H05_ENABLE_PATCH, "base64").toString();
+  const marker = { scenario: "native-session-cancel/hmr-15-0-15/shutdown", error: null };
+  const events = () => { try { return readFileSync(path.join(control, "events.jsonl"), "utf8").trim().split("\\n").filter(Boolean).map(JSON.parse); } catch { return []; } };
+  const astSchemas = () => ctx.tools.schemas().filter((tool) => tool.name.startsWith("mcp__ast__")).sort((a, b) => a.name.localeCompare(b.name));
+  const fail = (message) => { throw new Error(message); };
+  const atomicReplace = (content) => { const next = patchPath + ".next"; writeFileSync(next, content); renameSync(next, patchPath); };
+  const refreshPatch = (content) => { atomicReplace(content); const registrations = [...(ctx.get("hmr")?.configs?.values() ?? [])]; if (registrations.length === 0) fail("H-05 HMR registration is absent"); for (const registration of registrations) registration.watcher.emit("change", patchPath); };
+  const writeCommand = (callId, fixtureId, mode, correlationId) => { const command = Object.freeze({ callId, correlationId, fixtureId, mode, nonce, ownerToken }); writeFileSync(path.join(control, "command.json"), JSON.stringify(command)); return command; };
+  const ownerPids = () => process.platform !== "linux" ? [] : readdirSync("/proc").filter((name) => /^\\d+$/.test(name)).filter((name) => { try { return readFileSync("/proc/" + name + "/environ", "utf8").split("\\0").includes("AST_H01_PROCESS_OWNER=" + ownerToken); } catch { return false; } }).map(Number).sort((a, b) => a - b);
+  const awaitOwnerExit = (owned) => new Promise((resolve, reject) => { let deadline; const finish = (error) => { clearTimeout(deadline); process.off("SIGCHLD", check); error ? reject(error) : resolve(); }; const check = () => { if (owned.every((pid) => !ownerPids().includes(pid))) finish(); }; deadline = setTimeout(() => finish(new Error("H-05 owner-exit barrier expired")), 15000); process.on("SIGCHLD", check); check(); });
+  const waitEvent = (predicate) => new Promise((resolve, reject) => { let observer; const deadline = setTimeout(() => { observer?.close(); reject(new Error("H-05 event barrier expired")); }, 15000); const check = () => { const found = events().find(predicate); if (!found) return; clearTimeout(deadline); observer?.close(); resolve(found); }; observer = watch(control, { persistent: false }, check); check(); });
+  const awaitCatalog = (count) => new Promise((resolve, reject) => { let stop, checking = false; const deadline = setTimeout(() => { stop?.(); reject(new Error("H-05 catalog barrier expired " + count + "/" + astSchemas().length)); }, 30000); const check = async () => { if (checking || astSchemas().length !== count) return; checking = true; try { const refreshes = [...(ctx.get("hmr")?.refreshTasks ?? [])]; if (refreshes.length) await Promise.all(refreshes); await ctx.loader.await(); const schemas = astSchemas(); if (schemas.length !== count) return; clearTimeout(deadline); stop?.(); resolve(schemas); } catch (error) { reject(error); } finally { checking = false; } }; stop = ctx.on("tools/change", () => void check()); void check(); });
+  const awaitRetirementStart = () => new Promise((resolve, reject) => { let stop; const deadline = setTimeout(() => { stop?.(); reject(new Error("H-05 retirement-start barrier expired")); }, 15000); const check = () => { if (astSchemas().length >= 15) return; clearTimeout(deadline); stop?.(); resolve(); }; stop = ctx.on("tools/change", check); check(); });
+  const execute = (callId, agent) => ctx.tools.execute({ callId, name: ${JSON.stringify(H01_TOOL_NAME)}, arguments: { project_root: root }, signal: new AbortController().signal, ...(agent ? { agent } : {}) });
+  const createSession = (sessionId) => ctx.agents.create({ sessionId, meta: { cwd: root }, agentOptions: { provider: "deepseek-official", model: "deepseek-v4-flash" } });
+  const prompt = (handle) => handle.agent.followup(Object.freeze({ id: randomUUID(), role: "user", content: [Object.freeze({ type: "text", text: "Inspect project status." })], source: Object.freeze({ kind: "user" }) }));
+  const durableResults = (handle, callId) => handle.agent.session.events.filter((event) => event.type === "tool/result" && event.data.message.source.callId === callId);
+  const fixtureErrors = (expected) => events().filter((event) => event.callId === expected.callId && event.fixtureId === expected.fixtureId && event.generation === expected.generation && event.phase === "error");
+  const findPublicError = (value) => { if (typeof value === "string") { try { return findPublicError(JSON.parse(value)); } catch { return; } } if (Array.isArray(value)) { for (const item of value) { const found = findPublicError(item); if (found) return found; } } else if (value && typeof value === "object") { if (value.error?.code && typeof value.error.correlation_id === "string") return value.error; for (const key of ["structuredContent", "content", "text", "value", "error", "message"]) { const found = findPublicError(value[key]); if (found) return found; } } };
+  const classifyTransport = (result, callId) => { const encoded = JSON.stringify(result), text = result?.content?.[0]?.text ?? result?.[0]?.content?.[0]?.text ?? "", observed = result?.error?.info?.code ?? (/abort/iu.test(text) ? "ABORTED" : /timeout/iu.test(text) ? "TIMEOUT" : "OTHER"), code = typeof observed === "string" && /^[A-Z][A-Z0-9_-]{0,63}$/u.test(observed) ? observed : "OTHER"; return Object.freeze({ surface: "transport", code, bytes: Buffer.byteLength(encoded), callId, authoritativeAstTerminal: false }); };
+  const assertTerminalIdentity = (expected, command, evidenceRows, nativeRows, durableRows) => { const evidence = evidenceRows[0], astAuthority = findPublicError(evidence.result), terminalOrigins = [command.callId === expected.callId, command.fixtureId === expected.fixtureId, command.correlationId === expected.correlationId, command.ownerToken === ownerToken, expected.ownerToken === ownerToken, evidence.callId === expected.callId, evidence.fixtureId === expected.fixtureId, evidence.generation === expected.generation, evidence.correlationId === expected.correlationId, evidence.ownerToken === command.ownerToken, evidence.ownerToken === expected.ownerToken], rejectedAstCodes = ["ABORTED", "ABORTED_BEFORE_DISPATCH", "OPERATION_DEADLINE_EXCEEDED"]; if (evidenceRows.length !== 1 || nativeRows.length !== 1 || nativeRows[0].exec.callId !== expected.callId || nativeRows[0].result.isError !== true || durableRows.length !== 1 || durableRows[0].data.message.source.callId !== expected.callId || !terminalOrigins.every(Boolean) || !astAuthority || astAuthority.code !== "REQUEST_CANCELLED" || astAuthority.correlation_id !== expected.correlationId || rejectedAstCodes.includes(astAuthority.code)) fail("AST authority/join " + JSON.stringify({ e: evidenceRows.length, n: nativeRows.length, d: durableRows.length, origin: terminalOrigins, ast: astAuthority })); const encoded = JSON.stringify({ native: nativeRows[0].result, durable: durableRows[0].data.message.content }); if (Buffer.byteLength(encoded) > 4096 || /Bearer |api-key|token=|ownerToken|nonce|stack|\\/home\\//i.test(encoded)) fail("terminal evidence was unbounded or sensitive"); return Object.freeze({ astAuthority, native: { ...classifyTransport(nativeRows[0].result, nativeRows[0].exec.callId), astCorrelationId: astAuthority.correlation_id }, durable: { ...classifyTransport(durableRows[0].data.message.content, durableRows[0].data.message.source.callId), astCorrelationId: astAuthority.correlation_id } }); };
+  const assertNoRetiredEffects = (handle, readNative) => { const retiredEvents = events().filter((event) => event.fixtureId === "retire"), retiredDurable = durableResults(handle, "h05-retire"), retiredNative = readNative(); if (retiredNative.length !== 1 || retiredNative.some((row) => row.result.isError !== true) || retiredDurable.length !== 0 || retiredEvents.some((event) => event.outcome === "succeeded") || retiredEvents.filter((event) => event.phase === "terminal").length !== 1 || new Set(retiredEvents.map(JSON.stringify)).size !== retiredEvents.length) fail("retired generation published a late, duplicate, or durable effect"); };
+  const native = [], shutdownNative = [], catalogHistory = [], bridgeToolResults = [], bridgeAbortResults = [];
+  const captureBridge = (handle) => { const scoped = handle.agent.scope.ctx, stopNative = scoped.on("tools/result", (exec, result) => native.push({ exec, result })), stopExecute = scoped.on("tools/execute", async (exec, next) => { const result = await next(); if (exec.callId === "mock-call-1") bridgeToolResults.push({ exec, result, signalAborted: exec.signal.aborted }); return result; }), stopPost = scoped.on("tools/post-execute", async (exec, result, next) => { if (exec.callId === "mock-call-1") bridgeAbortResults.push({ exec, result, signalAborted: exec.signal.aborted }); return next(); }); return () => { stopPost(); stopExecute(); stopNative(); }; };
+  const stopResult = ctx.on("tools/result", (exec, result) => { if (exec.callId === "h05-fresh") native.push({ exec, result }); });
+  const stopCatalog = ctx.on("tools/change", () => catalogHistory.push(astSchemas().map((tool) => tool.name)));
+  let shutdownHandle, shutdownExpected, shutdownCommand, shutdownTerminal, shutdownResources, resolveShutdownNative;
+  const shutdownResultHooks = ctx.events._hooks["tools/result"] ||= [], shutdownResultObserver = { ctx: ctx.root, global: true, callback: (exec, result) => { if (shutdownExpected && exec.callId === shutdownExpected.callId) { shutdownNative.push({ exec, result }); resolveShutdownNative?.(); } } }; shutdownResultHooks.push(shutdownResultObserver);
+  const shutdownStopResult = () => ctx.events.unregister(shutdownResultHooks, shutdownResultObserver.callback);
+  const waitShutdownNative = () => new Promise((resolve, reject) => { if (shutdownNative.length) return resolve(); const deadline = setTimeout(() => reject(new Error("H-05 shutdown native-result barrier expired")), 15000); resolveShutdownNative = () => { clearTimeout(deadline); resolve(); }; });
+  const shutdownHook = ctx.effect(() => async () => { try {
+    if (!shutdownHandle) return;
+    await shutdownHandle.dispose();
+    await waitEvent((event) => event.callId === shutdownExpected.callId && event.fixtureId === shutdownExpected.fixtureId && event.generation === shutdownExpected.generation && event.phase === "error"); await waitShutdownNative();
+    const shutdownErrors = fixtureErrors(shutdownExpected), shutdownDurable = durableResults(shutdownHandle, shutdownExpected.callId);
+    assertTerminalIdentity(shutdownExpected, shutdownCommand, shutdownErrors, shutdownNative, shutdownDurable); shutdownTerminal = shutdownErrors[0];
+    shutdownResources = shutdownTerminal.resources;
+    if (!shutdownResources || [shutdownResources.active, shutdownResources.held, shutdownResources.abortListeners, shutdownResources.staleSettlements, shutdownResources.timers].some((value) => value !== 0)) fail("shutdown fixture resources did not converge to zero");
+    Object.assign(marker, { shutdownTerminal: { callId: shutdownTerminal.callId, code: shutdownTerminal.result.error.code, correlationId: shutdownTerminal.result.error.correlation_id }, readback: shutdownResources });
+    process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n");
+  } catch (error) { marker.error = String(error).slice(0, 240); process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n"); throw error; } finally { shutdownStopResult(); stopResult(); stopCatalog(); } });
+  async function run() {
+    await ctx.loader.await();
+    const baselineSchemas = astSchemas();
+    if (baselineSchemas.length !== 15 || new Set(baselineSchemas.map((tool) => tool.name)).size !== 15) fail("baseline catalog is not unique guarded-15"); catalogHistory.length = 0;
+    const handle = await createSession("h05-native-cancel"), stopCancelBridge = captureBridge(handle), cancelExpected = Object.freeze({ callId: "mock-call-1", correlationId: "00000000-0000-4000-8000-000000000001", fixtureId: "user-cancel", generation: 1, ownerToken });
+    const cancelCommand = writeCommand(cancelExpected.callId, cancelExpected.fixtureId, "hold", cancelExpected.correlationId); prompt(handle);
+    await waitEvent((event) => event.callId === cancelExpected.callId && event.phase === "started"); handle.agent.cancel({ kind: "user" }); await handle.agent.whenIdle();
+    await waitEvent((event) => event.callId === cancelExpected.callId && event.fixtureId === cancelExpected.fixtureId && event.generation === cancelExpected.generation && event.phase === "error"); const cancelErrors = fixtureErrors(cancelExpected), astCancel = cancelErrors[0], cancelNative = native.filter((row) => row.exec.agent === handle.agent), cancelDurable = durableResults(handle, cancelExpected.callId);
+    const agentAbortReason = handle.agent.session.events.findLast((event) => event.type === "turn/end")?.data.reason;
+    if (JSON.stringify(agentAbortReason) !== JSON.stringify({ kind: "aborted", reason: { kind: "user" } })) fail("Agent turn/end did not retain user abort reason");
+    // Signal rejection and MCP isError text reduction are distinct transport observations.
+    const cancelEvidence = assertTerminalIdentity(cancelExpected, cancelCommand, cancelErrors, cancelNative, cancelDurable), bridgeTool = classifyTransport(bridgeToolResults[0]?.result, bridgeToolResults[0]?.exec.callId), bridgeAbort = classifyTransport(bridgeAbortResults[0]?.result, bridgeAbortResults[0]?.exec.callId), transportRows = [bridgeAbort, bridgeTool, cancelEvidence.native, cancelEvidence.durable]; if (bridgeToolResults.length !== 1 || bridgeAbortResults.length !== 1 || bridgeToolResults[0].signalAborted !== true || bridgeAbortResults[0].signalAborted !== true || transportRows.some((row) => !row || row.callId !== cancelExpected.callId || row.bytes < 1 || row.bytes > 4096 || row.authoritativeAstTerminal !== false || !/^[A-Z][A-Z0-9_-]{0,63}$/u.test(row.code)) || /Bearer |api-key|token=|ownerToken|nonce|stack|\\/home\\//i.test(JSON.stringify([bridgeToolResults[0].result, bridgeAbortResults[0].result]))) fail("actual transport evidence diverged"); stopCancelBridge(); await handle.dispose();
+
+    const retireHandle = await createSession("h05-native-retire"), retireCommand = writeCommand("h05-retire", "retire", "hold", "00000000-0000-4000-8000-000000000002"), retirePending = execute("h05-retire", retireHandle.agent);
+    await waitEvent((event) => event.fixtureId === retireCommand.fixtureId && event.phase === "started");
+    const stopRetireNative = retireHandle.agent.scope.ctx.on("tools/result", (exec, result) => native.push({ exec, result })), oldOwnerPids = ownerPids(), retiring = awaitRetirementStart(), removed = awaitCatalog(0); refreshPatch("- id: mcp-ast\\n  disabled: true\\n"); await retiring; const retireSettled = await retirePending; await removed; await awaitOwnerExit(oldOwnerPids);
+    const readNative = () => native.filter((row) => row.exec.callId === retireCommand.callId); assertNoRetiredEffects(retireHandle, readNative);
+    if (retireSettled.isError !== true || oldOwnerPids.length === 0 || ownerPids().length !== 0) fail("old producer or owner did not actively settle at retirement");
+    const stale = await execute("h05-stale"); if (stale.isError !== true || stale.error?.info?.code !== "UNKNOWN_TOOL") fail("stale invocation was not UNKNOWN_TOOL");
+
+    const reconnected = awaitCatalog(15); refreshPatch(enablePatch); const freshSchemas = await reconnected, freshOwnerPids = ownerPids();
+    if (freshSchemas.length !== 15 || new Set(freshSchemas.map((tool) => tool.name)).size !== 15 || JSON.stringify(freshSchemas) !== JSON.stringify(baselineSchemas) || freshOwnerPids.length === 0 || freshOwnerPids.some((pid) => oldOwnerPids.includes(pid))) fail("fresh generation did not publish one unique schema-identical catalog");
+    writeCommand("h05-fresh", "fresh", "pass", "00000000-0000-4000-8000-000000000003"); if ((await execute("h05-fresh")).isError === true || native.filter((row) => row.exec.callId === "h05-fresh").length !== 1 || catalogHistory.some((catalog) => new Set(catalog).size !== catalog.length) || catalogHistory.filter((catalog, index) => catalog.length === 0 && catalogHistory[index - 1]?.length !== 0).length !== 1 || catalogHistory.filter((catalog, index) => catalog.length === 15 && catalogHistory[index - 1]?.length !== 15).length !== 1) fail("fresh generation duplicated or re-registered lifecycle surfaces");
+    assertNoRetiredEffects(retireHandle, readNative); stopRetireNative(); await retireHandle.dispose();
+
+    shutdownHandle = await createSession("h05-native-shutdown"); shutdownExpected = Object.freeze({ callId: "mock-call-1", correlationId: "00000000-0000-4000-8000-000000000006", fixtureId: "shutdown", generation: 1, ownerToken });
+    shutdownCommand = writeCommand(shutdownExpected.callId, shutdownExpected.fixtureId, "hold", shutdownExpected.correlationId); prompt(shutdownHandle);
+    await waitEvent((event) => event.fixtureId === shutdownExpected.fixtureId && event.phase === "started");
+    Object.assign(marker, { transport: { bridgeAbort: { ...bridgeAbort, acknowledged: bridgeAbortResults[0].signalAborted }, bridgeTool: { ...bridgeTool, acknowledged: bridgeToolResults[0].signalAborted }, native: cancelEvidence.native, durable: cancelEvidence.durable }, agentAbortReason, astTerminal: { callId: astCancel.callId, fixtureId: astCancel.fixtureId, generation: astCancel.generation, ownerObserved: astCancel.ownerToken === ownerToken, code: astCancel.result.error.code, correlationId: astCancel.result.error.correlation_id }, catalogs: [baselineSchemas.length, 0, freshSchemas.length], oldOwnerPids, freshOwnerPids });
+    process.stderr.write("DSH_SHUTDOWN_ARMED\\n");
+  }
+  void run().catch((error) => { marker.error = String(error).slice(0, 240); process.stderr.write("DSH_PROBE_RESULT:" + JSON.stringify(marker) + "\\n"); });
 }
 `;
 }
@@ -1521,6 +1651,125 @@ try {
   // prettier-ignore
   summary.h03 = { budget: H03_COMPRESSED_BUDGET, joins: { cold: join({ callId: "h03-cold", fixtureId: "cold", generation: coldEvents[0].generation }, cold), queued: join(queuedOrigin, queued), recycle: join({ callId: "h03-recycle", fixtureId: "recycle", generation: recycleEvents[0].generation }, recycle) }, rawMarkerSha256: h03.rawMarkerSha256, readback };
   summary.phases.h03 = "ok";
+
+  // ── Phase H-05: native Session cancellation + config-HMR retirement ────────
+  const h05Control = path.join(temporaryRoot, "h05-control");
+  const h05Bundle = path.join(temporaryRoot, "h05-lifecycle-bundle");
+  const h05Nonce = `h05-${createHash("sha256").update(mcpClientArchive).digest("hex").slice(0, 24)}`;
+  const h05OwnerToken = `h05-owner-${createHash("sha256").update(archivePath).digest("hex").slice(0, 20)}`;
+  await mkdir(h05Control, { recursive: true });
+  await mkdir(h05Bundle, { recursive: true });
+  await writeFile(
+    path.join(h05Bundle, "package.json"),
+    JSON.stringify({
+      name: "@ast-mcp/h05-lifecycle",
+      version: "1.0.0",
+      type: "module",
+      exports: "./probe.mjs",
+      dsh: { bundle: { patch: "./cordis.patch.yml" } },
+    }),
+  );
+  await writeFile(path.join(h05Bundle, "probe.mjs"), h05ProbeSource());
+  await writeFile(
+    path.join(h05Bundle, "cordis.patch.yml"),
+    "- insert:\n    - id: h05-lifecycle-probe\n      name: '@ast-mcp/h05-lifecycle'\n      inject: ['tools', 'loader', 'agents']\n",
+  );
+  await run(nodeBin, [cliBin, "plugin", "--profile", "smoke", "add", `file:${h05Bundle}`], {
+    cwd: temporaryRoot,
+    env: dshEnvironment,
+  });
+  // prettier-ignore
+  const h05Descriptor = JSON.stringify({ controlDirectory: h05Control, nonce: h05Nonce, ownerToken: h05OwnerToken, generation: 1 });
+  const h05EnablePatch = `- id: mcp-ast
+  disabled: false
+  config:
+    serverName: ast
+    transport: stdio
+    command: !!js process.execPath
+    args:
+      - !!js process.getBuiltinModule('node:url').fileURLToPath(new URL('node_modules/ast-mcp-server/dist/index.js', baseUrl))
+    cwd: !!js process.cwd()
+    failOnStartupError: true
+    toolCallTimeoutMs: ${timeoutBudget.outerToolCallMs}
+    env:
+      AST_MCP_APPLY_GUARD: deny
+      AST_MCP_TEXT_PROJECTION: canonical_json
+      AST_COMPILER_WORKER_MODE: supervised
+      AST_H05_FIXTURE: '${h05Descriptor}'
+      AST_H01_PROCESS_OWNER: '${h05OwnerToken}'
+`;
+  await writeFile(path.join(profileDir, "cordis.patch.yml"), h05EnablePatch);
+  const h05DumpConfig = (
+    await run(nodeBin, [cliBin, "--profile", "smoke", "--dump-config"], {
+      cwd: temporaryRoot,
+      env: dshEnvironment,
+    })
+  ).stdout;
+  assert(h05DumpConfig.includes("h05-lifecycle-probe"), "H-05 immutable probe bundle is absent");
+  const mockModulePath = path.join(
+    source,
+    "packages",
+    "test-support",
+    "llm-mock-server",
+    "lib",
+    "index.js",
+  );
+  const { startMockLlmServer } = await import(pathToFileURL(mockModulePath).href);
+  const h05Mock = await startMockLlmServer({
+    sequence: [
+      "tool_call_success",
+      "success",
+      "tool_call_success",
+      "success",
+      "tool_call_success",
+      "success",
+    ],
+    repeatLast: true,
+    apiKey: "h05-native-key",
+    toolName: H01_TOOL_NAME,
+    toolArguments: JSON.stringify({ project_root: fixtureProject }),
+  });
+  let h05;
+  try {
+    h05 = await bootWithProbe(
+      cliBin,
+      nodeBin,
+      {
+        ...dshEnvironment,
+        AST_H05_CONTROL_DIRECTORY: h05Control,
+        AST_H05_NONCE: h05Nonce,
+        AST_H05_OWNER_TOKEN: h05OwnerToken,
+        AST_H05_PATCH_PATH: path.join(profileDir, "cordis.patch.yml"),
+        AST_H05_ENABLE_PATCH: Buffer.from(h05EnablePatch).toString("base64"),
+        DEEPSEEK_API_KEY: "h05-native-key",
+        DEEPSEEK_BASE_URL: h05Mock.baseURL,
+      },
+      fixtureProject,
+      dshHome,
+      true,
+    );
+  } finally {
+    await h05Mock.close();
+  }
+  await assertNoTransientResidue(temporaryRoot);
+  assert(h05.error === null, `H-05 exact-host probe failed: ${h05.error ?? "unknown"}`);
+  assert(isDeepStrictEqual(h05.catalogs, [15, 0, 15]), "H-05 catalog sequence diverged");
+  const h05TransportRows = Object.entries(h05.transport ?? {});
+  // prettier-ignore
+  assert(h05.astTerminal?.code === "REQUEST_CANCELLED" && h05.astTerminal.ownerObserved === true && h05.shutdownTerminal?.code === "REQUEST_CANCELLED" && h05.transport?.bridgeAbort?.acknowledged === true && h05.transport.bridgeAbort.surface === "transport" && h05.transport.bridgeTool?.acknowledged === true && isDeepStrictEqual(h05TransportRows.map(([name]) => name).sort(), ["bridgeAbort", "bridgeTool", "durable", "native"]) && h05TransportRows.every(([, evidence]) => evidence.surface === "transport" && evidence.callId === h05.astTerminal.callId && evidence.bytes > 0 && evidence.bytes <= 4096 && /^[A-Z][A-Z0-9_-]{0,63}$/u.test(evidence.code) && evidence.authoritativeAstTerminal === false) && h05.transport.native?.callId === h05.transport.durable?.callId && h05.transport.native.astCorrelationId === h05.astTerminal.correlationId && h05.transport.durable.astCorrelationId === h05.astTerminal.correlationId && !["ABORTED", "ABORTED_BEFORE_DISPATCH", "OPERATION_DEADLINE_EXCEEDED"].includes(h05.astTerminal.code) && isDeepStrictEqual(h05.agentAbortReason, { kind: "aborted", reason: { kind: "user" } }), "H-05 cancellation ownership diverged");
+  assert(
+    (await collectOwnerTokenPids(h05OwnerToken)).length === 0,
+    "H-05 process owner survived Host shutdown",
+  );
+  summary.h05 = {
+    catalogs: h05.catalogs,
+    astTerminal: h05.astTerminal,
+    transport: h05.transport,
+    ownerGenerations: [h05.oldOwnerPids.length, h05.freshOwnerPids.length],
+    readback: h05.readback,
+    rawMarkerSha256: h05.rawMarkerSha256,
+  };
+  summary.phases.h05 = "ok";
 
   // ── Phase D: native agent/session visibility + durable cold replay (H-01a) ──
   const harness = { source, cliBin, nodeBin };

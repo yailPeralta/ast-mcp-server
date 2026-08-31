@@ -28,11 +28,11 @@ Convergence MUST await boundary completion, expected Session catalog/owner state
 
 ### Requirement: User cancellation retains AST terminal authority
 
-User cancellation MUST yield one bounded correlated AST error from the closed vocabulary; bridge Abort acknowledgement MUST remain separate transport evidence.
+User cancellation MUST yield one bounded authoritative internal AST public envelope from the closed vocabulary; bridge Abort acknowledgement and Host result surfaces MUST remain separate transport evidence.
 
 #### Scenario: Session cancellation is correlated
 
-- **GIVEN** a held Session AST call, **WHEN** public user-cancel occurs, **THEN** one `REQUEST_CANCELLED`, native `tools/result`, and durable `tool/result` MUST exist with one UUID and at most 4096 response bytes.
+- **GIVEN** a held Session AST call, **WHEN** public user-cancel occurs, **THEN** one authoritative `REQUEST_CANCELLED` UUID plus exactly one native `tools/result` and durable `tool/result` MUST exist within 4096 bytes, with observed call/source identities joining both transport surfaces to that UUID.
 
 #### Scenario: Competing abort classification fails
 

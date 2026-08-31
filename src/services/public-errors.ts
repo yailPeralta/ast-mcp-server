@@ -1,7 +1,10 @@
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { types as utilTypes } from "node:util";
-import { emitConfiguredH03ErrorEvidence } from "./h03-timeout-fixture.js";
+import {
+  configuredH05CorrelationId,
+  emitConfiguredH03ErrorEvidence,
+} from "./h03-timeout-fixture.js";
 
 export const PUBLIC_ERROR_CODES = Object.freeze([
   "INVALID_INPUT",
@@ -302,7 +305,7 @@ function serializePublicError(
 
 export function renderPublicError(
   error: unknown,
-  correlationId: string = randomUUID(),
+  correlationId: string = configuredH05CorrelationId(error) ?? randomUUID(),
 ): RenderedPublicError {
   const classified = classifyPublicError(error);
   const emitted = (value: RenderedPublicError) => (
