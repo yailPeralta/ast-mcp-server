@@ -7,6 +7,7 @@ export interface BoundedCommandOptions extends SpawnOptions {
 }
 
 export function terminateProcessTree(child: ChildProcess): Promise<void>;
+export function sanitizeDiagnosticText(value: unknown): string;
 export function runBoundedCommand(
   command: string,
   args: readonly string[],

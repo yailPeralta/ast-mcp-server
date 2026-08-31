@@ -35,7 +35,7 @@ import { isDeepStrictEqual } from "node:util";
 import yaml from "yaml";
 import { validateTimeoutBudget } from "./harness-timeout-budget.mjs";
 // prettier-ignore
-import { classifyExactHostToolError, createH03CleanupEvidence, parseProbeMarker, requireExactIdentity, runBoundedCommand, terminateProcessTree } from "./runtime-process.mjs";
+import { classifyExactHostToolError, createH03CleanupEvidence, parseProbeMarker, requireExactIdentity, runBoundedCommand, sanitizeDiagnosticText, terminateProcessTree } from "./runtime-process.mjs";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const packageMetadata = JSON.parse(
@@ -53,6 +53,8 @@ const PUBLIC_PACKAGE_INTEGRITY =
 const PUBLIC_PACKAGE_SHASUM = "166f95121a72f0b03c325cef586a211cd9107a24";
 // prettier-ignore
 const PINNED_GUI_IDENTITY = Object.freeze({ webPackageSha256: "d73d37377783372f27971b0518b62c9cd1cbf03177e5ac402bb2c4fe1f42a3ec", webEntrypointSha256: "069851c0c35055baa63fbd8bca9b833f1d05a4e96613c618ff1ff0c0595c7db0", playwrightVersion: "1.61.1", playwrightPackageSha256: "6b840268612656f0639fb7d68782e8353bdf11518589d30ddf66f283c2670ed5", playwrightSourceSha256: "a0f5715ea22354f922791a9c53dc012d5d5c067ff9cc4cd35ffb7cd272071a9f", browserManifestSha256: "ee39bc924bc3d1bd895626c2910f1292d109bbfeeb5abd113acb45e1951cc942", chromiumRevision: "1228", chromiumVersion: "149.0.7827.55", chromiumSha256: "2d18db9d8608b052b6a552ee00ec1e830f93692e928b65ecc67d693bd33fe801" });
+// prettier-ignore
+const PINNED_H05_PROFILE_SHA256 = Object.freeze({ native: "b807c75f27ddebf98a128207177dced8e025aaf78592f0eb951338831fe00600", web: "742f534cac58cbbf9a527fc988cefe4d82b6f0bbc782a03a5377db55e8e2356d", nativeTempRoots: 1, webTempRoots: 2 });
 const H01_TOOL_NAME = "mcp__ast__ast_get_project_status";
 // prettier-ignore
 const H03_COMPRESSED_BUDGET = validateTimeoutBudget({ queueWaitMs: 100, executionDeadlineMs: 1000, marginMs: 100, outerToolCallMs: 1500 });
@@ -133,6 +135,9 @@ async function digestFile(filePath, algorithm, encoding) {
 function hashJson(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
+
+// prettier-ignore
+function canonicalH05Profile(content, { controlDirectory, nonce, ownerToken, tempRoot, tempRoots }) { let canonical = content; for (const [value, marker, count] of [[controlDirectory, "<CONTROL>", 1], [nonce, "<NONCE>", 1], [ownerToken, "<OWNER>", 2], [tempRoot, "<TEMP>", tempRoots]]) { const observed = canonical.split(value).length - 1; assert(observed === count, `H-05 profile binding ${marker} diverged (${observed}/${count})`); canonical = canonical.replaceAll(value, marker); } return canonical; }
 
 function classifyText(text) {
   return {
@@ -444,7 +449,7 @@ async function assertNoTransientResidue(...roots) {
 async function waitForJsonLine(filePath, predicate, timeoutMs = 30_000) { return new Promise((resolve, reject) => { let observer; const deadline = setTimeout(() => finish(new Error(`event barrier expired for ${path.basename(filePath)}`)), timeoutMs); const finish = (error, value) => { clearTimeout(deadline); observer?.close(); if (error) reject(error); else resolve(value); }; const check = async () => { const lines = await readFile(filePath, "utf8").then((text) => text.trim().split("\n").filter(Boolean), () => []); for (const line of lines) { const value = JSON.parse(line); if (predicate(value)) return finish(undefined, value); } }; observer = watch(path.dirname(filePath), { persistent: false }, () => void check().catch(finish)); void check().catch(finish); }); }
 
 // prettier-ignore
-async function launchPinnedWeb(cliBin, nodeBin, environment) { const child = spawn(nodeBin, [cliBin, "web", "--no-open", "--host", "127.0.0.1", "--port", "0"], { cwd: temporaryRoot, env: environment, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" }); let output = ""; const launchUrl = await new Promise((resolve, reject) => { const deadline = setTimeout(() => reject(new Error("pinned Web readiness deadline expired")), 90_000); const inspect = (chunk) => { output = `${output}${String(chunk)}`.slice(-100_000); const match = /dsh web: (http:\/\/[^\s]+)/u.exec(output); if (match?.[1]) { clearTimeout(deadline); resolve(match[1]); } }; child.stdout.on("data", inspect); child.stderr.on("data", inspect); child.once("error", reject); child.once("exit", (code) => reject(new Error(`pinned Web exited before readiness (${String(code)})`))); }).catch(async (error) => { await terminateProcessTree(child); throw error; }); return { child, launchUrl, output: () => output }; }
+async function launchPinnedWeb(cliBin, nodeBin, environment) { const child = spawn(nodeBin, [cliBin, "web", "--no-open", "--host", "127.0.0.1", "--port", "0"], { cwd: temporaryRoot, env: environment, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" }); let output = "", readiness = ""; const launchUrl = await new Promise((resolve, reject) => { const deadline = setTimeout(() => reject(new Error("pinned Web readiness deadline expired")), 90_000); const inspect = (chunk) => { const text = String(chunk); output = `${output}${text}`.slice(-100_000); readiness = `${readiness}${text}`.slice(-2048); const match = /dsh web: (http:\/\/[^\s]+)/u.exec(readiness); if (match?.[1]) { readiness = ""; clearTimeout(deadline); resolve(match[1]); } }; child.stdout.on("data", inspect); child.stderr.on("data", inspect); child.once("error", reject); child.once("exit", (code) => reject(new Error(`pinned Web exited before readiness (${String(code)})`))); }).catch(async (error) => { readiness = ""; await terminateProcessTree(child); throw error; }); return { child, launchUrl, output: () => sanitizeDiagnosticText(output) }; }
 
 /** Boot the profile with the probe plugin and return its DSH_PROBE_RESULT marker. */
 async function bootWithProbe(
@@ -642,14 +647,15 @@ export default function apply(ctx) {
   const waitEvent = (predicate) => new Promise((resolve, reject) => { let observer; const deadline = setTimeout(() => { observer?.close(); reject(new Error("H-05 event barrier expired")); }, 15000); const check = () => { const found = events().find(predicate); if (!found) return; clearTimeout(deadline); observer?.close(); resolve(found); }; observer = watch(control, { persistent: false }, check); check(); });
   const awaitCatalog = (count) => new Promise((resolve, reject) => { let stop, checking = false; const deadline = setTimeout(() => { stop?.(); reject(new Error("H-05 catalog barrier expired " + count + "/" + astSchemas().length)); }, 30000); const check = async () => { if (checking || astSchemas().length !== count) return; checking = true; try { const refreshes = [...(ctx.get("hmr")?.refreshTasks ?? [])]; if (refreshes.length) await Promise.all(refreshes); await ctx.loader.await(); const schemas = astSchemas(); if (schemas.length !== count) return; clearTimeout(deadline); stop?.(); resolve(schemas); } catch (error) { reject(error); } finally { checking = false; } }; stop = ctx.on("tools/change", () => void check()); void check(); });
   const awaitRetirementStart = () => new Promise((resolve, reject) => { let stop; const deadline = setTimeout(() => { stop?.(); reject(new Error("H-05 retirement-start barrier expired")); }, 15000); const check = () => { if (astSchemas().length >= 15) return; clearTimeout(deadline); stop?.(); resolve(); }; stop = ctx.on("tools/change", check); check(); });
-  const execute = (callId, agent) => ctx.tools.execute({ callId, name: ${JSON.stringify(H01_TOOL_NAME)}, arguments: { project_root: root }, signal: new AbortController().signal, ...(agent ? { agent } : {}) });
-  const createSession = (sessionId) => ctx.agents.create({ sessionId, meta: { cwd: root }, agentOptions: { provider: "deepseek-official", model: "deepseek-v4-flash" } });
+  const execute = (callId, agent) => ctx.tools.execute({ callId, name: ${JSON.stringify(H01_TOOL_NAME)}, arguments: { project_root: agent ? agent.session.header.cwd : root }, signal: new AbortController().signal, ...(agent ? { agent } : {}) });
+  const assertSessionIdentity = (handle, sessionId) => { const agent = handle.agent, observed = { sessionId: agent.id === agent.session.id ? agent.session.id : "", provider: agent.options.provider, model: agent.options.model, cwd: agent.session.header.cwd }, expected = { sessionId, provider: "deepseek-official", model: "deepseek-v4-flash", cwd: root }; if (JSON.stringify(observed) !== JSON.stringify(expected)) fail("Agent/Session identity diverged"); };
+  const createSession = async (sessionId) => { const handle = await ctx.agents.create({ sessionId, meta: { cwd: root }, agentOptions: { provider: "deepseek-official", model: "deepseek-v4-flash" } }); assertSessionIdentity(handle, sessionId); return handle; };
   const prompt = (handle) => handle.agent.followup(Object.freeze({ id: randomUUID(), role: "user", content: [Object.freeze({ type: "text", text: "Inspect project status." })], source: Object.freeze({ kind: "user" }) }));
   const durableResults = (handle, callId) => handle.agent.session.events.filter((event) => event.type === "tool/result" && event.data.message.source.callId === callId);
   const fixtureErrors = (expected) => events().filter((event) => event.callId === expected.callId && event.fixtureId === expected.fixtureId && event.generation === expected.generation && event.phase === "error");
   const findPublicError = (value) => { if (typeof value === "string") { try { return findPublicError(JSON.parse(value)); } catch { return; } } if (Array.isArray(value)) { for (const item of value) { const found = findPublicError(item); if (found) return found; } } else if (value && typeof value === "object") { if (value.error?.code && typeof value.error.correlation_id === "string") return value.error; for (const key of ["structuredContent", "content", "text", "value", "error", "message"]) { const found = findPublicError(value[key]); if (found) return found; } } };
   const classifyTransport = (result, callId) => { const encoded = JSON.stringify(result), text = result?.content?.[0]?.text ?? result?.[0]?.content?.[0]?.text ?? "", observed = result?.error?.info?.code ?? (/abort/iu.test(text) ? "ABORTED" : /timeout/iu.test(text) ? "TIMEOUT" : "OTHER"), code = typeof observed === "string" && /^[A-Z][A-Z0-9_-]{0,63}$/u.test(observed) ? observed : "OTHER"; return Object.freeze({ surface: "transport", code, bytes: Buffer.byteLength(encoded), callId, authoritativeAstTerminal: false }); };
-  const assertTerminalIdentity = (expected, command, evidenceRows, nativeRows, durableRows) => { const evidence = evidenceRows[0], astAuthority = findPublicError(evidence.result), terminalOrigins = [command.callId === expected.callId, command.fixtureId === expected.fixtureId, command.correlationId === expected.correlationId, command.ownerToken === ownerToken, expected.ownerToken === ownerToken, evidence.callId === expected.callId, evidence.fixtureId === expected.fixtureId, evidence.generation === expected.generation, evidence.correlationId === expected.correlationId, evidence.ownerToken === command.ownerToken, evidence.ownerToken === expected.ownerToken], rejectedAstCodes = ["ABORTED", "ABORTED_BEFORE_DISPATCH", "OPERATION_DEADLINE_EXCEEDED"]; if (evidenceRows.length !== 1 || nativeRows.length !== 1 || nativeRows[0].exec.callId !== expected.callId || nativeRows[0].result.isError !== true || durableRows.length !== 1 || durableRows[0].data.message.source.callId !== expected.callId || !terminalOrigins.every(Boolean) || !astAuthority || astAuthority.code !== "REQUEST_CANCELLED" || astAuthority.correlation_id !== expected.correlationId || rejectedAstCodes.includes(astAuthority.code)) fail("AST authority/join " + JSON.stringify({ e: evidenceRows.length, n: nativeRows.length, d: durableRows.length, origin: terminalOrigins, ast: astAuthority })); const encoded = JSON.stringify({ native: nativeRows[0].result, durable: durableRows[0].data.message.content }); if (Buffer.byteLength(encoded) > 4096 || /Bearer |api-key|token=|ownerToken|nonce|stack|\\/home\\//i.test(encoded)) fail("terminal evidence was unbounded or sensitive"); return Object.freeze({ astAuthority, native: { ...classifyTransport(nativeRows[0].result, nativeRows[0].exec.callId), astCorrelationId: astAuthority.correlation_id }, durable: { ...classifyTransport(durableRows[0].data.message.content, durableRows[0].data.message.source.callId), astCorrelationId: astAuthority.correlation_id } }); };
+  const assertTerminalIdentity = (expected, command, evidenceRows, nativeRows, durableRows) => { const evidence = evidenceRows[0], astAuthority = findPublicError(evidence.result), terminalOrigins = [command.callId === expected.callId, command.fixtureId === expected.fixtureId, command.correlationId === expected.correlationId, command.ownerToken === ownerToken, expected.ownerToken === ownerToken, evidence.callId === expected.callId, evidence.fixtureId === expected.fixtureId, evidence.generation === expected.generation, evidence.correlationId === expected.correlationId, evidence.ownerToken === command.ownerToken, evidence.ownerToken === expected.ownerToken, nativeRows[0]?.exec.arguments.project_root === nativeRows[0]?.exec.agent?.session.header.cwd], rejectedAstCodes = ["ABORTED", "ABORTED_BEFORE_DISPATCH", "OPERATION_DEADLINE_EXCEEDED"]; if (evidenceRows.length !== 1 || nativeRows.length !== 1 || nativeRows[0].exec.callId !== expected.callId || nativeRows[0].result.isError !== true || durableRows.length !== 1 || durableRows[0].data.message.source.callId !== expected.callId || !terminalOrigins.every(Boolean) || !astAuthority || astAuthority.code !== "REQUEST_CANCELLED" || astAuthority.correlation_id !== expected.correlationId || rejectedAstCodes.includes(astAuthority.code)) fail("AST authority/join " + JSON.stringify({ e: evidenceRows.length, n: nativeRows.length, d: durableRows.length, origin: terminalOrigins, ast: astAuthority })); const encoded = JSON.stringify({ native: nativeRows[0].result, durable: durableRows[0].data.message.content }); if (Buffer.byteLength(encoded) > 4096 || /Bearer |api-key|token=|ownerToken|nonce|stack|\\/home\\//i.test(encoded)) fail("terminal evidence was unbounded or sensitive"); return Object.freeze({ astAuthority, native: { ...classifyTransport(nativeRows[0].result, nativeRows[0].exec.callId), astCorrelationId: astAuthority.correlation_id }, durable: { ...classifyTransport(durableRows[0].data.message.content, durableRows[0].data.message.source.callId), astCorrelationId: astAuthority.correlation_id } }); };
   const assertNoRetiredEffects = (handle, readNative) => { const retiredEvents = events().filter((event) => event.fixtureId === "retire"), retiredDurable = durableResults(handle, "h05-retire"), retiredNative = readNative(); if (retiredNative.length !== 1 || retiredNative.some((row) => row.result.isError !== true) || retiredDurable.length !== 0 || retiredEvents.some((event) => event.outcome === "succeeded") || retiredEvents.filter((event) => event.phase === "terminal").length !== 1 || new Set(retiredEvents.map(JSON.stringify)).size !== retiredEvents.length) fail("retired generation published a late, duplicate, or durable effect"); };
   if (process.env.AST_H05_GUI_CONTROL === "1") {
     const eventPath = path.join(control, "gui-events.jsonl"), commandPath = path.join(control, "gui-command.json"); let activeId;
@@ -1600,30 +1606,12 @@ try {
   const chromiumSha256 = await requirePrerequisite("installed Chromium executable", () =>
     sha256(chromiumPath),
   );
-  const exactGuiRuntimeIdentity = {
-    webPackageSha256: await sha256(path.join(source, "apps", "web", "package.json")),
-    webEntrypointSha256: await sha256(path.join(source, "apps", "web", "dist", "index.html")),
-    playwrightVersion: playwrightMetadata.version,
-    playwrightPackageSha256: await sha256(playwrightPackagePath),
-    playwrightSourceSha256: await sha256(playwrightSourcePath),
-    browserManifestSha256: await sha256(browserManifestPath),
-    chromiumRevision: pinnedChromium?.revision,
-    chromiumVersion: pinnedChromium?.browserVersion,
-    chromiumSha256,
-  };
+  // prettier-ignore
+  const exactGuiRuntimeIdentity = { webPackageSha256: await sha256(path.join(source, "apps", "web", "package.json")), webEntrypointSha256: await sha256(path.join(source, "apps", "web", "dist", "index.html")), playwrightVersion: playwrightMetadata.version, playwrightPackageSha256: await sha256(playwrightPackagePath), playwrightSourceSha256: await sha256(playwrightSourcePath), browserManifestSha256: await sha256(browserManifestPath), chromiumRevision: pinnedChromium?.revision, chromiumVersion: pinnedChromium?.browserVersion, chromiumSha256 };
   requireExactIdentity(exactGuiRuntimeIdentity, PINNED_GUI_IDENTITY);
   let identityBrowser;
-  try {
-    identityBrowser = await requirePrerequisite("installed Chromium executable", () =>
-      playwright.chromium.launch({ executablePath: chromiumPath, headless: true }),
-    );
-    requireExactIdentity(
-      { chromiumVersion: identityBrowser.version() },
-      { chromiumVersion: PINNED_GUI_IDENTITY.chromiumVersion },
-    );
-  } finally {
-    await identityBrowser?.close();
-  }
+  // prettier-ignore
+  try { identityBrowser = await requirePrerequisite("installed Chromium executable", () => playwright.chromium.launch({ executablePath: chromiumPath, headless: true })); requireExactIdentity({ chromiumVersion: identityBrowser.version() }, { chromiumVersion: PINNED_GUI_IDENTITY.chromiumVersion }); } finally { await identityBrowser?.close(); }
 
   const h03Control = path.join(temporaryRoot, "h03-control");
   const h03Nonce = `h03-${createHash("sha256").update(archivePath).digest("hex").slice(0, 24)}`;
@@ -1742,11 +1730,10 @@ try {
       dsh: { bundle: { patch: "./cordis.patch.yml" } },
     }),
   );
-  await writeFile(path.join(h05Bundle, "probe.mjs"), h05ProbeSource());
-  await writeFile(
-    path.join(h05Bundle, "cordis.patch.yml"),
-    "- insert:\n    - id: h05-lifecycle-probe\n      name: '@ast-mcp/h05-lifecycle'\n      inject: ['tools', 'loader', 'agents']\n",
-  );
+  // prettier-ignore
+  const h05Probe = h05ProbeSource(), h05ProbePatch = "- insert:\n    - id: h05-lifecycle-probe\n      name: '@ast-mcp/h05-lifecycle'\n      inject: ['tools', 'loader', 'agents']\n";
+  await writeFile(path.join(h05Bundle, "probe.mjs"), h05Probe);
+  await writeFile(path.join(h05Bundle, "cordis.patch.yml"), h05ProbePatch);
   await run(nodeBin, [cliBin, "plugin", "--profile", "smoke", "add", `file:${h05Bundle}`], {
     cwd: temporaryRoot,
     env: dshEnvironment,
@@ -1772,13 +1759,15 @@ try {
       AST_H01_PROCESS_OWNER: '${h05OwnerToken}'
 `;
   await writeFile(path.join(profileDir, "cordis.patch.yml"), h05EnablePatch);
-  const h05DumpConfig = (
-    await run(nodeBin, [cliBin, "--profile", "smoke", "--dump-config"], {
-      cwd: temporaryRoot,
-      env: dshEnvironment,
-    })
-  ).stdout;
-  assert(h05DumpConfig.includes("h05-lifecycle-probe"), "H-05 immutable probe bundle is absent");
+  // prettier-ignore
+  const h05DumpConfig = (await run(nodeBin, [cliBin, "--profile", "smoke", "--dump-config"], { cwd: temporaryRoot, env: dshEnvironment })).stdout;
+  // prettier-ignore
+  const h05Bindings = { controlDirectory: h05Control, nonce: h05Nonce, ownerToken: h05OwnerToken, tempRoot: temporaryRoot };
+  // prettier-ignore
+  const exactH05Profile = { effectiveProfileSha256: hashJson({ effectiveConfig: canonicalH05Profile(h05DumpConfig, { ...h05Bindings, tempRoots: PINNED_H05_PROFILE_SHA256.nativeTempRoots }), probeSourceSha256: createHash("sha256").update(h05Probe).digest("hex"), probePatchSha256: createHash("sha256").update(h05ProbePatch).digest("hex"), adapterSha256: expectedAdapterSha256 }) };
+  console.error("H05_NATIVE_IDENTITY", JSON.stringify(exactH05Profile));
+  // prettier-ignore
+  requireExactIdentity(exactH05Profile, { effectiveProfileSha256: PINNED_H05_PROFILE_SHA256.native });
   const mockModulePath = path.join(
     source,
     "packages",
@@ -1852,32 +1841,18 @@ try {
       env: dshEnvironment,
     });
   const webPatch = `${nativeModePatch}${h05EnablePatch}`;
-  const expectedProfileSha256 = createHash("sha256").update(webPatch).digest("hex");
   await writeFile(path.join(webProfileDir, "cordis.patch.yml"), webPatch);
-  const exactGuiIdentity = {
-    ...exactGuiRuntimeIdentity,
-    profileSha256: await sha256(path.join(webProfileDir, "cordis.patch.yml")),
-  };
-  requireExactIdentity(exactGuiIdentity, {
-    ...PINNED_GUI_IDENTITY,
-    profileSha256: expectedProfileSha256,
-  });
-  const guiMock = await startMockLlmServer({
-    sequence: ["success"],
-    repeatLast: true,
-    apiKey: "h05-gui-key",
-  });
-  const guiEnvironment = {
-    ...dshEnvironment,
-    AST_H05_CONTROL_DIRECTORY: h05Control,
-    AST_H05_NONCE: h05Nonce,
-    AST_H05_OWNER_TOKEN: h05OwnerToken,
-    AST_H05_PATCH_PATH: path.join(webProfileDir, "cordis.patch.yml"),
-    AST_H05_ENABLE_PATCH: Buffer.from(webPatch).toString("base64"),
-    AST_H05_GUI_CONTROL: "1",
-    DEEPSEEK_API_KEY: "h05-gui-key",
-    DEEPSEEK_BASE_URL: guiMock.baseURL,
-  };
+  // prettier-ignore
+  const webDumpConfig = (await run(nodeBin, [cliBin, "--profile", "web", "--dump-config"], { cwd: temporaryRoot, env: dshEnvironment })).stdout;
+  // prettier-ignore
+  const exactGuiIdentity = { ...exactGuiRuntimeIdentity, effectiveProfileSha256: hashJson({ effectiveConfig: canonicalH05Profile(webDumpConfig, { ...h05Bindings, tempRoots: PINNED_H05_PROFILE_SHA256.webTempRoots }), probeSourceSha256: createHash("sha256").update(h05Probe).digest("hex"), probePatchSha256: createHash("sha256").update(h05ProbePatch).digest("hex"), adapterSha256: expectedAdapterSha256 }) };
+  console.error("H05_WEB_IDENTITY", JSON.stringify(exactGuiIdentity));
+  // prettier-ignore
+  requireExactIdentity(exactGuiIdentity, { ...PINNED_GUI_IDENTITY, effectiveProfileSha256: PINNED_H05_PROFILE_SHA256.web });
+  // prettier-ignore
+  const guiMock = await startMockLlmServer({ sequence: ["success"], repeatLast: true, apiKey: "h05-gui-key" });
+  // prettier-ignore
+  const guiEnvironment = { ...dshEnvironment, AST_H05_CONTROL_DIRECTORY: h05Control, AST_H05_NONCE: h05Nonce, AST_H05_OWNER_TOKEN: h05OwnerToken, AST_H05_PATCH_PATH: path.join(webProfileDir, "cordis.patch.yml"), AST_H05_ENABLE_PATCH: Buffer.from(webPatch).toString("base64"), AST_H05_GUI_CONTROL: "1", DEEPSEEK_API_KEY: "h05-gui-key", DEEPSEEK_BASE_URL: guiMock.baseURL };
   let webChild, browser, context, page;
   try {
     const running = await launchPinnedWeb(cliBin, nodeBin, guiEnvironment);

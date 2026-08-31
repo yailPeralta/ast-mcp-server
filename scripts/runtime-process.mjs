@@ -3,6 +3,9 @@ import { Buffer } from "node:buffer";
 import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
 
+// prettier-ignore
+export function sanitizeDiagnosticText(value) { return String(value).replace(/(https?:\/\/[^\s?#]+)[?#][^\s]*/giu, "$1").replace(/\b(?:Authorization:\s*)?(?:Bearer|Basic)\s+[^\s,;]+/giu, "[REDACTED]").replace(/\b(?:api[-_]?key|token|password|secret)\s*[:=]\s*[^\s,;]+/giu, "[REDACTED]"); }
+
 function waitForExit(child, timeoutMs) {
   if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
   return new Promise((resolve) => {
