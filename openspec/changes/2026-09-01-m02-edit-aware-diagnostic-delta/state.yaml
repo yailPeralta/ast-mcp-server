@@ -1,0 +1,25 @@
+schemaName: gentle-ai.sdd-status
+schemaVersion: 1
+changeName: 2026-09-01-m02-edit-aware-diagnostic-delta
+artifactStore: hybrid
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-01-m02-edit-aware-diagnostic-delta
+nextRecommended: propose
+lastPhase: explore
+artifacts:
+  exploration: done
+  proposal: missing
+  specs: missing
+  design: missing
+  tasks: missing
+  applyProgress: missing
+  verifyReport: missing
+taskProgress:
+  total: 0
+  completed: 0
+  pending: 0
+  allComplete: false
+risks:
+  - Repeated text requires deterministic edit alignment and conservative boundaries.
+  - Coarse bounded fallback may block safe operations but must never authorize uncertain errors.
+  - Legacy prepared v1 plans retain unsafe diagnostic authorization unless rejected or revalidated.
+  - DeepSeek Harness apply must remain absent and denied.
