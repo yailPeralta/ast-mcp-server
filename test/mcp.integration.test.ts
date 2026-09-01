@@ -487,8 +487,8 @@ export function formatValue(value: number): string { return String(value); }
       releaseBeforeWrite = resolve;
     });
     setOperationTestHooksForTests({
-      beforeReplace: async (_file, index) => {
-        if (index !== 0) return;
+      onFilePhase: async ({ index, phase }) => {
+        if (phase !== "before-publish" || index !== 0) return;
         markBeforeWrite();
         await release;
       },
