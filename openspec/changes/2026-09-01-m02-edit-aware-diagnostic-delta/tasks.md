@@ -49,9 +49,9 @@ Runtime tasks 1.1, 2.1–5.3, 6.1–6.5 MUST acquire, run only on `proceed`, set
 
 ## Phase 4 — U4 integration
 
-- [ ] 4.1 **RED:** all operations plus `allow_new_errors=true`. Failure: comparison precedes text-pairs.
-- [ ] 4.2 **GREEN:** reorder `operations.ts`; delta-before-policy/hash/retain; preserve freshness/cleanup/no-writes; run U1+U4.
-- [ ] 4.3 **REFACTOR after GREEN:** reduce plumbing; rerun U4.
+- [x] 4.1 **RED:** all operations plus `allow_new_errors=true`. Failure: comparison precedes text-pairs.
+- [x] 4.2 **GREEN:** reorder `operations.ts`; delta-before-policy/hash/retain; preserve freshness/cleanup/no-writes; run U1+U4.
+- [x] 4.3 **REFACTOR after GREEN:** reduce plumbing; rerun U4.
 
 ## Phase 5 — U5 v2
 

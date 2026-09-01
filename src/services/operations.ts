@@ -5,10 +5,11 @@ import path from "node:path";
 import { createTwoFilesPatch } from "diff";
 import { LanguageVariant, Node, ScriptTarget, SyntaxKind, ts, type Project } from "ts-morph";
 import {
-  compareDiagnostics,
-  normalizeDiagnostic,
+  compareObservedDiagnostics,
+  observeDiagnostic,
   type DiagnosticDelta,
-  type NormalizedDiagnostic,
+  type DiagnosticObservation,
+  type DiagnosticTextChange,
 } from "./diagnostics.js";
 import {
   probePublicationCapability,
@@ -200,13 +201,47 @@ function pruneOperations(): void {
   }
 }
 
-function normalizeProjectDiagnostics(
+function observeProjectDiagnostics(
   project: Project,
   projectRoot: string,
   requestContext: RequestContext,
-): NormalizedDiagnostic[] {
+): DiagnosticObservation[] {
   return [...project.getConfigFileParsingDiagnostics(), ...project.getPreEmitDiagnostics()].map(
-    (diagnostic) => normalizeDiagnostic(diagnostic, projectRoot, requestContext),
+    (diagnostic, ordinal) => observeDiagnostic(diagnostic, projectRoot, ordinal, requestContext),
+  );
+}
+
+interface PlannedTextChange extends DiagnosticTextChange {
+  absolutePath: string;
+}
+
+function collectPlannedTextChanges(
+  project: Project,
+  projectRoot: string,
+  originals: ReadonlyMap<string, string>,
+  requestContext: RequestContext,
+): PlannedTextChange[] {
+  const updated = new Map<string, string>(
+    project
+      .getSourceFiles()
+      .map((sourceFile) => [sourceFile.getFilePath(), sourceFile.getFullText()]),
+  );
+  const paths = new Set([...originals.keys(), ...updated.keys()]);
+  const changes: PlannedTextChange[] = [];
+  for (const absolutePath of paths) {
+    requestContext.checkpoint();
+    const beforeText = originals.get(absolutePath) ?? null;
+    const afterText = updated.get(absolutePath) ?? null;
+    if (beforeText === afterText) continue;
+    changes.push({
+      absolutePath,
+      file: path.relative(projectRoot, absolutePath),
+      beforeText,
+      afterText,
+    });
+  }
+  return changes.sort((left, right) =>
+    left.file < right.file ? -1 : left.file > right.file ? 1 : 0,
   );
 }
 
@@ -336,7 +371,7 @@ async function createPlan(
       const context = createFreshProject(projectRootInput);
       const workspaceBefore = createWorkspaceSnapshot(context);
       operationContext.checkpoint();
-      const beforeDiagnostics = normalizeProjectDiagnostics(
+      const beforeObservations = observeProjectDiagnostics(
         context.project,
         context.projectRoot,
         operationContext,
@@ -366,46 +401,65 @@ async function createPlan(
       operationContext.checkpoint();
       const referenceCount = mutate(context.project, context.projectRoot);
       operationContext.checkpoint();
-      const afterDiagnostics = normalizeProjectDiagnostics(
+      const afterObservations = observeProjectDiagnostics(
         context.project,
         context.projectRoot,
         operationContext,
       );
-      const diagnosticDelta = compareDiagnostics(
-        beforeDiagnostics,
-        afterDiagnostics,
+      const textChanges = collectPlannedTextChanges(
+        context.project,
+        context.projectRoot,
+        originals,
+        operationContext,
+      );
+      if (textChanges.length === 0) {
+        throw new Error("The structural operation produced no file changes.");
+      }
+
+      const comparisonWorkspace = createWorkspaceSnapshot(
+        createFreshProject(context.tsConfigFilePath),
+      );
+      operationContext.checkpoint();
+      if (comparisonWorkspace.digest !== workspaceBefore.digest) {
+        throw new Error(
+          "Workspace changed while the operation was being prepared. Retry preparation.",
+        );
+      }
+      const diagnosticDelta = compareObservedDiagnostics(
+        beforeObservations,
+        afterObservations,
+        textChanges,
         operationContext,
       );
       const files: PlannedFileInternal[] = [];
 
-      for (const sourceFile of context.project.getSourceFiles()) {
+      for (const { absolutePath, file, beforeText, afterText } of textChanges) {
         operationContext.checkpoint();
-        const absolutePath = sourceFile.getFilePath();
-        const originalText = originals.get(absolutePath);
-        const updatedText = sourceFile.getFullText();
-
-        if (originalText === undefined) {
-          const file = path.relative(context.projectRoot, absolutePath);
+        if (afterText === null) {
+          throw new Error(`Structural operation deletion is unsupported: ${file}`);
+        }
+        if (beforeText === null) {
           assertSafeNewOperationFile(context.projectRoot, absolutePath, file);
           const originalBytes = Buffer.alloc(0);
-          const updatedBytes = Buffer.from(updatedText, "utf8");
+          const updatedBytes = Buffer.from(afterText, "utf8");
           files.push({
             absolutePath,
             file,
             originalHash: ABSENT_FILE_HASH,
             updatedHash: hashBytes(updatedBytes),
             originalText: "",
-            updatedText,
+            updatedText: afterText,
             originalBytes,
             updatedBytes,
-            diff: createTwoFilesPatch("/dev/null", file, "", updatedText, "before", "after", {
+            diff: createTwoFilesPatch("/dev/null", file, "", afterText, "before", "after", {
               context: 3,
             }),
             mode: DEFAULT_NEW_FILE_MODE,
           });
           continue;
         }
-        if (updatedText === originalText) continue;
+        const originalText = beforeText;
+        const updatedText = afterText;
         const originalBytes = await readFile(absolutePath);
         operationContext.checkpoint();
         if (decodeSource(originalBytes, absolutePath) !== originalText) {
@@ -416,7 +470,6 @@ async function createPlan(
         const updatedBytes = encodeUpdatedSource(originalBytes, updatedText);
         const fileStat = await stat(absolutePath);
         operationContext.checkpoint();
-        const file = path.relative(context.projectRoot, absolutePath);
         files.push({
           absolutePath,
           file,
@@ -431,11 +484,6 @@ async function createPlan(
           }),
           mode: fileStat.mode,
         });
-      }
-
-      files.sort((left, right) => left.file.localeCompare(right.file));
-      if (files.length === 0) {
-        throw new Error("The structural operation produced no file changes.");
       }
 
       const postWorkspaceFiles = new Map(workspaceBefore.files);
