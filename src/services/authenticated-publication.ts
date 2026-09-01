@@ -135,13 +135,11 @@ export async function rollbackOwnedCommit(
     !equal(await entry(token.directory, token.displacedBasename), token.displacedIdentity)
   )
     return { state: "ambiguous", phase: "rollback" };
-  try {
-    await exchangeDirectoryEntries(
-      token.directory,
-      token.displacedBasename,
-      token.destinationBasename,
-    );
-  } catch {}
+  await exchangeDirectoryEntries(
+    token.directory,
+    token.displacedBasename,
+    token.destinationBasename,
+  ).catch(() => undefined);
   const restored =
     equal(await entry(token.directory, token.destinationBasename), token.displacedIdentity) &&
     equal(await entry(token.directory, token.displacedBasename), token.destinationIdentity);
@@ -152,9 +150,7 @@ export async function publishAuthenticated(plan: PublicationPlan): Promise<Publi
   if (process.platform !== "linux") return { state: "pre_effect", reason: "unsupported" };
   await plan.beforePublish?.();
   if (plan.kind === "creation") {
-    try {
-      await linkHeldFile(plan.stage, plan.directory, plan.destinationBasename);
-    } catch {}
+    await linkHeldFile(plan.stage, plan.directory, plan.destinationBasename).catch(() => undefined);
     const destination = await entry(plan.directory, plan.destinationBasename);
     if (equal(destination, plan.stageIdentity))
       return {
@@ -170,9 +166,11 @@ export async function publishAuthenticated(plan: PublicationPlan): Promise<Publi
       return { state: "ambiguous", phase: "commit" };
     return { state: "pre_effect", reason: destination ? "conflict" : "unsupported" };
   }
-  try {
-    await exchangeDirectoryEntries(plan.directory, plan.stageBasename, plan.destinationBasename);
-  } catch {}
+  await exchangeDirectoryEntries(
+    plan.directory,
+    plan.stageBasename,
+    plan.destinationBasename,
+  ).catch(() => undefined);
   const destination = await entry(plan.directory, plan.destinationBasename);
   const displaced = await entry(plan.directory, plan.stageBasename);
   if (equal(destination, plan.stageIdentity) && displaced) {
