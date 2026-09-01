@@ -810,10 +810,17 @@ async function cleanupHeldPublication(held: HeldPublication): Promise<void> {
   await closeHeldPublication(held);
 }
 
-async function preserveHeldPublications(held: Iterable<HeldPublication>): Promise<void> {
+async function settleHeldPublications(
+  held: Iterable<HeldPublication>,
+  preserveEntries = false,
+): Promise<void> {
   const publications = [...held];
-  for (const publication of publications) publication.cleanupIdentity = null;
-  await Promise.all(publications.map(closeHeldPublication));
+  if (preserveEntries) {
+    for (const publication of publications) publication.cleanupIdentity = null;
+  }
+  await Promise.all(
+    publications.map(preserveEntries ? closeHeldPublication : cleanupHeldPublication),
+  );
 }
 
 async function syncDirectories(files: readonly PlannedFileInternal[]): Promise<void> {
@@ -1094,11 +1101,11 @@ export async function applyOperation(
                   }
                 }
                 await syncDirectories(operation.files);
-                await Promise.all([...staged.values()].map(cleanupHeldPublication));
+                await settleHeldPublications(staged.values());
                 staged.clear();
               } catch (error) {
                 if (PublicOperationalError.is(error) && error.code === "AMBIGUOUS_APPLY") {
-                  await preserveHeldPublications(staged.values());
+                  await settleHeldPublications(staged.values(), true);
                   staged.clear();
                   throw error;
                 }
@@ -1128,7 +1135,7 @@ export async function applyOperation(
                 }
 
                 if (rollbackAmbiguous) {
-                  await preserveHeldPublications(staged.values());
+                  await settleHeldPublications(staged.values(), true);
                   staged.clear();
                   throw new PublicOperationalError(
                     "AMBIGUOUS_APPLY",
@@ -1137,7 +1144,7 @@ export async function applyOperation(
                   );
                 }
 
-                await Promise.all([...staged.values()].map(cleanupHeldPublication));
+                await settleHeldPublications(staged.values());
                 staged.clear();
                 if (applied.length > 0) {
                   await syncDirectories(applied);
