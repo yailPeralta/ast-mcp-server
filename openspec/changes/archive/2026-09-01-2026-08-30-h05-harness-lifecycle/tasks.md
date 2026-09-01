@@ -43,5 +43,8 @@ Chain strategy: stacked-to-main
 - [x] 3.2 GREEN — Managed-launch pinned `dsh web` with disposable profile/port/auth URL; never edit host.
 - [x] 3.3 REFACTOR — Close all owners, prove root absence, and keep durable data correlation-only.
 - [x] 3.4 Run blind dual Judgment Day; remediate RED-first with receipts and two re-judgments.
-- [ ] 3.5 Run canonical format/lint/typecheck/test/build/smoke/audit/pack gates; verify/archive/settle/merge.
-- [ ] 3.6 After merged-main CI, version/changelog/dry-run/publish/verify/promote, then tag the proven main SHA.
+- [x] 3.5 Run canonical format/lint/typecheck/test/build/smoke/audit/pack gates; settle apply delivery and merge all four slices. Dedicated verify/archive follow.
+
+### Post-archive release obligation
+
+After merged-main CI and dedicated SDD verify/archive: set version `v0.13.1`, update the changelog, run the dry-run, publish, verify, promote, then tag the proven main SHA.

@@ -2,8 +2,12 @@ dist
 coverage
 node_modules
 package-lock.json
-openspec/archive
-openspec/changes/2026-08-30-h05-harness-lifecycle/judgment-day.json
+openspec/changes/archive
+openspec/archive/2026-08-03-cli-batch-orchestration/verification.md
+openspec/archive/2026-08-03-progressive-results-and-safe-scaffold/verification.md
+openspec/archive/2026-08-13-improve-agent-setup/tasks.md
+openspec/archive/2026-08-13-improve-agent-setup/verification.md
+openspec/archive/2026-08-13-improve-agent-setup/verify-report.md
 benchmark/results/production-readiness/*.json
 benchmark/results/production-readiness-sqlite-default-v1/*.json
 benchmark/results/production-readiness-sqlite-default-v2/*.json
