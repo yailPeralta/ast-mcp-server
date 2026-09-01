@@ -1,6 +1,6 @@
 # AST MCP Server Roadmap
 
-> **Recommendation:** treat v0.13.1 as the released baseline and return issue-first to the core authority backlog: M-01, M-02, R-01, then F-01. H-01a, H-02, H-03, and H-05 are closed and released. Apply stays denied; UI specialization, Code Mode, and output-vocabulary projection remain separate decisions.
+> **Recommendation:** treat v0.13.1 as the released baseline and continue issue-first with M-02, R-01, then F-01. M-01 is closed on `main`; H-01a, H-02, H-03, and H-05 are closed and released. Apply stays denied; UI specialization, Code Mode, and output-vocabulary projection remain separate decisions.
 
 This roadmap owns product status, sequencing, gates, and non-goals. The detailed findings, static evidence, and exact-host continuation contract live in the [v0.13 Harness hardening evidence annex](ast-mcp-server-harness-improvement-report.md).
 
@@ -36,15 +36,16 @@ Released describes immutable product history, not proof that every intended inva
 
 ## Decision and status ledger
 
-| Status                   | Direction                                                                                      | Decision posture                                                                     |
-| ------------------------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| **Shipped**              | v0.13.1 baseline; H-01a/H-02/H-03/H-05 closed and released                                     | Preserve immutable v0.13.0 history and the final v0.13.1 evidence.                   |
-| **Next**                 | Core authority backlog: M-01, M-02, R-01, F-01                                                 | Work issue-first with a deterministic RED at the claimed boundary.                   |
-| **Parallel**             | Supervised rollout measurement                                                                 | Measure independently; do not promote supervised mode by default without evidence.   |
-| **Then**                 | Optional MCP synchronization progress                                                          | Begin only after hardening gates are green; progress remains observational.          |
-| **Later**                | Bounded syntax-pattern discovery; multi-language capability/evidence architecture              | Prototype read-only discovery first and negotiate capabilities explicitly.           |
-| **Benchmark-gated**      | Index direction, `ast_explore` compute budgeting, semantic routing, further isolation          | Implement only when preregistered evidence clears a threshold. “No change” is valid. |
-| **Rejected / non-goals** | Generic executor, heuristic authority, shared daemon/pool by default, generic throwing backend | Reopen only with a new problem statement and contradictory evidence.                 |
+| Status                   | Direction                                                                                                                                                                      | Decision posture                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| **Shipped**              | v0.13.1 baseline; H-01a/H-02/H-03/H-05 closed and released                                                                                                                     | Preserve immutable v0.13.0 history and the final v0.13.1 evidence.                   |
+| **Closed on main**       | M-01 external-writer-safe apply publication ([#127](https://github.com/yailPeralta/ast-mcp-server/issues/127), [#128](https://github.com/yailPeralta/ast-mcp-server/pull/128)) | Preserve its canonical spec, archive, verified threat boundary, and Harness denial.  |
+| **Next**                 | Core authority backlog: M-02, R-01, F-01                                                                                                                                       | Work issue-first with a deterministic RED at the claimed boundary.                   |
+| **Parallel**             | Supervised rollout measurement                                                                                                                                                 | Measure independently; do not promote supervised mode by default without evidence.   |
+| **Then**                 | Optional MCP synchronization progress                                                                                                                                          | Begin only after hardening gates are green; progress remains observational.          |
+| **Later**                | Bounded syntax-pattern discovery; multi-language capability/evidence architecture                                                                                              | Prototype read-only discovery first and negotiate capabilities explicitly.           |
+| **Benchmark-gated**      | Index direction, `ast_explore` compute budgeting, semantic routing, further isolation                                                                                          | Implement only when preregistered evidence clears a threshold. “No change” is valid. |
+| **Rejected / non-goals** | Generic executor, heuristic authority, shared daemon/pool by default, generic throwing backend                                                                                 | Reopen only with a new problem statement and contradictory evidence.                 |
 
 Statuses express sequencing, not implementation authorization.
 
@@ -54,10 +55,10 @@ Statuses express sequencing, not implementation authorization.
 
 **Scope:** M-01, M-02, R-01, F-01.
 
-- Make apply publication fail closed against external writers and overlapping configurations.
-- Make diagnostic deltas edit-aware.
-- Ensure every public relationship kind has real bounded coverage or returns explicit incomplete/unsupported evidence.
-- Make JSON and TOON success shapes executable at the MCP boundary.
+- **M-01 closed on `main`:** apply publication now fails closed against deterministic external writers and overlapping configurations; the canonical contract and full evidence are archived under `openspec/changes/archive/2026-09-01-2026-09-01-m01-external-writer-safe-apply/`.
+- **M-02 next:** make diagnostic deltas edit-aware.
+- **R-01:** ensure every public relationship kind has real bounded coverage or returns explicit incomplete/unsupported evidence.
+- **F-01:** make JSON and TOON success shapes executable at the MCP boundary.
 
 **Entry:** each finding has a minimal deterministic RED at the boundary of the claim.
 
@@ -210,4 +211,4 @@ Pinned upstream evidence remains DeepSeek Harness `dsh-v0.1.2-alpha.1` at `cd5ef
 
 ## Next decision
 
-Return issue-first to **M-01, M-02, R-01, then F-01**. Require a minimal deterministic RED at each claim boundary before correction. Apply remains denied; keep UI specialization, Code Mode, output-vocabulary projection [#103](https://github.com/yailPeralta/ast-mcp-server/issues/103), and apply authorization separate from this core authority sequence.
+Continue issue-first with **M-02, R-01, then F-01**. Require a minimal deterministic RED at each claim boundary before correction. M-01 is closed on `main` with its verified OpenSpec archive; apply remains denied. Keep UI specialization, Code Mode, output-vocabulary projection [#103](https://github.com/yailPeralta/ast-mcp-server/issues/103), and apply authorization separate from this core authority sequence.
