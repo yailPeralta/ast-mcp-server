@@ -1,0 +1,103 @@
+{
+  "schema": "gentle-ai.judgment-day/v1",
+  "target": {
+    "head": "b4ab1b17aa6b4545647bdde682591b3b7042e750",
+    "tree": "5f7cb610f1fe31e788c125c38f3a90118cf84833",
+    "diffSha256": "4d385632754cc57089d04c3fa6156afd0034a1caca7ae7278845266ba3cbe878",
+    "base": "main",
+    "changedPaths": 20
+  },
+  "round": 1,
+  "judges": {
+    "A": {
+      "findings": [
+        {
+          "location": "src/services/authenticated-publication.ts:204",
+          "severity": "ERROR",
+          "claim": "Structural apply admits successful mutation on a Linux installation whose fixed ln executable is uutils rather than GNU, while support wording names a GNU matrix.",
+          "evidence_class": "deterministic",
+          "causal_disposition": "introduced",
+          "proof_refs": [
+            "publishAuthenticated gates Linux and the capability probe proves behavior but does not authenticate architecture or tool branding.",
+            "/usr/bin/ln --version reports uutils coreutils 0.8.0 while focused structural apply succeeds."
+          ]
+        },
+        {
+          "location": "openspec/changes/2026-09-01-m01-external-writer-safe-apply/verify-report.md:81",
+          "severity": "WARNING",
+          "claim": "Cumulative git diff --check reports Markdown hard-break whitespace although the report records the clean-worktree command as passing.",
+          "evidence_class": "deterministic",
+          "causal_disposition": "introduced",
+          "proof_refs": [
+            "git diff --check main...HEAD reports trailing whitespace in Markdown hard-break lines."
+          ]
+        }
+      ],
+      "evidence": [
+        "Verified immutable HEAD, tree, cumulative diff hash, and clean status before and after review.",
+        "Inspected all 20 scoped paths, issue #127, OpenSpec artifacts, implementation, tests, support docs, and Harness guard evidence.",
+        "Focused acceptance, publication, structural apply, and Harness denial tests passed."
+      ]
+    },
+    "B": {
+      "findings": [
+        {
+          "location": "src/services/operations.ts:924-978",
+          "severity": "ERROR",
+          "claim": "Receipt recovery and idempotent replay compare postimage bytes but do not compare the prepared mode, so a finite chmod between receipt failure and retry can be accepted as exact recovery.",
+          "evidence_class": "deterministic",
+          "causal_disposition": "introduced",
+          "proof_refs": [
+            "The in-memory applied and imported-record recovery branches compare updatedHash only while the persisted plan retains file.mode.",
+            "The receipt recovery test asserts bytes but does not mutate mode."
+          ]
+        }
+      ],
+      "evidence": [
+        "Verified immutable HEAD, tree, cumulative diff hash, and clean status before and after review.",
+        "Inspected all scoped OpenSpec, publication, operations, managed-file, public-error, documentation, and Harness paths.",
+        "Focused publication, race, rollback, receipt, replay, cancellation, typecheck, and Harness tests passed."
+      ]
+    }
+  },
+  "ledger": {
+    "confirmed": [],
+    "suspect": [
+      {
+        "id": "JD-S01",
+        "source": "B",
+        "severity": "ERROR",
+        "location": "src/services/operations.ts:924-978",
+        "claim": "Receipt recovery does not revalidate prepared file mode."
+      },
+      {
+        "id": "JD-S02",
+        "source": "A",
+        "severity": "ERROR",
+        "location": "src/services/authenticated-publication.ts:204",
+        "claim": "Behavior-probed uutils ln succeeds while support wording names a GNU matrix."
+      }
+    ],
+    "contradictions": [],
+    "info": [
+      {
+        "id": "JD-I01",
+        "source": "A",
+        "severity": "WARNING",
+        "location": "openspec/changes/2026-09-01-m01-external-writer-safe-apply/verify-report.md:81",
+        "claim": "Cumulative diff-check treats Prettier Markdown hard-break spaces as trailing whitespace."
+      }
+    ]
+  },
+  "fixWorkUnits": [],
+  "scopedRejudgment": "not_run",
+  "terminalState": "approved",
+  "rationale": "The two blind judges confirmed no common severe finding and produced no contradiction. Under Judgment Day policy, single-judge severe reports remain suspects and warnings remain informational; no correction actor may be launched.",
+  "skillResolution": {
+    "status": "paths-injected",
+    "paths": [
+      "/home/yail/.agents/skills/structural-code-editing/SKILL.md",
+      "/home/yail/.agents/skills/rdd-defect-workflow/SKILL.md"
+    ]
+  }
+}
