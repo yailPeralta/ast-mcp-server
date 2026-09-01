@@ -42,10 +42,10 @@ During apply, `apply-progress.json` records each transition before/after: status
 
 ## Phase 1: Seam and RED (impl-1)
 
-- [ ] 1.1 Replace `src/services/operations.ts` hooks with deterministic `onFilePhase(operationId,file,index,phase)` barriers. Verify: `yarn typecheck`.
-- [ ] 1.2 RED `operations.test.ts`: replacement/same-inode bytes+mode preserve externals as `CONFLICT`; no sleeps. Verify: `yarn vitest run test/operations.test.ts -t "replacement|same-inode"`.
-- [ ] 1.3 RED creation/overlapping configs: competitor/B current, stage unpublished. Verify: `yarn vitest run test/operations.test.ts -t "creation|distinct configurations"`.
-- [ ] 1.4 RED multi-file/rollback/unsupported: preserve competitors, ambiguous/blocked, zero effects. Verify: `yarn vitest run test/operations.test.ts -t "multi-file|rollback|unsupported"`.
+- [x] 1.1 Replace `src/services/operations.ts` hooks with deterministic `onFilePhase(operationId,file,index,phase)` barriers. Verify: `yarn typecheck`.
+- [x] 1.2 RED `operations.test.ts`: replacement/same-inode bytes+mode preserve externals as `CONFLICT`; no sleeps. Verify: `yarn vitest run test/operations.test.ts -t "replacement|same-inode"`.
+- [x] 1.3 RED creation/overlapping configs: competitor/B current, stage unpublished. Verify: `yarn vitest run test/operations.test.ts -t "creation|distinct configurations"`.
+- [x] 1.4 RED multi-file/rollback/unsupported: preserve competitors, ambiguous/blocked, zero effects. Verify: `yarn vitest run test/operations.test.ts -t "multi-file|rollback|unsupported"`.
 
 ## Phase 2: GREEN (impl-2→impl-3)
 

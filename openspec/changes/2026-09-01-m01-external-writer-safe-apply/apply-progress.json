@@ -1,0 +1,111 @@
+{
+  "schema": "dsh-sdd-apply-progress",
+  "change": "2026-09-01-m01-external-writer-safe-apply",
+  "workUnit": "impl-1-hooks-reds",
+  "delivery": "feature-branch-chain auto-chain; branch test/m01-impl1-red",
+  "acquireToken": "sha256:09eb8d40253190ac33ee3cb70f8903e3cd128a840e38e163611405d81fead4ec",
+  "stage": "red-complete",
+  "tasks": [
+    { "id": "1.1", "name": "Deterministic per-file phase hook seam", "status": "completed" },
+    { "id": "1.2", "name": "Replacement and same-inode REDs", "status": "completed" },
+    { "id": "1.3", "name": "Creation and distinct-configuration REDs", "status": "completed" },
+    {
+      "id": "1.4",
+      "name": "Multi-file, rollback, and unsupported-capability REDs",
+      "status": "completed"
+    }
+  ],
+  "tdd": {
+    "red": [
+      {
+        "id": "replacement-substitution",
+        "name": "Replacement preserves a substituted destination",
+        "file": "test/operations.test.ts",
+        "taskId": "1.2",
+        "runId": "red-replacement-same-inode"
+      },
+      {
+        "id": "same-inode-bytes-mode",
+        "name": "Replacement preserves same-inode byte and mode edits",
+        "file": "test/operations.test.ts",
+        "taskId": "1.2",
+        "runId": "red-replacement-same-inode"
+      },
+      {
+        "id": "creation-competitor",
+        "name": "Creation preserves the competing inode and reports conflict",
+        "file": "test/operations.test.ts",
+        "taskId": "1.3",
+        "runId": "red-creation-config"
+      },
+      {
+        "id": "distinct-configurations",
+        "name": "Distinct configurations preserve the committed writer",
+        "file": "test/operations.test.ts",
+        "taskId": "1.3",
+        "runId": "red-creation-config"
+      },
+      {
+        "id": "multi-file-later-target",
+        "name": "Multi-file apply preserves a later external target",
+        "file": "test/operations.test.ts",
+        "taskId": "1.4",
+        "runId": "red-multifile-rollback-unsupported"
+      },
+      {
+        "id": "rollback-ownership",
+        "name": "Rollback preserves a changed earlier commit and reports ambiguity",
+        "file": "test/operations.test.ts",
+        "taskId": "1.4",
+        "runId": "red-multifile-rollback-unsupported"
+      },
+      {
+        "id": "unsupported-capability",
+        "name": "Unsupported publication capability has zero source effects",
+        "file": "test/operations.test.ts",
+        "taskId": "1.4",
+        "runId": "red-multifile-rollback-unsupported"
+      }
+    ],
+    "green": [],
+    "refactored": []
+  },
+  "runs": [
+    {
+      "id": "red-replacement-same-inode",
+      "command": "yarn vitest run test/operations.test.ts -t 'replacement|same-inode' --reporter=dot",
+      "result": "exit 1; 2 failed, 2 passed, 30 skipped; only intended external-byte preservation assertions failed",
+      "finishedAt": "2026-09-01T04:23:20Z"
+    },
+    {
+      "id": "red-creation-config",
+      "command": "yarn vitest run test/operations.test.ts -t 'creation|distinct configurations' --reporter=dot",
+      "result": "exit 1; 2 failed, 32 skipped; only intended CONFLICT classification and committed-writer preservation assertions failed",
+      "finishedAt": "2026-09-01T04:25:22Z"
+    },
+    {
+      "id": "red-multifile-rollback-unsupported",
+      "command": "yarn vitest run test/operations.test.ts -t 'multi-file|rollback|unsupported' --reporter=dot",
+      "result": "exit 1; 3 failed, 2 passed, 29 skipped; only intended external-target preservation, AMBIGUOUS_APPLY, and MUTATION_BLOCKED assertions failed",
+      "finishedAt": "2026-09-01T04:23:46Z"
+    },
+    {
+      "id": "typecheck",
+      "command": "yarn typecheck",
+      "result": "exit 0",
+      "finishedAt": "2026-09-01T04:27:13Z"
+    },
+    {
+      "id": "control",
+      "command": "yarn vitest run test/operations.test.ts -t 'rolls back already replaced|ignores cancellation after|removes only the exact created|does not orphan' --reporter=dot",
+      "result": "exit 0; 4 passed, 30 skipped",
+      "finishedAt": "2026-09-01T04:24:23Z"
+    }
+  ],
+  "evidence": {
+    "safetyNet": "Existing rollback, cancellation, creation cleanup, and receipt control: exit 0; 4 passed, 30 skipped",
+    "runtimeHarness": "N/A: impl-1 changes an internal test-only seam and adds intentionally RED operation tests; it adds no authenticated publication runtime capability and Harness apply remains absent/denied",
+    "rollback": "Revert the operations test-hook seam and migrated fixture call sites, the seven impl-1 RED scenarios, Phase 1 task checkboxes, and this progress artifact only"
+  },
+  "updatedAt": "2026-09-01T04:27:45Z"
+}

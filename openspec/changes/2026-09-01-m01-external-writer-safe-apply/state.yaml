@@ -11,12 +11,12 @@ artifacts:
   specs: done
   design: done
   tasks: done
-  applyProgress: missing
+  applyProgress: partial
   verifyReport: missing
 taskProgress:
   total: 16
-  completed: 2
-  pending: 14
+  completed: 6
+  pending: 10
   allComplete: false
 risks:
   - Authenticated publication support is limited to the verified Linux x64 and filesystem primitive matrix.
