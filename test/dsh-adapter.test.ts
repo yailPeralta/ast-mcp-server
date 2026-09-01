@@ -333,6 +333,9 @@ describe("pinned Harness smoke contract", () => {
     );
     // prettier-ignore
     for (const contract of ["PINNED_GUI_IDENTITY", "PINNED_H05_PROFILE_SHA256", "canonicalH05Profile(h05DumpConfig", "canonicalH05Profile(webDumpConfig", "probeSourceSha256", "adapterSha256", "assertSessionIdentity(handle, sessionId)", "project_root: agent ? agent.session.header.cwd : root", "nativeRows[0]?.exec.arguments.project_root === nativeRows[0]?.exec.agent?.session.header.cwd", "pinned Playwright package", "installed Chromium executable", "authenticated Web launch URL", "rendered Trajectory Tools rows", 'locator("button", { hasText: /^Trajectory$/u })', 'getByLabel("Trajectory timeline")', 'getByRole("button", { name: /Request #/u })', 'getByRole("tab", { name: "Tools", exact: true })', "toolCatalogName", "renderedAstNames", "headerCatalogSha256", "requestHeader.seq", "captureRequestHeader", 'getByRole("dialog", { name: "Session download started" })', "headers.length !== requestNumber", "requestHeader.seq <= previousSequence", "new Set(renderedGuiEvidence.map((row) => row.sequence)).size", "browser?.close()", "terminateProcessTree(webChild)", "output: () => sanitizeDiagnosticText(output)", "webOutput: running.output()"]) expect(source).toContain(contract);
+    expect(source).toMatch(
+      /runOrderedCleanup\("GUI owner cleanup", \[\["page"[\s\S]*\["context"[\s\S]*\["browser"[\s\S]*\["Web process tree"[\s\S]*\["mock"[\s\S]*\["owner-zero"[\s\S]*collectOwnerTokenPids[\s\S]*\["residue"[\s\S]*assertNoTransientResidue/u,
+    );
     expect(source).not.toMatch(
       /"install", "chromium"|PLAYWRIGHT_BROWSERS_PATH|name: "New Session"|\.slice\(-3\)|observed\s*=\s*\{[^}]*root,\s*cwd|renderedAstNames\s*=\s*(?:registry|durable|probe|schemas)/u,
     );

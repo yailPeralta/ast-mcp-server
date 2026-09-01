@@ -35,7 +35,7 @@ import { isDeepStrictEqual } from "node:util";
 import yaml from "yaml";
 import { validateTimeoutBudget } from "./harness-timeout-budget.mjs";
 // prettier-ignore
-import { classifyExactHostToolError, createH03CleanupEvidence, parseProbeMarker, requireExactIdentity, runBoundedCommand, sanitizeDiagnosticText, terminateProcessTree } from "./runtime-process.mjs";
+import { classifyExactHostToolError, createH03CleanupEvidence, parseProbeMarker, requireExactIdentity, runBoundedCommand, runOrderedCleanup, sanitizeDiagnosticText, terminateProcessTree } from "./runtime-process.mjs";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const packageMetadata = JSON.parse(
@@ -2034,23 +2034,9 @@ try {
     );
     summary.h05Gui = { identity: exactGuiIdentity, rendered: renderedGuiEvidence };
   } finally {
-    const cleanup = await Promise.allSettled([
-      page?.close(),
-      context?.close(),
-      browser?.close(),
-      webChild ? terminateProcessTree(webChild) : undefined,
-      guiMock.close(),
-    ]);
-    assert(
-      cleanup.every((result) => result.status === "fulfilled"),
-      "GUI owner cleanup failed",
-    );
+    // prettier-ignore
+    await runOrderedCleanup("GUI owner cleanup", [["page", () => page?.close()], ["context", () => context?.close()], ["browser", () => browser?.close()], ["Web process tree", () => webChild && terminateProcessTree(webChild)], ["mock", () => guiMock.close()], ["owner-zero", async () => assert((await collectOwnerTokenPids(h05OwnerToken)).length === 0, "GUI AST owner survived closure")], ["residue", () => assertNoTransientResidue(temporaryRoot)]]);
   }
-  assert(
-    (await collectOwnerTokenPids(h05OwnerToken)).length === 0,
-    "GUI AST owner survived closure",
-  );
-  await assertNoTransientResidue(temporaryRoot);
 
   // ── Phase D: native agent/session visibility + durable cold replay (H-01a) ──
   const harness = { source, cliBin, nodeBin };
