@@ -84,7 +84,7 @@ The included batch benchmark records a 50% reduction in model round-trips and a 
 
 ## Supported environment and trust boundary
 
-Published v0.12.0 requires Node.js `>=22.13.0`; its immutable evidence matrix targets exact Node.js 22.13.0 and the current Node.js 24 line. Managed setup-file publication additionally requires GNU coreutils 9.7 `mv` supporting `--update=none-fail`, `--exchange`, `--no-copy`, and `--no-target-directory`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, and `O_DIRECTORY`/`O_NOFOLLOW`. Other Linux architectures or systems without those filesystem primitives, macOS, and Windows remain unverified.
+Published v0.12.0 requires Node.js `>=22.13.0`; its immutable evidence matrix targets exact Node.js 22.13.0 and the current Node.js 24 line. Structural apply and managed setup-file publication are verified only on Linux x64 with GNU coreutils 9.7 `mv` supporting `--update=none-fail`, `--exchange`, `--no-copy`, and `--no-target-directory`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, `O_DIRECTORY`/`O_NOFOLLOW`, and a destination filesystem that passes the owned link/exchange identity probe. A failed or denied primitive blocks mutation before source effects; there is no rename, copy/delete, or pathname-only fallback. Other Linux architectures or systems without this complete matrix, macOS, and Windows remain unverified.
 
 This is a local stdio server. It runs with the invoking user's filesystem permissions, and clients may request any `project_root` that user can access. It does not provide HTTP authentication, sandboxing, tenant isolation, or a remote-service security boundary. Remote, untrusted, and multi-tenant operation is unsupported.
 
@@ -529,12 +529,13 @@ Apply loads the exact retained postimages, requires the separately supplied revi
 
 ### Guarantee boundary
 
-The server does **not** claim a filesystem-wide transaction:
+The server does **not** claim a filesystem-wide transaction or safety against a continuously mutating writer:
 
-- Replacement is atomic per file where the local filesystem provides atomic rename.
-- A multi-file apply has a short interval in which some replacements may already be visible.
-- Rollback is best effort and refuses to overwrite a file changed by another writer after replacement.
-- MCP and CLI apply share a fail-closed filesystem lock keyed by canonical `tsconfig.json` when they use the same state directory. It does not coordinate editors, NFS writers, or hostile external processes.
+- Each replacement exchanges and authenticates one staged/destination pair. Multi-file apply remains sequential, so earlier postimages may be visible before later files commit.
+- Reverse rollback restores only an exact operation-owned pair. Lost ownership preserves the observable entries and returns `AMBIGUOUS_APPLY`; it never falls back to pathname replacement.
+- Creation is no-clobber. Once a created inode is published, a later failure cannot safely infer unlink ownership, so the destination and hidden stage are preserved and rollback fails closed as ambiguous.
+- MCP and CLI apply share a fail-closed filesystem lock keyed by canonical `tsconfig.json` when they use the same state directory. It does not coordinate editors, NFS writers, writers using another configuration, or hostile external processes.
+- Deterministic promise barriers prove the tested publication/rollback interleavings. They are a threat-boundary test seam, not a global atomicity or continuous-writer guarantee.
 - Receipt persistence runs before that lock is released. If receipt storage fails after source replacement, apply exits non-zero and reports that verified postimages may be present; retry recovers the receipt only when the complete workspace exactly matches the reviewed post-workspace fingerprint.
 - A hard process crash can leave a stale lock. Remove it only after inspecting its metadata and proving no apply is running; exact complete postimages can then recover the receipt, while partial or divergent state remains a conflict.
 - Source encoding support is UTF-8, with or without BOM. Unsupported encodings are rejected.
