@@ -18,8 +18,11 @@ Do not reopen released Harness slices through broad refactoring or substitute a 
 | ---------------------- | ------------------------------------------------------------------------------------------------- |
 | AST package            | `ast-mcp-server@0.13.1`; npm `latest` = `next` = `0.13.1`                                         |
 | AST release Git commit | npm `gitHead`, tag, and GitHub Release: `27b80a3da169b473a3b5c5dfea69ed52903ed4c7`                |
-| npm integrity          | `sha512-jqgGoYs8fe7J+E25lZusLK4wV6sjM5n5qiWnfe1RJIxOFo1r5nbtcBr1a/fdSWTYf/37bUNkshQp86UrdBHOsA==` |
-| Historical baseline    | v0.13.0: `75302189733f40aba6a36a8379c5b1f65fc3bd84`; its recorded registry evidence is unchanged  |
+| v0.13.1 npm integrity  | `sha512-jqgGoYs8fe7J+E25lZusLK4wV6sjM5n5qiWnfe1RJIxOFo1r5nbtcBr1a/fdSWTYf/37bUNkshQp86UrdBHOsA==` |
+| v0.13.1 npm shasum     | `2de6ccfe89cb97b45f6ec9f1a17623db8492c744`                                                        |
+| v0.13.0 release commit | `75302189733f40aba6a36a8379c5b1f65fc3bd84`                                                        |
+| v0.13.0 npm integrity  | `sha512-vbna6hhjX+VlayTnrgWQ/EitxkBmhVza0az6J/MCpE14M4Yn50D4yTQZrrcjfCi05sVhJhWFGPnzv6VE3V9KIw==` |
+| v0.13.0 npm shasum     | `166f95121a72f0b03c325cef586a211cd9107a24`                                                        |
 | Harness host           | `dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a752a658978873241fdf8e2bbc`                                |
 | MCP bridge             | `@deepseek-ai/dsh-mcp-client` source version `0.1.2-alpha.1` from the same Harness revision       |
 | Adapter                | Published `cordis.patch.yml` from the AST package; package-relative `dist/index.js` resolution    |
@@ -52,6 +55,8 @@ The v0.13.1 release is bound to the identity above:
 The immutable v0.13.0 public RED remains historical evidence for the defects corrected in v0.13.1; it is not rewritten as if those fixes had already shipped there. Authorized workspace confinement and the core authority findings below remain open.
 
 ## Prioritized findings
+
+`Priority` records audit impact/severity, not execution order. The roadmap status ledger and next-decision section own sequencing; closed findings remain here to preserve historical severity.
 
 | ID   | Priority | Finding                                                                                     | Evidence state                                                 | Primary owner                             |
 | ---- | -------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------- |
