@@ -1,9 +1,11 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-01-m02-edit-aware-diagnostic-delta",
-  "workUnit": "u5-persisted-plan-v2-cutover",
-  "delivery": "feature-branch-chain auto-chain; branch fix/m02-u5-plan-v2; tasks 5.1-5.3 only",
-  "lineageToken": "sha256:f165d79d3c4bc74192313c5bd8b17cc12347d5f20ed13c39b0c25266cafe2921",
+  "workUnit": "u6-full-harness-evidence-gates",
+  "delivery": "feature-branch-chain auto-chain; branch test/m02-u6-gates; tasks 6.1-6.3 only",
+  "attemptToken": "sha256:771640eda07baae0de3224135c2f8e9ea33493ef28cb687a5457f239a9efdd33",
+  "remediatesEvidenceRevision": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidenceRevision": "sha256:7ab0f0f717ba8e6948bc43a52c851a8f6b45f4788dd38a8b5de09281f89cb224",
   "stage": "refactored",
   "tasks": [
     { "id": "0.1", "name": "Planning delivery through design", "status": "completed" },
@@ -21,46 +23,15 @@
     { "id": "5.1", "name": "Persistence v2 RED", "status": "completed" },
     { "id": "5.2", "name": "Persistence v2 GREEN", "status": "completed" },
     { "id": "5.3", "name": "Persistence v2 REFACTOR", "status": "completed" },
-    { "id": "6.1", "name": "Full and package gates", "status": "pending" },
-    { "id": "6.2", "name": "Harness denial gates", "status": "pending" },
-    { "id": "6.3", "name": "Evidence closure", "status": "pending" },
+    { "id": "6.1", "name": "Full and package gates", "status": "completed" },
+    { "id": "6.2", "name": "Harness denial gates", "status": "completed" },
+    { "id": "6.3", "name": "Evidence closure", "status": "completed" },
     { "id": "6.4", "name": "Judgment Day", "status": "pending" },
     { "id": "6.5", "name": "Strict verify", "status": "pending" },
     { "id": "6.6", "name": "Archive and delivery", "status": "pending" }
   ],
   "tdd": {
-    "red": [
-      {
-        "id": "u2-mapper-apis",
-        "taskId": "2.1",
-        "command": "yarn vitest run test/diagnostics.test.ts",
-        "exitCode": 1,
-        "failure": "10 failed, 7 passed: observeDiagnostic/buildEditContext absent"
-      },
-      {
-        "id": "u3-observed-comparator-api",
-        "taskId": "3.1",
-        "command": "yarn vitest run test/diagnostics.test.ts",
-        "exitCode": 1,
-        "failure": "12 failed, 17 passed: TypeError compareObservedDiagnostics is not a function"
-      },
-      {
-        "id": "u4-operation-integration",
-        "name": "Blocked and allowed same-identity replacement preparation",
-        "file": "test/operations.test.ts",
-        "taskId": "4.1",
-        "command": "yarn vitest run test/operations.test.ts -t \"same-identity\"",
-        "exitCode": 1,
-        "failure": "2 failed, 34 skipped: default prepared.blocked was false and allow=true addedErrors was empty under legacy comparison"
-      },
-      {
-        "id": "u5-plan-v2-cutover",
-        "taskId": "5.1",
-        "command": "yarn vitest run test/operation-plan-file.test.ts",
-        "exitCode": 1,
-        "failure": "2 failed, 5 passed: new envelope was schema_version 1 and a valid v1 prepared plan applied instead of rejecting"
-      }
-    ],
+    "red": [],
     "green": [
       {
         "id": "u2-mapper",
@@ -77,8 +48,8 @@
       {
         "id": "same-identity-dual-acceptance",
         "taskId": "1.1",
-        "command": "yarn vitest run test/operations.test.ts -t \"same-identity\"",
-        "result": "exit 0; 2 passed, 34 skipped; default blocked, allow=true applyable, exact corrected addedErrors"
+        "command": "yarn vitest run test/operations.test.ts -t same-identity",
+        "result": "exit 0; 2 passed, 34 skipped; default blocked and allow=true retained corrected error"
       },
       {
         "id": "u4-operation-integration",
@@ -90,79 +61,95 @@
         "id": "u5-plan-v2-cutover",
         "taskId": "5.2",
         "command": "yarn vitest run test/operation-plan-file.test.ts",
-        "result": "exit 0; 7 passed: v2 hash/write/receipt/replay, v1 prepared denial, exact v1 applied replay, mismatch and unknown-version denial"
+        "result": "exit 0; 7 passed"
+      },
+      {
+        "id": "u6-full-chain",
+        "taskId": "6.1",
+        "command": "env -u GIT_PAGER bash -lc '<full chain>'",
+        "result": "exit 0; primary 74 files/963 tests; supervised 1 file/2 tests; all five smokes ok"
+      },
+      {
+        "id": "u6-harness",
+        "taskId": "6.2",
+        "command": "env -u GIT_PAGER bash -lc '<focused Harness chain>'",
+        "result": "exit 0; 23 focused tests; phases a/b/c/h03/h05/d ok; guarded-15 and UNKNOWN_TOOL"
       }
     ],
     "refactored": [
-      {
-        "id": "u2-mapper",
-        "taskId": "2.3",
-        "command": "yarn vitest run test/diagnostics.test.ts",
-        "result": "exit 0 after Prettier; 17 passed"
-      },
+      { "id": "u2-mapper", "taskId": "2.3", "result": "exit 0 after formatting; 17 passed" },
       {
         "id": "u3-conservative-matcher",
         "taskId": "3.3",
-        "command": "yarn prettier --write src/services/diagnostics.ts test/diagnostics.test.ts && yarn vitest run test/diagnostics.test.ts",
-        "result": "exit 0; 29 passed"
+        "result": "exit 0 after deduplication; 29 passed"
       },
       {
         "id": "u4-operation-integration",
         "taskId": "4.3",
-        "command": "yarn vitest run test/operations.test.ts -t \"same-identity\"",
-        "result": "exit 0 after naming/plumbing cleanup; 2 passed, 34 skipped"
+        "result": "exit 0 after plumbing cleanup; 2 focused passed"
       },
       {
         "id": "u5-plan-v2-cutover",
         "taskId": "5.3",
-        "command": "yarn prettier --write <U5 files> && yarn vitest run test/operation-plan-file.test.ts",
-        "result": "exit 0 after centralizing envelope dispatch; 7 passed"
+        "result": "exit 0 after envelope dispatch cleanup; 7 passed"
+      },
+      {
+        "id": "u6-evidence",
+        "taskId": "6.3",
+        "result": "7/7 requirements and 8/8 scenarios mapped; active RED empty; JSON/format/diff valid; 215 changed lines"
       }
     ]
   },
   "runs": [
     {
-      "id": "safety-net",
-      "command": "yarn vitest run test/operations.test.ts",
-      "result": "exit 0 before edit; 34 passed"
-    },
-    {
-      "id": "nearby-controls",
-      "command": "yarn vitest run test/operations.test.ts -t \"introduces a new TypeScript error|replaces arrow-function bodies\"",
-      "result": "exit 0; 2 passed, 33 skipped"
-    },
-    {
-      "id": "typecheck",
-      "command": "yarn typecheck",
-      "result": "exit 0; no output"
-    },
-    {
-      "id": "u3-safety-net",
+      "id": "historical-red-u2",
       "command": "yarn vitest run test/diagnostics.test.ts",
-      "result": "exit 0 before U3 edits; 17 passed"
+      "result": "historical exit 1; 10 failed, 7 passed because observation/map APIs were absent"
     },
     {
-      "id": "u3-quality",
-      "command": "yarn typecheck; yarn eslint src/services/diagnostics.ts test/diagnostics.test.ts; yarn prettier --check src/services/diagnostics.ts test/diagnostics.test.ts",
-      "result": "all exit 0; typecheck/lint silent; Prettier matched"
+      "id": "historical-red-u3",
+      "command": "yarn vitest run test/diagnostics.test.ts",
+      "result": "historical exit 1; 12 failed, 17 passed because compareObservedDiagnostics was absent"
     },
     {
-      "id": "u4-final-gates",
-      "command": "yarn vitest run test/operations.test.ts; yarn vitest run test/diagnostics.test.ts; yarn typecheck; touched eslint/prettier",
-      "result": "all exit 0; operations 36 passed; diagnostics 29 passed; typecheck/lint silent; Prettier matched"
+      "id": "historical-red-u4",
+      "command": "yarn vitest run test/operations.test.ts -t same-identity",
+      "result": "historical exit 1; 2 failed, 34 skipped under location-blind comparison"
     },
     {
-      "id": "u5-final-gates",
-      "command": "operation-plan full; operations persisted/recovery and full; diagnostics full; typecheck; touched eslint/prettier; JSON/diff checks",
-      "result": "all exit 0; plan 7/7, operations 4 focused and 36/36 full, diagnostics 29/29, typecheck/lint silent, formatting/JSON/diff valid"
+      "id": "historical-red-u5",
+      "command": "yarn vitest run test/operation-plan-file.test.ts",
+      "result": "historical exit 1; 2 failed, 5 passed because v1 writing/prepared acceptance remained"
+    },
+    {
+      "id": "u4-final",
+      "command": "operations + diagnostics + typecheck + touched lint/format",
+      "result": "all exit 0; operations 36, diagnostics 29"
+    },
+    {
+      "id": "u5-final",
+      "command": "plan-file + operations + diagnostics + typecheck + touched lint/format",
+      "result": "all exit 0; plan 7, operations 36, diagnostics 29"
+    },
+    {
+      "id": "u6-full",
+      "command": "env -u GIT_PAGER bash -lc 'yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && yarn test:mcp && yarn test:lifecycle && yarn test:cli && yarn test:errors && yarn test:package'",
+      "result": "exit 0; format/lint/typecheck/build green; Vitest 963+2; MCP/lifecycle/CLI/errors/package status ok"
+    },
+    {
+      "id": "u6-harness",
+      "command": "env -u GIT_PAGER bash -lc 'yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts && yarn test:dsh-adapter'",
+      "result": "exit 0; 23 tests; exact pinned Harness revision; catalogs 15/0/15; apply absent; direct UNKNOWN_TOOL; cleanup ok"
     }
   ],
   "evidence": {
-    "expectedCorrection": "New plans bind the v2 hash domain and persist strict v2 envelopes; strict v1/v2 reading rejects v1 prepared before import, while verified v1 applied replay remains v1.",
-    "runtime": "Real-file Vitest applied and replayed v2 receipts, denied legacy prepared plans without writes/import, replayed exact legacy applied postimages, and denied a mismatched postimage.",
-    "cleanup": "Each test cleared operation stores, sessions, temporary state, and project fixtures; no Harness files or lingering runtime processes were created.",
-    "rollback": "Revert U5 changes in operations.ts, operation-plan-file.ts, its focused test, and task/state/progress 5.1-5.3 marks; U1-U4 remain intact.",
-    "risk": "Legacy applied v1 replay intentionally remains supported only under legacy-domain integrity and exact postimage verification; unknown versions fail schema parsing."
+    "historicalRed": "Four historical RED runs are retained above; no active RED remains after U2-U5 GREEN/refactor and U6 gate closure.",
+    "coverage": "evidence.md maps all 7 requirements and all 8 scenarios to implementation, tests, and commands.",
+    "harness": "Fresh materialization authenticated revision cd5ef8148158c3a752a658978873241fdf8e2bbc and tag dsh-v0.1.2-alpha.1; exactly 15 guarded tools were rendered, apply was absent, and direct apply returned UNKNOWN_TOOL.",
+    "checkout": "The supplied built Harness path has no Git metadata, so HEAD/status commands returned 128 before and after; three read-only identity hashes were byte-identical, and no command wrote there.",
+    "cleanup": "Harness temporary root removed; owned processes 0; H03/H05 resource readbacks zero; lifecycle orphan_processes 0.",
+    "rollback": "Revert evidence.md and task/state/apply-progress 6.1-6.3 updates only; U1-U5 implementation remains intact.",
+    "risk": "Repeated text or coarse fallback may over-block safe edits; legacy applied v1 replay remains limited to exact postimage verification."
   },
-  "updatedAt": "2026-09-01T22:43:00Z"
+  "updatedAt": "2026-09-01T23:05:23Z"
 }
