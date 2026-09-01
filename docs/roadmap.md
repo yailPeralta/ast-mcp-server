@@ -1,6 +1,6 @@
 # AST MCP Server Roadmap
 
-> **Recommendation:** treat v0.13.0 as the published baseline, recover the core authority guarantees challenged by the v0.13 audit, and continue with H-05 against the exact pinned host. H-03 is archived and merged through PR #115 at `7ab04c29a274156c78c470eb7bc3488ce057b928`, with final main CI and Security green; it is not a published v0.13.1 release. Apply stays denied until native approval and session/workspace binding exist.
+> **Recommendation:** treat v0.13.1 as the released baseline and return issue-first to the core authority backlog: M-01, M-02, R-01, then F-01. H-01a, H-02, H-03, and H-05 are closed and released. Apply stays denied; UI specialization, Code Mode, and output-vocabulary projection remain separate decisions.
 
 This roadmap owns product status, sequencing, gates, and non-goals. The detailed findings, static evidence, and exact-host continuation contract live in the [v0.13 Harness hardening evidence annex](ast-mcp-server-harness-improvement-report.md).
 
@@ -16,9 +16,9 @@ Make `ast-mcp-server` the trustworthy structural intelligence layer for coding a
 
 The goal is not to become a generic search daemon, command runner, or host-specific fork. The goal is a small predictable structural interface with evidence that survives each supported runtime boundary.
 
-## Released baseline: v0.13.0
+## Released baseline: v0.13.1
 
-Release evidence binds `v0.13.0` to `75302189733f40aba6a36a8379c5b1f65fc3bd84`. npm `latest` and `next` both resolved to 0.13.0 when verified on 2026-08-29.
+Release evidence binds npm `gitHead`, tag, and GitHub Release for `v0.13.1` to `27b80a3da169b473a3b5c5dfea69ed52903ed4c7`. Registry integrity is `sha512-jqgGoYs8fe7J+E25lZusLK4wV6sjM5n5qiWnfe1RJIxOFo1r5nbtcBr1a/fdSWTYf/37bUNkshQp86UrdBHOsA==`; `latest` and `next` both resolve to `0.13.1`. The immutable v0.13.0 release evidence remains historical baseline evidence rather than being rewritten.
 
 | Foundation                            | Released state                                                                                                                 |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -29,8 +29,8 @@ Release evidence binds `v0.13.0` to `75302189733f40aba6a36a8379c5b1f65fc3bd84`. 
 | Agent setup and operations            | Managed skill setup, upgrades, doctor diagnostics, and CLI project discovery are shipped.                                      |
 | Runtime isolation                     | Opt-in supervised compiler workers use a bounded generation-aware relay; `in_process` remains the rollback.                    |
 | Diagnostic summaries and capabilities | Exact bounded aggregates and one immutable tool catalog shipped in v0.12.0.                                                    |
-| DeepSeek Harness first slice          | The published package mounts through the official pinned MCP bridge and exposes reads, prepare, and preview with apply denied. |
-| Registry installation                 | A fresh pinned-Harness install discovers 15 AST tools; `ast_apply_operation` remains absent.                                   |
+| DeepSeek Harness surface              | The published package exposes reads, prepare, and preview through the pinned bridge; apply remains absent and rejected.        |
+| Harness hardening and lifecycle       | Model/durable/replay visibility, schema fidelity, timeout ownership, and native/rendered `15 → 0 → 15` lifecycle are released. |
 
 Released describes immutable product history, not proof that every intended invariant is satisfied. The v0.13 audit identifies static risks and exact-boundary gaps that now require RED evidence and bounded correction.
 
@@ -38,8 +38,8 @@ Released describes immutable product history, not proof that every intended inva
 
 | Status                   | Direction                                                                                      | Decision posture                                                                     |
 | ------------------------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| **Shipped**              | v0.13.0 baseline and guarded Harness first slice                                               | Preserve release history; correct documentation drift without rewriting evidence.    |
-| **Next**                 | v0.13 correctness and Harness hardening                                                        | Recover core authority; finish the remaining exact-host lifecycle evidence.          |
+| **Shipped**              | v0.13.1 baseline; H-01a/H-02/H-03/H-05 closed and released                                     | Preserve immutable v0.13.0 history and the final v0.13.1 evidence.                   |
+| **Next**                 | Core authority backlog: M-01, M-02, R-01, F-01                                                 | Work issue-first with a deterministic RED at the claimed boundary.                   |
 | **Parallel**             | Supervised rollout measurement                                                                 | Measure independently; do not promote supervised mode by default without evidence.   |
 | **Then**                 | Optional MCP synchronization progress                                                          | Begin only after hardening gates are green; progress remains observational.          |
 | **Later**                | Bounded syntax-pattern discovery; multi-language capability/evidence architecture              | Prototype read-only discovery first and negotiate capabilities explicitly.           |
@@ -48,7 +48,7 @@ Released describes immutable product history, not proof that every intended inva
 
 Statuses express sequencing, not implementation authorization.
 
-## v0.13 correctness and Harness hardening
+## Post-v0.13.1 authority work and released Harness evidence
 
 ### 1. Recover core authority
 
@@ -65,27 +65,19 @@ Statuses express sequencing, not implementation authorization.
 
 **Stop:** do not combine these into a broad refactor, and do not accept a unit-only reproduction when the defect is at filesystem or MCP publication.
 
-### 2. Prove model-visible Harness interoperability
+### 2. Preserve released Harness interoperability
 
-**Scope:** H-01, H-02, H-03, H-05.
+**Scope:** H-01a, H-02, H-03, H-05 — closed in v0.13.1.
 
-The **H-01a native agent/session result visibility** chain merged through PRs [#95](https://github.com/yailPeralta/ast-mcp-server/pull/95)–[#99](https://github.com/yailPeralta/ast-mcp-server/pull/99). Its mandatory gate preserves the immutable public v0.13.0 empty-result RED and binds one candidate value across raw capture, native presentation, the next model request, durable storage, cold Agent resume/replay, and owned teardown.
+H-01a and H-02 preserve model-visible native results, durable replay, schema fidelity, all three cross-field failures, and honest multi-format exceptions. H-03 preserves AST-owned timeout and cancellation authority under the shipped queue `30000`, execution `120000`, margin `15000`, and outer `180000` millisecond tuple.
 
-**H-02 schema fidelity** merged in PR [#104](https://github.com/yailPeralta/ast-mcp-server/pull/104). The gate binds direct MCP, scoped registry, and native schemas; preserves all three cross-field failures; and keeps multi-format output exceptions honest.
+H-05 merged in order through PRs [#118](https://github.com/yailPeralta/ast-mcp-server/pull/118) (`6256391`), [#120](https://github.com/yailPeralta/ast-mcp-server/pull/120) (`ee80d5d`), [#122](https://github.com/yailPeralta/ast-mcp-server/pull/122) (`4d879ae`), and [#124](https://github.com/yailPeralta/ast-mcp-server/pull/124) (`3dab418`); release closure merged in [#125](https://github.com/yailPeralta/ast-mcp-server/pull/125) at `27b80a3`. Its archived OpenSpec lives at `openspec/changes/archive/2026-09-01-2026-08-30-h05-harness-lifecycle/`: the canonical spec contains 6 requirements and 12 scenarios, strict verification passed, and Judgment was APPROVED.
 
-The **H-03 timeout ownership** chain is merged on `main` in order: budget PR [#109](https://github.com/yailPeralta/ast-mcp-server/pull/109) at `d0cf9417b9fd0e23ddda568f2df2872b47aaa253`, closed-seam PR [#111](https://github.com/yailPeralta/ast-mcp-server/pull/111) at `b5850296e09ccf93958211070ef6d96ba09cbb2f`, exact-host PR [#113](https://github.com/yailPeralta/ast-mcp-server/pull/113) at `3d31fb38a2b29b7ef40d879bbd356414fcfacb1d`, and closure PR [#115](https://github.com/yailPeralta/ast-mcp-server/pull/115) at `7ab04c29a274156c78c470eb7bc3488ce057b928`. H-03 is archived; final main CI and Security were green. This merged candidate remains unreleased as v0.13.1.
+The exact pinned-host gates prove the native and rendered catalog sequence `15 → 0 → 15`, cancellation join, retirement and shutdown, and secret-safe ordered cleanup that continues every owner check after an earlier cleanup failure. They add no public fixture or Harness-host edit. Apply remains absent and rejected.
 
-The candidate contract pins Harness `dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a752a658978873241fdf8e2bbc` and bridge `0.1.2-alpha.1`. Its sole shipped tuple is queue `30000`, execution `120000`, margin `15000`, and outer `180000` milliseconds, with strict ownership ordering `180000 > 30000 + 120000 + 15000`.
+**Released gate:** exact public package and source-built pinned host; native/model/durable/replay evidence; reconnect/removal; cancellation and public-error fidelity; rendered GUI lifecycle; zero residual owned state.
 
-Exact-host evidence preserves the 15-tool guarded catalog and request-local joins. Cold work ends `OPERATION_DEADLINE_EXCEEDED`; queued work ends `QUEUE_WAIT_TIMEOUT` with no late start; recycled work ends `REQUEST_CANCELLED` across generation `1 → 2`. `ToolTimeoutError`/`TOOL_TIMEOUT` is forbidden. Cleanup readback reports zero active/held/listener state and owned processes, drains two events, and removes the profile/control state; the current raw marker digest is `a42076a676cce36c0166e106abff8f56cbbf2e93ce258b729ee888dab028d7f0`, and the post-`finally` cleanup-evidence digest is `cfcf12cf078e4066857cc68d0dc22bb3da3cc9f08fe9a80605cc445e29b8e5de`.
-
-The next ordered unit is H-05 lifecycle evidence: reconnect, removal, remaining cancellation/public-error, shutdown, and GUI lifecycle. This baseline update does not implement H-05 runtime behavior.
-
-**Entry:** the exact public registry artifact and source-built pinned host are available in an isolated profile. Missing prerequisites block rather than skip.
-
-**Exit:** native mode has one host-mediated invocation for every promised capability class, apply absence plus rejected invocation, durable resume/replay evidence, and zero leaked processes/state.
-
-**Stop:** direct MCP, config dump, or registry-only success cannot substitute for the agent/session boundary. Do not expand to `ptc`, `both`, UI specialization, or apply while native schema and lifecycle gates remain open.
+**Boundary:** direct MCP, configuration, or registry-only success never substitutes for the agent/session boundary. UI specialization, Code Mode, output-vocabulary projection [#103](https://github.com/yailPeralta/ast-mcp-server/issues/103), and apply authorization remain separate.
 
 ### 3. Establish compiler and workspace trust boundaries
 
@@ -201,7 +193,7 @@ Across all surfaces, errors remain bounded and free of credentials, raw environm
 
 ## Source documents and accepted decisions
 
-Detailed active evidence:
+Detailed release and backlog evidence:
 
 - [v0.13 Harness hardening evidence annex](ast-mcp-server-harness-improvement-report.md)
 
@@ -218,4 +210,4 @@ Pinned upstream evidence remains DeepSeek Harness `dsh-v0.1.2-alpha.1` at `cd5ef
 
 ## Next decision
 
-Begin **H-05 lifecycle evidence** from the archived H-03 baseline. If an H-03 slice must be rolled back, run `git revert <PR-sha>` and rerun `yarn build && yarn test:dsh-adapter`; do not weaken the timeout tuple or relabel bridge-owned timeout evidence as AST-owned. Keep UI specialization, Code Mode, output-vocabulary projection (#103), and apply work separate.
+Return issue-first to **M-01, M-02, R-01, then F-01**. Require a minimal deterministic RED at each claim boundary before correction. Apply remains denied; keep UI specialization, Code Mode, output-vocabulary projection [#103](https://github.com/yailPeralta/ast-mcp-server/issues/103), and apply authorization separate from this core authority sequence.

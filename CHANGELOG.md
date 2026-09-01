@@ -6,18 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.13.1] - 2026-09-01
+## [0.13.1] — published to `latest` and `next`, registry verified (2026-09-01)
 
 ### Fixed
 
-- The DeepSeek Harness adapter now opts into a bounded canonical-JSON text projection when a successful MCP result has structured data but no ordinary text, preserving lossless `structuredContent` while making native Agent/Session results useful and durable. The mandatory pinned-host smoke freezes the public 0.13.0 RED baseline and verifies the corrected candidate across the next model request, persisted `tool/result`, cold replay, guarded catalog, and cleanup readback.
-- `ast_explore` now publishes its complete object input schema while retaining all cross-field runtime rejection, and `ast_get_impact` no longer advertises one false output shape across JSON and TOON. The pinned Harness gate binds the public empty-schema RED to candidate registry/native parity and unchanged hashes for the other 14 model schemas.
+- The DeepSeek Harness adapter now opts into a bounded canonical-JSON text projection when a successful MCP result has structured data but no ordinary text, preserving lossless `structuredContent` while making native Agent/Session results useful and durable. The mandatory pinned-host smoke freezes the public 0.13.0 RED baseline and verifies the released correction across the next model request, persisted `tool/result`, cold replay, guarded catalog, and cleanup readback.
+- `ast_explore` now publishes its complete object input schema while retaining all cross-field runtime rejection, and `ast_get_impact` no longer advertises one false output shape across JSON and TOON. The pinned Harness gate binds the public empty-schema RED to released registry/native parity and unchanged hashes for the other 14 model schemas.
 - Timeout ownership is now explicit across the Harness, queue, and AST worker: the shipped outer timeout exceeds the complete queue/execution/margin budget, deterministic slow work returns bounded AST-owned operational errors, queued work never starts after its deadline, cancellation remains correlated across worker generations, and cleanup proves zero active work, held requests, listeners, or owned processes.
 - Harness lifecycle handling now converges deterministically through MCP removal and reconnect, rejects retired-generation effects, preserves AST `REQUEST_CANCELLED` authority separately from bridge transport observations, and completes correlated shutdown without residual state. The pinned native and rendered-GUI gates verify the `15→0→15` catalog sequence, request/header identity, secret-safe diagnostics, and ordered cleanup that still runs every owner check after an earlier cleanup failure.
 
 ### Release status
 
-- This is the reviewed `0.13.1` release candidate. Publication to npm `next`, public-registry verification, promotion to `latest`, tagging, and GitHub Release creation remain pending and are not claimed here.
+- npm published immutable `0.13.1` bytes with integrity `sha512-jqgGoYs8fe7J+E25lZusLK4wV6sjM5n5qiWnfe1RJIxOFo1r5nbtcBr1a/fdSWTYf/37bUNkshQp86UrdBHOsA==`. Public-registry verification passed; `latest` and `next` both resolve to `0.13.1`; and npm `gitHead`, the annotated `v0.13.1` tag, and the GitHub Release target exact commit `27b80a3da169b473a3b5c5dfea69ed52903ed4c7`.
+- Main CI `33460585683`, Security `33460585625`, publish `33461292810`, verification `33461385440`, and promotion retry `33461651288` are green. Initial promotion run `33461571363` changed `latest` successfully but its bounded readback timed out; the verified idempotent retry is authoritative.
 
 ## [0.13.0] — published to `latest` and `next`, registry verified (2026-08-29)
 

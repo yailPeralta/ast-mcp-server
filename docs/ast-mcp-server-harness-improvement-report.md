@@ -1,29 +1,28 @@
-# AST MCP Server v0.13.0 Harness Hardening Evidence Annex
+# AST MCP Server v0.13.1 Harness Hardening Evidence Annex
 
-> **Decision:** keep the published DeepSeek Harness surface at reads, prepare, and preview with apply denied. H-01a, H-02, and archived H-03 are merged with exact pinned gates; H-03 closure PR #115 merged at `7ab04c29a274156c78c470eb7bc3488ce057b928` with final main CI and Security green, but no v0.13.1 release exists. H-05 is next. Core authority findings remain separate AST-owned blockers requiring their own RED tests.
+> **Decision:** v0.13.1 is the released Harness-hardening baseline. H-01a, H-02, H-03, and H-05 are closed and released; reads, prepare, and preview remain available while apply is denied. Continue issue-first with core authority findings M-01, M-02, R-01, and F-01. UI specialization, Code Mode, and output-vocabulary projection remain separate.
 
-This annex records detailed evidence and acceptance gates for the [project roadmap](roadmap.md). The roadmap owns priority and sequencing; this document owns the supporting observations, open questions, and proof requirements.
+This annex records detailed evidence and acceptance gates for the [project roadmap](roadmap.md). The roadmap owns priority and sequencing; this document preserves the released evidence and remaining proof requirements.
 
 ## Quick continuation path
 
-H-01a merged through PRs [#95](https://github.com/yailPeralta/ast-mcp-server/pull/95)–[#99](https://github.com/yailPeralta/ast-mcp-server/pull/99). Its mandatory gate preserves the immutable public RED and same-invocation raw/model/durable/replay evidence.
+1. Preserve the immutable v0.13.0 RED evidence and the released v0.13.1 H-01a/H-02/H-03/H-05 gates.
+2. Open or confirm one issue before work on M-01, M-02, R-01, or F-01; begin with a deterministic RED at the claimed boundary.
+3. Keep apply denied and keep UI specialization, Code Mode, and output-vocabulary projection [#103](https://github.com/yailPeralta/ast-mcp-server/issues/103) separate.
 
-H-02 issues [#100](https://github.com/yailPeralta/ast-mcp-server/issues/100)–[#102](https://github.com/yailPeralta/ast-mcp-server/issues/102) merged in PR [#104](https://github.com/yailPeralta/ast-mcp-server/pull/104). Direct MCP, scoped registry, and native model schemas are hash-bound; all three invalid combinations fail closed.
-
-1. Use archived H-03 and merged closure PR [#115](https://github.com/yailPeralta/ast-mcp-server/pull/115) as the candidate baseline; v0.13.0 remains the published release.
-2. Preserve H-01a/H-02/H-03 public RED baselines and exact candidate gates.
-3. Continue with H-05 lifecycle evidence while keeping output-vocabulary projection #103 separate.
-
-Do not begin with apply enablement, UI presentation, broad refactoring, or a newer unpinned Harness build.
+Do not reopen released Harness slices through broad refactoring or substitute a newer unpinned Harness build for their exact-host evidence.
 
 ## Audited identity
 
 | Component              | Immutable identity                                                                                |
 | ---------------------- | ------------------------------------------------------------------------------------------------- |
-| AST package            | `ast-mcp-server@0.13.0`                                                                           |
-| AST release Git commit | `75302189733f40aba6a36a8379c5b1f65fc3bd84`                                                        |
-| npm integrity          | `sha512-vbna6hhjX+VlayTnrgWQ/EitxkBmhVza0az6J/MCpE14M4Yn50D4yTQZrrcjfCi05sVhJhWFGPnzv6VE3V9KIw==` |
-| npm shasum             | `166f95121a72f0b03c325cef586a211cd9107a24`                                                        |
+| AST package            | `ast-mcp-server@0.13.1`; npm `latest` = `next` = `0.13.1`                                         |
+| AST release Git commit | npm `gitHead`, tag, and GitHub Release: `27b80a3da169b473a3b5c5dfea69ed52903ed4c7`                |
+| v0.13.1 npm integrity  | `sha512-jqgGoYs8fe7J+E25lZusLK4wV6sjM5n5qiWnfe1RJIxOFo1r5nbtcBr1a/fdSWTYf/37bUNkshQp86UrdBHOsA==` |
+| v0.13.1 npm shasum     | `2de6ccfe89cb97b45f6ec9f1a17623db8492c744`                                                        |
+| v0.13.0 release commit | `75302189733f40aba6a36a8379c5b1f65fc3bd84`                                                        |
+| v0.13.0 npm integrity  | `sha512-vbna6hhjX+VlayTnrgWQ/EitxkBmhVza0az6J/MCpE14M4Yn50D4yTQZrrcjfCi05sVhJhWFGPnzv6VE3V9KIw==` |
+| v0.13.0 npm shasum     | `166f95121a72f0b03c325cef586a211cd9107a24`                                                        |
 | Harness host           | `dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a752a658978873241fdf8e2bbc`                                |
 | MCP bridge             | `@deepseek-ai/dsh-mcp-client` source version `0.1.2-alpha.1` from the same Harness revision       |
 | Adapter                | Published `cordis.patch.yml` from the AST package; package-relative `dist/index.js` resolution    |
@@ -45,38 +44,39 @@ No item in this annex is a PASS for a gate that was not executed at its exact ru
 
 ## Verified published baseline
 
-The following facts were established for the immutable identity above on 2026-08-29:
+The v0.13.1 release is bound to the identity above:
 
-- `ast-mcp-server@0.13.0` is published on npm and both `latest` and `next` resolve to it.
-- A fresh registry install through pinned Harness succeeds with `dsh plugin --profile <profile> add ast-mcp-server@0.13.0`.
-- Harness discovers 15 server-qualified AST tools.
-- `mcp__ast__ast_apply_operation` is absent from discovery and direct invocation is rejected.
-- The published patch uses the official MCP bridge, resolves the AST entrypoint package-relatively, and pins `AST_MCP_APPLY_GUARD=deny`.
-- The shipped smoke proves package identity, configuration composition, discovery, registry-level read/prepare/preview invocation, and apply denial.
+- npm `gitHead`, annotated tag, and GitHub Release target the exact release commit; registry integrity matches, and `latest` plus `next` resolve to `0.13.1`.
+- Main CI run `33460585683`, Security run `33460585625`, publish run `33461292810`, public-registry verification run `33461385440`, and promotion retry `33461651288` are green.
+- Promotion run `33461571363` changed `latest` successfully but its bounded readback timed out. The green idempotent retry is the authoritative final verification; the first run is retained rather than hidden.
+- Harness exposes 15 server-qualified AST tools before removal, zero after removal, and 15 after reconnect. `mcp__ast__ast_apply_operation` stays absent and direct invocation is rejected.
+- Native and rendered gates prove model/durable/replay visibility, cancellation join, retirement, shutdown, secret-safe diagnostics, and ordered cleanup without public fixture or Harness-host edits.
 
-That baseline does **not** prove that successful results reach the model, that replay preserves them, that every published schema survives the bridge, or that the stdio child is confined to an authorized workspace.
+The immutable v0.13.0 public RED remains historical evidence for the defects corrected in v0.13.1; it is not rewritten as if those fixes had already shipped there. Authorized workspace confinement and the core authority findings below remain open.
 
 ## Prioritized findings
 
-| ID   | Priority | Finding                                                                                      | Evidence state                                                 | Primary owner                             |
-| ---- | -------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------- |
-| M-01 | P0       | Apply publication has a TOCTOU window against external writers.                              | Static-v0.13; deterministic RED required                       | AST                                       |
-| M-02 | P0       | Diagnostic delta identity omits edit location.                                               | Static-v0.13; RED required                                     | AST                                       |
-| R-01 | P0       | Public `call`/`contains` impact requests can have no scoped producer.                        | Static-v0.13; RED required                                     | AST                                       |
-| H-01 | P0       | Successful structured results may not become model-visible native content.                   | Merged on main; exact public RED remains mandatory             | Harness bridge; AST mitigation merged     |
-| H-02 | P0/P1    | Refined/reused schemas may degrade through the pinned bridge.                                | Merged in #104; exact public RED remains mandatory             | Harness bridge + AST                      |
-| C-01 | P0       | Embedded compiler behavior may differ from the project compiler.                             | Static dependency drift; differential RED required             | AST                                       |
-| S-01 | P0       | The adapter does not enforce an authorized workspace root.                                   | Static-v0.13; exact-host escape RED required                   | AST mitigation; Harness sandbox preferred |
-| F-01 | P1       | `ast_get_impact` registers one output schema but can return a TOON envelope.                 | Merged in #104; JSON/TOON runtime gate retained                | AST                                       |
-| C-02 | P1       | Semantic package boundaries are absent from workspace identity.                              | Static-v0.13; freshness/conflict RED required                  | AST                                       |
-| H-03 | P1       | Harness transport timeout is shorter than AST's default queue plus execution budget.         | Archived and merged through #115; unreleased as v0.13.1        | Adapter                                   |
-| H-04 | P1       | Prepare and preview have no approved Harness continuation to apply.                          | Release-verified product gap                                   | Product + Harness authorization           |
-| H-05 | P1       | The shipped smoke does not prove agent/session visibility, durable replay, or GUI lifecycle. | Native visibility/replay candidate-verified; lifecycle remains | AST gate + Harness                        |
-| T-01 | P1       | Affected-test proof reconstruction traverses relationships in both directions.               | Static-v0.13; cyclic graph RED required                        | AST                                       |
-| B-01 | P1       | Batch fan-out does not stop sibling assignment or own all session cleanup.                   | Static-v0.13; runtime RED required                             | AST CLI                                   |
-| P-01 | P2       | SQLite validation follows the canonical compiler scan and may not reduce search work.        | Static-v0.13; benchmark decision                               | AST                                       |
-| A-01 | P2       | Endpoint identity and traversal logic remain duplicated.                                     | Static-v0.13; refactor only after parity gates                 | AST                                       |
-| O-01 | P2       | Payload limits, public errors, and release documentation need consolidation.                 | Mixed static/documentation evidence                            | AST                                       |
+`Priority` records audit impact/severity, not execution order. The roadmap status ledger and next-decision section own sequencing; closed findings remain here to preserve historical severity.
+
+| ID   | Priority | Finding                                                                                     | Evidence state                                                 | Primary owner                             |
+| ---- | -------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------- |
+| M-01 | P0       | Apply publication has a TOCTOU window against external writers.                             | Static-v0.13; deterministic RED required                       | AST                                       |
+| M-02 | P0       | Diagnostic delta identity omits edit location.                                              | Static-v0.13; RED required                                     | AST                                       |
+| R-01 | P0       | Public `call`/`contains` impact requests can have no scoped producer.                       | Static-v0.13; RED required                                     | AST                                       |
+| H-01 | P0       | Successful structured results may not become model-visible native content.                  | Closed and released in v0.13.1; public v0.13.0 RED retained    | Harness bridge; AST mitigation released   |
+| H-02 | P0/P1    | Refined/reused schemas may degrade through the pinned bridge.                               | Closed and released in v0.13.1; exact regression gate retained | Harness bridge + AST                      |
+| C-01 | P0       | Embedded compiler behavior may differ from the project compiler.                            | Static dependency drift; differential RED required             | AST                                       |
+| S-01 | P0       | The adapter does not enforce an authorized workspace root.                                  | Static-v0.13; exact-host escape RED required                   | AST mitigation; Harness sandbox preferred |
+| F-01 | P1       | JSON and TOON success shapes still need executable MCP-boundary proof.                      | Schema correction released; runtime RED required               | AST                                       |
+| C-02 | P1       | Semantic package boundaries are absent from workspace identity.                             | Static-v0.13; freshness/conflict RED required                  | AST                                       |
+| H-03 | P1       | Harness transport timeout was shorter than AST's queue plus execution budget.               | Closed, archived, and released in v0.13.1                      | Adapter                                   |
+| H-04 | P1       | Prepare and preview have no approved Harness continuation to apply.                         | Release-verified product gap                                   | Product + Harness authorization           |
+| H-05 | P1       | Lifecycle needed agent/session, replay, removal/reconnect, shutdown, and rendered evidence. | Closed, archived, and released in v0.13.1                      | AST gate + Harness                        |
+| T-01 | P1       | Affected-test proof reconstruction traverses relationships in both directions.              | Static-v0.13; cyclic graph RED required                        | AST                                       |
+| B-01 | P1       | Batch fan-out does not stop sibling assignment or own all session cleanup.                  | Static-v0.13; runtime RED required                             | AST CLI                                   |
+| P-01 | P2       | SQLite validation follows the canonical compiler scan and may not reduce search work.       | Static-v0.13; benchmark decision                               | AST                                       |
+| A-01 | P2       | Endpoint identity and traversal logic remain duplicated.                                    | Static-v0.13; refactor only after parity gates                 | AST                                       |
+| O-01 | P2       | Payload limits, public errors, and release documentation need consolidation.                | Mixed static/documentation evidence                            | AST                                       |
 
 ## Core authority findings
 
@@ -111,7 +111,9 @@ The public relationship vocabulary includes `reference`, `import`, `export`, `ex
 
 ### F-01 — Executable JSON/TOON contract
 
-`ast_get_impact` registers the canonical impact `outputSchema`, while `formattedResult()` returns `{format:"toon",data}` for TOON. The exact MCP call must prove whether SDK output validation rejects that alternate shape.
+v0.13.1 removed the false universal `ast_get_impact` output schema. The remaining core-authority question is executable MCP-boundary proof for both success forms rather than schema-advertisement fidelity alone.
+
+**Required RED:** exercise exact JSON and TOON calls through the registered MCP handler and fail if either accepted success shape cannot execute or losslessly decode.
 
 **Acceptance gate:** JSON validates as the canonical object, TOON decodes losslessly to it, and the MCP boundary accepts both declared success forms.
 
@@ -121,7 +123,7 @@ The public relationship vocabulary includes `reference`, `import`, `export`, `ex
 
 The public v0.13.0 package returns `content: []` plus `structuredContent`. Issue #84 proved that the pinned bridge preserves the canonical value internally while the native model request, durable `tool/result`, and resumed replay receive only the non-useful empty-result marker.
 
-**Candidate correction:** the adapter explicitly sets `AST_MCP_TEXT_PROJECTION=canonical_json`. The server preserves `structuredContent`, adds deterministic text only to successful empty-text results, retains existing text unchanged, and applies a shared supervised-transport frame budget. The final exact-host run bound the same candidate raw value to native, model, durable, and resumed replay evidence. This remains candidate evidence until merged.
+**Released correction:** the adapter sets `AST_MCP_TEXT_PROJECTION=canonical_json`. The server preserves `structuredContent`, adds deterministic text only to successful empty-text results, retains existing text unchanged, and applies a shared supervised-transport frame budget. The exact-host gate binds the same value across raw, native, model, durable, and resumed replay evidence.
 
 **Preferred long-term ownership:** Harness should render bounded deterministic text when structured content exists and text content is empty. The AST mitigation remains adapter-only and removable if the pinned integration adopts equivalent behavior.
 
@@ -129,15 +131,15 @@ The public v0.13.0 package returns `content: []` plus `structuredContent`. Issue
 
 `ast_explore` uses cross-field refinements, and other schemas reuse components or publish keywords that the pinned bridge may not preserve. Exact `tools/list` and scoped Harness schemas are the boundary evidence; Zod source shape alone is not.
 
-The public package deterministically publishes `ast_explore` as `{"type":"object","properties":{}}` (SHA-256 `8243f0af…`). The candidate registers the direct object schema, reapplies all three refinements inside the handler, and removes the false universal `ast_get_impact` output schema. Its scoped-registry and native-model schema hashes match (`41deb923…`), all other model tool definitions retain hash `428d0ab3…`, and the Harness registry rejects all three cross-field invalid combinations.
+The v0.13.0 public package deterministically published `ast_explore` as `{"type":"object","properties":{}}` (SHA-256 `8243f0af…`). The v0.13.1 correction registers the direct object schema, reapplies all three refinements inside the handler, and removes the false universal `ast_get_impact` output schema. Its scoped-registry and native-model schema hashes match (`41deb923…`), all other model tool definitions retain hash `428d0ab3…`, and the Harness registry rejects all three cross-field invalid combinations.
 
 **Acceptance gate:** required inputs remain visible, invalid combinations still fail closed, no relevant field degrades silently to `any`/`{}`, and multi-format output exceptions are explicit. Native mode intentionally carries input schemas only; global projection of MCP output vocabularies into Harness remains the separate contract tracked by [#103](https://github.com/yailPeralta/ast-mcp-server/issues/103).
 
 ### H-03 — Timeout ownership
 
-The published v0.13.0 patch does not set `toolCallTimeoutMs`. The candidate establishes one machine-readable tuple: queue `30000`, execution `120000`, margin `15000`, and outer `180000` milliseconds. Validation requires the strict order `180000 > 30000 + 120000 + 15000`; equality, missing values, non-integers, or a non-positive margin fail closed.
+The published v0.13.0 patch did not set `toolCallTimeoutMs`. v0.13.1 ships one machine-readable tuple: queue `30000`, execution `120000`, margin `15000`, and outer `180000` milliseconds. Validation requires the strict order `180000 > 30000 + 120000 + 15000`; equality, missing values, non-integers, or a non-positive margin fail closed.
 
-The evidence identity remains Harness `dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a752a658978873241fdf8e2bbc` with bridge `0.1.2-alpha.1`. The ordered `main` chain is PR #109 at `d0cf9417b9fd0e23ddda568f2df2872b47aaa253`, PR #111 at `b5850296e09ccf93958211070ef6d96ba09cbb2f`, PR #113 at `3d31fb38a2b29b7ef40d879bbd356414fcfacb1d`, and closure PR #115 at `7ab04c29a274156c78c470eb7bc3488ce057b928`. H-03 is archived, and final main CI and Security were green; the candidate is not released as v0.13.1.
+The evidence identity remains Harness `dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a752a658978873241fdf8e2bbc` with bridge `0.1.2-alpha.1`. The ordered H-03 chain is PR #109 at `d0cf9417b9fd0e23ddda568f2df2872b47aaa253`, PR #111 at `b5850296e09ccf93958211070ef6d96ba09cbb2f`, PR #113 at `3d31fb38a2b29b7ef40d879bbd356414fcfacb1d`, and closure PR #115 at `7ab04c29a274156c78c470eb7bc3488ce057b928`. H-03 is archived, closed, and released in v0.13.1.
 
 **Delivered exact-host outcome**
 
@@ -149,7 +151,7 @@ The evidence identity remains Harness `dsh-v0.1.2-alpha.1` at `cd5ef8148158c3a75
 
 The guarded catalog remains exactly 15 tools. `ToolTimeoutError` and `TOOL_TIMEOUT` are forbidden outcomes, as is an unrelated `AbortError` classification. Cleanup/readback reports active, held, and listener counts at zero; two events drained; zero owned processes; and removed disposable profile/control state. The current `DSH_PROBE_RESULT` raw-marker SHA-256 is `a42076a676cce36c0166e106abff8f56cbbf2e93ce258b729ee888dab028d7f0`; the post-`finally` cleanup-evidence SHA-256 is `cfcf12cf078e4066857cc68d0dc22bb3da3cc9f08fe9a80605cc445e29b8e5de`.
 
-**Acceptance gate:** a slow fixture ends with AST's bounded operational error, not a generic bridge timeout; cancellation still propagates in cold, queued, and recycled-worker cases. Roll back one delivered slice with `git revert <PR-sha>`, then rerun `yarn build && yarn test:dsh-adapter`. Do not relax the tuple or merge H-05 implementation into this closure.
+**Released gate:** a slow fixture ends with AST's bounded operational error, not a generic bridge timeout; cancellation propagates in cold, queued, and recycled-worker cases. Preserve the shipped tuple and keep this H-03 evidence distinct from the later H-05 lifecycle evidence.
 
 ### H-04 — Prepare/preview continuation
 
@@ -161,9 +163,13 @@ The guarded profile exposes prepare and preview while apply is absent. Choose on
 
 Environment configuration alone is not approval authority.
 
-### H-05 — Gate the user-visible lifecycle
+### H-05 — User-visible lifecycle
 
-The H-01a candidate adds a real pinned agent/session journey, scoped discovery, same-invocation raw capture, model-visible result, durable event, cold Agent resume/replay, supervised framing, and owned process-tree teardown. Reconnect/removal, cancellation, public-error fidelity, and GUI lifecycle remain separate H-05 work.
+**Status:** closed and released in v0.13.1. The merge chain is PR [#118](https://github.com/yailPeralta/ast-mcp-server/pull/118) (`6256391`), [#120](https://github.com/yailPeralta/ast-mcp-server/pull/120) (`ee80d5d`), [#122](https://github.com/yailPeralta/ast-mcp-server/pull/122) (`4d879ae`), [#124](https://github.com/yailPeralta/ast-mcp-server/pull/124) (`3dab418`), and release closure [#125](https://github.com/yailPeralta/ast-mcp-server/pull/125) (`27b80a3`).
+
+The canonical archive is `openspec/changes/archive/2026-09-01-2026-08-30-h05-harness-lifecycle/`. The canonical spec contains 6 requirements and 12 scenarios; strict verification passed and Judgment was APPROVED.
+
+The pinned native and rendered gates prove the exact catalog lifecycle `15 → 0 → 15`, request-local cancellation join, retirement and shutdown, and secret-safe ordered cleanup that runs every owner check even after an earlier cleanup failure. The slice required no public fixture or Harness-host edit. Apply remains absent and rejected.
 
 ## Compiler and workspace trust boundary
 
@@ -198,13 +204,13 @@ The release declares `ts-morph@24.0.0`, while the lock resolves the project Type
 - **A-01:** consolidate endpoint identity and bounded traversal only behind parity tests; do not create a generic backend with routine unsupported failures.
 - **O-01:** add a shared byte-budget policy, typed operational errors, current release/install documentation, and bounded preview handling.
 
-## Completed exact-host candidate work unit
+## Released exact-host work unit
 
 ### H-01a — Native agent/session result visibility
 
-**Status:** candidate-verified in approved issue [#84](https://github.com/yailPeralta/ast-mcp-server/issues/84); chained delivery pending.
+**Status:** closed and released in v0.13.1 from approved issue [#84](https://github.com/yailPeralta/ast-mcp-server/issues/84).
 
-The public baseline reproduced the defect and the candidate corrected the smallest proven compatibility boundary without changing AST authority or enabling mutation. The contract below remains the immutable regression gate.
+The v0.13.0 public baseline reproduced the defect, and v0.13.1 corrected the smallest proven compatibility boundary without changing AST authority or enabling mutation. The contract below remains the immutable regression gate.
 
 **Immutable inputs**
 
@@ -236,7 +242,7 @@ The public baseline reproduced the defect and the candidate corrected the smalle
 **Observed outcome**
 
 - the immutable public baseline produced the same 58-byte non-useful marker in native, model, durable, and resumed replay forms;
-- the candidate produced one useful canonical JSON value whose raw, native, model, durable, and resumed replay hashes matched within the run;
+- the released correction produced one useful canonical JSON value whose raw, native, model, durable, and resumed replay hashes matched within the run;
 - the guarded catalog remained 15 tools, apply remained absent/rejected, an escape-amplified result stayed within the supervised worker frame, and the owned process tree plus disposable state were removed;
 - exact run-specific hashes and toolchain identities are recorded on issue #84 rather than hard-coded into this durable document.
 
