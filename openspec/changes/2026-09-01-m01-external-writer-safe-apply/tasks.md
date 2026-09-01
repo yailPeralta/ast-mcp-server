@@ -37,8 +37,8 @@ During apply, `apply-progress.json` records each transition before/after: status
 
 ## Phase 0: Planning delivery
 
-- [ ] 0.1 Deliver planning-1: `exploration.md`+`proposal.md`, 233 lines. Verify: `git diff --check`.
-- [ ] 0.2 Deliver planning-2 atop it: `spec.md`+`design.md`+`tasks.md`; no implementation. Verify: `git diff --check`.
+- [x] 0.1 Deliver planning-1: `exploration.md`+`proposal.md`, 239 lines. Verify: `git diff --check`.
+- [x] 0.2 Deliver planning-2 atop it: `spec.md`+`design.md`+`tasks.md`; no implementation. Verify: `git diff --check`.
 
 ## Phase 1: Seam and RED (impl-1)
 
