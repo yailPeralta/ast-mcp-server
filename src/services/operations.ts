@@ -44,6 +44,7 @@ const DEFAULT_NEW_FILE_MODE = 0o644;
 
 export type OperationKind = "rename_symbol" | "replace_symbol_body" | "scaffold_class";
 export type OperationStatus = "prepared" | "applied";
+export type OperationPlanVersion = 1 | 2;
 
 interface PlannedFileInternal {
   absolutePath: string;
@@ -142,29 +143,32 @@ function hash(content: string | Uint8Array): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
-function planHashFor(operation: {
-  operation_id: string;
-  kind: OperationKind;
-  project_root: string;
-  created_at: string;
-  expires_at: string;
-  reference_count: number;
-  workspace_hash: string;
-  post_workspace_hash: string;
-  workspace_file_count: number;
-  diagnostics: DiagnosticDelta;
-  allow_new_errors: boolean;
-  blocked: boolean;
-  files: ReadonlyArray<{
-    file: string;
-    originalHash: string;
-    updatedHash: string;
-    mode: number;
-  }>;
-}): string {
+function planHashFor(
+  operation: {
+    operation_id: string;
+    kind: OperationKind;
+    project_root: string;
+    created_at: string;
+    expires_at: string;
+    reference_count: number;
+    workspace_hash: string;
+    post_workspace_hash: string;
+    workspace_file_count: number;
+    diagnostics: DiagnosticDelta;
+    allow_new_errors: boolean;
+    blocked: boolean;
+    files: ReadonlyArray<{
+      file: string;
+      originalHash: string;
+      updatedHash: string;
+      mode: number;
+    }>;
+  },
+  version: OperationPlanVersion = 2,
+): string {
   return hash(
     JSON.stringify({
-      version: 1,
+      version,
       operation_id: operation.operation_id,
       kind: operation.kind,
       project_root: operation.project_root,
@@ -1314,6 +1318,7 @@ export function exportOperationRecord(operationId: string): PersistedOperationRe
 export function importOperationRecord(
   persisted: PersistedOperationRecord,
   expectedPlanHash: string,
+  planVersion: OperationPlanVersion = 2,
 ): PreparedOperation {
   if (persisted.plan_hash !== expectedPlanHash) {
     throw new Error(
@@ -1418,7 +1423,7 @@ export function importOperationRecord(
     tsConfigFilePath: context.tsConfigFilePath,
     files,
   };
-  if (planHashFor(record) !== expectedPlanHash) {
+  if (planHashFor(record, planVersion) !== expectedPlanHash) {
     throw new Error(
       `Persisted plan integrity mismatch for operation "${persisted.operation_id}". No files were written.`,
     );

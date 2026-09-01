@@ -55,9 +55,9 @@ Runtime tasks 1.1, 2.1–5.3, 6.1–6.5 MUST acquire, run only on `proceed`, set
 
 ## Phase 5 — U5 v2
 
-- [ ] 5.1 **RED:** v2-hash/writer, prepared-v1-denial, exact-postimage-applied-v1-recovery, mismatch-denial, v2-idempotence. Failure: v1 acceptance.
-- [ ] 5.2 **GREEN:** dual-read/v2-write `operation-plan-file.ts`; versioned hash-import; run U5.
-- [ ] 5.3 **REFACTOR after GREEN:** centralize dispatch; rerun U5.
+- [x] 5.1 **RED:** v2-hash/writer, prepared-v1-denial, exact-postimage-applied-v1-recovery, mismatch-denial, v2-idempotence. Failure: v1 acceptance.
+- [x] 5.2 **GREEN:** dual-read/v2-write `operation-plan-file.ts`; versioned hash-import; run U5.
+- [x] 5.3 **REFACTOR after GREEN:** centralize dispatch; rerun U5.
 
 ## Phase 6 — Gates/closure
 

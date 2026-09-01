@@ -15,11 +15,11 @@ artifacts:
   verifyReport: missing
 taskProgress:
   total: 21
-  completed: 12
-  pending: 9
+  completed: 15
+  pending: 6
   allComplete: false
 risks:
   - Repeated text requires deterministic edit alignment and conservative boundaries.
   - Coarse bounded fallback may block safe operations but must never authorize uncertain errors.
-  - Legacy prepared v1 plans retain unsafe diagnostic authorization unless rejected or revalidated.
+  - Legacy applied v1 receipts remain replayable only while every exact postimage still matches.
   - DeepSeek Harness apply must remain absent and denied.

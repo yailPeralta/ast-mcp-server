@@ -17,7 +17,7 @@ import {
   type RuntimeStateOptions,
 } from "./runtime-state.js";
 
-export const PLAN_SCHEMA_VERSION = 1 as const;
+export const PLAN_SCHEMA_VERSION = 2 as const;
 export const MAX_PLAN_BYTES = 50 * 1024 * 1024;
 
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -75,16 +75,17 @@ const PersistedOperationSchema = z
     files: z.array(PersistedFileSchema).min(1),
   })
   .strict();
-const PlanEnvelopeSchema = z
-  .object({
-    schema_version: z.literal(PLAN_SCHEMA_VERSION),
-    operation: PersistedOperationSchema,
-  })
-  .strict();
+const PlanEnvelopeSchema = z.discriminatedUnion("schema_version", [
+  z.object({ schema_version: z.literal(1), operation: PersistedOperationSchema }).strict(),
+  z.object({ schema_version: z.literal(2), operation: PersistedOperationSchema }).strict(),
+]);
 
-interface PlanEnvelope {
-  schema_version: typeof PLAN_SCHEMA_VERSION;
-  operation: PersistedOperationRecord;
+type PlanEnvelope =
+  | { schema_version: 1; operation: PersistedOperationRecord }
+  | { schema_version: 2; operation: PersistedOperationRecord };
+
+function planEnvelope(version: 1 | 2, operation: PersistedOperationRecord): PlanEnvelope {
+  return version === 1 ? { schema_version: 1, operation } : { schema_version: 2, operation };
 }
 
 export type PersistPlanOptions = RuntimeStateOptions;
@@ -175,10 +176,10 @@ export async function persistOperationPlan(
 ): Promise<string> {
   const plansDirectory = path.join(stateDirectory(options), "plans");
   const planFile = path.join(plansDirectory, `${operationId}.astplan`);
-  await atomicWritePlan(planFile, {
-    schema_version: PLAN_SCHEMA_VERSION,
-    operation: exportOperationRecord(operationId),
-  });
+  await atomicWritePlan(
+    planFile,
+    planEnvelope(PLAN_SCHEMA_VERSION, exportOperationRecord(operationId)),
+  );
   return planFile;
 }
 
@@ -191,22 +192,26 @@ export async function applyPersistedOperation(
     throw new Error("plan_hash must be a 64-character lowercase SHA-256 digest.");
   }
   const current = await readPlanEnvelope(planFileInput);
-  const operationId = current.envelope.operation.operation_id;
-  importOperationRecord(current.envelope.operation, planHash);
+  const { schema_version: planVersion, operation } = current.envelope;
+  if (planVersion === 1 && operation.status === "prepared") {
+    throw new Error("Legacy v1 prepared plans are not authorized for apply.");
+  }
+  const operationId = operation.operation_id;
+  importOperationRecord(operation, planHash, planVersion);
   configureOperationApply(operationId, {
     stateDirectory: options.stateDirectory,
     receiptWriter: async () => {
-      await atomicWritePlan(current.planFile, {
-        schema_version: PLAN_SCHEMA_VERSION,
-        operation: exportOperationRecord(operationId),
-      });
+      await atomicWritePlan(
+        current.planFile,
+        planEnvelope(planVersion, exportOperationRecord(operationId)),
+      );
     },
   });
   return applyOperation(operationId, planHash);
 }
 
 export async function inspectPersistedPlan(planFileInput: string): Promise<{
-  schema_version: 1;
+  schema_version: 1 | 2;
   operation_id: string;
   plan_hash: string;
   status: "prepared" | "applied";
@@ -222,7 +227,7 @@ export async function inspectPersistedPlan(planFileInput: string): Promise<{
   const { envelope } = await readPlanEnvelope(planFileInput);
   const operation = envelope.operation;
   return {
-    schema_version: PLAN_SCHEMA_VERSION,
+    schema_version: envelope.schema_version,
     operation_id: operation.operation_id,
     plan_hash: operation.plan_hash,
     status: operation.status,
