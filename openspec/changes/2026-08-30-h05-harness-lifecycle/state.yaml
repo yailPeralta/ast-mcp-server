@@ -1,0 +1,24 @@
+schemaName: gentle-ai.sdd-status
+schemaVersion: 1
+changeName: 2026-08-30-h05-harness-lifecycle
+artifactStore: openspec
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-08-30-h05-harness-lifecycle
+nextRecommended: apply
+lastPhase: apply
+artifacts:
+  exploration: done
+  proposal: done
+  specs: done
+  design: done
+  tasks: done
+  applyProgress: done
+  verifyReport: missing
+taskProgress:
+  total: 18
+  completed: 4
+  pending: 14
+  allComplete: false
+risks:
+  - Raw transport loss retains the last-good catalog; removal evidence uses Cordis config-HMR.
+  - Session cancellation and late settlement may expose upstream ownership races.
+  - GUI proof must inspect rendered Trajectory Tools rows rather than substitute indirect evidence.
