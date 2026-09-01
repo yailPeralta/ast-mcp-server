@@ -132,24 +132,242 @@ export interface DiagnosticDelta {
   addedErrors: NormalizedDiagnostic[];
 }
 
+export function observeDiagnostic(
+  diagnostic: Diagnostic,
+  projectRoot: string,
+  ordinal = 0,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+) {
+  requestContext.checkpoint();
+  const sourceFile = diagnostic.getSourceFile();
+  const start = diagnostic.getStart() ?? null;
+  const length = diagnostic.getLength() ?? null;
+  const location =
+    sourceFile && start !== null ? sourceFile.getLineAndColumnAtPos(start) : undefined;
+  return {
+    public: {
+      code: diagnostic.getCode(),
+      category: DiagnosticCategory[diagnostic.getCategory()] ?? String(diagnostic.getCategory()),
+      file: sourceFile ? path.relative(projectRoot, sourceFile.getFilePath()) : null,
+      line: location?.line ?? null,
+      column: location?.column ?? null,
+      message: ts.flattenDiagnosticMessageText(diagnostic.compilerObject.messageText, "\n"),
+    },
+    start,
+    length,
+    ordinal,
+  };
+}
+
 export function normalizeDiagnostic(
   diagnostic: Diagnostic,
   projectRoot: string,
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): NormalizedDiagnostic {
-  requestContext.checkpoint();
-  const sourceFile = diagnostic.getSourceFile();
-  const start = diagnostic.getStart();
-  const location =
-    sourceFile && start !== undefined ? sourceFile.getLineAndColumnAtPos(start) : undefined;
+  return observeDiagnostic(diagnostic, projectRoot, 0, requestContext).public;
+}
+
+export interface EditSpan {
+  oldStart: number;
+  oldEnd: number;
+  newStart: number;
+  newEnd: number;
+}
+
+export interface EditContext {
+  coarse: boolean;
+  runs: EditSpan[];
+  hunks: EditSpan[];
+}
+
+export interface EditBudget {
+  frontierSteps: number;
+  traceCells: number;
+  hunks: number;
+}
+
+const DEFAULT_EDIT_BUDGET = { frontierSteps: 1_000_000, traceCells: 250_000, hunks: 10_000 };
+const BUDGET_EXCEEDED = Symbol("edit-budget-exceeded");
+type EditOperation = "equal" | "delete" | "insert";
+
+function coarseContext(
+  oldLength: number,
+  newLength: number,
+  prefix: number,
+  suffix: number,
+): EditContext {
+  const runs: EditSpan[] = [];
+  if (prefix > 0) runs.push({ oldStart: 0, oldEnd: prefix, newStart: 0, newEnd: prefix });
+  if (suffix > 0) {
+    runs.push({
+      oldStart: oldLength - suffix,
+      oldEnd: oldLength,
+      newStart: newLength - suffix,
+      newEnd: newLength,
+    });
+  }
   return {
-    code: diagnostic.getCode(),
-    category: DiagnosticCategory[diagnostic.getCategory()] ?? String(diagnostic.getCategory()),
-    file: sourceFile ? path.relative(projectRoot, sourceFile.getFilePath()) : null,
-    line: location?.line ?? null,
-    column: location?.column ?? null,
-    message: ts.flattenDiagnosticMessageText(diagnostic.compilerObject.messageText, "\n"),
+    coarse: true,
+    runs,
+    hunks: [
+      {
+        oldStart: prefix,
+        oldEnd: oldLength - suffix,
+        newStart: prefix,
+        newEnd: newLength - suffix,
+      },
+    ],
   };
+}
+
+function backtrack(
+  trace: ReadonlyMap<number, number>[],
+  depth: number,
+  oldLength: number,
+  newLength: number,
+): EditOperation[] {
+  const reversed: EditOperation[] = [];
+  let x = oldLength;
+  let y = newLength;
+  for (let d = depth; d > 0; d -= 1) {
+    const previous = trace[d - 1]!;
+    const diagonal = x - y;
+    const left = previous.get(diagonal - 1) ?? Number.NEGATIVE_INFINITY;
+    const right = previous.get(diagonal + 1) ?? Number.NEGATIVE_INFINITY;
+    const previousDiagonal =
+      diagonal === -d || (diagonal !== d && left < right) ? diagonal + 1 : diagonal - 1;
+    const previousX = previous.get(previousDiagonal)!;
+    const previousY = previousX - previousDiagonal;
+    while (x > previousX && y > previousY) {
+      reversed.push("equal");
+      x -= 1;
+      y -= 1;
+    }
+    if (x === previousX) {
+      reversed.push("insert");
+      y -= 1;
+    } else {
+      reversed.push("delete");
+      x -= 1;
+    }
+  }
+  while (x > 0 && y > 0) {
+    reversed.push("equal");
+    x -= 1;
+    y -= 1;
+  }
+  return reversed.reverse();
+}
+
+function emitContext(
+  operations: readonly EditOperation[],
+  prefix: number,
+  budget: EditBudget,
+  requestContext: RequestContext,
+): EditContext {
+  const runs: EditSpan[] = [];
+  const hunks: EditSpan[] = [];
+  let oldPosition = prefix;
+  let newPosition = prefix;
+  if (prefix > 0) runs.push({ oldStart: 0, oldEnd: prefix, newStart: 0, newEnd: prefix });
+  for (let index = 0; index < operations.length;) {
+    requestContext.checkpoint();
+    const equal = operations[index] === "equal";
+    const oldStart = oldPosition;
+    const newStart = newPosition;
+    while (index < operations.length && (operations[index] === "equal") === equal) {
+      if (operations[index] !== "insert") oldPosition += 1;
+      if (operations[index] !== "delete") newPosition += 1;
+      index += 1;
+    }
+    const span = { oldStart, oldEnd: oldPosition, newStart, newEnd: newPosition };
+    if (equal) runs.push(span);
+    else {
+      if (hunks.length >= budget.hunks) throw BUDGET_EXCEEDED;
+      hunks.push(span);
+    }
+  }
+  return { coarse: false, runs, hunks };
+}
+
+export function buildEditContext(
+  oldText: string,
+  newText: string,
+  budget: EditBudget = DEFAULT_EDIT_BUDGET,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): EditContext {
+  requestContext.checkpoint();
+  let comparisons = 0;
+  const equalAt = (oldIndex: number, newIndex: number): boolean => {
+    if (++comparisons % 4_096 === 0) requestContext.checkpoint();
+    return oldText[oldIndex] === newText[newIndex];
+  };
+  let prefix = 0;
+  while (prefix < oldText.length && prefix < newText.length && equalAt(prefix, prefix)) prefix += 1;
+  let suffix = 0;
+  while (
+    suffix < oldText.length - prefix &&
+    suffix < newText.length - prefix &&
+    equalAt(oldText.length - suffix - 1, newText.length - suffix - 1)
+  )
+    suffix += 1;
+  if (prefix === oldText.length && prefix === newText.length) {
+    return {
+      coarse: false,
+      runs: prefix === 0 ? [] : [{ oldStart: 0, oldEnd: prefix, newStart: 0, newEnd: prefix }],
+      hunks: [],
+    };
+  }
+
+  const oldMiddle = oldText.slice(prefix, oldText.length - suffix);
+  const newMiddle = newText.slice(prefix, newText.length - suffix);
+  const trace: Map<number, number>[] = [];
+  let previous = new Map<number, number>([[1, 0]]);
+  let frontierSteps = 0;
+  let traceCells = 0;
+  try {
+    for (let depth = 0; depth <= oldMiddle.length + newMiddle.length; depth += 1) {
+      const current = new Map<number, number>();
+      for (let diagonal = -depth; diagonal <= depth; diagonal += 2) {
+        requestContext.checkpoint();
+        if (++frontierSteps > budget.frontierSteps || ++traceCells > budget.traceCells)
+          throw BUDGET_EXCEEDED;
+        const left = previous.get(diagonal - 1) ?? Number.NEGATIVE_INFINITY;
+        const right = previous.get(diagonal + 1) ?? Number.NEGATIVE_INFINITY;
+        let x = diagonal === -depth || (diagonal !== depth && left < right) ? right : left + 1;
+        let y = x - diagonal;
+        while (x < oldMiddle.length && y < newMiddle.length && oldMiddle[x] === newMiddle[y]) {
+          if (++comparisons % 4_096 === 0) requestContext.checkpoint();
+          x += 1;
+          y += 1;
+        }
+        current.set(diagonal, x);
+        if (x >= oldMiddle.length && y >= newMiddle.length) {
+          trace.push(current);
+          const context = emitContext(
+            backtrack(trace, depth, oldMiddle.length, newMiddle.length),
+            prefix,
+            budget,
+            requestContext,
+          );
+          if (suffix > 0)
+            context.runs.push({
+              oldStart: oldText.length - suffix,
+              oldEnd: oldText.length,
+              newStart: newText.length - suffix,
+              newEnd: newText.length,
+            });
+          return context;
+        }
+      }
+      trace.push(current);
+      previous = current;
+    }
+    throw new Error("Myers alignment did not terminate.");
+  } catch (error) {
+    if (error !== BUDGET_EXCEEDED) throw error;
+    return coarseContext(oldText.length, newText.length, prefix, suffix);
+  }
 }
 
 function identity(diagnostic: NormalizedDiagnostic): string {

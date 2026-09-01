@@ -1,17 +1,17 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-01-m02-edit-aware-diagnostic-delta",
-  "workUnit": "u1-dual-acceptance-red",
-  "delivery": "feature-branch-chain auto-chain; branch test/m02-u1-red; task 1.1 only",
-  "lineageToken": "sha256:04068e79193f9c28ce1c4dbebc8598edac92b710d3a88764b797744f397aa3d2",
-  "stage": "red",
+  "workUnit": "u2-bounded-utf16-mapper",
+  "delivery": "feature-branch-chain auto-chain; branch feat/m02-u2-mapper; tasks 2.1-2.3 only",
+  "lineageToken": "sha256:750b7054c7acca637106de79fafda8c42c56475f335d23be74a7b79394ee0d41",
+  "stage": "refactored",
   "tasks": [
     { "id": "0.1", "name": "Planning delivery through design", "status": "completed" },
     { "id": "0.2", "name": "Deliver tasks artifact", "status": "completed" },
     { "id": "1.1", "name": "Dual-acceptance operation RED", "status": "completed" },
-    { "id": "2.1", "name": "Mapper RED", "status": "pending" },
-    { "id": "2.2", "name": "Mapper GREEN", "status": "pending" },
-    { "id": "2.3", "name": "Mapper REFACTOR", "status": "pending" },
+    { "id": "2.1", "name": "Mapper RED", "status": "completed" },
+    { "id": "2.2", "name": "Mapper GREEN", "status": "completed" },
+    { "id": "2.3", "name": "Mapper REFACTOR", "status": "completed" },
     { "id": "3.1", "name": "Matcher edge RED", "status": "pending" },
     { "id": "3.2", "name": "Matcher GREEN", "status": "pending" },
     { "id": "3.3", "name": "Matcher REFACTOR", "status": "pending" },
@@ -38,10 +38,31 @@
         "command": "yarn vitest run test/operations.test.ts -t \"same-identity\"",
         "exitCode": 1,
         "failure": "AssertionError at test/operations.test.ts:883:30: expected prepared.blocked true, received false; 1 failed, 34 skipped"
+      },
+      {
+        "id": "u2-mapper-apis",
+        "taskId": "2.1",
+        "command": "yarn vitest run test/diagnostics.test.ts",
+        "exitCode": 1,
+        "failure": "10 failed, 7 passed: observeDiagnostic/buildEditContext absent"
       }
     ],
-    "green": [],
-    "refactored": []
+    "green": [
+      {
+        "id": "u2-mapper",
+        "taskId": "2.2",
+        "command": "yarn vitest run test/diagnostics.test.ts",
+        "result": "exit 0; 17 passed"
+      }
+    ],
+    "refactored": [
+      {
+        "id": "u2-mapper",
+        "taskId": "2.3",
+        "command": "yarn vitest run test/diagnostics.test.ts",
+        "result": "exit 0 after Prettier; 17 passed"
+      }
+    ]
   },
   "runs": [
     {
@@ -63,6 +84,11 @@
       "id": "typecheck",
       "command": "yarn typecheck",
       "result": "exit 0; no output"
+    },
+    {
+      "id": "u1-preserved-red",
+      "command": "yarn vitest run test/operations.test.ts -t \"same-identity\"",
+      "result": "exit 1 as expected; 1 failed, 34 skipped; blocked expected true, received false"
     }
   ],
   "evidence": {

@@ -1,13 +1,17 @@
+import { Project } from "ts-morph";
 import { describe, expect, it } from "vitest";
 import {
   buildDiagnosticAggregates,
+  buildEditContext,
   compareDiagnostics,
   DIAGNOSTIC_AGGREGATE_GROUP_LIMIT,
+  observeDiagnostic,
   type DiagnosticAggregateMetadata,
   type DiagnosticAggregates,
+  type EditBudget,
   type NormalizedDiagnostic,
 } from "../src/services/diagnostics.js";
-import type { RequestContext } from "../src/services/request-context.js";
+import { RequestContextError, type RequestContext } from "../src/services/request-context.js";
 
 function diagnostic(overrides: Partial<NormalizedDiagnostic> = {}): NormalizedDiagnostic {
   return {
@@ -20,6 +24,108 @@ function diagnostic(overrides: Partial<NormalizedDiagnostic> = {}): NormalizedDi
     ...overrides,
   };
 }
+
+describe("diagnostic observations and edit context", () => {
+  it("observes compiler spans in JavaScript UTF-16 code units", () => {
+    const project = new Project({ useInMemoryFileSystem: true, compilerOptions: { strict: true } });
+    const text = 'const emoji = "😀";\nconst value: number = "x";';
+    project.createSourceFile("/project/value.ts", text);
+    const compilerDiagnostic = project.getPreEmitDiagnostics()[0]!;
+    const observed = observeDiagnostic(compilerDiagnostic, "/project", 7);
+    expect(observed).toMatchObject({ start: text.indexOf("value"), length: 5, ordinal: 7 });
+    expect(observed.public).not.toHaveProperty("start");
+    expect(observed.public).not.toHaveProperty("length");
+  });
+  it.each([
+    [
+      "insertion",
+      "ab",
+      "aXb",
+      [
+        [0, 1, 0, 1],
+        [1, 2, 2, 3],
+      ],
+      [[1, 1, 1, 2]],
+    ],
+    [
+      "deletion",
+      "aXb",
+      "ab",
+      [
+        [0, 1, 0, 1],
+        [2, 3, 1, 2],
+      ],
+      [[1, 2, 1, 1]],
+    ],
+    [
+      "replacement",
+      "abc",
+      "aXc",
+      [
+        [0, 1, 0, 1],
+        [2, 3, 2, 3],
+      ],
+      [[1, 2, 1, 2]],
+    ],
+    [
+      "multiple edits",
+      "abcde",
+      "aXbcYe",
+      [
+        [0, 1, 0, 1],
+        [1, 3, 2, 4],
+        [4, 5, 5, 6],
+      ],
+      [
+        [1, 1, 1, 2],
+        [3, 4, 4, 5],
+      ],
+    ],
+  ])("builds maximal ordered runs for %s", (_name, oldText, newText, runs, hunks) => {
+    const context = buildEditContext(oldText, newText);
+    expect(context.coarse).toBe(false);
+    expect(context.runs.map((run) => Object.values(run))).toEqual(runs);
+    expect(context.hunks.map((hunk) => Object.values(hunk))).toEqual(hunks);
+  });
+  it("uses a stable deletion-first tie-break for repeated text", () => {
+    const expected = buildEditContext("ABAB", "BABA");
+    expect(expected).toEqual(buildEditContext("ABAB", "BABA"));
+    expect(expected.runs).toEqual([{ oldStart: 1, oldEnd: 4, newStart: 0, newEnd: 3 }]);
+    expect(expected.hunks).toEqual([
+      { oldStart: 0, oldEnd: 1, newStart: 0, newEnd: 0 },
+      { oldStart: 4, oldEnd: 4, newStart: 3, newEnd: 4 },
+    ]);
+  });
+
+  it.each(["frontierSteps", "traceCells", "hunks"] as const)(
+    "falls back to a conservative maximal-prefix/suffix hunk at the %s cap",
+    (cap) => {
+      const budget: EditBudget = { frontierSteps: 100, traceCells: 100, hunks: 100, [cap]: 0 };
+      expect(buildEditContext("PabcS", "PxyzS", budget)).toEqual({
+        coarse: true,
+        runs: [
+          { oldStart: 0, oldEnd: 1, newStart: 0, newEnd: 1 },
+          { oldStart: 4, oldEnd: 5, newStart: 4, newEnd: 5 },
+        ],
+        hunks: [{ oldStart: 1, oldEnd: 4, newStart: 1, newEnd: 4 }],
+      });
+    },
+  );
+
+  it("propagates typed cancellation from a deterministic mapping checkpoint", () => {
+    let checkpoints = 0;
+    const requestContext: RequestContext = {
+      signal: new AbortController().signal,
+      checkpoint() {
+        if (++checkpoints === 2) throw new RequestContextError("REQUEST_CANCELLED");
+      },
+    };
+    expect(() => buildEditContext("abc", "xyz", undefined, requestContext)).toThrowError(
+      expect.objectContaining({ code: "REQUEST_CANCELLED" }),
+    );
+    expect(checkpoints).toBe(2);
+  });
+});
 
 describe("diagnostic deltas", () => {
   it("does not classify a shifted existing diagnostic as new", () => {

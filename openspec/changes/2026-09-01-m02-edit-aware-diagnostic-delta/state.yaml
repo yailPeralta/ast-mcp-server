@@ -15,8 +15,8 @@ artifacts:
   verifyReport: missing
 taskProgress:
   total: 21
-  completed: 3
-  pending: 18
+  completed: 6
+  pending: 15
   allComplete: false
 risks:
   - Repeated text requires deterministic edit alignment and conservative boundaries.

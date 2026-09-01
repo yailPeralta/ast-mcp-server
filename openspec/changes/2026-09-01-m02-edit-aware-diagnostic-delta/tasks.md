@@ -37,9 +37,9 @@ Runtime tasks 1.1, 2.1–5.3, 6.1–6.5 MUST acquire, run only on `proceed`, set
 
 ## Phase 2 — U2 mapper
 
-- [ ] 2.1 **RED:** UTF-16-observations/deterministic-Myers/three-cap-fallback/cancellation. Failure: APIs absent.
-- [ ] 2.2 **GREEN:** implement bounded maps/order/checkpoints in `diagnostics.ts`; run U2.
-- [ ] 2.3 **REFACTOR after GREEN:** simplify; preserve budgets/cancellation; rerun U2.
+- [x] 2.1 **RED:** UTF-16-observations/deterministic-Myers/three-cap-fallback/cancellation. Failure: APIs absent.
+- [x] 2.2 **GREEN:** implement bounded maps/order/checkpoints in `diagnostics.ts`; run U2.
+- [x] 2.3 **REFACTOR after GREEN:** simplify; preserve budgets/cancellation; rerun U2.
 
 ## Phase 3 — U3 edges
 
