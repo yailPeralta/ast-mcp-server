@@ -7,6 +7,9 @@ export interface BoundedCommandOptions extends SpawnOptions {
 }
 
 export function terminateProcessTree(child: ChildProcess): Promise<void>;
+export function sanitizeDiagnosticText(value: unknown): string;
+// prettier-ignore
+export function runOrderedCleanup(label: string, steps: ReadonlyArray<readonly [string, () => unknown | Promise<unknown>]>): Promise<void>;
 export function runBoundedCommand(
   command: string,
   args: readonly string[],

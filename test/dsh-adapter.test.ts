@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +8,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import yaml from "yaml";
 import { validateTimeoutBudget } from "../scripts/harness-timeout-budget.mjs";
+import { sanitizeDiagnosticText } from "../scripts/runtime-process.mjs";
 import { createServer } from "../src/server.js";
 import {
   COMPILER_WORKER_JSONRPC_ENVELOPE_RESERVE_BYTES,
@@ -314,6 +316,39 @@ describe("pinned Harness smoke contract", () => {
     );
     expect(source).toContain("assertNoTransientResidue");
     expect(source).toContain("summary.h05");
+  });
+
+  it("requires exact rendered Web lifecycle evidence and rejects indirect substitutes", async () => {
+    // prettier-ignore
+    const source = await readFile(SMOKE_PATH, "utf8"), identity = source.slice(source.indexOf("const exactGuiRuntimeIdentity ="), source.indexOf("requireExactIdentity(exactGuiIdentity")), h05Start = source.indexOf('const h05Control = path.join(temporaryRoot, "h05-control")');
+    // prettier-ignore
+    for (const field of ["webPackageSha256", "webEntrypointSha256", "playwrightPackageSha256", "playwrightSourceSha256", "browserManifestSha256", "chromiumRevision", "chromiumVersion", "chromiumSha256", "effectiveProfileSha256"]) expect(identity).toContain(field);
+    expect(source.indexOf("requireExactIdentity(exactGuiIdentity")).toBeLessThan(
+      source.indexOf("await launchPinnedWeb("),
+    );
+    // prettier-ignore
+    for (const gate of ["requireExactIdentity(exactGuiRuntimeIdentity", "identityBrowser.version()", "identityBrowser?.close()"]) expect(source.indexOf(gate)).toBeLessThan(h05Start);
+    expect(source.indexOf("requireExactIdentity(exactH05Profile")).toBeLessThan(
+      source.indexOf("h05 = await bootWithProbe"),
+    );
+    // prettier-ignore
+    for (const contract of ["PINNED_GUI_IDENTITY", "PINNED_H05_PROFILE_SHA256", "canonicalH05Profile(h05DumpConfig", "canonicalH05Profile(webDumpConfig", "probeSourceSha256", "adapterSha256", "assertSessionIdentity(handle, sessionId)", "project_root: agent ? agent.session.header.cwd : root", "nativeRows[0]?.exec.arguments.project_root === nativeRows[0]?.exec.agent?.session.header.cwd", "pinned Playwright package", "installed Chromium executable", "authenticated Web launch URL", "rendered Trajectory Tools rows", 'locator("button", { hasText: /^Trajectory$/u })', 'getByLabel("Trajectory timeline")', 'getByRole("button", { name: /Request #/u })', 'getByRole("tab", { name: "Tools", exact: true })', "toolCatalogName", "renderedAstNames", "headerCatalogSha256", "requestHeader.seq", "captureRequestHeader", 'getByRole("dialog", { name: "Session download started" })', "headers.length !== requestNumber", "requestHeader.seq <= previousSequence", "new Set(renderedGuiEvidence.map((row) => row.sequence)).size", "browser?.close()", "terminateProcessTree(webChild)", "output: () => sanitizeDiagnosticText(output)", "webOutput: running.output()"]) expect(source).toContain(contract);
+    expect(source).toMatch(
+      /runOrderedCleanup\("GUI owner cleanup", \[\["page"[\s\S]*\["context"[\s\S]*\["browser"[\s\S]*\["Web process tree"[\s\S]*\["mock"[\s\S]*\["owner-zero"[\s\S]*collectOwnerTokenPids[\s\S]*\["residue"[\s\S]*assertNoTransientResidue/u,
+    );
+    expect(source).not.toMatch(
+      /"install", "chromium"|PLAYWRIGHT_BROWSERS_PATH|name: "New Session"|\.slice\(-3\)|observed\s*=\s*\{[^}]*root,\s*cwd|renderedAstNames\s*=\s*(?:registry|durable|probe|schemas)/u,
+    );
+  });
+
+  it("removes generated Web auth tokens from failure diagnostics", () => {
+    // prettier-ignore
+    const token = randomBytes(32).toString("base64url"), sanitized = sanitizeDiagnosticText(`dsh web: http://127.0.0.1:3000/?token=${token} Authorization: Bearer ${token} api-key=${token}`);
+    expect(token).toHaveLength(43);
+    expect(sanitized).not.toContain(token);
+    expect(sanitized).not.toMatch(
+      /[?&](?:token|access_token|api_key|key|auth)=|Bearer\s|api-key=/iu,
+    );
   });
 
   it("keeps installation guidance executable and free of unpublished registry claims", async () => {

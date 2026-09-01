@@ -9,6 +9,7 @@ import {
   parseProbeMarker,
   requireExactIdentity,
   runBoundedCommand,
+  runOrderedCleanup,
   terminateProcessTree,
 } from "../scripts/runtime-process.mjs";
 
@@ -83,6 +84,14 @@ describe("exact-host evidence guards", () => {
 });
 
 describe("bounded subprocess runtime", () => {
+  // prettier-ignore
+  it("cleans owners serially and continues after a sanitized rejection", async () => {
+    const order: string[] = [], token = "web-secret-token", owners = ["page", "context", "browser", "Web process tree", "mock", "owner-zero", "residue"] as const;
+    const step = (name: string, fails = false) => async () => { order.push(`${name}:start`); await Promise.resolve(); order.push(`${name}:end`); if (fails) throw new Error(`http://127.0.0.1/?token=${token}`); }, steps = (failures = new Set<string>()) => owners.map((name) => [name, step(name, failures.has(name))] as const), cleanup = runOrderedCleanup("GUI owner cleanup", steps(new Set(["page", "owner-zero"])));
+    await expect(cleanup).rejects.toThrow("page: http://127.0.0.1/; owner-zero: http://127.0.0.1/"); await expect(cleanup).rejects.not.toThrow(token);
+    expect(order).toEqual(owners.flatMap((name) => [`${name}:start`, `${name}:end`])); order.length = 0; await runOrderedCleanup("GUI owner cleanup", steps()); expect(order).toEqual(owners.flatMap((name) => [`${name}:start`, `${name}:end`]));
+  });
+
   it.skipIf(process.platform === "win32")(
     "terminates a timed-out command's process group including grandchildren",
     async () => {

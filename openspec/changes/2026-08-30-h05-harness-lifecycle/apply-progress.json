@@ -1,11 +1,13 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-08-30-h05-harness-lifecycle",
-  "workUnit": "Phase 2 / PR3 native lifecycle",
-  "delivery": "stacked-to-main PR3; approved issue #121; tracker #116",
-  "stage": "phase-2-pr3-minimal-correction-parent-settlement-pending",
-  "attemptToken": "sha256:18559476c752818e0b5260bdb4556e0f4b870b7a7a03c33b7576866ea0f35ae9",
-  "remediatesEvidenceRevision": "sha256:1acf35766c5efcf4efc0666bc077943c2323e6101e3670f5f011f98ea4a75520",
+  "workUnit": "Phase 3 / PR4 rendered GUI closure",
+  "delivery": "stacked-to-main PR4; parent test/h05-native-lifecycle; tracker #116",
+  "stage": "focused-review-correction-applied",
+  "focusedReviewCorrection": "Receipt sha256:0d79e904cb8002b5bd13d53b346efb225fcc0c8be18026a5a599b874f24486e6; RED proved owner-zero/residue escaped early cleanup rejection; GREEN 30/30 focused plus exact Harness cleanup ok.",
+  "attemptToken": "sha256:916e32b0e9d9ddea1cbab1db6e710b536e5a0f4843cf148c1c30175d6f8ab249",
+  "remediatesEvidenceRevision": "sha256:6a7da802ad1cdfb565fb9a8903ab46e7bc547ac34dd41713e51a879b08d6723b",
+  "evidenceRevision": "sha256:9c64c75eee4cd915adac53c8be285f9e5b82ce601c2ebfdc5378d02b9ae9d221",
   "completedTasks": [
     "0.1",
     "0.2",
@@ -18,13 +20,30 @@
     "2.1",
     "2.2",
     "2.3",
-    "2.4"
+    "2.4",
+    "3.1",
+    "3.2",
+    "3.3",
+    "3.4"
   ],
   "phase2Tdd": {
     "red": "Focused contract failed 18/19 because shutdown lacked an outliving native-result observer; exact Harness then proved the missing native row.",
     "green": "Focused H05/Harness passed 28/28 with exactly one shutdown native row and one durable row joined to REQUEST_CANCELLED.",
     "triangulate": "Exact pinned Harness observed cancellation and shutdown native/durable cardinality while generic transport classes remained non-authoritative.",
     "refactor": "Removed numeric bridge recognition and made shutdown observer cleanup explicit; all prior gates remain."
+  },
+  "phase3Tdd": {
+    "red": "Pinned Chromium first unblocked identity, then exact DOM exposed stale-session selection, Lexical fill, native-mode removal, AST-only zero, and SQLite-backed export defects.",
+    "green": "Exact pinned Web rendered and exported three correlated request/header catalogs with AST counts 15→0→15."
+  },
+  "judgmentDayRound1": {
+    "workUnit": "H05-JD-C1 only; task 3.4 remains pending for scoped re-judgment.",
+    "tdd": "RED 19/20 positional correlation, then exact Harness exposed repeated-export dialog ownership; GREEN/REFACTOR 20/20 with per-capture session/request-number/header-sequence joins and dialog closure."
+  },
+  "phase3Evidence": {
+    "focusedTest": "yarn vitest run test/dsh-adapter.test.ts: 20/20 passed.",
+    "runtimeHarness": "env -u GIT_PAGER -u DSH_HARNESS_SOURCE yarn test:dsh-adapter: DSH_ADAPTER_SMOKE_OK; rendered AST 15→0→15; cleanup ok.",
+    "rollback": "Revert scripts/dsh-adapter-smoke.mjs, test/dsh-adapter.test.ts, and Phase 3 task/progress marks only."
   },
   "evidence": {
     "focusedTest": "yarn vitest run test/dsh-adapter.test.ts test/h05-lifecycle-fixture.test.ts: exit 0; 2 files and 28 tests passed; generated probe parsed with zero diagnostics.",

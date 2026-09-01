@@ -39,9 +39,9 @@ Chain strategy: stacked-to-main
 
 ## Phase 3 — PR4 GUI and closure
 
-- [ ] 3.1 RED — Require pinned Playwright/Chromium/auth and correlated rendered Tools rows `15→0→15`.
-- [ ] 3.2 GREEN — Managed-launch pinned `dsh web` with disposable profile/port/auth URL; never edit host.
-- [ ] 3.3 REFACTOR — Close all owners, prove root absence, and keep durable data correlation-only.
-- [ ] 3.4 Run blind dual Judgment Day; remediate RED-first with receipts and two re-judgments.
+- [x] 3.1 RED — Require pinned Playwright/Chromium/auth and correlated rendered Tools rows `15→0→15`.
+- [x] 3.2 GREEN — Managed-launch pinned `dsh web` with disposable profile/port/auth URL; never edit host.
+- [x] 3.3 REFACTOR — Close all owners, prove root absence, and keep durable data correlation-only.
+- [x] 3.4 Run blind dual Judgment Day; remediate RED-first with receipts and two re-judgments.
 - [ ] 3.5 Run canonical format/lint/typecheck/test/build/smoke/audit/pack gates; verify/archive/settle/merge.
 - [ ] 3.6 After merged-main CI, version/changelog/dry-run/publish/verify/promote, then tag the proven main SHA.

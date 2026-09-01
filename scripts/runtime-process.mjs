@@ -3,6 +3,11 @@ import { Buffer } from "node:buffer";
 import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
 
+// prettier-ignore
+export function sanitizeDiagnosticText(value) { return String(value).replace(/(https?:\/\/[^\s?#]+)[?#][^\s]*/giu, "$1").replace(/\b(?:Authorization:\s*)?(?:Bearer|Basic)\s+[^\s,;]+/giu, "[REDACTED]").replace(/\b(?:api[-_]?key|token|password|secret)\s*[:=]\s*[^\s,;]+/giu, "[REDACTED]"); }
+// prettier-ignore
+export async function runOrderedCleanup(label, steps) { const failures = []; for (const [owner, cleanup] of steps) { try { await cleanup(); } catch (error) { failures.push(`${owner}: ${sanitizeDiagnosticText(error instanceof Error ? error.message : error).slice(0, 256)}`); } } if (failures.length > 0) throw new Error(`${label} failed: ${failures.join("; ")}`); }
+
 function waitForExit(child, timeoutMs) {
   if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
   return new Promise((resolve) => {
