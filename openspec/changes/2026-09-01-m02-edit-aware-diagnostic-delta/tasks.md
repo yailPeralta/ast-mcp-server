@@ -33,7 +33,7 @@ Runtime tasks 1.1, 2.1–5.3, 6.1–6.5 MUST acquire, run only on `proceed`, set
 
 ## Phase 1 — U1 RED
 
-- [ ] 1.1 Test replacement TS2322 added/blocked/apply-denied/disk-unchanged; shifted unrelated absent. RED: the current location-blind comparator yields `blocked=false`.
+- [x] 1.1 Test replacement TS2322 added/blocked/apply-denied/disk-unchanged; shifted unrelated absent. RED: the current location-blind comparator yields `blocked=false`.
 
 ## Phase 2 — U2 mapper
 

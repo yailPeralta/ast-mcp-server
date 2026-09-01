@@ -1,0 +1,76 @@
+{
+  "schema": "dsh-sdd-apply-progress",
+  "change": "2026-09-01-m02-edit-aware-diagnostic-delta",
+  "workUnit": "u1-dual-acceptance-red",
+  "delivery": "feature-branch-chain auto-chain; branch test/m02-u1-red; task 1.1 only",
+  "lineageToken": "sha256:04068e79193f9c28ce1c4dbebc8598edac92b710d3a88764b797744f397aa3d2",
+  "stage": "red",
+  "tasks": [
+    { "id": "0.1", "name": "Planning delivery through design", "status": "completed" },
+    { "id": "0.2", "name": "Deliver tasks artifact", "status": "completed" },
+    { "id": "1.1", "name": "Dual-acceptance operation RED", "status": "completed" },
+    { "id": "2.1", "name": "Mapper RED", "status": "pending" },
+    { "id": "2.2", "name": "Mapper GREEN", "status": "pending" },
+    { "id": "2.3", "name": "Mapper REFACTOR", "status": "pending" },
+    { "id": "3.1", "name": "Matcher edge RED", "status": "pending" },
+    { "id": "3.2", "name": "Matcher GREEN", "status": "pending" },
+    { "id": "3.3", "name": "Matcher REFACTOR", "status": "pending" },
+    { "id": "4.1", "name": "Operation integration RED", "status": "pending" },
+    { "id": "4.2", "name": "Operation integration GREEN", "status": "pending" },
+    { "id": "4.3", "name": "Operation integration REFACTOR", "status": "pending" },
+    { "id": "5.1", "name": "Persistence v2 RED", "status": "pending" },
+    { "id": "5.2", "name": "Persistence v2 GREEN", "status": "pending" },
+    { "id": "5.3", "name": "Persistence v2 REFACTOR", "status": "pending" },
+    { "id": "6.1", "name": "Full and package gates", "status": "pending" },
+    { "id": "6.2", "name": "Harness denial gates", "status": "pending" },
+    { "id": "6.3", "name": "Evidence closure", "status": "pending" },
+    { "id": "6.4", "name": "Judgment Day", "status": "pending" },
+    { "id": "6.5", "name": "Strict verify", "status": "pending" },
+    { "id": "6.6", "name": "Archive and delivery", "status": "pending" }
+  ],
+  "tdd": {
+    "red": [
+      {
+        "id": "same-identity-dual-acceptance",
+        "name": "Same-identity replacement blocks without reclassifying an unrelated shift",
+        "file": "test/operations.test.ts",
+        "taskId": "1.1",
+        "command": "yarn vitest run test/operations.test.ts -t \"same-identity\"",
+        "exitCode": 1,
+        "failure": "AssertionError at test/operations.test.ts:883:30: expected prepared.blocked true, received false; 1 failed, 34 skipped"
+      }
+    ],
+    "green": [],
+    "refactored": []
+  },
+  "runs": [
+    {
+      "id": "safety-net",
+      "command": "yarn vitest run test/operations.test.ts",
+      "result": "exit 0 before edit; 34 passed"
+    },
+    {
+      "id": "focused-red",
+      "command": "yarn vitest run test/operations.test.ts -t \"same-identity\"",
+      "result": "exit 1 as expected; 1 failed, 34 skipped; prepared.blocked expected true but received false"
+    },
+    {
+      "id": "nearby-controls",
+      "command": "yarn vitest run test/operations.test.ts -t \"introduces a new TypeScript error|replaces arrow-function bodies\"",
+      "result": "exit 0; 2 passed, 33 skipped"
+    },
+    {
+      "id": "typecheck",
+      "command": "yarn typecheck",
+      "result": "exit 0; no output"
+    }
+  ],
+  "evidence": {
+    "expectedCorrection": "Exactly the replacement TS2322 is addedErrors, blocked is true, apply returns public MUTATION_BLOCKED, disk bytes are unchanged, and the unrelated shifted TS2322 is absent from added and removed.",
+    "runtime": "Vitest executes createProjectFixture, the real TypeScript compiler-backed prepareReplaceBody boundary, and applyOperation without sleeps or polling.",
+    "cleanup": "The operations suite afterEach clears retained operations and project sessions, verifies no symbol-index cache residue, and recursively removes fixture and environment roots even on RED failure.",
+    "rollback": "Remove only the added same-identity test and apply-progress.json, restore task 1.1 to unchecked, and restore state.yaml to 2/21 with applyProgress missing; no production files are involved.",
+    "risk": "The first RED assertion intentionally stops later acceptance assertions until U2/U4 correct diagnostic continuity; no production correction is present."
+  },
+  "updatedAt": "2026-09-01T21:22:33Z"
+}
