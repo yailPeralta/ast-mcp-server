@@ -1,4 +1,14 @@
-import { access, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -72,6 +82,42 @@ async function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
     },
     (error: unknown) => error,
   );
+}
+
+type FilePhaseEvent = {
+  operationId: string;
+  file: string;
+  index: number;
+  phase: "capability-preflight" | "before-publish" | "after-commit" | "before-rollback";
+};
+
+function holdFilePhase(predicate: (event: FilePhaseEvent) => boolean) {
+  let arrive!: () => void;
+  const reached = new Promise<void>((resolve) => (arrive = resolve));
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  setOperationTestHooksForTests({
+    onFilePhase: async (event) => {
+      if (!predicate(event)) return;
+      arrive();
+      await released;
+    },
+  });
+  return { reached, release };
+}
+
+async function oneFileReplacement() {
+  const fixture = await createProjectFixture({
+    "src/value.ts": "export function value(): string { return 'original'; }\n",
+  });
+  fixtures.push(fixture);
+  const prepared = await prepareReplaceBody({
+    projectRoot: fixture.root,
+    filePath: "src/value.ts",
+    symbolPath: "value",
+    newBody: "return 'ast';",
+  });
+  return { fixture, prepared, target: path.join(fixture.root, "src/value.ts") };
 }
 
 function scaffoldSpec() {
@@ -278,8 +324,8 @@ describe("prepared structural operations", () => {
       releasePostWrite = resolve;
     });
     setOperationTestHooksForTests({
-      afterReplace: async (_file, index) => {
-        if (index !== 0) return;
+      onFilePhase: async ({ index, phase }) => {
+        if (phase !== "after-commit" || index !== 0) return;
         controller.abort();
         markPostWrite();
         await release;
@@ -350,8 +396,8 @@ describe("prepared structural operations", () => {
       releasePostWrite = resolve;
     });
     setOperationTestHooksForTests({
-      afterReplace: async (_file, index) => {
-        if (index !== 0) return;
+      onFilePhase: async ({ index, phase }) => {
+        if (phase !== "after-commit" || index !== 0) return;
         markPostWrite();
         await postWriteRelease;
       },
@@ -424,6 +470,194 @@ describe("prepared structural operations", () => {
     expect(await fixture.read("src/use.ts")).toContain("renderValue");
   });
 
+  it("replacement preserves a substituted destination after final authentication", async () => {
+    const { fixture, prepared, target } = await oneFileReplacement();
+    const barrier = holdFilePhase(
+      ({ operationId, phase }) =>
+        operationId === prepared.operation_id && phase === "before-publish",
+    );
+    const applying = applyOperation(prepared.operation_id, prepared.plan_hash);
+    await barrier.reached;
+    await unlink(target);
+    await writeFile(target, "export const externalReplacement = true;\n");
+    barrier.release();
+    const error = await applying.then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    expect(await fixture.read("src/value.ts")).toBe("export const externalReplacement = true;\n");
+    expect(classifyPublicError(error)).toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("same-inode bytes and mode edits remain current after final authentication", async () => {
+    const { fixture, prepared, target } = await oneFileReplacement();
+    const before = await stat(target);
+    const barrier = holdFilePhase(
+      ({ operationId, phase }) =>
+        operationId === prepared.operation_id && phase === "before-publish",
+    );
+    const applying = applyOperation(prepared.operation_id, prepared.plan_hash);
+    await barrier.reached;
+    await writeFile(target, "export const externalSameInode = true;\n");
+    await chmod(target, 0o600);
+    expect((await stat(target)).ino).toBe(before.ino);
+    barrier.release();
+    const error = await applying.then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    expect(await fixture.read("src/value.ts")).toBe("export const externalSameInode = true;\n");
+    expect((await stat(target)).mode & 0o777).toBe(0o600);
+    expect(classifyPublicError(error)).toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("creation race preserves the competitor and reports conflict", async () => {
+    const fixture = await createProjectFixture({ "src/existing.ts": "export const ok = true;\n" });
+    fixtures.push(fixture);
+    const target = path.join(fixture.root, "src/user.service.ts");
+    const prepared = await prepareScaffoldClass({
+      projectRoot: fixture.root,
+      filePath: "src/user.service.ts",
+      spec: scaffoldSpec(),
+    });
+    const barrier = holdFilePhase(
+      ({ operationId, phase }) =>
+        operationId === prepared.operation.operation_id && phase === "before-publish",
+    );
+    const applying = applyOperation(prepared.operation.operation_id, prepared.operation.plan_hash);
+    await barrier.reached;
+    await writeFile(target, "export const externalCreation = true;\n");
+    const competitor = await stat(target);
+    barrier.release();
+    const error = await rejectionOf(applying);
+
+    expect(await readFile(target, "utf8")).toBe("export const externalCreation = true;\n");
+    expect((await stat(target)).ino).toBe(competitor.ino);
+    expect(classifyPublicError(error)).toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("distinct configurations cannot overwrite a shared physical file", async () => {
+    const fixture = await createProjectFixture({
+      "src/shared.ts": "export function shared(): string { return 'original'; }\n",
+    });
+    fixtures.push(fixture);
+    const config = JSON.stringify({
+      compilerOptions: { strict: true },
+      include: ["src/shared.ts"],
+    });
+    await fixture.write("tsconfig.a.json", config);
+    await fixture.write("tsconfig.b.json", config);
+    const input = { filePath: "src/shared.ts", symbolPath: "shared" };
+    const a = await prepareReplaceBody({
+      ...input,
+      projectRoot: path.join(fixture.root, "tsconfig.a.json"),
+      newBody: "return 'A';",
+    });
+    const b = await prepareReplaceBody({
+      ...input,
+      projectRoot: path.join(fixture.root, "tsconfig.b.json"),
+      newBody: "return 'B';",
+    });
+    const barrier = holdFilePhase(
+      ({ operationId, phase }) => operationId === a.operation_id && phase === "before-publish",
+    );
+    const applyingA = applyOperation(a.operation_id, a.plan_hash);
+    await barrier.reached;
+    await applyOperation(b.operation_id, b.plan_hash);
+    barrier.release();
+    const error = await applyingA.then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    expect(await fixture.read("src/shared.ts")).toContain("return 'B'");
+    expect(classifyPublicError(error)).toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("multi-file apply preserves a later external target", async () => {
+    const fixture = await renameFixture();
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "formatValue",
+      newName: "renderValue",
+    });
+    const barrier = holdFilePhase(
+      ({ operationId, index, phase }) =>
+        operationId === prepared.operation_id && index === 0 && phase === "after-commit",
+    );
+    const applying = applyOperation(prepared.operation_id, prepared.plan_hash);
+    await barrier.reached;
+    await fixture.write("src/value.ts", "export const externalLaterTarget = true;\n");
+    barrier.release();
+    const error = await applying.then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    expect(await fixture.read("src/value.ts")).toBe("export const externalLaterTarget = true;\n");
+    expect(classifyPublicError(error)).toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("rollback preserves a changed earlier commit and reports ambiguity", async () => {
+    const fixture = await renameFixture();
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "formatValue",
+      newName: "renderValue",
+    });
+    let rollbackArrived!: () => void;
+    const rollbackReached = new Promise<void>((resolve) => (rollbackArrived = resolve));
+    let releaseRollback!: () => void;
+    const rollbackReleased = new Promise<void>((resolve) => (releaseRollback = resolve));
+    setOperationTestHooksForTests({
+      onFilePhase: async ({ operationId, index, phase }) => {
+        if (operationId !== prepared.operation_id) return;
+        if (phase === "before-publish" && index === 1) throw new Error("later conflict");
+        if (phase === "before-rollback" && index === 0) {
+          rollbackArrived();
+          await rollbackReleased;
+        }
+      },
+    });
+    const applying = applyOperation(prepared.operation_id, prepared.plan_hash);
+    await rollbackReached;
+    await fixture.write("src/use.ts", "export const externalRollback = true;\n");
+    releaseRollback();
+    const error = await rejectionOf(applying);
+
+    expect(await fixture.read("src/use.ts")).toBe("export const externalRollback = true;\n");
+    expect(classifyPublicError(error)).toMatchObject({ code: "AMBIGUOUS_APPLY" });
+  });
+
+  it("unsupported publication capability has zero source effects and is mutation blocked", async () => {
+    const { fixture, prepared } = await oneFileReplacement();
+    const original = await fixture.read("src/value.ts");
+    let arrive!: () => void;
+    const reached = new Promise<void>((resolve) => (arrive = resolve));
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    setOperationTestHooksForTests({
+      onFilePhase: async (event) => {
+        if (event.operationId !== prepared.operation_id || event.phase !== "capability-preflight")
+          return;
+        arrive();
+        await released;
+        throw new Error("publication capability unsupported");
+      },
+    });
+    const applying = applyOperation(prepared.operation_id, prepared.plan_hash);
+    await reached;
+    release();
+    const error = await rejectionOf(applying);
+
+    expect(await fixture.read("src/value.ts")).toBe(original);
+    expect(classifyPublicError(error)).toMatchObject({ code: "MUTATION_BLOCKED" });
+  });
+
   it("rejects a stale plan before writing any files", async () => {
     const fixture = await renameFixture();
     const prepared = await prepareRename({
@@ -492,8 +726,8 @@ describe("prepared structural operations", () => {
       newName: "renderValue",
     });
     setOperationTestHooksForTests({
-      beforeReplace: (_file, index) => {
-        if (index === 1) throw new Error("injected failure");
+      onFilePhase: ({ index, phase }) => {
+        if (phase === "before-publish" && index === 1) throw new Error("injected failure");
       },
     });
 
@@ -546,8 +780,8 @@ describe("prepared structural operations", () => {
         lockEnqueues += 1;
         if (lockEnqueues === 2) secondLockEnqueued();
       },
-      beforeReplace: async (_file, index) => {
-        if (index !== 0 || lockEnqueues !== 1) return;
+      onFilePhase: async ({ index, phase }) => {
+        if (phase !== "before-publish" || index !== 0 || lockEnqueues !== 1) return;
         firstReplaceStarted();
         await firstReplaceBlocked;
       },
@@ -856,8 +1090,8 @@ describe("prepared structural operations", () => {
       spec: scaffoldSpec(),
     });
     setOperationTestHooksForTests({
-      afterReplace: () => {
-        throw new Error("injected post-create failure");
+      onFilePhase: ({ phase }) => {
+        if (phase === "after-commit") throw new Error("injected post-create failure");
       },
     });
 
@@ -879,7 +1113,8 @@ describe("prepared structural operations", () => {
       spec: scaffoldSpec(),
     });
     setOperationTestHooksForTests({
-      afterReplace: async () => {
+      onFilePhase: async ({ phase }) => {
+        if (phase !== "after-commit") return;
         await writeFile(target, "export const competingWriter = true;\n");
         throw new Error("injected post-create failure");
       },

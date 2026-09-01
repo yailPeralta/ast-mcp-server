@@ -101,8 +101,8 @@ async function runFixtureServer() {
     scenario === "completion_critical_with_noncritical"
   ) {
     setOperationTestHooksForTests({
-      afterReplace: async (_file, index) => {
-        if (index !== 0) return;
+      onFilePhase: async ({ index, phase }) => {
+        if (phase !== "after-commit" || index !== 0) return;
         emitFixtureEvent("lifecycle_critical_apply_entered");
         // prettier-ignore
         await (supervisedChild ? new Promise((resolve) => { const keepAlive = setInterval(() => undefined, 1_000); process.once("SIGUSR1", () => { clearInterval(keepAlive); resolve(); }); }) : waitForFixtureControl("release_critical_apply"));

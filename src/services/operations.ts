@@ -107,11 +107,18 @@ export interface AppliedOperation {
 const operations = new Map<string, OperationRecord>();
 const writeQueues = new Map<string, Promise<void>>();
 
+type OperationFilePhase =
+  "capability-preflight" | "before-publish" | "after-commit" | "before-rollback";
+
 interface OperationTestHooks {
   afterRetain?: (operationId: string) => Promise<void> | void;
   afterWriteLockEnqueue?: () => Promise<void> | void;
-  beforeReplace?: (file: string, index: number) => Promise<void> | void;
-  afterReplace?: (file: string, index: number) => Promise<void> | void;
+  onFilePhase?: (event: {
+    operationId: string;
+    file: string;
+    index: number;
+    phase: OperationFilePhase;
+  }) => Promise<void> | void;
 }
 
 let operationTestHooks: OperationTestHooks = {};
@@ -886,8 +893,14 @@ export async function applyOperation(
                   staged.set(file, await stageFile(file, operationId));
                   operationContext.checkpoint();
                 }
-                for (const file of operation.files) {
+                for (const [index, file] of operation.files.entries()) {
                   operationContext.checkpoint();
+                  await operationTestHooks.onFilePhase?.({
+                    operationId,
+                    file: file.file,
+                    index,
+                    phase: "capability-preflight",
+                  });
                   if (isCreatedFile(file)) {
                     assertSafeNewOperationFile(
                       operation.project_root,
@@ -906,7 +919,12 @@ export async function applyOperation(
                 }
                 for (const [index, file] of operation.files.entries()) {
                   operationContext.checkpoint();
-                  await operationTestHooks.beforeReplace?.(file.file, index);
+                  await operationTestHooks.onFilePhase?.({
+                    operationId,
+                    file: file.file,
+                    index,
+                    phase: "before-publish",
+                  });
                   if (!completionCritical) {
                     operationContext.enterCompletionCritical();
                     completionCritical = true;
@@ -922,7 +940,12 @@ export async function applyOperation(
                     staged.delete(file);
                     applied.push(file);
                   }
-                  await operationTestHooks.afterReplace?.(file.file, index);
+                  await operationTestHooks.onFilePhase?.({
+                    operationId,
+                    file: file.file,
+                    index,
+                    phase: "after-commit",
+                  });
                   const writtenBytes = await readFile(file.absolutePath);
                   if (hashBytes(writtenBytes) !== file.updatedHash) {
                     throw new Error(`Post-write verification failed for ${file.file}.`);
@@ -933,6 +956,12 @@ export async function applyOperation(
                 const rollbackErrors: string[] = [];
                 for (const file of [...applied].reverse()) {
                   try {
+                    await operationTestHooks.onFilePhase?.({
+                      operationId,
+                      file: file.file,
+                      index: operation.files.indexOf(file),
+                      phase: "before-rollback",
+                    });
                     const currentBytes = await readFile(file.absolutePath);
                     if (hashBytes(currentBytes) !== file.updatedHash) {
                       rollbackErrors.push(
