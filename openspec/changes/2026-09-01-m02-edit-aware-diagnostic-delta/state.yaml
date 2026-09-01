@@ -3,13 +3,13 @@ schemaVersion: 1
 changeName: 2026-09-01-m02-edit-aware-diagnostic-delta
 artifactStore: hybrid
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-01-m02-edit-aware-diagnostic-delta
-nextRecommended: design
-lastPhase: spec
+nextRecommended: tasks
+lastPhase: design
 artifacts:
   exploration: done
   proposal: done
   specs: done
-  design: missing
+  design: done
   tasks: missing
   applyProgress: missing
   verifyReport: missing
