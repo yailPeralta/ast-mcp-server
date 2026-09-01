@@ -3,6 +3,7 @@ import {
   chmod,
   mkdtemp,
   readFile,
+  readdir,
   rm,
   stat,
   symlink,
@@ -631,6 +632,11 @@ describe("prepared structural operations", () => {
 
     expect(await fixture.read("src/use.ts")).toBe("export const externalRollback = true;\n");
     expect(classifyPublicError(error)).toMatchObject({ code: "AMBIGUOUS_APPLY" });
+    expect(
+      (await readdir(path.join(fixture.root, "src"))).filter((entry) =>
+        entry.includes(`.ast-mcp-${prepared.operation_id}-`),
+      ),
+    ).toHaveLength(2);
   });
 
   it("unsupported publication capability has zero source effects and is mutation blocked", async () => {
@@ -1078,7 +1084,7 @@ describe("prepared structural operations", () => {
     );
   });
 
-  it("removes only the exact created postimage after an injected failure", async () => {
+  it("preserves a created destination and hidden stage when rollback is ambiguous", async () => {
     const fixture = await createProjectFixture({
       "src/existing.ts": "export const existing = true;\n",
     });
@@ -1095,10 +1101,16 @@ describe("prepared structural operations", () => {
       },
     });
 
-    await expect(
+    const error = await rejectionOf(
       applyOperation(prepared.operation.operation_id, prepared.operation.plan_hash),
-    ).rejects.toThrow(/rollback succeeded/i);
-    await expect(access(target)).rejects.toThrow();
+    );
+    expect(classifyPublicError(error)).toMatchObject({ code: "AMBIGUOUS_APPLY" });
+    expect(await readFile(target, "utf8")).toContain("class UserService");
+    expect(
+      (await readdir(path.dirname(target))).filter((entry) =>
+        entry.includes(`.ast-mcp-${prepared.operation.operation_id}-`),
+      ),
+    ).toHaveLength(1);
   });
 
   it("preserves a scaffold target changed before rollback can verify its postimage", async () => {
@@ -1120,10 +1132,16 @@ describe("prepared structural operations", () => {
       },
     });
 
-    await expect(
+    const error = await rejectionOf(
       applyOperation(prepared.operation.operation_id, prepared.operation.plan_hash),
-    ).rejects.toThrow(/rollback was incomplete.*postimage/i);
+    );
+    expect(classifyPublicError(error)).toMatchObject({ code: "AMBIGUOUS_APPLY" });
     expect(await readFile(target, "utf8")).toBe("export const competingWriter = true;\n");
+    expect(
+      (await readdir(path.dirname(target))).filter((entry) =>
+        entry.includes(`.ast-mcp-${prepared.operation.operation_id}-`),
+      ),
+    ).toHaveLength(1);
   });
 
   it("recovers a durable scaffold postimage after receipt persistence fails", async () => {
