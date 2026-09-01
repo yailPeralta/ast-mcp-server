@@ -4565,8 +4565,8 @@ async function runFixtureServer() {
     },
     async ({ before_replace_index }) => {
       setOperationTestHooksForTests({
-        beforeReplace: (_file, index) => {
-          if (index !== before_replace_index) return;
+        onFilePhase: ({ index, phase }) => {
+          if (phase !== "before-publish" || index !== before_replace_index) return;
           setOperationTestHooksForTests({});
           throw new Error("canary injected apply failure");
         },

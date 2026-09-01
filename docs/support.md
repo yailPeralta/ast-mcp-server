@@ -16,7 +16,7 @@ This document defines the supported platform, runtime, persistence, and operatio
 
 Published v0.12.0 requires Node.js `>=22.13.0`; its immutable matrix targets exact Node.js 22.13.0 and the governed Node.js 24 major. The earlier v0.8.1 Node.js 22.5.0/24 matrix remains historical evidence for those bytes only. A future runtime satisfying an engine range is not automatically a verified release target.
 
-The checked-evidence freezer requires GNU coreutils 9.7 `mv` with `--update=none-fail`, `--no-copy`, and `--no-target-directory`. Managed setup-file mutation additionally requires that same `mv` with `--exchange`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, `O_DIRECTORY`, and `O_NOFOLLOW`. It fails closed when any verified Linux primitive is unavailable. Equivalent publication, exchange, descriptor-link, and descriptor-relative mutation semantics have not been verified on other operating systems or architectures.
+The checked-evidence freezer requires GNU coreutils 9.7 `mv` with `--update=none-fail`, `--no-copy`, and `--no-target-directory`. Structural apply and managed setup-file mutation additionally require that same `mv` with `--exchange`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, `O_DIRECTORY`/`O_NOFOLLOW`, and successful owned link/exchange identity probes on each destination parent filesystem before source effects. Missing, denied, or behaviorally incompatible primitives fail closed; there is no rename, copy/delete, or pathname-only fallback. Equivalent semantics have not been verified on other operating systems, architectures, or filesystems.
 
 ## Local stdio trust boundary
 
@@ -30,7 +30,9 @@ The server does not provide:
 - tenant isolation;
 - protection from a malicious process running with the same filesystem authority.
 
-Operation locks coordinate cooperating same-user processes. They do not stop editors, network filesystems, or hostile same-user writers. Report-set freezer coordination likewise assumes cooperating same-UID processes and cannot defend checked evidence against a malicious process with the same filesystem authority. The freezer guarantees no-replace atomic visibility of the checked directory; it does not claim persistence across sudden power loss because parent-directory `fsync` durability is not established.
+Operation locks coordinate cooperating processes using the same configuration identity; they do not authorize writes against editors, overlapping configurations, network filesystems, continuously mutating writers, or hostile same-user processes. Structural replacement authenticates one exchanged pair at a time, and multi-file apply is sequential rather than globally atomic. Reverse rollback restores only exact owned pairs. Creation is no-clobber, but if a later failure follows its first publication, unlink ownership is not inferred: the destination and hidden stage are preserved and the outcome is `AMBIGUOUS_APPLY`. Deterministic promise barriers prove only the named publication and rollback interleavings, not arbitrary-writer atomicity.
+
+Report-set freezer coordination likewise assumes cooperating same-UID processes and cannot defend checked evidence against a malicious process with the same filesystem authority. The freezer guarantees no-replace atomic visibility of the checked directory; it does not claim persistence across sudden power loss because parent-directory `fsync` durability is not established.
 
 ## Optional supervised compiler worker
 
