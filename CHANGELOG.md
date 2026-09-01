@@ -6,10 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-09-01
+
 ### Fixed
 
 - The DeepSeek Harness adapter now opts into a bounded canonical-JSON text projection when a successful MCP result has structured data but no ordinary text, preserving lossless `structuredContent` while making native Agent/Session results useful and durable. The mandatory pinned-host smoke freezes the public 0.13.0 RED baseline and verifies the corrected candidate across the next model request, persisted `tool/result`, cold replay, guarded catalog, and cleanup readback.
 - `ast_explore` now publishes its complete object input schema while retaining all cross-field runtime rejection, and `ast_get_impact` no longer advertises one false output shape across JSON and TOON. The pinned Harness gate binds the public empty-schema RED to candidate registry/native parity and unchanged hashes for the other 14 model schemas.
+- Timeout ownership is now explicit across the Harness, queue, and AST worker: the shipped outer timeout exceeds the complete queue/execution/margin budget, deterministic slow work returns bounded AST-owned operational errors, queued work never starts after its deadline, cancellation remains correlated across worker generations, and cleanup proves zero active work, held requests, listeners, or owned processes.
+- Harness lifecycle handling now converges deterministically through MCP removal and reconnect, rejects retired-generation effects, preserves AST `REQUEST_CANCELLED` authority separately from bridge transport observations, and completes correlated shutdown without residual state. The pinned native and rendered-GUI gates verify the `15→0→15` catalog sequence, request/header identity, secret-safe diagnostics, and ordered cleanup that still runs every owner check after an earlier cleanup failure.
+
+### Release status
+
+- This is the reviewed `0.13.1` release candidate. Publication to npm `next`, public-registry verification, promotion to `latest`, tagging, and GitHub Release creation remain pending and are not claimed here.
 
 ## [0.13.0] — published to `latest` and `next`, registry verified (2026-08-29)
 

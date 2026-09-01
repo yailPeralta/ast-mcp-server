@@ -3,7 +3,7 @@
 # Mounts the packaged `ast-mcp-server` stdio command through the official
 # `@deepseek-ai/dsh-mcp-client` bridge. Harness does not resolve MCP binaries
 # from PATH, so the entrypoint is resolved relative to the profile directory
-# (`baseUrl`), where `dsh plugin --profile <name> add ./ast-mcp-server-0.13.0.tgz`
+# (`baseUrl`), where `dsh plugin --profile <name> add ./ast-mcp-server-0.13.1.tgz`
 # installs a locally packed package as a dependency.
 #
 # First-slice surface: reads + prepare + preview. Every apply path is denied
