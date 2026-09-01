@@ -124,6 +124,16 @@ export const linkHeldFile = (source: FileHandle, directory: FileHandle, basename
     ["-L", "-T", "--", "/proc/self/fd/3", `/proc/self/fd/4/${basename}`],
     [source.fd, directory.fd],
   );
+export async function removeOwnedPublicationEntry(
+  directory: FileHandle,
+  basename: string,
+  expected: PublicationIdentity,
+): Promise<boolean> {
+  if (!equal(await entry(directory, basename), expected)) return false;
+  await rm(`/proc/self/fd/${directory.fd}/${basename}`);
+  return (await entry(directory, basename)) === undefined;
+}
+
 export async function rollbackOwnedCommit(
   token: CommitToken,
   hooks: Pick<PublicationPlan, "beforeRollback"> = {},

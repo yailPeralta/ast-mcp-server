@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstatSync, realpathSync } from "node:fs";
-import { link, open, readFile, rename, stat, unlink } from "node:fs/promises";
+import { constants, lstatSync, realpathSync } from "node:fs";
+import { open, readFile, stat, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { createTwoFilesPatch } from "diff";
 import { LanguageVariant, Node, ScriptTarget, SyntaxKind, ts, type Project } from "ts-morph";
@@ -11,6 +11,16 @@ import {
   type NormalizedDiagnostic,
 } from "./diagnostics.js";
 import {
+  probePublicationCapability,
+  publishAuthenticated,
+  removeOwnedPublicationEntry,
+  rollbackOwnedCommit,
+  snapshotHeldFile,
+  type CommitToken,
+  type PublicationIdentity,
+  type PublicationPlan,
+} from "./authenticated-publication.js";
+import {
   createFreshProject,
   findDeclarationByName,
   getSourceFileOrThrow,
@@ -18,6 +28,7 @@ import {
   recordProjectMutationHistory,
   withProjectOperation,
 } from "./project.js";
+import { PublicOperationalError } from "./public-errors.js";
 import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
 import { executableDeclaration } from "./symbols.js";
 import { buildClassScaffold, type ClassScaffoldSpec } from "./scaffold.js";
@@ -679,38 +690,137 @@ async function withWriteLock<T>(
   }
 }
 
-async function safeUnlink(filePath: string): Promise<void> {
+interface HeldPublication {
+  readonly plan: PublicationPlan;
+  readonly handles: FileHandle[];
+  readonly parentPath: string;
+  readonly parentDev: bigint;
+  readonly parentIno: bigint;
+  committed?: CommitToken;
+  cleanupIdentity: PublicationIdentity | null;
+}
+
+function matchesPrepared(identity: PublicationIdentity, sha256: string, mode: number): boolean {
+  return identity.sha256 === sha256 && identity.mode === (mode & 0o777);
+}
+
+async function stageFile(file: PlannedFileInternal, operationId: string): Promise<HeldPublication> {
+  const parentPath = path.dirname(file.absolutePath);
+  const destinationBasename = path.basename(file.absolutePath);
+  const stageBasename = `${destinationBasename}.ast-mcp-${operationId}-${randomUUID()}.tmp`;
+  const temporaryPath = path.join(parentPath, stageBasename);
+  const handles: FileHandle[] = [];
+  let directory: FileHandle | undefined;
+  let stage: FileHandle | undefined;
   try {
-    await unlink(filePath);
+    directory = await open(
+      parentPath,
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    );
+    handles.push(directory);
+    const heldParent = await directory.stat({ bigint: true });
+    const namedParent = lstatSync(parentPath, { bigint: true });
+    if (
+      !heldParent.isDirectory() ||
+      !namedParent.isDirectory() ||
+      heldParent.dev !== namedParent.dev ||
+      heldParent.ino !== namedParent.ino
+    ) {
+      throw new Error("Publication parent identity changed during staging.");
+    }
+    stage = await open(temporaryPath, "wx", file.mode);
+    handles.push(stage);
+    await stage.writeFile(file.updatedBytes);
+    await stage.chmod(file.mode & 0o777);
+    await stage.sync();
+    const stageIdentity = await snapshotHeldFile(stage);
+    if (!matchesPrepared(stageIdentity, file.updatedHash, file.mode)) {
+      throw new Error("Staged publication does not match the reviewed postimage.");
+    }
+    const plan: PublicationPlan = {
+      kind: isCreatedFile(file) ? "creation" : "replacement",
+      directory,
+      destinationBasename,
+      stage,
+      stageBasename,
+      stageIdentity,
+    };
+    if (!isCreatedFile(file)) {
+      const preimage = await open(
+        `/proc/self/fd/${directory.fd}/${destinationBasename}`,
+        constants.O_RDONLY | constants.O_NOFOLLOW,
+      );
+      handles.push(preimage);
+      const preimageIdentity = await snapshotHeldFile(preimage);
+      if (!matchesPrepared(preimageIdentity, file.originalHash, file.mode)) {
+        throw new Error(`Conflict: ${file.file} changed while publication was staged.`);
+      }
+      plan.preimage = preimage;
+      plan.preimageIdentity = preimageIdentity;
+    }
+    return {
+      plan,
+      handles,
+      parentPath,
+      parentDev: heldParent.dev,
+      parentIno: heldParent.ino,
+      cleanupIdentity: plan.stageIdentity,
+    };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (directory && stage) {
+      try {
+        const currentStage = await snapshotHeldFile(stage);
+        await removeOwnedPublicationEntry(directory, stageBasename, currentStage);
+      } catch {
+        // Preserve the original staging error; cleanup remains best effort.
+      }
+    }
+    await Promise.allSettled(handles.map((handle) => handle.close()));
+    throw error;
   }
 }
 
-async function stageFile(file: PlannedFileInternal, operationId: string): Promise<string> {
-  const temporaryPath = `${file.absolutePath}.ast-mcp-${operationId}.tmp`;
-  await safeUnlink(temporaryPath);
-  const handle = await open(temporaryPath, "wx", file.mode);
-  try {
-    await handle.writeFile(file.updatedBytes);
-    await handle.sync();
-  } finally {
-    await handle.close();
+async function authenticateHeldParent(held: HeldPublication): Promise<void> {
+  const current = lstatSync(held.parentPath, { bigint: true });
+  const opened = await held.plan.directory.stat({ bigint: true });
+  if (
+    !current.isDirectory() ||
+    current.isSymbolicLink() ||
+    current.dev !== held.parentDev ||
+    current.ino !== held.parentIno ||
+    opened.dev !== held.parentDev ||
+    opened.ino !== held.parentIno
+  ) {
+    throw new Error("Conflict: publication parent identity changed before publication.");
   }
-  return temporaryPath;
 }
 
-async function restoreFile(file: PlannedFileInternal, operationId: string): Promise<void> {
-  const restorePath = `${file.absolutePath}.ast-mcp-${operationId}.restore`;
-  await safeUnlink(restorePath);
-  const handle = await open(restorePath, "wx", file.mode);
-  try {
-    await handle.writeFile(file.originalBytes);
-    await handle.sync();
-  } finally {
-    await handle.close();
+async function closeHeldPublication(held: HeldPublication): Promise<void> {
+  await Promise.allSettled(held.handles.map((handle) => handle.close()));
+}
+
+async function cleanupHeldPublication(held: HeldPublication): Promise<void> {
+  if (held.cleanupIdentity !== null) {
+    await removeOwnedPublicationEntry(
+      held.plan.directory,
+      held.plan.stageBasename,
+      held.cleanupIdentity,
+    ).catch(() => false);
   }
-  await rename(restorePath, file.absolutePath);
+  await closeHeldPublication(held);
+}
+
+async function settleHeldPublications(
+  held: Iterable<HeldPublication>,
+  preserveEntries = false,
+): Promise<void> {
+  const publications = [...held];
+  if (preserveEntries) {
+    for (const publication of publications) publication.cleanupIdentity = null;
+  }
+  await Promise.all(
+    publications.map(preserveEntries ? closeHeldPublication : cleanupHeldPublication),
+  );
 }
 
 async function syncDirectories(files: readonly PlannedFileInternal[]): Promise<void> {
@@ -885,7 +995,7 @@ export async function applyOperation(
                 }
               }
 
-              const staged = new Map<PlannedFileInternal, string>();
+              const staged = new Map<PlannedFileInternal, HeldPublication>();
               const applied: PlannedFileInternal[] = [];
               let completionCritical = false;
               try {
@@ -893,14 +1003,28 @@ export async function applyOperation(
                   staged.set(file, await stageFile(file, operationId));
                   operationContext.checkpoint();
                 }
+                const probedParents = new Set<string>();
                 for (const [index, file] of operation.files.entries()) {
                   operationContext.checkpoint();
-                  await operationTestHooks.onFilePhase?.({
-                    operationId,
-                    file: file.file,
-                    index,
-                    phase: "capability-preflight",
-                  });
+                  try {
+                    await operationTestHooks.onFilePhase?.({
+                      operationId,
+                      file: file.file,
+                      index,
+                      phase: "capability-preflight",
+                    });
+                    const parent = path.dirname(file.absolutePath);
+                    if (!probedParents.has(parent)) {
+                      await probePublicationCapability(parent);
+                      probedParents.add(parent);
+                    }
+                  } catch (cause) {
+                    throw new PublicOperationalError(
+                      "MUTATION_BLOCKED",
+                      "Authenticated publication capability is unavailable.",
+                      { cause },
+                    );
+                  }
                   if (isCreatedFile(file)) {
                     assertSafeNewOperationFile(
                       operation.project_root,
@@ -925,21 +1049,46 @@ export async function applyOperation(
                     index,
                     phase: "before-publish",
                   });
+                  const held = staged.get(file)!;
+                  await authenticateHeldParent(held);
                   if (!completionCritical) {
                     operationContext.enterCompletionCritical();
                     completionCritical = true;
                     invalidateAfterCompletion = true;
                   }
-                  if (isCreatedFile(file)) {
-                    await link(staged.get(file)!, file.absolutePath);
-                    applied.push(file);
-                    await safeUnlink(staged.get(file)!);
-                    staged.delete(file);
-                  } else {
-                    await rename(staged.get(file)!, file.absolutePath);
-                    staged.delete(file);
-                    applied.push(file);
+                  const publication = await publishAuthenticated(held.plan);
+                  if (publication.state === "pre_effect") {
+                    if (publication.reason === "unsupported") {
+                      throw new PublicOperationalError(
+                        "MUTATION_BLOCKED",
+                        "Authenticated publication capability is unavailable.",
+                      );
+                    }
+                    throw new PublicOperationalError(
+                      "CONFLICT",
+                      "Authenticated publication preserved a competing entry.",
+                    );
                   }
+                  if (publication.state === "rolled_back") {
+                    held.cleanupIdentity = held.plan.stageIdentity;
+                    throw new PublicOperationalError(
+                      "CONFLICT",
+                      "Authenticated publication preserved a competing entry.",
+                    );
+                  }
+                  if (publication.state === "ambiguous") {
+                    held.cleanupIdentity = null;
+                    throw new PublicOperationalError(
+                      "AMBIGUOUS_APPLY",
+                      "Authenticated publication ownership is ambiguous.",
+                    );
+                  }
+                  held.committed = publication.token;
+                  held.cleanupIdentity =
+                    publication.token.kind === "replacement"
+                      ? publication.token.displacedIdentity
+                      : held.plan.stageIdentity;
+                  applied.push(file);
                   await operationTestHooks.onFilePhase?.({
                     operationId,
                     file: file.file,
@@ -952,9 +1101,18 @@ export async function applyOperation(
                   }
                 }
                 await syncDirectories(operation.files);
+                await settleHeldPublications(staged.values());
+                staged.clear();
               } catch (error) {
-                const rollbackErrors: string[] = [];
+                if (PublicOperationalError.is(error) && error.code === "AMBIGUOUS_APPLY") {
+                  await settleHeldPublications(staged.values(), true);
+                  staged.clear();
+                  throw error;
+                }
+
+                let rollbackAmbiguous = false;
                 for (const file of [...applied].reverse()) {
+                  const held = staged.get(file)!;
                   try {
                     await operationTestHooks.onFilePhase?.({
                       operationId,
@@ -962,42 +1120,37 @@ export async function applyOperation(
                       index: operation.files.indexOf(file),
                       phase: "before-rollback",
                     });
-                    const currentBytes = await readFile(file.absolutePath);
-                    if (hashBytes(currentBytes) !== file.updatedHash) {
-                      rollbackErrors.push(
-                        `${file.file}: current bytes no longer match this operation's postimage`,
-                      );
-                      continue;
+                    const rollback = await rollbackOwnedCommit(held.committed!);
+                    if (rollback.state !== "rolled_back") {
+                      held.cleanupIdentity = null;
+                      rollbackAmbiguous = true;
+                      break;
                     }
-                    if (isCreatedFile(file)) {
-                      assertSafeOperationFile(operation.project_root, file.absolutePath, file.file);
-                      await safeUnlink(file.absolutePath);
-                    } else {
-                      await restoreFile(file, operationId);
-                    }
-                  } catch (rollbackError) {
-                    rollbackErrors.push(
-                      `${file.file}: ${
-                        rollbackError instanceof Error
-                          ? rollbackError.message
-                          : String(rollbackError)
-                      }`,
-                    );
+                    held.cleanupIdentity = held.committed!.destinationIdentity;
+                  } catch {
+                    held.cleanupIdentity = null;
+                    rollbackAmbiguous = true;
+                    break;
                   }
                 }
-                for (const temporaryPath of staged.values()) await safeUnlink(temporaryPath);
-                if (applied.length > 0 && rollbackErrors.length === 0) {
-                  await syncDirectories(applied);
-                  throw new Error(
-                    `Operation failed after replacing ${applied.length} file(s); rollback succeeded and original bytes were restored. Original error: ${
-                      error instanceof Error ? error.message : String(error)
-                    }`,
+
+                if (rollbackAmbiguous) {
+                  await settleHeldPublications(staged.values(), true);
+                  staged.clear();
+                  throw new PublicOperationalError(
+                    "AMBIGUOUS_APPLY",
+                    "Authenticated rollback ownership is ambiguous.",
                     { cause: error },
                   );
                 }
-                if (rollbackErrors.length > 0) {
+
+                await settleHeldPublications(staged.values());
+                staged.clear();
+                if (applied.length > 0) {
+                  await syncDirectories(applied);
+                  if (PublicOperationalError.is(error)) throw error;
                   throw new Error(
-                    `Operation failed and rollback was incomplete: ${rollbackErrors.join("; ")}. Original error: ${
+                    `Operation failed after replacing ${applied.length} file(s); rollback succeeded and original bytes were restored. Original error: ${
                       error instanceof Error ? error.message : String(error)
                     }`,
                     { cause: error },
