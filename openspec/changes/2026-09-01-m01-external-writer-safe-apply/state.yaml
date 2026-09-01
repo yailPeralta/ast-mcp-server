@@ -1,0 +1,24 @@
+schemaName: gentle-ai.sdd-status
+schemaVersion: 1
+changeName: 2026-09-01-m01-external-writer-safe-apply
+artifactStore: hybrid
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-01-m01-external-writer-safe-apply
+nextRecommended: apply
+lastPhase: tasks
+artifacts:
+  exploration: done
+  proposal: done
+  specs: done
+  design: done
+  tasks: done
+  applyProgress: missing
+  verifyReport: missing
+taskProgress:
+  total: 16
+  completed: 0
+  pending: 16
+  allComplete: false
+risks:
+  - Authenticated publication support is limited to the verified Linux x64 and filesystem primitive matrix.
+  - Ambiguous exchange or rollback ownership must preserve observable entries and fail closed.
+  - Locks keyed by configuration cannot authorize writes to physical files shared across configurations.
