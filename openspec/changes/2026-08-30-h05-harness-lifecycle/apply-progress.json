@@ -1,27 +1,37 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-08-30-h05-harness-lifecycle",
-  "workUnit": "Phase 1 / PR2 private seam",
-  "delivery": "stacked-to-main PR2; approved issue #119; tracker #116",
-  "stage": "phase-1-minimal-final-correction-complete-parent-settlement-pending",
-  "attemptToken": "sha256:55d8c8166215cdf7ba3e6dae89616c45d952f7abdfb0bb1031e66a2a2047076e",
-  "completedTasks": ["0.1", "0.2", "0.3", "0.4", "1.1", "1.2", "1.3", "1.4"],
-  "phase1Tdd": {
-    "red": "Tombstone RED: H05/H03 Vitest exited 1 because valid generation 7 resurrected after failed generation 8 replacement construction.",
-    "green": "Tombstone GREEN: H05/H03 Vitest passed 14/14; generations 7 and 8 reject after failed 8, while valid 9 initializes.",
-    "triangulate": "Nine H05 cases cover malformed parsing, descriptor drift, queued identity, cancellation/deadline/failure, failed-construction tombstones, held/readback rollover, sanitization, stale suppression, and fresh publication.",
-    "refactor": "Kept abort-before-construction, compacted the existing regression file, preserved H03 and the closed public surface, and retained the PR2 budget."
-  },
-  "tdd": {
-    "red": "Static truth check exit 1: roadmap and annex claimed PR #115 open/unmerged.",
-    "green": "Static truth check exit 0 for both docs: merged SHA, archived H-03, final main CI/Security green, unreleased v0.13.1, H-05 next.",
-    "refactor": "Compacted exploration/proposal/spec/design/tasks/state while retaining 6 requirements, 12 scenarios, 18 tasks, risks, rollback, four PRs, and pinned identity."
+  "workUnit": "Phase 2 / PR3 native lifecycle",
+  "delivery": "stacked-to-main PR3; approved issue #121; tracker #116",
+  "stage": "phase-2-pr3-minimal-correction-parent-settlement-pending",
+  "attemptToken": "sha256:18559476c752818e0b5260bdb4556e0f4b870b7a7a03c33b7576866ea0f35ae9",
+  "remediatesEvidenceRevision": "sha256:1acf35766c5efcf4efc0666bc077943c2323e6101e3670f5f011f98ea4a75520",
+  "completedTasks": [
+    "0.1",
+    "0.2",
+    "0.3",
+    "0.4",
+    "1.1",
+    "1.2",
+    "1.3",
+    "1.4",
+    "2.1",
+    "2.2",
+    "2.3",
+    "2.4"
+  ],
+  "phase2Tdd": {
+    "red": "Focused contract failed 18/19 because shutdown lacked an outliving native-result observer; exact Harness then proved the missing native row.",
+    "green": "Focused H05/Harness passed 28/28 with exactly one shutdown native row and one durable row joined to REQUEST_CANCELLED.",
+    "triangulate": "Exact pinned Harness observed cancellation and shutdown native/durable cardinality while generic transport classes remained non-authoritative.",
+    "refactor": "Removed numeric bridge recognition and made shutdown observer cleanup explicit; all prior gates remain."
   },
   "evidence": {
-    "focusedTest": "Tombstone GREEN: H05/H03 passed 14/14; relevant lifecycle/integration gate passed 7/7 files and 134/134 tests.",
-    "publicSurface": "Guarded MCP integration compared the complete serialized 15-tool schema/annotation catalog byte-for-byte with the unguarded catalog minus apply; no H05 public tool, argument, or annotation exists.",
-    "quality": "yarn format:check, yarn lint, yarn typecheck, and yarn build: exit 0; H03 compatibility passed 5/5 inside the focused suite.",
-    "runtimeHarness": "N/A — Phase 1 is an environment-gated closed fixture seam; the exact Harness lifecycle runtime belongs to Phase 2/PR3 and the parent owns attempt settlement.",
-    "rollback": "Revert src/services/compiler-worker-host.ts, src/services/h03-timeout-fixture.ts, src/services/project.ts, src/services/runtime-policy.ts, and test/h05-lifecycle-fixture.test.ts; leave Phase 0 docs and unrelated H03/public behavior intact."
+    "focusedTest": "yarn vitest run test/dsh-adapter.test.ts test/h05-lifecycle-fixture.test.ts: exit 0; 2 files and 28 tests passed; generated probe parsed with zero diagnostics.",
+    "runtimeHarness": "env -u GIT_PAGER yarn test:dsh-adapter: exit 0 with DSH_ADAPTER_SMOKE_OK; phases a/b/c/h03/h05/d passed, catalog 15→0→15, exactly one shutdown native row and one durable row joined REQUEST_CANCELLED, and shutdown resources were zero.",
+    "preserved": "H-01a native/model/durable/replay, H-02 corrected schema, H-03 timeout ownership, guarded catalog 15, and apply UNKNOWN_TOOL denial remained green.",
+    "quality": "yarn format:check, yarn lint, yarn typecheck, yarn build, and git diff --check passed.",
+    "cleanup": "Pre-delete scanning walks all temporaryRoot siblings except package-manager yarn.lock/uv.lock inventories; terminal fixture evidence reports active/held/listener/timer/stale counters at zero before recursive root deletion.",
+    "rollback": "Revert the H05 correlation/resource evidence in src/services/{h03-timeout-fixture,public-errors}.ts plus scripts/dsh-adapter-smoke.mjs, focused tests, and the two cancellation-spec clarifications; restore Phase 2 task/progress marks. Parent owns settlement."
   }
 }
