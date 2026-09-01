@@ -3,7 +3,8 @@
   "change": "2026-08-30-h05-harness-lifecycle",
   "workUnit": "Phase 3 / PR4 rendered GUI closure",
   "delivery": "stacked-to-main PR4; parent test/h05-native-lifecycle; tracker #116",
-  "stage": "focused-review-correction-applied",
+  "stage": "implementation-closure-merged-main-ci-pending",
+  "closureReceipt": "sha256:5cc96b0b2545be06737fb7deb574e5fcf49c2a930e9236b1bbef669b468683cf",
   "focusedReviewCorrection": "Receipt sha256:0d79e904cb8002b5bd13d53b346efb225fcc0c8be18026a5a599b874f24486e6; RED proved owner-zero/residue escaped early cleanup rejection; GREEN 30/30 focused plus exact Harness cleanup ok.",
   "attemptToken": "sha256:916e32b0e9d9ddea1cbab1db6e710b536e5a0f4843cf148c1c30175d6f8ab249",
   "remediatesEvidenceRevision": "sha256:6a7da802ad1cdfb565fb9a8903ab46e7bc547ac34dd41713e51a879b08d6723b",
@@ -24,7 +25,8 @@
     "3.1",
     "3.2",
     "3.3",
-    "3.4"
+    "3.4",
+    "3.5"
   ],
   "phase2Tdd": {
     "red": "Focused contract failed 18/19 because shutdown lacked an outliving native-result observer; exact Harness then proved the missing native row.",
@@ -44,6 +46,15 @@
     "focusedTest": "yarn vitest run test/dsh-adapter.test.ts: 20/20 passed.",
     "runtimeHarness": "env -u GIT_PAGER -u DSH_HARNESS_SOURCE yarn test:dsh-adapter: DSH_ADAPTER_SMOKE_OK; rendered AST 15→0→15; cleanup ok.",
     "rollback": "Revert scripts/dsh-adapter-smoke.mjs, test/dsh-adapter.test.ts, and Phase 3 task/progress marks only."
+  },
+  "implementationClosure": {
+    "delivery": "stacked-to-main complete: PR118 merge 6256391; PR120 merge ee80d5d; PR122 merge 4d879ae; PR124 merge 3dab418.",
+    "head": "Clean local main and origin/main both resolve to 3dab41862f7e82137c29f7eeb49158c9c8d3d2e4.",
+    "reviewBudget": "Each authored slice remained at or below 400 changed lines.",
+    "pr4Ci": "Final PR4 CI completed four quality lanes green after ordered cleanup.",
+    "canonical": "Local format, lint, typecheck, full 923-test suite, and build passed; focused PSS rerun passed; exact pinned Harness emitted DSH_ADAPTER_SMOKE_OK; audit and pack passed.",
+    "judgment": "Judgment Day APPROVED; post-approval delivery-correction focused review APPROVE.",
+    "pending": "Main push CI/Security for 3dab418 is running and is not claimed passed. Release v0.13.1 remains pending until after dedicated SDD verify/archive; version/changelog/dry-run/publish/verify/promote/tag are unperformed."
   },
   "evidence": {
     "focusedTest": "yarn vitest run test/dsh-adapter.test.ts test/h05-lifecycle-fixture.test.ts: exit 0; 2 files and 28 tests passed; generated probe parsed with zero diagnostics.",
