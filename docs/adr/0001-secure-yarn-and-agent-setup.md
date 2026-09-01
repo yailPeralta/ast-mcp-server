@@ -76,6 +76,12 @@ Setup is convergent and retry-safe, not transactionally atomic across independen
 
 Machine output is one stable versioned JSON value. Setup schema v2 reports `mcp`, `skill`, and `guidance` per logical agent plus physically deduplicated writes tagged as `skill`, `guidance`, or `mcp_config`. Command time and output are bounded. Provider output is never copied into public diagnostics; a correlation ID ties bounded failures to the setup result. Code rollback retains valid user registrations, skill files, and standalone managed text blocks; it does not remove or downgrade them automatically. Mixed-version rollout fails closed on unknown contracts.
 
+### Authenticated publication boundary
+
+Structural apply reuses the authenticated publication primitive, not setup orchestration or result policy. Its verified mutation matrix is Linux x64, GNU coreutils 9.7 `mv --exchange --no-copy -T`, GNU `ln -L -T`, `/proc/self/fd`, `O_DIRECTORY`/`O_NOFOLLOW`, and a destination filesystem that passes the owned link/exchange identity probe. Primitive absence, denial, or incompatible behavior blocks before source effects; no pathname rename, copy/delete, or unlink fallback is permitted.
+
+The primitive authenticates one publication pair, not a global multi-file transaction. Structural files commit sequentially, and reverse rollback restores only exact operation-owned pairs. A created destination is no-clobber, but after its first publication later-failure rollback cannot infer safe unlink ownership; it preserves the destination and hidden stage and reports ambiguity. Promise-barrier race tests prove the named bounded interleavings only, not safety against a continuously mutating writer.
+
 ## Alternatives considered
 
 ### Keep npm and use `npm ci --ignore-scripts`

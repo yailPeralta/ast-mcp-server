@@ -1,0 +1,150 @@
+{
+  "schema": "dsh-sdd-apply-progress",
+  "change": "2026-09-01-m01-external-writer-safe-apply",
+  "workUnit": "impl-5-invariants-support-gates",
+  "delivery": "feature-branch-chain auto-chain; branch refactor/m01-impl5-invariants-support",
+  "lineageToken": "sha256:1487b4e42e7c98abcd313800477c3571df9d78c616b1e40d9309b4f832080638",
+  "stage": "done",
+  "tasks": [
+    { "id": "0.1", "name": "Planning exploration and proposal", "status": "completed" },
+    { "id": "0.2", "name": "Planning specification, design, and tasks", "status": "completed" },
+    { "id": "1.1", "name": "Deterministic per-file phase hook seam", "status": "completed" },
+    { "id": "1.2", "name": "Replacement and same-inode REDs", "status": "completed" },
+    { "id": "1.3", "name": "Creation and distinct-configuration REDs", "status": "completed" },
+    { "id": "1.4", "name": "Multi-file, rollback, and unsupported REDs", "status": "completed" },
+    { "id": "2.1", "name": "Authenticated publication and managed parity", "status": "completed" },
+    { "id": "2.2", "name": "Held no-clobber creation", "status": "completed" },
+    { "id": "2.3", "name": "Exchange replacement and overlapping configs", "status": "completed" },
+    { "id": "3.1", "name": "Reverse owned CommitToken rollback", "status": "completed" },
+    { "id": "3.2", "name": "Bounded typed public outcomes", "status": "completed" },
+    { "id": "3.3", "name": "Receipt, replay, cancellation, and ordering", "status": "completed" },
+    { "id": "3.4", "name": "Shared ownership and cleanup refactor", "status": "completed" },
+    { "id": "3.5", "name": "Verified support-boundary documentation", "status": "completed" },
+    { "id": "4.1", "name": "Complete repository and package gates", "status": "completed" },
+    { "id": "4.2", "name": "Harness denial and 15-tool catalog gates", "status": "completed" }
+  ],
+  "tdd": {
+    "red": [],
+    "green": [
+      {
+        "id": "replacement-substitution",
+        "name": "Replacement preserves substitution",
+        "file": "test/operations.test.ts",
+        "taskId": "2.3"
+      },
+      {
+        "id": "same-inode-bytes-mode",
+        "name": "Replacement preserves same-inode edits",
+        "file": "test/operations.test.ts",
+        "taskId": "2.3"
+      },
+      {
+        "id": "creation-competitor",
+        "name": "Creation preserves competitor",
+        "file": "test/operations.test.ts",
+        "taskId": "2.2"
+      },
+      {
+        "id": "distinct-configurations",
+        "name": "Distinct configs preserve committed writer",
+        "file": "test/operations.test.ts",
+        "taskId": "2.3"
+      },
+      {
+        "id": "authenticated-publication-api",
+        "name": "Authenticated publication primitive",
+        "file": "test/authenticated-publication.test.ts",
+        "taskId": "2.1"
+      },
+      {
+        "id": "managed-file-parity",
+        "name": "Managed publication parity",
+        "file": "test/managed-guidance.test.ts",
+        "taskId": "2.1"
+      },
+      {
+        "id": "multi-file-later-target",
+        "name": "Multi-file conflict restores owned commits",
+        "file": "test/operations.test.ts",
+        "taskId": "3.1"
+      },
+      {
+        "id": "rollback-ownership",
+        "name": "Ambiguous rollback preserves entries",
+        "file": "test/operations.test.ts",
+        "taskId": "3.1"
+      },
+      {
+        "id": "unsupported-capability",
+        "name": "Typed outcomes stay bounded and path-free",
+        "file": "test/operations.test.ts",
+        "taskId": "3.2"
+      }
+    ],
+    "refactored": [
+      {
+        "id": "shared-publication-settlement",
+        "name": "Shared cleanup and preserve settlement",
+        "file": "test/operations.test.ts",
+        "taskId": "3.4"
+      }
+    ]
+  },
+  "runs": [
+    {
+      "id": "focused-authority",
+      "command": "yarn vitest run test/operations.test.ts -t 'receipt|replay|cancellation|rolls back already replaced|rollback|does not orphan|scheduler' --reporter=dot",
+      "result": "exit 0; 11 passed, 23 skipped"
+    },
+    {
+      "id": "focused-exact",
+      "command": "yarn vitest run test/operations.test.ts -t 'receipt|replay|cancellation' --reporter=dot",
+      "result": "exit 0; 5 passed, 29 skipped"
+    },
+    {
+      "id": "primitive-managed",
+      "command": "yarn vitest run test/authenticated-publication.test.ts test/managed-guidance.test.ts --reporter=dot",
+      "result": "exit 0; 40 passed"
+    },
+    {
+      "id": "post-refactor",
+      "command": "yarn typecheck && yarn vitest run test/operations.test.ts test/managed-guidance.test.ts --reporter=dot; yarn vitest run test/authenticated-publication.test.ts --reporter=dot",
+      "result": "exit 0; typecheck passed; 69 passed; primitive 5 passed"
+    },
+    {
+      "id": "harness-unit",
+      "command": "yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts --reporter=dot",
+      "result": "exit 0; 23 passed; guarded catalog 15, apply absent"
+    },
+    {
+      "id": "harness-runtime",
+      "command": "yarn test:dsh-adapter",
+      "result": "exit 0; phases a/b/c/h03/h05/d ok; catalogs 15/0/15; direct apply UNKNOWN_TOOL; cleanup ok"
+    },
+    {
+      "id": "full-initial",
+      "command": "mandatory full gate chain",
+      "result": "exit 1; 936 passed, 1 failed because inherited GIT_PAGER=cat triggered the canary ambient-control guard before its target assertion"
+    },
+    {
+      "id": "full-diagnosis",
+      "command": "env -u GIT_PAGER yarn vitest run test/canary-local-mcp.test.ts -t 'rejects duplicate, symbolic, and hard-linked direct-/tmp raw inputs before publication' --reporter=dot",
+      "result": "exit 0; 1 passed, 26 skipped; confirms environment-only failure"
+    },
+    {
+      "id": "full-clean",
+      "command": "env -u GIT_PAGER bash -c 'yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && node scripts/ci-prepare-gnu-mv.mjs probe && yarn test:package'",
+      "result": "exit 0; format/lint/typecheck/build pass; 74 files/937 tests plus supervised 1 file/2 tests; GNU mv 9.7 pass; package smoke status ok"
+    }
+  ],
+  "evidence": {
+    "priorCycles": "Seven intended operation REDs became the nine retained GREEN behaviors across tasks 2.1-3.2; zero RED remains.",
+    "invariants": "Receipt failure recovery, exact-postimage replay, cancellation after first publication, completion-critical drain, reverse owned rollback, scheduler serialization, and no-orphan behavior remain authoritative.",
+    "refactor": "Only after focused GREEN, shared settleHeldPublications unified owned cleanup and preserve-only descriptor closure; typecheck and 69 operation/managed tests plus 5 primitive tests stayed green.",
+    "runtime": "Linux x64 GNU mv 9.7 probe passed. Harness native smoke proved apply absent/direct UNKNOWN_TOOL, 15 guarded AST tools, H03 active/held/listeners zero, H05 owner readback zero, and cleanup ok.",
+    "support": "Documentation limits mutation to the verified Linux x64/procfs/GNU coreutils/filesystem probe matrix, has no fallback, and disclaims global or continuous-writer atomicity.",
+    "rollback": "Revert operations.ts settlement refactor, three support documents, and impl-5 SDD task/state/progress updates; prior impl-1 through impl-4 behavior and evidence remain intact.",
+    "risk": "Creation rollback after first publication remains deliberately ambiguous and preserves destination plus hidden stage; unsupported filesystems and arbitrary continuous writers remain outside the guarantee."
+  },
+  "updatedAt": "2026-09-01T07:07:56Z"
+}
