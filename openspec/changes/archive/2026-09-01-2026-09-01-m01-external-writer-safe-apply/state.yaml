@@ -3,8 +3,8 @@ schemaVersion: 1
 changeName: 2026-09-01-m01-external-writer-safe-apply
 artifactStore: hybrid
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-01-m01-external-writer-safe-apply
-nextRecommended: judgment-day
-lastPhase: verify
+nextRecommended: archive
+lastPhase: judgment-day
 artifacts:
   exploration: done
   proposal: done
@@ -13,6 +13,7 @@ artifacts:
   tasks: done
   applyProgress: done
   verifyReport: done
+  judgmentDay: done
 taskProgress:
   total: 16
   completed: 16
