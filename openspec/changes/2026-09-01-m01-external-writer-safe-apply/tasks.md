@@ -55,8 +55,8 @@ During apply, `apply-progress.json` records each transition before/after: status
 
 ## Phase 3: Ownership (impl-4→impl-5)
 
-- [ ] 3.1 Add reverse `CommitToken` rollback; restore owned state or preserve entries and stop ambiguous. Verify: `yarn vitest run test/operations.test.ts -t "rollback|multi-file"`.
-- [ ] 3.2 Map typed bounded/path-free outcomes in `src/services/public-errors.ts`. Verify: `yarn vitest run test/public-errors.test.ts && yarn test:errors`.
+- [x] 3.1 Add reverse `CommitToken` rollback; restore owned state or preserve entries and stop ambiguous. Verify: `yarn vitest run test/operations.test.ts -t "rollback|multi-file"`.
+- [x] 3.2 Map typed bounded/path-free outcomes in `src/services/public-errors.ts`. Verify: `yarn vitest run test/public-errors.test.ts && yarn test:errors`.
 - [ ] 3.3 Preserve receipt/replay/cancellation completion-critical behavior. Verify: `yarn vitest run test/operations.test.ts -t "receipt|replay|cancellation"`.
 - [ ] 3.4 REFACTOR shared ownership/cleanup after GREEN. Verify: `yarn typecheck && yarn vitest run test/operations.test.ts test/managed-guidance.test.ts`.
 - [ ] 3.5 Align `README.md`, `docs/support.md`, `docs/adr/0001-secure-yarn-and-agent-setup.md` with verified Linux x64 matrix/no fallback. Verify: `yarn format:check`.

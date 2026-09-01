@@ -15,8 +15,8 @@ artifacts:
   verifyReport: missing
 taskProgress:
   total: 16
-  completed: 9
-  pending: 7
+  completed: 11
+  pending: 5
   allComplete: false
 risks:
   - Authenticated publication support is limited to the verified Linux x64 and filesystem primitive matrix.

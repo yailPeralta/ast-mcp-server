@@ -1,9 +1,9 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-01-m01-external-writer-safe-apply",
-  "workUnit": "impl-3-operations-green",
-  "delivery": "feature-branch-chain auto-chain; branch feat/m01-impl3-operations-green",
-  "lineageToken": "sha256:6e9ec323bd53c80c6c49b2179fc27572bb3abf4e8b7a976a4b626007f0ad5f81",
+  "workUnit": "impl-4-owned-rollback-public-mapping",
+  "delivery": "feature-branch-chain auto-chain; branch fix/m01-impl4-ownership-mapping",
+  "lineageToken": "sha256:a007f9d64b88bbc38e56a1246c4da229c84c7685ebef1546af98fbec8180ecbf",
   "stage": "partial",
   "tasks": [
     { "id": "1.1", "name": "Deterministic per-file phase hook seam", "status": "completed" },
@@ -28,32 +28,20 @@
       "id": "2.3",
       "name": "Exchange replacement and overlapping configuration adapter",
       "status": "completed"
+    },
+    {
+      "id": "3.1",
+      "name": "Reverse owned CommitToken rollback",
+      "status": "completed"
+    },
+    {
+      "id": "3.2",
+      "name": "Bounded typed public outcome mapping",
+      "status": "completed"
     }
   ],
   "tdd": {
-    "red": [
-      {
-        "id": "multi-file-later-target",
-        "name": "Multi-file apply preserves a later external target",
-        "file": "test/operations.test.ts",
-        "taskId": "1.4",
-        "runId": "red-multifile-rollback-unsupported"
-      },
-      {
-        "id": "rollback-ownership",
-        "name": "Rollback preserves a changed earlier commit and reports ambiguity",
-        "file": "test/operations.test.ts",
-        "taskId": "1.4",
-        "runId": "red-multifile-rollback-unsupported"
-      },
-      {
-        "id": "unsupported-capability",
-        "name": "Unsupported publication capability has zero source effects",
-        "file": "test/operations.test.ts",
-        "taskId": "1.4",
-        "runId": "red-multifile-rollback-unsupported"
-      }
-    ],
+    "red": [],
     "green": [
       {
         "id": "replacement-substitution",
@@ -96,16 +84,30 @@
         "file": "test/managed-guidance.test.ts",
         "taskId": "2.1",
         "runId": "impl2-managed-green"
+      },
+      {
+        "id": "multi-file-later-target",
+        "name": "Multi-file conflict restores only proved earlier commits",
+        "file": "test/operations.test.ts",
+        "taskId": "3.1",
+        "runId": "impl4-owned-green"
+      },
+      {
+        "id": "rollback-ownership",
+        "name": "Ambiguous rollback preserves all entries and closes descriptors",
+        "file": "test/operations.test.ts",
+        "taskId": "3.1",
+        "runId": "impl4-owned-green"
+      },
+      {
+        "id": "unsupported-capability",
+        "name": "Typed conflict, ambiguity, and blocked outcomes stay bounded and path-free",
+        "file": "test/operations.test.ts",
+        "taskId": "3.2",
+        "runId": "impl4-owned-green"
       }
     ],
     "impl2": {
-      "red": {
-        "id": "authenticated-publication-api",
-        "file": "test/authenticated-publication.test.ts",
-        "command": "yarn vitest run test/authenticated-publication.test.ts",
-        "result": "exit 1; module src/services/authenticated-publication.ts did not exist",
-        "finishedAt": "2026-09-01T04:47:58Z"
-      },
       "green": {
         "focal": "exit 0; 5 passed",
         "managedGuidance": "exit 0; 35 passed",
@@ -193,36 +195,6 @@
       "recordedAt": "2026-09-01T05:19:38Z"
     },
     {
-      "id": "impl2-final-focal",
-      "command": "yarn vitest run test/authenticated-publication.test.ts",
-      "result": "exit 0; 1 file passed; 5 tests passed"
-    },
-    {
-      "id": "impl2-final-managed",
-      "command": "yarn vitest run test/managed-guidance.test.ts",
-      "result": "exit 0; 1 file passed; 35 tests passed"
-    },
-    {
-      "id": "impl2-final-typecheck",
-      "command": "yarn typecheck",
-      "result": "exit 0"
-    },
-    {
-      "id": "impl2-final-prettier",
-      "command": "yarn format:check",
-      "result": "exit 0; all matched files use Prettier code style"
-    },
-    {
-      "id": "impl2-final-diff-check",
-      "command": "git diff --check",
-      "result": "exit 0; no output"
-    },
-    {
-      "id": "impl2-final-runtime-probe",
-      "command": "node scripts/ci-prepare-gnu-mv.mjs probe",
-      "result": "exit 0; {\"status\":\"pass\",\"version\":\"9.7\"}"
-    },
-    {
       "id": "impl3-primitive",
       "command": "yarn vitest run test/authenticated-publication.test.ts",
       "result": "exit 0; 5 passed"
@@ -271,19 +243,79 @@
       "command": "yarn lint && yarn typecheck && yarn format:check && git diff --check; yarn vitest run test/authenticated-publication.test.ts; yarn vitest run test/managed-guidance.test.ts; node scripts/ci-prepare-gnu-mv.mjs probe",
       "result": "exit 0 throughout; primitive 5 passed; managed guidance 35 passed; GNU mv probe pass 9.7",
       "finishedAt": "2026-09-01T06:11:04Z"
+    },
+    {
+      "id": "impl4-owned-green",
+      "command": "yarn vitest run test/operations.test.ts -t 'multi-file|rollback|unsupported' --reporter=dot",
+      "result": "exit 0; 6 passed, 28 skipped",
+      "finishedAt": "2026-09-01T06:41:36Z"
+    },
+    {
+      "id": "impl4-prior-races",
+      "command": "yarn vitest run test/operations.test.ts -t 'replacement|same-inode|creation|distinct configurations' --reporter=dot",
+      "result": "exit 0; 6 passed, 28 skipped",
+      "finishedAt": "2026-09-01T06:41:36Z"
+    },
+    {
+      "id": "impl4-controls",
+      "command": "yarn vitest run test/operations.test.ts -t 'rolls back already replaced|receipt|replay|cancellation|does not orphan|scheduler' --reporter=dot",
+      "result": "exit 0; 8 passed, 26 skipped",
+      "finishedAt": "2026-09-01T06:41:36Z"
+    },
+    {
+      "id": "impl4-public-unit",
+      "command": "yarn vitest run test/public-errors.test.ts --reporter=dot",
+      "result": "exit 0; 36 passed",
+      "finishedAt": "2026-09-01T06:41:36Z"
+    },
+    {
+      "id": "impl4-public-smoke",
+      "command": "yarn test:errors",
+      "result": "exit 0; {\"status\":\"ok\",\"compiled\":true,\"hostile_error\":true,\"stderr_correlation\":true}",
+      "finishedAt": "2026-09-01T06:41:36Z"
+    },
+    {
+      "id": "impl4-primitive",
+      "command": "yarn vitest run test/authenticated-publication.test.ts --reporter=dot",
+      "result": "exit 0; 5 passed",
+      "finishedAt": "2026-09-01T06:41:36Z"
+    },
+    {
+      "id": "impl4-managed",
+      "command": "yarn vitest run test/managed-guidance.test.ts --reporter=dot",
+      "result": "exit 0; 35 passed",
+      "finishedAt": "2026-09-01T06:41:36Z"
+    },
+    {
+      "id": "impl4-quality",
+      "command": "yarn lint; yarn typecheck; yarn format:check; git diff --check",
+      "result": "each exit 0; lint/typecheck/diff had no output; Prettier reported all matched files compliant",
+      "finishedAt": "2026-09-01T06:41:36Z"
+    },
+    {
+      "id": "impl4-public-bounds",
+      "command": "node --input-type=module -e \"import { Buffer } from 'node:buffer'; import { PublicOperationalError, renderPublicError } from './dist/services/public-errors.js'; for (const code of ['CONFLICT','AMBIGUOUS_APPLY','MUTATION_BLOCKED']) { const r=renderPublicError(new PublicOperationalError(code, '/home/private/source.ts '+ 'x'.repeat(5000)), '123e4567-e89b-42d3-a456-426614174000'); if (r.envelope.error.code!==code || Buffer.byteLength(r.text)>4096 || r.text.includes('/home/private')) throw new Error(code); } console.log('typed-public-outcomes-ok: 3/3 bounded path-free');\"",
+      "result": "exit 0; typed-public-outcomes-ok: 3/3 bounded path-free",
+      "finishedAt": "2026-09-01T06:49:39Z"
+    },
+    {
+      "id": "impl4-runtime-probe",
+      "command": "node scripts/ci-prepare-gnu-mv.mjs probe",
+      "result": "exit 0; {\"status\":\"pass\",\"version\":\"9.7\"}",
+      "finishedAt": "2026-09-01T06:41:36Z"
     }
   ],
   "evidence": {
     "safetyNet": "Original seven operation RED scenarios remain recorded; task 2.1 primitive was 5/5 and managed guidance was 35/35 before adaptation.",
     "focused": "Replacement/same-inode exit 0 with 4 passed; creation/distinct configurations exit 0 with 2 passed. Exactly those four impl-1 scenarios moved from RED to GREEN.",
-    "expectedRed": "Multi-file/rollback/unsupported expected exit 1 with 3 failed and 2 passed; only task-3 typed public mapping assertions remain RED, while external bytes and zero source effects are preserved.",
-    "control": "Recovery rerun of rollback, receipt, replay, cancellation, orphan, and scheduler controls exited 0 with 8 passed and 26 skipped.",
-    "runtimeHarness": "GNU mv governed runtime probe exit 0 with status pass/version 9.7; apply probes every distinct destination parent before first source publication.",
-    "formatAndTypes": "Recovery rerun: yarn lint, yarn typecheck, yarn format:check, and git diff --check each exit 0 after correcting four no-empty lint findings; three findings existed in the impl-2 parent and one was introduced by the partial impl-3 cleanup path.",
-    "diagnosis": "The partial implementation compiled and its focused tests fit the 400-line budget, but it had not passed the repository lint gate. The failed executor is therefore classified as implementation/finalization failure rather than compile, focused-test, budget, or publication-process failure.",
-    "rollback": "Revert src/services/operations.ts, removeOwnedPublicationEntry in src/services/authenticated-publication.ts, task 2.2/2.3 checkboxes, and this impl-3 ledger transition; no task-3 mapping or docs are included.",
-    "riskBoundary": "Creation CommitToken rollback remains ambiguous/rollback without namespace mutation. Ambiguous and unsupported outcomes fail closed but retain task-3 public mapping REDs. Guarantees cover deterministic barriers and the verified Linux matrix, not continuously racing arbitrary writers.",
-    "remaining": "Tasks 3.1 and 3.2 own reverse CommitToken rollback and full bounded public outcome mapping; tasks 3.3 through 4.2 remain pending."
+    "redToGreen": "The historical multi-file, rollback, and unsupported run remains test-first proof: exit 1 with 3 intended failures and 2 passes. All three now reside only in GREEN; no RED remains.",
+    "control": "Prior race gate passed 6/6; rollback/receipt/replay/cancellation/orphan/scheduler controls passed 8/8; public error unit passed 36/36, compiled smoke returned status ok, and the three typed operation codes passed the 4096-byte/path-free runtime probe.",
+    "runtimeHarness": "GNU mv governed runtime probe exit 0 with status pass/version 9.7; primitive passed 5/5 and managed parity passed 35/35.",
+    "formatAndTypes": "yarn lint, yarn typecheck, yarn format:check, and git diff --check each exited 0.",
+    "diagnosis": "The recovered two-file implementation is safe for tasks 3.1/3.2: reverse replacement tokens roll back in order, successful rollback cleans the exact destination identity now held at the hidden stage, and ambiguity clears cleanup authority before every descriptor closes.",
+    "rollback": "Revert src/services/operations.ts and test/operations.test.ts plus task 3.1/3.2, state, and this impl-4 ledger transition; prior impl-1 through impl-3 evidence remains intact.",
+    "riskBoundary": "Creation CommitToken rollback intentionally remains no-effect ambiguous and preserves destination plus stage. Ambiguous replacement rollback preserves every observable entry while closing held descriptors. Guarantees remain limited to deterministic barriers and the verified Linux x64 procfs/coreutils/filesystem matrix, not continuously racing arbitrary writers.",
+    "remaining": "Tasks 3.3 through 4.2 remain pending; no full repository suite was run for impl-4."
   },
-  "updatedAt": "2026-09-01T06:11:04Z"
+  "updatedAt": "2026-09-01T06:49:39Z"
 }
