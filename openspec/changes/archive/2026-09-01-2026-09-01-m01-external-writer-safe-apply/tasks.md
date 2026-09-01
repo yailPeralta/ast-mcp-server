@@ -49,19 +49,19 @@ During apply, `apply-progress.json` records each transition before/after: status
 
 ## Phase 2: GREEN (impl-2→impl-3)
 
-- [ ] 2.1 Extract authenticated driver to `src/services/authenticated-publication.ts`; adapt `src/services/managed-file.ts`, retaining held-inode, timeout/signal, exact-pair parity. Verify: `yarn vitest run test/managed-guidance.test.ts`.
-- [ ] 2.2 GREEN held no-clobber creation in `src/services/operations.ts`; competitor→`CONFLICT`. Verify: `yarn vitest run test/operations.test.ts -t "creation"`.
-- [ ] 2.3 GREEN exchange replacement/same-inode/overlapping configs. Verify: `yarn vitest run test/operations.test.ts -t "replacement|same-inode|distinct configurations"`.
+- [x] 2.1 Extract authenticated driver to `src/services/authenticated-publication.ts`; adapt `src/services/managed-file.ts`, retaining held-inode, timeout/signal, exact-pair parity. Verify: `yarn vitest run test/managed-guidance.test.ts`.
+- [x] 2.2 GREEN held no-clobber creation in `src/services/operations.ts`; competitor→`CONFLICT`. Verify: `yarn vitest run test/operations.test.ts -t "creation"`.
+- [x] 2.3 GREEN exchange replacement/same-inode/overlapping configs. Verify: `yarn vitest run test/operations.test.ts -t "replacement|same-inode|distinct configurations"`.
 
 ## Phase 3: Ownership (impl-4→impl-5)
 
-- [ ] 3.1 Add reverse `CommitToken` rollback; restore owned state or preserve entries and stop ambiguous. Verify: `yarn vitest run test/operations.test.ts -t "rollback|multi-file"`.
-- [ ] 3.2 Map typed bounded/path-free outcomes in `src/services/public-errors.ts`. Verify: `yarn vitest run test/public-errors.test.ts && yarn test:errors`.
-- [ ] 3.3 Preserve receipt/replay/cancellation completion-critical behavior. Verify: `yarn vitest run test/operations.test.ts -t "receipt|replay|cancellation"`.
-- [ ] 3.4 REFACTOR shared ownership/cleanup after GREEN. Verify: `yarn typecheck && yarn vitest run test/operations.test.ts test/managed-guidance.test.ts`.
-- [ ] 3.5 Align `README.md`, `docs/support.md`, `docs/adr/0001-secure-yarn-and-agent-setup.md` with verified Linux x64 matrix/no fallback. Verify: `yarn format:check`.
+- [x] 3.1 Add reverse `CommitToken` rollback; restore owned state or preserve entries and stop ambiguous. Verify: `yarn vitest run test/operations.test.ts -t "rollback|multi-file"`.
+- [x] 3.2 Map typed bounded/path-free outcomes in `src/services/public-errors.ts`. Verify: `yarn vitest run test/public-errors.test.ts && yarn test:errors`.
+- [x] 3.3 Preserve receipt/replay/cancellation completion-critical behavior. Verify: `yarn vitest run test/operations.test.ts -t "receipt|replay|cancellation"`.
+- [x] 3.4 REFACTOR shared ownership/cleanup after GREEN. Verify: `yarn typecheck && yarn vitest run test/operations.test.ts test/managed-guidance.test.ts`.
+- [x] 3.5 Align `README.md`, `docs/support.md`, `docs/adr/0001-secure-yarn-and-agent-setup.md` with verified Linux x64 matrix/no fallback. Verify: `yarn format:check`.
 
 ## Phase 4: Gates
 
-- [ ] 4.1 Run `yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && node scripts/ci-prepare-gnu-mv.mjs probe && yarn test:package`; persist results.
-- [ ] 4.2 Harness/catalog regression is applicable: `yarn test:dsh-adapter && yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts`; prove apply absent and direct invocation denied.
+- [x] 4.1 Run `yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && node scripts/ci-prepare-gnu-mv.mjs probe && yarn test:package`; persist results.
+- [x] 4.2 Harness/catalog regression is applicable: `yarn test:dsh-adapter && yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts`; prove apply absent and direct invocation denied.

@@ -1,8 +1,8 @@
 import { randomUUID, createHash } from "node:crypto";
-import { spawn } from "node:child_process";
 import { constants as fsConstants, type BigIntStats } from "node:fs";
 import { lstat, mkdir, open, realpath, rm, type FileHandle } from "node:fs/promises";
 import path from "node:path";
+import { runPublicationPrimitive } from "./authenticated-publication.js";
 
 export type ManagedFileStatus = "installed" | "updated" | "unchanged";
 
@@ -111,8 +111,6 @@ export interface ManagedFilePlan {
 
 const GNU_LN_PATH = "/usr/bin/ln";
 const GNU_MV_PATH = "/usr/bin/mv";
-const COREUTILS_TIMEOUT_MS = 5_000;
-const COREUTILS_STDERR_LIMIT = 4_096;
 
 function errno(error: unknown): string | undefined {
   return (error as NodeJS.ErrnoException).code;
@@ -129,63 +127,6 @@ function identitiesEqual(
   return (
     left !== undefined && right !== undefined && left.dev === right.dev && left.ino === right.ino
   );
-}
-
-async function runCoreutils(
-  executable: string,
-  args: string[],
-  inheritedDescriptors: number[],
-): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(executable, args, {
-      env: { LANG: "C", LC_ALL: "C", PATH: "/usr/bin:/bin" },
-      shell: false,
-      stdio: ["ignore", "ignore", "pipe", ...inheritedDescriptors],
-      windowsHide: true,
-    });
-    let stderrBytes = 0;
-    let settled = false;
-    let requestedFailure: Error | undefined;
-    const requestFailure = (message: string, cause?: unknown): void => {
-      if (settled || requestedFailure !== undefined) return;
-      requestedFailure = new Error(message, cause === undefined ? undefined : { cause });
-      clearTimeout(timeout);
-      child.kill("SIGKILL");
-    };
-    const timeout = setTimeout(
-      () => requestFailure(`Managed Linux primitive timed out: ${path.basename(executable)}`),
-      COREUTILS_TIMEOUT_MS,
-    );
-    child.stderr!.on("data", (chunk: Buffer) => {
-      stderrBytes += chunk.byteLength;
-      if (stderrBytes > COREUTILS_STDERR_LIMIT) {
-        requestFailure(
-          `Managed Linux primitive exceeded its stderr limit: ${path.basename(executable)}`,
-        );
-      }
-    });
-    child.on("error", (error) => {
-      requestFailure(`Managed Linux primitive is unavailable: ${path.basename(executable)}`, error);
-    });
-    child.on("close", (code, signal) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (requestedFailure !== undefined) {
-        reject(requestedFailure);
-        return;
-      }
-      if (code === 0 && signal === null) {
-        resolve();
-        return;
-      }
-      reject(
-        new Error(
-          `Managed Linux primitive failed: ${path.basename(executable)} (${signal ?? code ?? "unknown"})`,
-        ),
-      );
-    });
-  });
 }
 
 export function hashBytes(content: Uint8Array | string): string {
@@ -594,7 +535,7 @@ async function linkHeldFile(
   directory: FileHandle,
   basename: string,
 ): Promise<void> {
-  await runCoreutils(
+  await runPublicationPrimitive(
     GNU_LN_PATH,
     ["-L", "-T", "--", "/proc/self/fd/3", `/proc/self/fd/4/${basename}`],
     [source.fd, directory.fd],
@@ -606,7 +547,7 @@ async function exchangeDirectoryEntries(
   leftBasename: string,
   rightBasename: string,
 ): Promise<void> {
-  await runCoreutils(
+  await runPublicationPrimitive(
     GNU_MV_PATH,
     [
       "--exchange",
