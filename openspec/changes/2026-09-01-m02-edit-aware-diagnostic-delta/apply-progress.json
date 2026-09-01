@@ -1,9 +1,9 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-01-m02-edit-aware-diagnostic-delta",
-  "workUnit": "u2-bounded-utf16-mapper",
-  "delivery": "feature-branch-chain auto-chain; branch feat/m02-u2-mapper; tasks 2.1-2.3 only",
-  "lineageToken": "sha256:750b7054c7acca637106de79fafda8c42c56475f335d23be74a7b79394ee0d41",
+  "workUnit": "u3-conservative-diagnostic-matcher",
+  "delivery": "feature-branch-chain auto-chain; branch feat/m02-u3-matcher; tasks 3.1-3.3 only",
+  "lineageToken": "sha256:61af5ff25bd1d20783bfba90efeea6681f0ace96c37fbde249dc15c882cabb0b",
   "stage": "refactored",
   "tasks": [
     { "id": "0.1", "name": "Planning delivery through design", "status": "completed" },
@@ -12,9 +12,9 @@
     { "id": "2.1", "name": "Mapper RED", "status": "completed" },
     { "id": "2.2", "name": "Mapper GREEN", "status": "completed" },
     { "id": "2.3", "name": "Mapper REFACTOR", "status": "completed" },
-    { "id": "3.1", "name": "Matcher edge RED", "status": "pending" },
-    { "id": "3.2", "name": "Matcher GREEN", "status": "pending" },
-    { "id": "3.3", "name": "Matcher REFACTOR", "status": "pending" },
+    { "id": "3.1", "name": "Matcher edge RED", "status": "completed" },
+    { "id": "3.2", "name": "Matcher GREEN", "status": "completed" },
+    { "id": "3.3", "name": "Matcher REFACTOR", "status": "completed" },
     { "id": "4.1", "name": "Operation integration RED", "status": "pending" },
     { "id": "4.2", "name": "Operation integration GREEN", "status": "pending" },
     { "id": "4.3", "name": "Operation integration REFACTOR", "status": "pending" },
@@ -45,6 +45,13 @@
         "command": "yarn vitest run test/diagnostics.test.ts",
         "exitCode": 1,
         "failure": "10 failed, 7 passed: observeDiagnostic/buildEditContext absent"
+      },
+      {
+        "id": "u3-observed-comparator-api",
+        "taskId": "3.1",
+        "command": "yarn vitest run test/diagnostics.test.ts",
+        "exitCode": 1,
+        "failure": "12 failed, 17 passed: TypeError compareObservedDiagnostics is not a function"
       }
     ],
     "green": [
@@ -53,6 +60,12 @@
         "taskId": "2.2",
         "command": "yarn vitest run test/diagnostics.test.ts",
         "result": "exit 0; 17 passed"
+      },
+      {
+        "id": "u3-conservative-matcher",
+        "taskId": "3.2",
+        "command": "yarn vitest run test/diagnostics.test.ts",
+        "result": "exit 0; 29 passed"
       }
     ],
     "refactored": [
@@ -61,6 +74,12 @@
         "taskId": "2.3",
         "command": "yarn vitest run test/diagnostics.test.ts",
         "result": "exit 0 after Prettier; 17 passed"
+      },
+      {
+        "id": "u3-conservative-matcher",
+        "taskId": "3.3",
+        "command": "yarn prettier --write src/services/diagnostics.ts test/diagnostics.test.ts && yarn vitest run test/diagnostics.test.ts",
+        "result": "exit 0; 29 passed"
       }
     ]
   },
@@ -89,14 +108,29 @@
       "id": "u1-preserved-red",
       "command": "yarn vitest run test/operations.test.ts -t \"same-identity\"",
       "result": "exit 1 as expected; 1 failed, 34 skipped; blocked expected true, received false"
+    },
+    {
+      "id": "u3-safety-net",
+      "command": "yarn vitest run test/diagnostics.test.ts",
+      "result": "exit 0 before U3 edits; 17 passed"
+    },
+    {
+      "id": "u3-quality",
+      "command": "yarn typecheck; yarn eslint src/services/diagnostics.ts test/diagnostics.test.ts; yarn prettier --check src/services/diagnostics.ts test/diagnostics.test.ts",
+      "result": "all exit 0; typecheck/lint silent; Prettier matched"
+    },
+    {
+      "id": "u3-u1-preserved-red",
+      "command": "yarn vitest run test/operations.test.ts -t \"same-identity\"",
+      "result": "exit 1 expected until U4; 1 failed, 34 skipped; blocked=false"
     }
   ],
   "evidence": {
-    "expectedCorrection": "Exactly the replacement TS2322 is addedErrors, blocked is true, apply returns public MUTATION_BLOCKED, disk bytes are unchanged, and the unrelated shifted TS2322 is absent from added and removed.",
-    "runtime": "Vitest executes createProjectFixture, the real TypeScript compiler-backed prepareReplaceBody boundary, and applyOperation without sleeps or polling.",
-    "cleanup": "The operations suite afterEach clears retained operations and project sessions, verifies no symbol-index cache residue, and recursively removes fixture and environment roots even on RED failure.",
-    "rollback": "Remove only the added same-identity test and apply-progress.json, restore task 1.1 to unchecked, and restore state.yaml to 2/21 with applyProgress missing; no production files are involved.",
-    "risk": "The first RED assertion intentionally stops later acceptance assertions until U2/U4 correct diagnostic continuity; no production correction is present."
+    "expectedCorrection": "U3 compares observed spans against exact changed text: only equal identity/length at mapped unchanged spans cancel; touched, abutting, missing, lifecycle, and uncertain cases remain added/removed.",
+    "runtime": "Vitest runs the pure edit-aware comparator and real TypeScript observation seam; U1 compiler-backed prepare remains expected RED blocked=false until U4 integrates the API.",
+    "cleanup": "Pure matcher tests allocate no filesystem resources; operations afterEach cleared retained operations, sessions, cache residue, fixture roots, and environment roots on expected RED.",
+    "rollback": "Revert only diagnostics.ts matcher additions, the U3 matrix in diagnostics.test.ts, and task/state/progress 3.1-3.3 marks; U1 RED and U2 mapper remain intact.",
+    "risk": "operations.ts still calls legacy compareDiagnostics, so preparation authority remains intentionally RED until U4; no public tool or schema fields changed."
   },
-  "updatedAt": "2026-09-01T21:22:33Z"
+  "updatedAt": "2026-09-01T19:07:00Z"
 }

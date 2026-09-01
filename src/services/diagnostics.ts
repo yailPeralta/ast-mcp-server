@@ -132,12 +132,19 @@ export interface DiagnosticDelta {
   addedErrors: NormalizedDiagnostic[];
 }
 
+export interface DiagnosticObservation {
+  public: NormalizedDiagnostic;
+  start: number | null;
+  length: number | null;
+  ordinal: number;
+}
+
 export function observeDiagnostic(
   diagnostic: Diagnostic,
   projectRoot: string,
   ordinal = 0,
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
-) {
+): DiagnosticObservation {
   requestContext.checkpoint();
   const sourceFile = diagnostic.getSourceFile();
   const start = diagnostic.getStart() ?? null;
@@ -377,6 +384,129 @@ function identity(diagnostic: NormalizedDiagnostic): string {
     diagnostic.file,
     diagnostic.message,
   ]);
+}
+
+export interface DiagnosticTextChange {
+  file: string;
+  beforeText: string | null;
+  afterText: string | null;
+}
+
+interface FileEditPair extends DiagnosticTextChange {
+  context: EditContext | null;
+}
+
+function touchesHunk(
+  start: number,
+  length: number,
+  hunks: readonly EditSpan[],
+  side: "old" | "new",
+): boolean {
+  const end = start + length;
+  return hunks.some((hunk) => {
+    const hunkStart = side === "old" ? hunk.oldStart : hunk.newStart;
+    const hunkEnd = side === "old" ? hunk.oldEnd : hunk.newEnd;
+    return end >= hunkStart && start <= hunkEnd;
+  });
+}
+
+function observationKey(
+  observation: DiagnosticObservation,
+  change: FileEditPair | undefined,
+  side: "old" | "new",
+): string | null {
+  const diagnostic = observation.public;
+  if (diagnostic.file === null) {
+    return JSON.stringify([identity(diagnostic), diagnostic.line, diagnostic.column]);
+  }
+  if (!change) {
+    return JSON.stringify([identity(diagnostic), observation.start, observation.length]);
+  }
+  if (
+    change.beforeText === null ||
+    change.afterText === null ||
+    observation.start === null ||
+    observation.length === null ||
+    !change.context ||
+    touchesHunk(observation.start, observation.length, change.context.hunks, side)
+  ) {
+    return null;
+  }
+
+  const run = change.context.runs.find((candidate) => {
+    const runStart = side === "old" ? candidate.oldStart : candidate.newStart;
+    const runEnd = side === "old" ? candidate.oldEnd : candidate.newEnd;
+    return observation.start! >= runStart && observation.start! + observation.length! <= runEnd;
+  });
+  if (!run) return null;
+  const mappedStart =
+    side === "old" ? run.newStart + observation.start - run.oldStart : observation.start;
+  return JSON.stringify([identity(diagnostic), mappedStart, observation.length]);
+}
+
+export function compareObservedDiagnostics(
+  before: readonly DiagnosticObservation[],
+  after: readonly DiagnosticObservation[],
+  changes: readonly DiagnosticTextChange[],
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): DiagnosticDelta {
+  requestContext.checkpoint();
+  const edits = new Map<string, FileEditPair>();
+  for (const change of changes) {
+    requestContext.checkpoint();
+    edits.set(change.file, {
+      ...change,
+      context:
+        change.beforeText === null || change.afterText === null
+          ? null
+          : buildEditContext(change.beforeText, change.afterText, undefined, requestContext),
+    });
+  }
+
+  const queues = new Map<string, { indices: number[]; cursor: number }>();
+  for (let index = 0; index < before.length; index += 1) {
+    requestContext.checkpoint();
+    const observation = before[index]!;
+    const key = observationKey(
+      observation,
+      observation.public.file === null ? undefined : edits.get(observation.public.file),
+      "old",
+    );
+    if (key !== null) {
+      const queue = queues.get(key) ?? { indices: [], cursor: 0 };
+      queue.indices.push(index);
+      queues.set(key, queue);
+    }
+  }
+
+  const matchedBefore = new Set<number>();
+  const matchedAfter = new Set<number>();
+  for (let index = 0; index < after.length; index += 1) {
+    requestContext.checkpoint();
+    const observation = after[index]!;
+    const key = observationKey(
+      observation,
+      observation.public.file === null ? undefined : edits.get(observation.public.file),
+      "new",
+    );
+    const queue = key === null ? undefined : queues.get(key);
+    if (queue && queue.cursor < queue.indices.length) {
+      matchedBefore.add(queue.indices[queue.cursor++]!);
+      matchedAfter.add(index);
+    }
+  }
+
+  const added = after
+    .filter((_, index) => !matchedAfter.has(index))
+    .map(({ public: value }) => value);
+  const removed = before
+    .filter((_, index) => !matchedBefore.has(index))
+    .map(({ public: value }) => value);
+  return {
+    added,
+    removed,
+    addedErrors: added.filter((diagnostic) => diagnostic.category === "Error"),
+  };
 }
 
 function subtract(

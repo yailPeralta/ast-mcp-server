@@ -43,9 +43,9 @@ Runtime tasks 1.1, 2.1–5.3, 6.1–6.5 MUST acquire, run only on `proceed`, set
 
 ## Phase 3 — U3 edges
 
-- [ ] 3.1 **RED:** disjoint-edits/repeats/FIFO-duplicates/boundaries/zero-width/missing-spans/lifecycle/unfiled/CRLF/surrogate/BOM. Failure: legacy subtraction.
-- [ ] 3.2 **GREEN:** conservative matcher preserving public schemas/`allow_new_errors`; run U3.
-- [ ] 3.3 **REFACTOR after GREEN:** deduplicate; rerun U3.
+- [x] 3.1 **RED:** disjoint-edits/repeats/FIFO-duplicates/boundaries/zero-width/missing-spans/lifecycle/unfiled/CRLF/surrogate/BOM. Failure: `compareObservedDiagnostics` absent.
+- [x] 3.2 **GREEN:** conservative matcher preserving public schemas/`allow_new_errors`; run U3.
+- [x] 3.3 **REFACTOR after GREEN:** deduplicate; rerun U3.
 
 ## Phase 4 — U4 integration
 
