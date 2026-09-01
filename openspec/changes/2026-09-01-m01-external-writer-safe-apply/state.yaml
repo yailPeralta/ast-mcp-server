@@ -4,7 +4,7 @@ changeName: 2026-09-01-m01-external-writer-safe-apply
 artifactStore: hybrid
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-01-m01-external-writer-safe-apply
 nextRecommended: apply
-lastPhase: tasks
+lastPhase: apply
 artifacts:
   exploration: done
   proposal: done
@@ -15,8 +15,8 @@ artifacts:
   verifyReport: missing
 taskProgress:
   total: 16
-  completed: 7
-  pending: 9
+  completed: 9
+  pending: 7
   allComplete: false
 risks:
   - Authenticated publication support is limited to the verified Linux x64 and filesystem primitive matrix.

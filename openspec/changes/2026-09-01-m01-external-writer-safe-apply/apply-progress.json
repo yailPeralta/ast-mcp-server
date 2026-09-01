@@ -1,9 +1,9 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-01-m01-external-writer-safe-apply",
-  "workUnit": "impl-2-authenticated-publication",
-  "delivery": "feature-branch-chain auto-chain; branch feat/m01-impl2-auth-publication",
-  "acquireToken": "sha256:525f84ddb820aed9aebe0cb883ad9917565f59d72070dccd9910d7fcd8aef231",
+  "workUnit": "impl-3-operations-green",
+  "delivery": "feature-branch-chain auto-chain; branch feat/m01-impl3-operations-green",
+  "lineageToken": "sha256:6e9ec323bd53c80c6c49b2179fc27572bb3abf4e8b7a976a4b626007f0ad5f81",
   "stage": "partial",
   "tasks": [
     { "id": "1.1", "name": "Deterministic per-file phase hook seam", "status": "completed" },
@@ -18,38 +18,20 @@
       "id": "2.1",
       "name": "Extract authenticated publication and retain managed-file parity",
       "status": "completed"
+    },
+    {
+      "id": "2.2",
+      "name": "Held no-clobber creation adapter",
+      "status": "completed"
+    },
+    {
+      "id": "2.3",
+      "name": "Exchange replacement and overlapping configuration adapter",
+      "status": "completed"
     }
   ],
   "tdd": {
     "red": [
-      {
-        "id": "replacement-substitution",
-        "name": "Replacement preserves a substituted destination",
-        "file": "test/operations.test.ts",
-        "taskId": "1.2",
-        "runId": "red-replacement-same-inode"
-      },
-      {
-        "id": "same-inode-bytes-mode",
-        "name": "Replacement preserves same-inode byte and mode edits",
-        "file": "test/operations.test.ts",
-        "taskId": "1.2",
-        "runId": "red-replacement-same-inode"
-      },
-      {
-        "id": "creation-competitor",
-        "name": "Creation preserves the competing inode and reports conflict",
-        "file": "test/operations.test.ts",
-        "taskId": "1.3",
-        "runId": "red-creation-config"
-      },
-      {
-        "id": "distinct-configurations",
-        "name": "Distinct configurations preserve the committed writer",
-        "file": "test/operations.test.ts",
-        "taskId": "1.3",
-        "runId": "red-creation-config"
-      },
       {
         "id": "multi-file-later-target",
         "name": "Multi-file apply preserves a later external target",
@@ -73,6 +55,34 @@
       }
     ],
     "green": [
+      {
+        "id": "replacement-substitution",
+        "name": "Replacement preserves a substituted destination",
+        "file": "test/operations.test.ts",
+        "taskId": "2.3",
+        "runId": "impl3-recovery-focused"
+      },
+      {
+        "id": "same-inode-bytes-mode",
+        "name": "Replacement preserves same-inode byte and mode edits",
+        "file": "test/operations.test.ts",
+        "taskId": "2.3",
+        "runId": "impl3-recovery-focused"
+      },
+      {
+        "id": "creation-competitor",
+        "name": "Creation preserves the competing inode and reports conflict",
+        "file": "test/operations.test.ts",
+        "taskId": "2.2",
+        "runId": "impl3-recovery-focused"
+      },
+      {
+        "id": "distinct-configurations",
+        "name": "Distinct configurations preserve the committed writer",
+        "file": "test/operations.test.ts",
+        "taskId": "2.3",
+        "runId": "impl3-recovery-focused"
+      },
       {
         "id": "authenticated-publication-api",
         "name": "Stable snapshots, no-clobber creation, and exact replacement rollback",
@@ -102,6 +112,16 @@
         "recordedAt": "2026-09-01T05:19:38Z"
       },
       "followUp": "Task 2.1 is complete at the scoped extraction and managed-file parity boundary. Creation CommitToken rollback remains intentionally fail-closed as {state:'ambiguous',phase:'rollback'} without moving, unlinking, or otherwise mutating namespace entries; successful creation rollback belongs to task 3.1."
+    },
+    "impl3": {
+      "safetyNet": "Seven impl-1 operation scenarios were confirmed RED before production changes; task 2.1 primitive and managed parity were GREEN.",
+      "green": {
+        "replacement": "exit 0; 4 passed, 30 skipped",
+        "creation": "exit 0; 2 passed, 32 skipped",
+        "recordedAt": "2026-09-01T06:01:33Z"
+      },
+      "triangulation": "Substitution and same-inode bytes+mode exercise distinct replacement paths; creation competitor and distinct configurations exercise no-clobber and cross-lock exchange.",
+      "refactor": "Held parent/stage/preimage descriptors, parent reauthentication, unique stages, and ownership-checked hidden cleanup retained all focused GREEN gates."
     },
     "refactored": []
   },
@@ -201,17 +221,69 @@
       "id": "impl2-final-runtime-probe",
       "command": "node scripts/ci-prepare-gnu-mv.mjs probe",
       "result": "exit 0; {\"status\":\"pass\",\"version\":\"9.7\"}"
+    },
+    {
+      "id": "impl3-primitive",
+      "command": "yarn vitest run test/authenticated-publication.test.ts",
+      "result": "exit 0; 5 passed"
+    },
+    {
+      "id": "impl3-managed-guidance",
+      "command": "yarn vitest run test/managed-guidance.test.ts",
+      "result": "exit 0; 35 passed"
+    },
+    {
+      "id": "impl3-quality",
+      "command": "yarn typecheck && yarn format:check && git diff --check",
+      "result": "exit 0 for each command"
+    },
+    {
+      "id": "impl3-runtime-probe",
+      "command": "node scripts/ci-prepare-gnu-mv.mjs probe",
+      "result": "exit 0; {\"status\":\"pass\",\"version\":\"9.7\"}"
+    },
+    {
+      "id": "impl3-recovery-diagnosis",
+      "command": "yarn lint",
+      "result": "initial exit 1; four no-empty errors (three inherited in authenticated-publication.ts and one introduced in operations.ts); corrected with outcome-classification and cleanup comments",
+      "finishedAt": "2026-09-01T06:09:42Z"
+    },
+    {
+      "id": "impl3-recovery-focused",
+      "command": "yarn vitest run test/operations.test.ts -t 'replacement|same-inode' --reporter=dot && yarn vitest run test/operations.test.ts -t 'creation|distinct configurations' --reporter=dot",
+      "result": "exit 0; 4 passed then 2 passed; 30 and 32 skipped",
+      "finishedAt": "2026-09-01T06:10:32Z"
+    },
+    {
+      "id": "impl3-recovery-controls",
+      "command": "yarn vitest run test/operations.test.ts -t 'rolls back already replaced|receipt|replay|cancellation|does not orphan|scheduler' --reporter=dot",
+      "result": "exit 0; 8 passed, 26 skipped",
+      "finishedAt": "2026-09-01T06:10:59Z"
+    },
+    {
+      "id": "impl3-recovery-task3-red",
+      "command": "yarn vitest run test/operations.test.ts -t 'multi-file|rollback|unsupported' --reporter=dot",
+      "result": "expected exit 1; 3 failed, 2 passed, 29 skipped; only intended task-3 public-code assertions remained RED",
+      "finishedAt": "2026-09-01T06:11:03Z"
+    },
+    {
+      "id": "impl3-recovery-final-gates",
+      "command": "yarn lint && yarn typecheck && yarn format:check && git diff --check; yarn vitest run test/authenticated-publication.test.ts; yarn vitest run test/managed-guidance.test.ts; node scripts/ci-prepare-gnu-mv.mjs probe",
+      "result": "exit 0 throughout; primitive 5 passed; managed guidance 35 passed; GNU mv probe pass 9.7",
+      "finishedAt": "2026-09-01T06:11:04Z"
     }
   ],
   "evidence": {
-    "safetyNet": "Managed guidance parity: exit 0; 35 passed",
-    "focused": "Authenticated publication: exit 0; 5 passed. Stable snapshots authenticate dev/ino/SHA-256/mode; replacement races restore only a revalidated pair; lost proof is ambiguous.",
-    "runtimeHarness": "GNU mv governed runtime probe: exit 0; status pass; version 9.7. Focal capability probe also performed owned link and exchange. Harness catalog/guard untouched.",
-    "formatAndTypes": "yarn typecheck: exit 0; yarn format:check: exit 0; git diff --check: exit 0.",
-    "operationsRed": "The three recorded impl-1 operation filters remain the intended evidence: seven tests are RED for the not-yet-adapted operations.ts behavior, while four unrelated filtered controls passed.",
-    "rollback": "Revert src/services/authenticated-publication.ts, the primitive-runner extraction in src/services/managed-file.ts, test/authenticated-publication.test.ts, the task 2.1 checkbox, and this impl-2 ledger update; no unrelated behavior is in this work-unit boundary.",
-    "riskBoundary": "Creation rollback remains exactly {state:'ambiguous',phase:'rollback'} and performs no namespace mutation. This slice proves only deterministic pre-publication/pre-rollback barriers on the verified Linux primitive matrix; it does not coordinate arbitrary continuously racing writers. The check-to-exchange window is an explicit task 3.1/review risk.",
-    "remaining": "Task 2.1 is complete. Task 3.1 owns successful creation rollback and must preserve the fail-closed boundary unless authenticated cleanup is proven."
+    "safetyNet": "Original seven operation RED scenarios remain recorded; task 2.1 primitive was 5/5 and managed guidance was 35/35 before adaptation.",
+    "focused": "Replacement/same-inode exit 0 with 4 passed; creation/distinct configurations exit 0 with 2 passed. Exactly those four impl-1 scenarios moved from RED to GREEN.",
+    "expectedRed": "Multi-file/rollback/unsupported expected exit 1 with 3 failed and 2 passed; only task-3 typed public mapping assertions remain RED, while external bytes and zero source effects are preserved.",
+    "control": "Recovery rerun of rollback, receipt, replay, cancellation, orphan, and scheduler controls exited 0 with 8 passed and 26 skipped.",
+    "runtimeHarness": "GNU mv governed runtime probe exit 0 with status pass/version 9.7; apply probes every distinct destination parent before first source publication.",
+    "formatAndTypes": "Recovery rerun: yarn lint, yarn typecheck, yarn format:check, and git diff --check each exit 0 after correcting four no-empty lint findings; three findings existed in the impl-2 parent and one was introduced by the partial impl-3 cleanup path.",
+    "diagnosis": "The partial implementation compiled and its focused tests fit the 400-line budget, but it had not passed the repository lint gate. The failed executor is therefore classified as implementation/finalization failure rather than compile, focused-test, budget, or publication-process failure.",
+    "rollback": "Revert src/services/operations.ts, removeOwnedPublicationEntry in src/services/authenticated-publication.ts, task 2.2/2.3 checkboxes, and this impl-3 ledger transition; no task-3 mapping or docs are included.",
+    "riskBoundary": "Creation CommitToken rollback remains ambiguous/rollback without namespace mutation. Ambiguous and unsupported outcomes fail closed but retain task-3 public mapping REDs. Guarantees cover deterministic barriers and the verified Linux matrix, not continuously racing arbitrary writers.",
+    "remaining": "Tasks 3.1 and 3.2 own reverse CommitToken rollback and full bounded public outcome mapping; tasks 3.3 through 4.2 remain pending."
   },
-  "updatedAt": "2026-09-01T05:35:16Z"
+  "updatedAt": "2026-09-01T06:11:04Z"
 }
