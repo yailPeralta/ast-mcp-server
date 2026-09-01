@@ -3,21 +3,22 @@ schemaVersion: 1
 changeName: 2026-09-01-m01-external-writer-safe-apply
 artifactStore: hybrid
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-01-m01-external-writer-safe-apply
-nextRecommended: apply
-lastPhase: apply
+nextRecommended: archive
+lastPhase: judgment-day
 artifacts:
   exploration: done
   proposal: done
   specs: done
   design: done
   tasks: done
-  applyProgress: partial
-  verifyReport: missing
+  applyProgress: done
+  verifyReport: done
+  judgmentDay: done
 taskProgress:
   total: 16
-  completed: 11
-  pending: 5
-  allComplete: false
+  completed: 16
+  pending: 0
+  allComplete: true
 risks:
   - Authenticated publication support is limited to the verified Linux x64 and filesystem primitive matrix.
   - Ambiguous exchange or rollback ownership must preserve observable entries and fail closed.
