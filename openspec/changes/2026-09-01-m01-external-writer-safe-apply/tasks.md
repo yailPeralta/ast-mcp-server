@@ -49,7 +49,7 @@ During apply, `apply-progress.json` records each transition before/after: status
 
 ## Phase 2: GREEN (impl-2→impl-3)
 
-- [ ] 2.1 Extract authenticated driver to `src/services/authenticated-publication.ts`; adapt `src/services/managed-file.ts`, retaining held-inode, timeout/signal, exact-pair parity. Verify: `yarn vitest run test/managed-guidance.test.ts`.
+- [x] 2.1 Extract authenticated driver to `src/services/authenticated-publication.ts`; adapt `src/services/managed-file.ts`, retaining held-inode, timeout/signal, exact-pair parity. Verify: `yarn vitest run test/managed-guidance.test.ts`.
 - [ ] 2.2 GREEN held no-clobber creation in `src/services/operations.ts`; competitor→`CONFLICT`. Verify: `yarn vitest run test/operations.test.ts -t "creation"`.
 - [ ] 2.3 GREEN exchange replacement/same-inode/overlapping configs. Verify: `yarn vitest run test/operations.test.ts -t "replacement|same-inode|distinct configurations"`.
 
