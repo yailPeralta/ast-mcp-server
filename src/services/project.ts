@@ -3,7 +3,7 @@ import path from "node:path";
 import { Project, type Node, type SourceFile } from "ts-morph";
 import type { FileFingerprint } from "./file-fingerprints.js";
 // prettier-ignore
-import { bindConfiguredH03Error, captureConfiguredH03Command, runConfiguredH03Fixture } from "./h03-timeout-fixture.js";
+import { bindConfiguredH03Error, captureConfiguredH03Command, captureConfiguredH05Command, runConfiguredH03Fixture, runConfiguredH05Fixture } from "./h03-timeout-fixture.js";
 import {
   InMemorySymbolIndex,
   SYMBOL_INDEX_SCHEMA_VERSION,
@@ -876,7 +876,9 @@ async function runSessionWithSyncPolicy<T>(
   h03Fixture = false,
 ): Promise<T> {
   requestContext.checkpoint();
-  const h03Command = h03Fixture ? captureConfiguredH03Command() : undefined;
+  const h05Command = h03Fixture ? captureConfiguredH05Command() : undefined;
+  // prettier-ignore
+  const h03Command = h05Command ? undefined : h03Fixture ? captureConfiguredH03Command() : undefined;
   // prettier-ignore
   try { return await session.scheduler.run(
     async (operationContext) => {
@@ -890,9 +892,9 @@ async function runSessionWithSyncPolicy<T>(
       operationContext.markExecuting();
       session.lastAccessSequence = nextProjectSessionAccessSequence();
       const execute = (context: ProjectOperationContext) => operation(session.context, context);
-      return h03Command ? runConfiguredH03Fixture(operationContext, execute, h03Command) : execute(operationContext);
+      return h05Command ? runConfiguredH05Fixture(operationContext, execute, h05Command) : h03Command ? runConfiguredH03Fixture(operationContext, execute, h03Command) : execute(operationContext);
     }, { signal: requestContext.signal },
-  ); } catch (error) { bindConfiguredH03Error(error, h03Command); throw error; }
+  ); } catch (error) { bindConfiguredH03Error(error, h05Command ?? h03Command); throw error; }
 }
 
 export async function withProject<T>(

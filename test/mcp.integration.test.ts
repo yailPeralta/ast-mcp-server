@@ -1653,12 +1653,14 @@ export function formatValue(value: number): string { return String(value); }
       guardedClient.connect(clientTransport),
     ]);
 
-    const names = (await guardedClient.listTools()).tools.map((tool) => tool.name).sort();
-    expect(names).toHaveLength(15);
-    expect(names).not.toContain("ast_apply_operation");
-    expect(names).toEqual(
-      [...toolInventory.names].filter((name) => name !== "ast_apply_operation").sort(),
+    const guardedTools = (await guardedClient.listTools()).tools.sort((a, b) =>
+      a.name.localeCompare(b.name),
     );
+    const baselineTools = (await client.listTools()).tools
+      .filter(({ name }) => name !== "ast_apply_operation")
+      .sort((a, b) => a.name.localeCompare(b.name));
+    expect(guardedTools).toHaveLength(15);
+    expect(JSON.stringify(guardedTools)).toBe(JSON.stringify(baselineTools));
 
     // Reads, prepare, and preview still work on the guarded surface.
     const read = structured(

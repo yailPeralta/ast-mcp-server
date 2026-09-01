@@ -16,6 +16,7 @@ import { emitConfiguredH03HostEvent } from "./h03-timeout-fixture.js";
 import {
   createCompilerWorkerSpawnSpec,
   parseH03FixtureDescriptor,
+  parseH05FixtureDescriptor,
   readRuntimePolicy,
   type RuntimePolicyEnvironment,
 } from "./runtime-policy.js";
@@ -56,12 +57,9 @@ export function spawnCompilerWorkerProcess(options: {
   beforeWrite?: (message: JSONRPCMessage) => void;
 }) {
   const fixture = parseH03FixtureDescriptor(options.environment.AST_H03_FIXTURE);
-  const environment = fixture
-    ? {
-        ...options.environment,
-        AST_H03_FIXTURE: JSON.stringify({ ...fixture, generation: options.generation }),
-      }
-    : options.environment;
+  const lifecycleFixture = parseH05FixtureDescriptor(options.environment.AST_H05_FIXTURE);
+  // prettier-ignore
+  const environment = fixture || lifecycleFixture ? { ...options.environment, ...(fixture ? { AST_H03_FIXTURE: JSON.stringify({ ...fixture, generation: options.generation }) } : {}), ...(lifecycleFixture ? { AST_H05_FIXTURE: JSON.stringify({ ...lifecycleFixture, generation: options.generation }) } : {}) } : options.environment;
   const spec = createCompilerWorkerSpawnSpec(options.workerEntryPath, environment);
   if (!spec.ok || !spec.command) throw new CompilerWorkerHostError("startup");
   const child = spawn(spec.command, spec.args, {

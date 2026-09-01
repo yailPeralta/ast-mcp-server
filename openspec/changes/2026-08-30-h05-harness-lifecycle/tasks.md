@@ -25,10 +25,10 @@ Chain strategy: stacked-to-main
 
 ## Phase 1 — PR2 private seam
 
-- [ ] 1.1 RED — Test closed descriptors, immutable generation/correlation/owner, stale effects, cancellation, sanitization, and zero counters.
-- [ ] 1.2 GREEN — Generalize `h03-timeout-fixture.ts`; retain environment gate and public `ast_get_project_status` only.
-- [ ] 1.3 REFACTOR — Deduplicate normalization; prove unchanged 15-tool public catalog/schema.
-- [ ] 1.4 Run focused tests, record rollback, settle; rebase after PR1 and merge PR2.
+- [x] 1.1 RED — Test closed descriptors, immutable generation/correlation/owner, stale effects, cancellation, sanitization, and zero counters.
+- [x] 1.2 GREEN — Generalize `h03-timeout-fixture.ts`; retain environment gate and public `ast_get_project_status` only.
+- [x] 1.3 REFACTOR — Deduplicate normalization; prove unchanged 15-tool public catalog/schema.
+- [x] 1.4 Run focused tests, record rollback, settle; rebase after PR1 and merge PR2.
 
 ## Phase 2 — PR3 native lifecycle
 
