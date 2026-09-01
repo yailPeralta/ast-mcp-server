@@ -16,13 +16,13 @@ build_output_hash: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca49599
 
 ## Verification Report
 
-**Change**: `2026-09-01-m01-external-writer-safe-apply`  
-**Artifact store**: OpenSpec/hybrid state; file artifacts are authoritative for this verification.  
-**Mode**: Strict TDD  
-**Branch / candidate**: `docs/m01-verify`; HEAD `dd48f3404d029e7bd310bdd1d662967334144743`; tree `d2f433f9eb7e7d6027e095d5a67caf73f72ed627`.  
-**Lineage handed to verification**: `sha256:966ab97cc89a921dd03642910042bfc0e3705955f8b4d1e4d618a73f9c98d423`.  
-**Approved authority**: issue #127 is OPEN with `status:approved` and `type:bug`; its scope and non-goals match this change.  
-**Verdict**: **PASS**.
+- **Change**: `2026-09-01-m01-external-writer-safe-apply`
+- **Artifact store**: OpenSpec/hybrid state; file artifacts are authoritative for this verification.
+- **Mode**: Strict TDD
+- **Branch / candidate**: `docs/m01-verify`; HEAD `dd48f3404d029e7bd310bdd1d662967334144743`; tree `d2f433f9eb7e7d6027e095d5a67caf73f72ed627`.
+- **Lineage handed to verification**: `sha256:966ab97cc89a921dd03642910042bfc0e3705955f8b4d1e4d618a73f9c98d423`.
+- **Approved authority**: issue #127 is OPEN with `status:approved` and `type:bug`; its scope and non-goals match this change.
+- **Verdict**: **PASS**.
 
 ### Completeness
 
@@ -106,8 +106,9 @@ The AST MCP tools were available by schema but returned no model-visible payload
 
 ### Findings and Residual Risks
 
-**CRITICAL**: None.  
-**WARNING**: None blocking PASS.  
+- **CRITICAL**: None.
+- **WARNING**: None blocking PASS.
+
 **Residual risks**:
 
 1. Continuously racing arbitrary/hostile same-user writers remain outside the guarantee; they can invalidate any check-to-cleanup interval.
