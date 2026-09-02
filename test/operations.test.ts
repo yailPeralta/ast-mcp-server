@@ -903,6 +903,34 @@ return replacement;`,
     expect(await readFile(target)).toEqual(originalBytes);
   });
 
+  it("retains same-identity replacement errors when explicitly allowed", async () => {
+    const source = `export function value(): number {
+  const previous: number = "wrong";
+  return previous;
+}
+`;
+    const fixture = await createProjectFixture({ "src/value.ts": source });
+    fixtures.push(fixture);
+    const prepared = await prepareReplaceBody({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "value",
+      newBody: `const replacement: number = "wrong";
+
+return replacement;`,
+      allowNewErrors: true,
+    });
+
+    expect(prepared.blocked).toBe(false);
+    expect(prepared.allow_new_errors).toBe(true);
+    expect(prepared.diagnostics.addedErrors).toEqual([
+      expect.objectContaining({ code: 2322, file: "src/value.ts" }),
+    ]);
+    expect(await fixture.read("src/value.ts")).toBe(source);
+    await applyOperation(prepared.operation_id, prepared.plan_hash);
+    expect(await fixture.read("src/value.ts")).toContain("const replacement");
+  });
+
   it("blocks a replacement that introduces a new TypeScript error", async () => {
     const fixture = await createProjectFixture({
       "src/value.ts": `export function value(): number { return 1; }\n`,

@@ -121,29 +121,51 @@ describe("diagnostic observations and edit context", () => {
     "falls back to a conservative maximal-prefix/suffix hunk at the %s cap",
     (cap) => {
       const budget: EditBudget = { frontierSteps: 100, traceCells: 100, hunks: 100, [cap]: 0 };
+      const workExhausted = cap === "frontierSteps";
       expect(buildEditContext("PabcS", "PxyzS", budget)).toEqual({
         coarse: true,
-        runs: [
-          { oldStart: 0, oldEnd: 1, newStart: 0, newEnd: 1 },
-          { oldStart: 4, oldEnd: 5, newStart: 4, newEnd: 5 },
+        runs: workExhausted
+          ? []
+          : [
+              { oldStart: 0, oldEnd: 1, newStart: 0, newEnd: 1 },
+              { oldStart: 4, oldEnd: 5, newStart: 4, newEnd: 5 },
+            ],
+        hunks: [
+          workExhausted
+            ? { oldStart: 0, oldEnd: 5, newStart: 0, newEnd: 5 }
+            : { oldStart: 1, oldEnd: 4, newStart: 1, newEnd: 4 },
         ],
-        hunks: [{ oldStart: 1, oldEnd: 4, newStart: 1, newEnd: 4 }],
       });
     },
   );
 
-  it("propagates typed cancellation from a deterministic mapping checkpoint", () => {
+  it("charges long prefix and Myers-snake comparisons to the work cap", () => {
+    const budget: EditBudget = { frontierSteps: 12, traceCells: 100, hunks: 100 };
+    expect(buildEditContext("aaaaaX", "aaaaaY", { ...budget, frontierSteps: 4 })).toEqual({
+      coarse: true,
+      runs: [{ oldStart: 0, oldEnd: 4, newStart: 0, newEnd: 4 }],
+      hunks: [{ oldStart: 4, oldEnd: 6, newStart: 4, newEnd: 6 }],
+    });
+    expect(buildEditContext(`X${"a".repeat(20)}Y`, `Z${"a".repeat(20)}W`, budget)).toEqual({
+      coarse: true,
+      runs: [],
+      hunks: [{ oldStart: 0, oldEnd: 22, newStart: 0, newEnd: 22 }],
+    });
+  });
+
+  it("propagates typed cancellation during long alignment work", () => {
     let checkpoints = 0;
     const requestContext: RequestContext = {
       signal: new AbortController().signal,
       checkpoint() {
-        if (++checkpoints === 2) throw new RequestContextError("REQUEST_CANCELLED");
+        if (++checkpoints === 20) throw new RequestContextError("REQUEST_CANCELLED");
       },
     };
-    expect(() => buildEditContext("abc", "xyz", undefined, requestContext)).toThrowError(
-      expect.objectContaining({ code: "REQUEST_CANCELLED" }),
-    );
-    expect(checkpoints).toBe(2);
+    const middle = "a".repeat(10_000);
+    expect(() =>
+      buildEditContext(`X${middle}Y`, `Z${middle}W`, undefined, requestContext),
+    ).toThrowError(expect.objectContaining({ code: "REQUEST_CANCELLED" }));
+    expect(checkpoints).toBe(20);
   });
 });
 
@@ -217,6 +239,31 @@ describe("edit-aware diagnostic deltas", () => {
     expect(delta.removed).toEqual([before[2]!.public]);
     expect(delta.added).toEqual([after[2]!.public, after[3]!.public]);
     expect(delta.addedErrors).toEqual(delta.added);
+  });
+
+  it("shares one work budget across every changed file", () => {
+    const prefix = "a".repeat(510_000);
+    const beforeText = `${prefix}X_tail`;
+    const afterText = `${prefix}Y_tail`;
+    const firstBefore = observation(prefix.length + 2, 4, { file: "src/first.ts" });
+    const firstAfter = observation(prefix.length + 2, 4, { file: "src/first.ts", line: 2 });
+    const secondBefore = observation(prefix.length + 2, 4, { file: "src/second.ts" });
+    const secondAfter = observation(prefix.length + 2, 4, { file: "src/second.ts", line: 2 });
+
+    expect(
+      compareObservedDiagnostics(
+        [firstBefore, secondBefore],
+        [firstAfter, secondAfter],
+        [
+          change(beforeText, afterText, "src/first.ts"),
+          change(beforeText, afterText, "src/second.ts"),
+        ],
+      ),
+    ).toEqual({
+      added: [secondAfter.public],
+      removed: [secondBefore.public],
+      addedErrors: [secondAfter.public],
+    });
   });
 
   it("propagates typed cancellation during observation matching", () => {
