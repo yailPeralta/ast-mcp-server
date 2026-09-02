@@ -25,7 +25,7 @@
   "ledger": [
     {
       "id": "J-M02-001",
-      "status": "confirmed-severe",
+      "status": "resolved",
       "title": "Edit alignment does not enforce the specified operation-global work bound",
       "confirmedBy": ["A", "B"],
       "evidence": [
@@ -34,7 +34,22 @@
         "compareObservedDiagnostics creates a fresh default budget for each changed file rather than sharing one operation budget",
         "test/diagnostics.test.ts lacks long-snake/backtrack/emission and cumulative multi-file exhaustion tests"
       ],
-      "requiredCorrection": "Use one shared operation-scoped budget; charge prefix, suffix, frontier, snake, backtrack, emission and hunks; checkpoint bounded loops; discard partial alignment on exhaustion; test long common-middle and cumulative multi-file limits."
+      "requiredCorrection": "Use one shared operation-scoped budget; charge prefix, suffix, frontier, snake, backtrack, emission and hunks; checkpoint bounded loops; discard partial alignment on exhaustion; test long common-middle and cumulative multi-file limits.",
+      "correction": {
+        "receipt": "sha256:d248369b2f4772f68078287d26df6c881ef27436a5ef98c46f13da33a0c23cc5",
+        "files": ["src/services/diagnostics.ts", "test/diagnostics.test.ts"],
+        "red": "diagnostics exit 1; 28 passed, 3 failed as intended",
+        "green": "diagnostics 31, operations 36, plan files 7, typecheck and touched checks passed",
+        "disposition": "Both scoped re-judges approved the immutable correction"
+      },
+      "rejudgment": {
+        "targetHead": "2825fab2fb8421194e41367998286a16e30810a0",
+        "targetTree": "d7e16a9775e0c3dc13d0e30735960de2bbd98a91",
+        "fixDiffSha256": "6f023d942ad2b84a7e4d2410e22f16ecd3c42c41f548a0450cb7db38c4e4f86c",
+        "judgeA": "APPROVED",
+        "judgeB": "APPROVED",
+        "fixCausedSevere": 0
+      }
     },
     {
       "id": "J-M02-I01",
@@ -46,10 +61,12 @@
   ],
   "counts": {
     "confirmedSevere": 1,
+    "resolvedSevere": 1,
+    "remainingSevere": 0,
     "suspect": 1,
     "contradictions": 0,
     "info": 1
   },
-  "terminalVerdict": null,
-  "next": "await-explicit-round-one-correction-authorization"
+  "terminalVerdict": "APPROVED",
+  "next": "strict-verify"
 }

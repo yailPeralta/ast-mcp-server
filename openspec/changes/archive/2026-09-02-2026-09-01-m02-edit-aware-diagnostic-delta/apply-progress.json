@@ -1,12 +1,23 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-01-m02-edit-aware-diagnostic-delta",
-  "workUnit": "u6-full-harness-evidence-gates",
-  "delivery": "feature-branch-chain auto-chain; branch test/m02-u6-gates; tasks 6.1-6.3 only",
-  "attemptToken": "sha256:771640eda07baae0de3224135c2f8e9ea33493ef28cb687a5457f239a9efdd33",
-  "remediatesEvidenceRevision": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "evidenceRevision": "sha256:7ab0f0f717ba8e6948bc43a52c851a8f6b45f4788dd38a8b5de09281f89cb224",
-  "stage": "refactored",
+  "workUnit": "verify",
+  "delivery": "feature-branch-chain auto-chain; branch docs/m02-verify; archive/delivery pending",
+  "attemptToken": "sha256:2d37ea83ed030559aab2119d5ef9b17c3acbda509833644fb18fd63bb6d5f043",
+  "remediatesEvidenceRevision": "sha256:6f023d942ad2b84a7e4d2410e22f16ecd3c42c41f548a0450cb7db38c4e4f86c",
+  "evidenceRevision": "sha256:fcc4bab113f3f0cb76d67bd21a43ba9333bf154c2b0ac7875301fe82da9349f1",
+  "stage": "verified-pass",
+  "judgmentRemediation": {
+    "round": 1,
+    "receipt": "sha256:d248369b2f4772f68078287d26df6c881ef27436a5ef98c46f13da33a0c23cc5",
+    "scope": ["J-M02-001"],
+    "status": "approved-by-both-scoped-rejudges",
+    "red": "exit 1; diagnostics 28 passed/3 failed on prefix-snake charging, typed long-work cancellation, and operation-global multi-file exhaustion",
+    "greenRefactor": "exit 0; diagnostics 31, operations 36, plan files 7, and typecheck; touched lint/prettier/JSON/diff checks passed",
+    "runtimeHarness": "N/A — correction is an internal deterministic comparison path covered by operation integration tests; no Harness boundary changed",
+    "rollback": "Revert src/services/diagnostics.ts and the J-M02-001 tests in test/diagnostics.test.ts; evidence and ledger updates may be reverted independently",
+    "activeRed": []
+  },
   "tasks": [
     { "id": "0.1", "name": "Planning delivery through design", "status": "completed" },
     { "id": "0.2", "name": "Deliver tasks artifact", "status": "completed" },
@@ -26,8 +37,8 @@
     { "id": "6.1", "name": "Full and package gates", "status": "completed" },
     { "id": "6.2", "name": "Harness denial gates", "status": "completed" },
     { "id": "6.3", "name": "Evidence closure", "status": "completed" },
-    { "id": "6.4", "name": "Judgment Day", "status": "pending" },
-    { "id": "6.5", "name": "Strict verify", "status": "pending" },
+    { "id": "6.4", "name": "Judgment Day", "status": "completed" },
+    { "id": "6.5", "name": "Strict verify", "status": "completed" },
     { "id": "6.6", "name": "Archive and delivery", "status": "pending" }
   ],
   "tdd": {
@@ -140,16 +151,22 @@
       "id": "u6-harness",
       "command": "env -u GIT_PAGER bash -lc 'yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts && yarn test:dsh-adapter'",
       "result": "exit 0; 23 tests; exact pinned Harness revision; catalogs 15/0/15; apply absent; direct UNKNOWN_TOOL; cleanup ok"
+    },
+    {
+      "id": "strict-verify",
+      "command": "/home/yail/.local/bin/gentle-ai sdd-verify-validate --input openspec/changes/2026-09-01-m02-edit-aware-diagnostic-delta/verify-report.md --requirements 7 --scenarios 8",
+      "result": "exit 0; verdict pass; requirements 7/7; scenarios 8/8; focused 74/74; full 965+2; adapter/catalog 23/23; active RED empty"
     }
   ],
   "evidence": {
     "historicalRed": "Four historical RED runs are retained above; no active RED remains after U2-U5 GREEN/refactor and U6 gate closure.",
-    "coverage": "evidence.md maps all 7 requirements and all 8 scenarios to implementation, tests, and commands.",
+    "coverage": "verify-report.md independently proves all 7 requirements and all 8 scenarios with focused 74/74, full 965+2, and adapter/catalog 23/23 passing.",
+    "verify": "strict validator exit 0 with PASS; task state 20/21; nextRecommended archive; archive/delivery remains pending; active RED empty.",
     "harness": "Fresh materialization authenticated revision cd5ef8148158c3a752a658978873241fdf8e2bbc and tag dsh-v0.1.2-alpha.1; exactly 15 guarded tools were rendered, apply was absent, and direct apply returned UNKNOWN_TOOL.",
     "checkout": "The supplied built Harness path has no Git metadata, so HEAD/status commands returned 128 before and after; three read-only identity hashes were byte-identical, and no command wrote there.",
     "cleanup": "Harness temporary root removed; owned processes 0; H03/H05 resource readbacks zero; lifecycle orphan_processes 0.",
     "rollback": "Revert evidence.md and task/state/apply-progress 6.1-6.3 updates only; U1-U5 implementation remains intact.",
     "risk": "Repeated text or coarse fallback may over-block safe edits; legacy applied v1 replay remains limited to exact postimage verification."
   },
-  "updatedAt": "2026-09-01T23:05:23Z"
+  "updatedAt": "2026-09-02T00:43:41Z"
 }
