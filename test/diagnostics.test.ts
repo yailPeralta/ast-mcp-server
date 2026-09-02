@@ -4,10 +4,13 @@ import {
   buildDiagnosticAggregates,
   buildEditContext,
   compareDiagnostics,
+  compareObservedDiagnostics,
   DIAGNOSTIC_AGGREGATE_GROUP_LIMIT,
   observeDiagnostic,
   type DiagnosticAggregateMetadata,
   type DiagnosticAggregates,
+  type DiagnosticObservation,
+  type DiagnosticTextChange,
   type EditBudget,
   type NormalizedDiagnostic,
 } from "../src/services/diagnostics.js";
@@ -23,6 +26,23 @@ function diagnostic(overrides: Partial<NormalizedDiagnostic> = {}): NormalizedDi
     message: "Type 'string' is not assignable to type 'number'.",
     ...overrides,
   };
+}
+
+function observation(
+  start: number | null,
+  length: number | null,
+  overrides: Partial<NormalizedDiagnostic> = {},
+  ordinal = 0,
+): DiagnosticObservation {
+  return { public: diagnostic(overrides), start, length, ordinal };
+}
+
+function change(
+  beforeText: string | null,
+  afterText: string | null,
+  file = "src/value.ts",
+): DiagnosticTextChange {
+  return { file, beforeText, afterText };
 }
 
 describe("diagnostic observations and edit context", () => {
@@ -101,18 +121,152 @@ describe("diagnostic observations and edit context", () => {
     "falls back to a conservative maximal-prefix/suffix hunk at the %s cap",
     (cap) => {
       const budget: EditBudget = { frontierSteps: 100, traceCells: 100, hunks: 100, [cap]: 0 };
+      const workExhausted = cap === "frontierSteps";
       expect(buildEditContext("PabcS", "PxyzS", budget)).toEqual({
         coarse: true,
-        runs: [
-          { oldStart: 0, oldEnd: 1, newStart: 0, newEnd: 1 },
-          { oldStart: 4, oldEnd: 5, newStart: 4, newEnd: 5 },
+        runs: workExhausted
+          ? []
+          : [
+              { oldStart: 0, oldEnd: 1, newStart: 0, newEnd: 1 },
+              { oldStart: 4, oldEnd: 5, newStart: 4, newEnd: 5 },
+            ],
+        hunks: [
+          workExhausted
+            ? { oldStart: 0, oldEnd: 5, newStart: 0, newEnd: 5 }
+            : { oldStart: 1, oldEnd: 4, newStart: 1, newEnd: 4 },
         ],
-        hunks: [{ oldStart: 1, oldEnd: 4, newStart: 1, newEnd: 4 }],
       });
     },
   );
 
-  it("propagates typed cancellation from a deterministic mapping checkpoint", () => {
+  it("charges long prefix and Myers-snake comparisons to the work cap", () => {
+    const budget: EditBudget = { frontierSteps: 12, traceCells: 100, hunks: 100 };
+    expect(buildEditContext("aaaaaX", "aaaaaY", { ...budget, frontierSteps: 4 })).toEqual({
+      coarse: true,
+      runs: [{ oldStart: 0, oldEnd: 4, newStart: 0, newEnd: 4 }],
+      hunks: [{ oldStart: 4, oldEnd: 6, newStart: 4, newEnd: 6 }],
+    });
+    expect(buildEditContext(`X${"a".repeat(20)}Y`, `Z${"a".repeat(20)}W`, budget)).toEqual({
+      coarse: true,
+      runs: [],
+      hunks: [{ oldStart: 0, oldEnd: 22, newStart: 0, newEnd: 22 }],
+    });
+  });
+
+  it("propagates typed cancellation during long alignment work", () => {
+    let checkpoints = 0;
+    const requestContext: RequestContext = {
+      signal: new AbortController().signal,
+      checkpoint() {
+        if (++checkpoints === 20) throw new RequestContextError("REQUEST_CANCELLED");
+      },
+    };
+    const middle = "a".repeat(10_000);
+    expect(() =>
+      buildEditContext(`X${middle}Y`, `Z${middle}W`, undefined, requestContext),
+    ).toThrowError(expect.objectContaining({ code: "REQUEST_CANCELLED" }));
+    expect(checkpoints).toBe(20);
+  });
+});
+
+describe("edit-aware diagnostic deltas", () => {
+  it("maps disjoint repeated edits in CRLF, surrogate, and BOM-excluded compiler text", () => {
+    const beforeText = "😀\r\nABAB--tail--end";
+    const afterText = "X😀\r\nBABA--tail--end!";
+    const before = [observation(beforeText.indexOf("tail"), 4)];
+    const after = [observation(afterText.indexOf("tail"), 4, { line: 2, column: 6 })];
+    expect(compareObservedDiagnostics(before, after, [change(beforeText, afterText)])).toEqual({
+      added: [],
+      removed: [],
+      addedErrors: [],
+    });
+  });
+
+  it.each([
+    ["inside replacement", "abc", "aXc", 1, 1, 1, 1],
+    ["intersects replacement", "abc", "aXc", 0, 2, 0, 2],
+    ["abuts replacement left", "abc", "aXc", 0, 1, 0, 1],
+    ["abuts replacement right", "abc", "aXc", 2, 1, 2, 1],
+    ["zero-width insertion", "ab", "aXb", 1, 0, 1, 0],
+    ["zero-width deletion", "aXb", "ab", 1, 0, 1, 0],
+    ["missing start", "abc", "aXc", null, 1, null, 1],
+    ["missing length", "abc", "aXc", 0, null, 0, null],
+  ])("fails closed for %s", (_name, oldText, newText, oldStart, oldLength, newStart, newLength) => {
+    const before = observation(oldStart, oldLength);
+    const after = observation(newStart, newLength);
+    expect(compareObservedDiagnostics([before], [after], [change(oldText, newText)])).toEqual({
+      added: [after.public],
+      removed: [before.public],
+      addedErrors: [after.public],
+    });
+  });
+
+  it("handles file lifecycle, unchanged files, and unfiled locations deterministically", () => {
+    const created = observation(0, 1, { file: "src/new.ts", message: "created" });
+    const deleted = observation(0, 1, { file: "src/old.ts", message: "deleted" });
+    const stable = observation(null, null, { file: "src/stable.ts", message: "stable" });
+    const oldSpan = observation(1, 1, { file: "src/stable.ts", message: "changed span" });
+    const newSpan = observation(1, 2, { file: "src/stable.ts", message: "changed span" });
+    const unfiled = observation(null, null, { file: null, line: null, column: null });
+    const movedUnfiled = observation(null, null, { file: null, line: 1, column: 1 });
+    const delta = compareObservedDiagnostics(
+      [deleted, stable, oldSpan, unfiled],
+      [created, stable, newSpan, movedUnfiled],
+      [change(null, "x", "src/new.ts"), change("x", null, "src/old.ts")],
+    );
+    expect(delta.added).toEqual([created.public, newSpan.public, movedUnfiled.public]);
+    expect(delta.removed).toEqual([deleted.public, oldSpan.public, unfiled.public]);
+    expect(
+      compareObservedDiagnostics(
+        [deleted, stable, oldSpan, unfiled],
+        [created, stable, newSpan, movedUnfiled],
+        [change(null, "x", "src/new.ts"), change("x", null, "src/old.ts")],
+      ),
+    ).toEqual(delta);
+  });
+
+  it("matches duplicate candidates FIFO while preserving original output order", () => {
+    const before = [1, 2, 3].map((line, ordinal) =>
+      observation(2, 1, { line, message: "duplicate" }, ordinal),
+    );
+    const after = [
+      observation(3, 1, { line: 10, message: "duplicate" }),
+      observation(3, 1, { line: 11, message: "duplicate" }),
+      observation(0, 1, { message: "first added" }),
+      observation(4, 1, { message: "second added" }),
+    ];
+    const delta = compareObservedDiagnostics(before, after, [change("xab", "xxab")]);
+    expect(delta.removed).toEqual([before[2]!.public]);
+    expect(delta.added).toEqual([after[2]!.public, after[3]!.public]);
+    expect(delta.addedErrors).toEqual(delta.added);
+  });
+
+  it("shares one work budget across every changed file", () => {
+    const prefix = "a".repeat(510_000);
+    const beforeText = `${prefix}X_tail`;
+    const afterText = `${prefix}Y_tail`;
+    const firstBefore = observation(prefix.length + 2, 4, { file: "src/first.ts" });
+    const firstAfter = observation(prefix.length + 2, 4, { file: "src/first.ts", line: 2 });
+    const secondBefore = observation(prefix.length + 2, 4, { file: "src/second.ts" });
+    const secondAfter = observation(prefix.length + 2, 4, { file: "src/second.ts", line: 2 });
+
+    expect(
+      compareObservedDiagnostics(
+        [firstBefore, secondBefore],
+        [firstAfter, secondAfter],
+        [
+          change(beforeText, afterText, "src/first.ts"),
+          change(beforeText, afterText, "src/second.ts"),
+        ],
+      ),
+    ).toEqual({
+      added: [secondAfter.public],
+      removed: [secondBefore.public],
+      addedErrors: [secondAfter.public],
+    });
+  });
+
+  it("propagates typed cancellation during observation matching", () => {
     let checkpoints = 0;
     const requestContext: RequestContext = {
       signal: new AbortController().signal,
@@ -120,14 +274,13 @@ describe("diagnostic observations and edit context", () => {
         if (++checkpoints === 2) throw new RequestContextError("REQUEST_CANCELLED");
       },
     };
-    expect(() => buildEditContext("abc", "xyz", undefined, requestContext)).toThrowError(
-      expect.objectContaining({ code: "REQUEST_CANCELLED" }),
-    );
-    expect(checkpoints).toBe(2);
+    expect(() =>
+      compareObservedDiagnostics([observation(0, 1)], [observation(0, 1)], [], requestContext),
+    ).toThrowError(expect.objectContaining({ code: "REQUEST_CANCELLED" }));
   });
 });
 
-describe("diagnostic deltas", () => {
+describe("legacy diagnostic deltas", () => {
   it("does not classify a shifted existing diagnostic as new", () => {
     const before = [diagnostic({ line: 1 })];
     const after = [diagnostic({ line: 12 })];
