@@ -195,7 +195,42 @@ export interface EditBudget {
 
 const DEFAULT_EDIT_BUDGET = { frontierSteps: 1_000_000, traceCells: 250_000, hunks: 10_000 };
 const BUDGET_EXCEEDED = Symbol("edit-budget-exceeded");
+const EDIT_CHECKPOINT_INTERVAL = 4_096;
 type EditOperation = "equal" | "delete" | "insert";
+
+interface EditWorkTracker {
+  readonly budget: EditBudget;
+  work: number;
+  traceCells: number;
+  hunks: number;
+  exhausted: boolean;
+}
+
+function createEditWorkTracker(budget: EditBudget): EditWorkTracker {
+  return { budget, work: 0, traceCells: 0, hunks: 0, exhausted: false };
+}
+
+function exhaust(tracker: EditWorkTracker): never {
+  tracker.exhausted = true;
+  throw BUDGET_EXCEEDED;
+}
+
+function chargeWork(tracker: EditWorkTracker, requestContext: RequestContext): void {
+  if (tracker.exhausted || tracker.work >= tracker.budget.frontierSteps) exhaust(tracker);
+  tracker.work += 1;
+  if (tracker.work % EDIT_CHECKPOINT_INTERVAL === 0) requestContext.checkpoint();
+}
+
+function chargeTraceCell(tracker: EditWorkTracker): void {
+  if (tracker.exhausted || tracker.traceCells >= tracker.budget.traceCells) exhaust(tracker);
+  tracker.traceCells += 1;
+}
+
+function chargeHunk(tracker: EditWorkTracker, requestContext: RequestContext): void {
+  chargeWork(tracker, requestContext);
+  if (tracker.hunks >= tracker.budget.hunks) exhaust(tracker);
+  tracker.hunks += 1;
+}
 
 function coarseContext(
   oldLength: number,
@@ -232,11 +267,14 @@ function backtrack(
   depth: number,
   oldLength: number,
   newLength: number,
+  tracker: EditWorkTracker,
+  requestContext: RequestContext,
 ): EditOperation[] {
   const reversed: EditOperation[] = [];
   let x = oldLength;
   let y = newLength;
   for (let d = depth; d > 0; d -= 1) {
+    requestContext.checkpoint();
     const previous = trace[d - 1]!;
     const diagonal = x - y;
     const left = previous.get(diagonal - 1) ?? Number.NEGATIVE_INFINITY;
@@ -246,10 +284,12 @@ function backtrack(
     const previousX = previous.get(previousDiagonal)!;
     const previousY = previousX - previousDiagonal;
     while (x > previousX && y > previousY) {
+      chargeWork(tracker, requestContext);
       reversed.push("equal");
       x -= 1;
       y -= 1;
     }
+    chargeWork(tracker, requestContext);
     if (x === previousX) {
       reversed.push("insert");
       y -= 1;
@@ -259,6 +299,7 @@ function backtrack(
     }
   }
   while (x > 0 && y > 0) {
+    chargeWork(tracker, requestContext);
     reversed.push("equal");
     x -= 1;
     y -= 1;
@@ -269,7 +310,7 @@ function backtrack(
 function emitContext(
   operations: readonly EditOperation[],
   prefix: number,
-  budget: EditBudget,
+  tracker: EditWorkTracker,
   requestContext: RequestContext,
 ): EditContext {
   const runs: EditSpan[] = [];
@@ -283,6 +324,7 @@ function emitContext(
     const oldStart = oldPosition;
     const newStart = newPosition;
     while (index < operations.length && (operations[index] === "equal") === equal) {
+      chargeWork(tracker, requestContext);
       if (operations[index] !== "insert") oldPosition += 1;
       if (operations[index] !== "delete") newPosition += 1;
       index += 1;
@@ -290,61 +332,58 @@ function emitContext(
     const span = { oldStart, oldEnd: oldPosition, newStart, newEnd: newPosition };
     if (equal) runs.push(span);
     else {
-      if (hunks.length >= budget.hunks) throw BUDGET_EXCEEDED;
+      chargeHunk(tracker, requestContext);
       hunks.push(span);
     }
   }
   return { coarse: false, runs, hunks };
 }
 
-export function buildEditContext(
+function buildEditContextWithTracker(
   oldText: string,
   newText: string,
-  budget: EditBudget = DEFAULT_EDIT_BUDGET,
-  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+  tracker: EditWorkTracker,
+  requestContext: RequestContext,
 ): EditContext {
   requestContext.checkpoint();
-  let comparisons = 0;
-  const equalAt = (oldIndex: number, newIndex: number): boolean => {
-    if (++comparisons % 4_096 === 0) requestContext.checkpoint();
-    return oldText[oldIndex] === newText[newIndex];
-  };
   let prefix = 0;
-  while (prefix < oldText.length && prefix < newText.length && equalAt(prefix, prefix)) prefix += 1;
   let suffix = 0;
-  while (
-    suffix < oldText.length - prefix &&
-    suffix < newText.length - prefix &&
-    equalAt(oldText.length - suffix - 1, newText.length - suffix - 1)
-  )
-    suffix += 1;
-  if (prefix === oldText.length && prefix === newText.length) {
-    return {
-      coarse: false,
-      runs: prefix === 0 ? [] : [{ oldStart: 0, oldEnd: prefix, newStart: 0, newEnd: prefix }],
-      hunks: [],
-    };
-  }
-
-  const oldMiddle = oldText.slice(prefix, oldText.length - suffix);
-  const newMiddle = newText.slice(prefix, newText.length - suffix);
-  const trace: Map<number, number>[] = [];
-  let previous = new Map<number, number>([[1, 0]]);
-  let frontierSteps = 0;
-  let traceCells = 0;
   try {
+    while (prefix < oldText.length && prefix < newText.length) {
+      chargeWork(tracker, requestContext);
+      if (oldText[prefix] !== newText[prefix]) break;
+      prefix += 1;
+    }
+    while (suffix < oldText.length - prefix && suffix < newText.length - prefix) {
+      chargeWork(tracker, requestContext);
+      if (oldText[oldText.length - suffix - 1] !== newText[newText.length - suffix - 1]) break;
+      suffix += 1;
+    }
+    if (prefix === oldText.length && prefix === newText.length) {
+      return {
+        coarse: false,
+        runs: prefix === 0 ? [] : [{ oldStart: 0, oldEnd: prefix, newStart: 0, newEnd: prefix }],
+        hunks: [],
+      };
+    }
+
+    const oldMiddle = oldText.slice(prefix, oldText.length - suffix);
+    const newMiddle = newText.slice(prefix, newText.length - suffix);
+    const trace: Map<number, number>[] = [];
+    let previous = new Map<number, number>([[1, 0]]);
     for (let depth = 0; depth <= oldMiddle.length + newMiddle.length; depth += 1) {
       const current = new Map<number, number>();
       for (let diagonal = -depth; diagonal <= depth; diagonal += 2) {
         requestContext.checkpoint();
-        if (++frontierSteps > budget.frontierSteps || ++traceCells > budget.traceCells)
-          throw BUDGET_EXCEEDED;
+        chargeWork(tracker, requestContext);
+        chargeTraceCell(tracker);
         const left = previous.get(diagonal - 1) ?? Number.NEGATIVE_INFINITY;
         const right = previous.get(diagonal + 1) ?? Number.NEGATIVE_INFINITY;
         let x = diagonal === -depth || (diagonal !== depth && left < right) ? right : left + 1;
         let y = x - diagonal;
-        while (x < oldMiddle.length && y < newMiddle.length && oldMiddle[x] === newMiddle[y]) {
-          if (++comparisons % 4_096 === 0) requestContext.checkpoint();
+        while (x < oldMiddle.length && y < newMiddle.length) {
+          chargeWork(tracker, requestContext);
+          if (oldMiddle[x] !== newMiddle[y]) break;
           x += 1;
           y += 1;
         }
@@ -352,9 +391,9 @@ export function buildEditContext(
         if (x >= oldMiddle.length && y >= newMiddle.length) {
           trace.push(current);
           const context = emitContext(
-            backtrack(trace, depth, oldMiddle.length, newMiddle.length),
+            backtrack(trace, depth, oldMiddle.length, newMiddle.length, tracker, requestContext),
             prefix,
-            budget,
+            tracker,
             requestContext,
           );
           if (suffix > 0)
@@ -375,6 +414,20 @@ export function buildEditContext(
     if (error !== BUDGET_EXCEEDED) throw error;
     return coarseContext(oldText.length, newText.length, prefix, suffix);
   }
+}
+
+export function buildEditContext(
+  oldText: string,
+  newText: string,
+  budget: EditBudget = DEFAULT_EDIT_BUDGET,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): EditContext {
+  return buildEditContextWithTracker(
+    oldText,
+    newText,
+    createEditWorkTracker(budget),
+    requestContext,
+  );
 }
 
 function identity(diagnostic: NormalizedDiagnostic): string {
@@ -452,6 +505,7 @@ export function compareObservedDiagnostics(
 ): DiagnosticDelta {
   requestContext.checkpoint();
   const edits = new Map<string, FileEditPair>();
+  const tracker = createEditWorkTracker(DEFAULT_EDIT_BUDGET);
   for (const change of changes) {
     requestContext.checkpoint();
     edits.set(change.file, {
@@ -459,7 +513,12 @@ export function compareObservedDiagnostics(
       context:
         change.beforeText === null || change.afterText === null
           ? null
-          : buildEditContext(change.beforeText, change.afterText, undefined, requestContext),
+          : buildEditContextWithTracker(
+              change.beforeText,
+              change.afterText,
+              tracker,
+              requestContext,
+            ),
     });
   }
 
