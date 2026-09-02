@@ -3,8 +3,8 @@ schemaVersion: 1
 changeName: 2026-09-01-m02-edit-aware-diagnostic-delta
 artifactStore: hybrid
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-01-m02-edit-aware-diagnostic-delta
-nextRecommended: verify
-lastPhase: judgment-day-approved
+nextRecommended: archive
+lastPhase: verify-pass
 artifacts:
   exploration: done
   proposal: done
@@ -12,11 +12,11 @@ artifacts:
   design: done
   tasks: done
   applyProgress: done
-  verifyReport: missing
+  verifyReport: done
 taskProgress:
   total: 21
-  completed: 19
-  pending: 2
+  completed: 20
+  pending: 1
   allComplete: false
 risks:
   - Judgment Day approved the operation-shared budget correction with no remaining severe findings.
