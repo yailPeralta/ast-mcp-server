@@ -37,33 +37,33 @@ Runtime tasks 1.1, 2.1–5.3, 6.1–6.5 MUST acquire, run only on `proceed`, set
 
 ## Phase 2 — U2 mapper
 
-- [ ] 2.1 **RED:** UTF-16-observations/deterministic-Myers/three-cap-fallback/cancellation. Failure: APIs absent.
-- [ ] 2.2 **GREEN:** implement bounded maps/order/checkpoints in `diagnostics.ts`; run U2.
-- [ ] 2.3 **REFACTOR after GREEN:** simplify; preserve budgets/cancellation; rerun U2.
+- [x] 2.1 **RED:** UTF-16-observations/deterministic-Myers/three-cap-fallback/cancellation. Failure: APIs absent.
+- [x] 2.2 **GREEN:** implement bounded maps/order/checkpoints in `diagnostics.ts`; run U2.
+- [x] 2.3 **REFACTOR after GREEN:** simplify; preserve budgets/cancellation; rerun U2.
 
 ## Phase 3 — U3 edges
 
-- [ ] 3.1 **RED:** disjoint-edits/repeats/FIFO-duplicates/boundaries/zero-width/missing-spans/lifecycle/unfiled/CRLF/surrogate/BOM. Failure: legacy subtraction.
-- [ ] 3.2 **GREEN:** conservative matcher preserving public schemas/`allow_new_errors`; run U3.
-- [ ] 3.3 **REFACTOR after GREEN:** deduplicate; rerun U3.
+- [x] 3.1 **RED:** disjoint-edits/repeats/FIFO-duplicates/boundaries/zero-width/missing-spans/lifecycle/unfiled/CRLF/surrogate/BOM. Failure: `compareObservedDiagnostics` absent.
+- [x] 3.2 **GREEN:** conservative matcher preserving public schemas/`allow_new_errors`; run U3.
+- [x] 3.3 **REFACTOR after GREEN:** deduplicate; rerun U3.
 
 ## Phase 4 — U4 integration
 
-- [ ] 4.1 **RED:** all operations plus `allow_new_errors=true`. Failure: comparison precedes text-pairs.
-- [ ] 4.2 **GREEN:** reorder `operations.ts`; delta-before-policy/hash/retain; preserve freshness/cleanup/no-writes; run U1+U4.
-- [ ] 4.3 **REFACTOR after GREEN:** reduce plumbing; rerun U4.
+- [x] 4.1 **RED:** all operations plus `allow_new_errors=true`. Failure: comparison precedes text-pairs.
+- [x] 4.2 **GREEN:** reorder `operations.ts`; delta-before-policy/hash/retain; preserve freshness/cleanup/no-writes; run U1+U4.
+- [x] 4.3 **REFACTOR after GREEN:** reduce plumbing; rerun U4.
 
 ## Phase 5 — U5 v2
 
-- [ ] 5.1 **RED:** v2-hash/writer, prepared-v1-denial, exact-postimage-applied-v1-recovery, mismatch-denial, v2-idempotence. Failure: v1 acceptance.
-- [ ] 5.2 **GREEN:** dual-read/v2-write `operation-plan-file.ts`; versioned hash-import; run U5.
-- [ ] 5.3 **REFACTOR after GREEN:** centralize dispatch; rerun U5.
+- [x] 5.1 **RED:** v2-hash/writer, prepared-v1-denial, exact-postimage-applied-v1-recovery, mismatch-denial, v2-idempotence. Failure: v1 acceptance.
+- [x] 5.2 **GREEN:** dual-read/v2-write `operation-plan-file.ts`; versioned hash-import; run U5.
+- [x] 5.3 **REFACTOR after GREEN:** centralize dispatch; rerun U5.
 
 ## Phase 6 — Gates/closure
 
-- [ ] 6.1 Full/package: `yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && yarn test:mcp && yarn test:lifecycle && yarn test:cli && yarn test:errors && yarn test:package`.
-- [ ] 6.2 Harness: `yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts && yarn test:dsh-adapter`; prove guarded-15/apply-absent/direct-`UNKNOWN_TOOL`; **no Harness checkout edits**.
-- [ ] 6.3 Generate separate ≤400-line evidence/apply-progress proving exact 7-requirement/8-scenario coverage.
-- [ ] 6.4 Freeze target; blind-dual Judgment Day; ≤2 receipt-bound RED-first remediation/re-judgments; require `APPROVED`.
-- [ ] 6.5 Strict verify: `~/.local/bin/gentle-ai sdd-verify-validate --input openspec/changes/2026-09-01-m02-edit-aware-diagnostic-delta/verify-report.md --requirements 7 --scenarios 8`.
+- [x] 6.1 Full/package: `yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && yarn test:mcp && yarn test:lifecycle && yarn test:cli && yarn test:errors && yarn test:package`.
+- [x] 6.2 Harness: `yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts && yarn test:dsh-adapter`; prove guarded-15/apply-absent/direct-`UNKNOWN_TOOL`; **no Harness checkout edits**.
+- [x] 6.3 Generate separate ≤400-line evidence/apply-progress proving exact 7-requirement/8-scenario coverage.
+- [x] 6.4 Freeze target; blind-dual Judgment Day; ≤2 receipt-bound RED-first remediation/re-judgments; require `APPROVED`.
+- [x] 6.5 Strict verify: `~/.local/bin/gentle-ai sdd-verify-validate --input openspec/changes/2026-09-01-m02-edit-aware-diagnostic-delta/verify-report.md --requirements 7 --scenarios 8`.
 - [ ] 6.6 After GREEN/receipts/CI: merge spec, archive immutably, accumulate U7→#145, merge tracker.
