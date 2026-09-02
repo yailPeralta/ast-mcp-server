@@ -857,6 +857,80 @@ describe("prepared structural operations", () => {
     expect((await getOperationPreview(plans[2]!.operation_id)).plan_hash).toBe(plans[2]!.plan_hash);
   });
 
+  it("blocks a same-identity replacement while preserving an unrelated shifted diagnostic", async () => {
+    const source = `export function value(): number {
+  const previous: number = "wrong";
+  return previous;
+}
+
+export const unrelated: boolean = 0;
+`;
+    const fixture = await createProjectFixture({ "src/value.ts": source });
+    fixtures.push(fixture);
+    const target = path.join(fixture.root, "src/value.ts");
+    const originalBytes = await readFile(target);
+    const prepared = await prepareReplaceBody({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "value",
+      newBody: `const replacement: number = "wrong";
+
+return replacement;`,
+    });
+    const replacementMessage = "Type 'string' is not assignable to type 'number'.";
+    const unrelatedMessage = "Type 'number' is not assignable to type 'boolean'.";
+
+    expect(prepared.blocked).toBe(true);
+    expect(prepared.diagnostics.addedErrors).toEqual([
+      expect.objectContaining({
+        code: 2322,
+        category: "Error",
+        file: "src/value.ts",
+        message: replacementMessage,
+      }),
+    ]);
+    expect(
+      [...prepared.diagnostics.added, ...prepared.diagnostics.removed].some(
+        (diagnostic) => diagnostic.message === unrelatedMessage,
+      ),
+    ).toBe(false);
+
+    const failure = await rejectionOf(applyOperation(prepared.operation_id, prepared.plan_hash));
+    expect(classifyPublicError(failure)).toEqual({
+      code: "MUTATION_BLOCKED",
+      message: "The mutation is blocked.",
+    });
+    expect(await readFile(target)).toEqual(originalBytes);
+  });
+
+  it("retains same-identity replacement errors when explicitly allowed", async () => {
+    const source = `export function value(): number {
+  const previous: number = "wrong";
+  return previous;
+}
+`;
+    const fixture = await createProjectFixture({ "src/value.ts": source });
+    fixtures.push(fixture);
+    const prepared = await prepareReplaceBody({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "value",
+      newBody: `const replacement: number = "wrong";
+
+return replacement;`,
+      allowNewErrors: true,
+    });
+
+    expect(prepared.blocked).toBe(false);
+    expect(prepared.allow_new_errors).toBe(true);
+    expect(prepared.diagnostics.addedErrors).toEqual([
+      expect.objectContaining({ code: 2322, file: "src/value.ts" }),
+    ]);
+    expect(await fixture.read("src/value.ts")).toBe(source);
+    await applyOperation(prepared.operation_id, prepared.plan_hash);
+    expect(await fixture.read("src/value.ts")).toContain("const replacement");
+  });
+
   it("blocks a replacement that introduces a new TypeScript error", async () => {
     const fixture = await createProjectFixture({
       "src/value.ts": `export function value(): number { return 1; }\n`,
