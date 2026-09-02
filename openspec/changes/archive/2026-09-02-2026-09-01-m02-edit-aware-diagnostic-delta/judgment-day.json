@@ -1,0 +1,72 @@
+{
+  "schema": "judgment-day",
+  "change": "2026-09-01-m02-edit-aware-diagnostic-delta",
+  "round": 1,
+  "target": {
+    "branch": "test/m02-u6-gates",
+    "head": "7ba5db3210621c39e9d4eb88d827ec64a9a0ad08",
+    "tree": "825d10bd8687bebf7fdf37994e5d299cf72bd5a4",
+    "diffSha256": "4e5ae1c8088cd2dca17670272b7f52bc85a94fa24f68aa243622e30cb867437f"
+  },
+  "judges": [
+    {
+      "id": "A",
+      "verdict": "REJECTED",
+      "severe": ["J-M02-001"],
+      "info": []
+    },
+    {
+      "id": "B",
+      "verdict": "REJECTED",
+      "severe": ["J-M02-001"],
+      "info": ["J-M02-I01"]
+    }
+  ],
+  "ledger": [
+    {
+      "id": "J-M02-001",
+      "status": "resolved",
+      "title": "Edit alignment does not enforce the specified operation-global work bound",
+      "confirmedBy": ["A", "B"],
+      "evidence": [
+        "src/services/diagnostics.ts prefix/suffix and snake comparisons are not charged to an enforced budget",
+        "src/services/diagnostics.ts backtracking and emission can traverse per-code-unit operations without bounded checkpoints",
+        "compareObservedDiagnostics creates a fresh default budget for each changed file rather than sharing one operation budget",
+        "test/diagnostics.test.ts lacks long-snake/backtrack/emission and cumulative multi-file exhaustion tests"
+      ],
+      "requiredCorrection": "Use one shared operation-scoped budget; charge prefix, suffix, frontier, snake, backtrack, emission and hunks; checkpoint bounded loops; discard partial alignment on exhaustion; test long common-middle and cumulative multi-file limits.",
+      "correction": {
+        "receipt": "sha256:d248369b2f4772f68078287d26df6c881ef27436a5ef98c46f13da33a0c23cc5",
+        "files": ["src/services/diagnostics.ts", "test/diagnostics.test.ts"],
+        "red": "diagnostics exit 1; 28 passed, 3 failed as intended",
+        "green": "diagnostics 31, operations 36, plan files 7, typecheck and touched checks passed",
+        "disposition": "Both scoped re-judges approved the immutable correction"
+      },
+      "rejudgment": {
+        "targetHead": "2825fab2fb8421194e41367998286a16e30810a0",
+        "targetTree": "d7e16a9775e0c3dc13d0e30735960de2bbd98a91",
+        "fixDiffSha256": "6f023d942ad2b84a7e4d2410e22f16ecd3c42c41f548a0450cb7db38c4e4f86c",
+        "judgeA": "APPROVED",
+        "judgeB": "APPROVED",
+        "fixCausedSevere": 0
+      }
+    },
+    {
+      "id": "J-M02-I01",
+      "status": "suspect-info",
+      "title": "Actual UTF-8 BOM preparation compatibility may be under-tested",
+      "confirmedBy": ["B"],
+      "disposition": "Do not auto-fix; one-judge WARNING. Existing operation BOM regression passed in the full suite. Reassess only if scoped correction touches BOM handling."
+    }
+  ],
+  "counts": {
+    "confirmedSevere": 1,
+    "resolvedSevere": 1,
+    "remainingSevere": 0,
+    "suspect": 1,
+    "contradictions": 0,
+    "info": 1
+  },
+  "terminalVerdict": "APPROVED",
+  "next": "strict-verify"
+}
