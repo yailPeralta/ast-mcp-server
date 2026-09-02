@@ -6,7 +6,18 @@
   "attemptToken": "sha256:771640eda07baae0de3224135c2f8e9ea33493ef28cb687a5457f239a9efdd33",
   "remediatesEvidenceRevision": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "evidenceRevision": "sha256:7ab0f0f717ba8e6948bc43a52c851a8f6b45f4788dd38a8b5de09281f89cb224",
-  "stage": "refactored",
+  "stage": "corrected-pending-rejudgment",
+  "judgmentRemediation": {
+    "round": 1,
+    "receipt": "sha256:d248369b2f4772f68078287d26df6c881ef27436a5ef98c46f13da33a0c23cc5",
+    "scope": ["J-M02-001"],
+    "status": "corrected-pending-rejudgment",
+    "red": "exit 1; diagnostics 28 passed/3 failed on prefix-snake charging, typed long-work cancellation, and operation-global multi-file exhaustion",
+    "greenRefactor": "exit 0; diagnostics 31, operations 36, plan files 7, and typecheck; touched lint/prettier/JSON/diff checks passed",
+    "runtimeHarness": "N/A — correction is an internal deterministic comparison path covered by operation integration tests; no Harness boundary changed",
+    "rollback": "Revert src/services/diagnostics.ts and the J-M02-001 tests in test/diagnostics.test.ts; evidence and ledger updates may be reverted independently",
+    "activeRed": []
+  },
   "tasks": [
     { "id": "0.1", "name": "Planning delivery through design", "status": "completed" },
     { "id": "0.2", "name": "Deliver tasks artifact", "status": "completed" },
@@ -151,5 +162,5 @@
     "rollback": "Revert evidence.md and task/state/apply-progress 6.1-6.3 updates only; U1-U5 implementation remains intact.",
     "risk": "Repeated text or coarse fallback may over-block safe edits; legacy applied v1 replay remains limited to exact postimage verification."
   },
-  "updatedAt": "2026-09-01T23:05:23Z"
+  "updatedAt": "2026-09-02T00:14:20Z"
 }

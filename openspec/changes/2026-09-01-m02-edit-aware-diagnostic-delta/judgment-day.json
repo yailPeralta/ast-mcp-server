@@ -25,7 +25,7 @@
   "ledger": [
     {
       "id": "J-M02-001",
-      "status": "confirmed-severe",
+      "status": "corrected-pending-rejudgment",
       "title": "Edit alignment does not enforce the specified operation-global work bound",
       "confirmedBy": ["A", "B"],
       "evidence": [
@@ -34,7 +34,14 @@
         "compareObservedDiagnostics creates a fresh default budget for each changed file rather than sharing one operation budget",
         "test/diagnostics.test.ts lacks long-snake/backtrack/emission and cumulative multi-file exhaustion tests"
       ],
-      "requiredCorrection": "Use one shared operation-scoped budget; charge prefix, suffix, frontier, snake, backtrack, emission and hunks; checkpoint bounded loops; discard partial alignment on exhaustion; test long common-middle and cumulative multi-file limits."
+      "requiredCorrection": "Use one shared operation-scoped budget; charge prefix, suffix, frontier, snake, backtrack, emission and hunks; checkpoint bounded loops; discard partial alignment on exhaustion; test long common-middle and cumulative multi-file limits.",
+      "correction": {
+        "receipt": "sha256:d248369b2f4772f68078287d26df6c881ef27436a5ef98c46f13da33a0c23cc5",
+        "files": ["src/services/diagnostics.ts", "test/diagnostics.test.ts"],
+        "red": "diagnostics exit 1; 28 passed, 3 failed as intended",
+        "green": "diagnostics 31, operations 36, plan files 7, typecheck and touched checks passed",
+        "disposition": "Await blind scoped re-judgment; no terminal verdict issued"
+      }
     },
     {
       "id": "J-M02-I01",
@@ -51,5 +58,5 @@
     "info": 1
   },
   "terminalVerdict": null,
-  "next": "await-explicit-round-one-correction-authorization"
+  "next": "scoped-round-one-rejudgment"
 }
