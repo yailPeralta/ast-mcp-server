@@ -25,7 +25,7 @@
   "ledger": [
     {
       "id": "J-M02-001",
-      "status": "corrected-pending-rejudgment",
+      "status": "resolved",
       "title": "Edit alignment does not enforce the specified operation-global work bound",
       "confirmedBy": ["A", "B"],
       "evidence": [
@@ -40,7 +40,15 @@
         "files": ["src/services/diagnostics.ts", "test/diagnostics.test.ts"],
         "red": "diagnostics exit 1; 28 passed, 3 failed as intended",
         "green": "diagnostics 31, operations 36, plan files 7, typecheck and touched checks passed",
-        "disposition": "Await blind scoped re-judgment; no terminal verdict issued"
+        "disposition": "Both scoped re-judges approved the immutable correction"
+      },
+      "rejudgment": {
+        "targetHead": "2825fab2fb8421194e41367998286a16e30810a0",
+        "targetTree": "d7e16a9775e0c3dc13d0e30735960de2bbd98a91",
+        "fixDiffSha256": "6f023d942ad2b84a7e4d2410e22f16ecd3c42c41f548a0450cb7db38c4e4f86c",
+        "judgeA": "APPROVED",
+        "judgeB": "APPROVED",
+        "fixCausedSevere": 0
       }
     },
     {
@@ -53,10 +61,12 @@
   ],
   "counts": {
     "confirmedSevere": 1,
+    "resolvedSevere": 1,
+    "remainingSevere": 0,
     "suspect": 1,
     "contradictions": 0,
     "info": 1
   },
-  "terminalVerdict": null,
-  "next": "scoped-round-one-rejudgment"
+  "terminalVerdict": "APPROVED",
+  "next": "strict-verify"
 }

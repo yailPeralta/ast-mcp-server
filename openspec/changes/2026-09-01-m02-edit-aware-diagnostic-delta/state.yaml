@@ -3,8 +3,8 @@ schemaVersion: 1
 changeName: 2026-09-01-m02-edit-aware-diagnostic-delta
 artifactStore: hybrid
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-01-m02-edit-aware-diagnostic-delta
-nextRecommended: judgment-day-rejudgment
-lastPhase: judgment-day-round-1-correction
+nextRecommended: verify
+lastPhase: judgment-day-approved
 artifacts:
   exploration: done
   proposal: done
@@ -15,11 +15,11 @@ artifacts:
   verifyReport: missing
 taskProgress:
   total: 21
-  completed: 18
-  pending: 3
+  completed: 19
+  pending: 2
   allComplete: false
 risks:
-  - Judgment Day round-one correction is pending scoped re-judgment for the operation-shared mapper work tracker.
+  - Judgment Day approved the operation-shared budget correction with no remaining severe findings.
   - Repeated text requires deterministic edit alignment and conservative boundaries.
   - Coarse bounded fallback may block safe operations but must never authorize uncertain errors.
   - Legacy applied v1 receipts remain replayable only while every exact postimage still matches.
