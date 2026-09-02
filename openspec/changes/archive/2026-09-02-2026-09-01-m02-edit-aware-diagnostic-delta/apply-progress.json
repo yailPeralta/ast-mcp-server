@@ -1,0 +1,172 @@
+{
+  "schema": "dsh-sdd-apply-progress",
+  "change": "2026-09-01-m02-edit-aware-diagnostic-delta",
+  "workUnit": "verify",
+  "delivery": "feature-branch-chain auto-chain; branch docs/m02-verify; archive/delivery pending",
+  "attemptToken": "sha256:2d37ea83ed030559aab2119d5ef9b17c3acbda509833644fb18fd63bb6d5f043",
+  "remediatesEvidenceRevision": "sha256:6f023d942ad2b84a7e4d2410e22f16ecd3c42c41f548a0450cb7db38c4e4f86c",
+  "evidenceRevision": "sha256:fcc4bab113f3f0cb76d67bd21a43ba9333bf154c2b0ac7875301fe82da9349f1",
+  "stage": "verified-pass",
+  "judgmentRemediation": {
+    "round": 1,
+    "receipt": "sha256:d248369b2f4772f68078287d26df6c881ef27436a5ef98c46f13da33a0c23cc5",
+    "scope": ["J-M02-001"],
+    "status": "approved-by-both-scoped-rejudges",
+    "red": "exit 1; diagnostics 28 passed/3 failed on prefix-snake charging, typed long-work cancellation, and operation-global multi-file exhaustion",
+    "greenRefactor": "exit 0; diagnostics 31, operations 36, plan files 7, and typecheck; touched lint/prettier/JSON/diff checks passed",
+    "runtimeHarness": "N/A — correction is an internal deterministic comparison path covered by operation integration tests; no Harness boundary changed",
+    "rollback": "Revert src/services/diagnostics.ts and the J-M02-001 tests in test/diagnostics.test.ts; evidence and ledger updates may be reverted independently",
+    "activeRed": []
+  },
+  "tasks": [
+    { "id": "0.1", "name": "Planning delivery through design", "status": "completed" },
+    { "id": "0.2", "name": "Deliver tasks artifact", "status": "completed" },
+    { "id": "1.1", "name": "Dual-acceptance operation GREEN", "status": "completed" },
+    { "id": "2.1", "name": "Mapper RED", "status": "completed" },
+    { "id": "2.2", "name": "Mapper GREEN", "status": "completed" },
+    { "id": "2.3", "name": "Mapper REFACTOR", "status": "completed" },
+    { "id": "3.1", "name": "Matcher edge RED", "status": "completed" },
+    { "id": "3.2", "name": "Matcher GREEN", "status": "completed" },
+    { "id": "3.3", "name": "Matcher REFACTOR", "status": "completed" },
+    { "id": "4.1", "name": "Operation integration RED", "status": "completed" },
+    { "id": "4.2", "name": "Operation integration GREEN", "status": "completed" },
+    { "id": "4.3", "name": "Operation integration REFACTOR", "status": "completed" },
+    { "id": "5.1", "name": "Persistence v2 RED", "status": "completed" },
+    { "id": "5.2", "name": "Persistence v2 GREEN", "status": "completed" },
+    { "id": "5.3", "name": "Persistence v2 REFACTOR", "status": "completed" },
+    { "id": "6.1", "name": "Full and package gates", "status": "completed" },
+    { "id": "6.2", "name": "Harness denial gates", "status": "completed" },
+    { "id": "6.3", "name": "Evidence closure", "status": "completed" },
+    { "id": "6.4", "name": "Judgment Day", "status": "completed" },
+    { "id": "6.5", "name": "Strict verify", "status": "completed" },
+    { "id": "6.6", "name": "Archive and delivery", "status": "pending" }
+  ],
+  "tdd": {
+    "red": [],
+    "green": [
+      {
+        "id": "u2-mapper",
+        "taskId": "2.2",
+        "command": "yarn vitest run test/diagnostics.test.ts",
+        "result": "exit 0; 17 passed"
+      },
+      {
+        "id": "u3-conservative-matcher",
+        "taskId": "3.2",
+        "command": "yarn vitest run test/diagnostics.test.ts",
+        "result": "exit 0; 29 passed"
+      },
+      {
+        "id": "same-identity-dual-acceptance",
+        "taskId": "1.1",
+        "command": "yarn vitest run test/operations.test.ts -t same-identity",
+        "result": "exit 0; 2 passed, 34 skipped; default blocked and allow=true retained corrected error"
+      },
+      {
+        "id": "u4-operation-integration",
+        "taskId": "4.2",
+        "command": "yarn vitest run test/operations.test.ts",
+        "result": "exit 0; 36 passed"
+      },
+      {
+        "id": "u5-plan-v2-cutover",
+        "taskId": "5.2",
+        "command": "yarn vitest run test/operation-plan-file.test.ts",
+        "result": "exit 0; 7 passed"
+      },
+      {
+        "id": "u6-full-chain",
+        "taskId": "6.1",
+        "command": "env -u GIT_PAGER bash -lc '<full chain>'",
+        "result": "exit 0; primary 74 files/963 tests; supervised 1 file/2 tests; all five smokes ok"
+      },
+      {
+        "id": "u6-harness",
+        "taskId": "6.2",
+        "command": "env -u GIT_PAGER bash -lc '<focused Harness chain>'",
+        "result": "exit 0; 23 focused tests; phases a/b/c/h03/h05/d ok; guarded-15 and UNKNOWN_TOOL"
+      }
+    ],
+    "refactored": [
+      { "id": "u2-mapper", "taskId": "2.3", "result": "exit 0 after formatting; 17 passed" },
+      {
+        "id": "u3-conservative-matcher",
+        "taskId": "3.3",
+        "result": "exit 0 after deduplication; 29 passed"
+      },
+      {
+        "id": "u4-operation-integration",
+        "taskId": "4.3",
+        "result": "exit 0 after plumbing cleanup; 2 focused passed"
+      },
+      {
+        "id": "u5-plan-v2-cutover",
+        "taskId": "5.3",
+        "result": "exit 0 after envelope dispatch cleanup; 7 passed"
+      },
+      {
+        "id": "u6-evidence",
+        "taskId": "6.3",
+        "result": "7/7 requirements and 8/8 scenarios mapped; active RED empty; JSON/format/diff valid; 215 changed lines"
+      }
+    ]
+  },
+  "runs": [
+    {
+      "id": "historical-red-u2",
+      "command": "yarn vitest run test/diagnostics.test.ts",
+      "result": "historical exit 1; 10 failed, 7 passed because observation/map APIs were absent"
+    },
+    {
+      "id": "historical-red-u3",
+      "command": "yarn vitest run test/diagnostics.test.ts",
+      "result": "historical exit 1; 12 failed, 17 passed because compareObservedDiagnostics was absent"
+    },
+    {
+      "id": "historical-red-u4",
+      "command": "yarn vitest run test/operations.test.ts -t same-identity",
+      "result": "historical exit 1; 2 failed, 34 skipped under location-blind comparison"
+    },
+    {
+      "id": "historical-red-u5",
+      "command": "yarn vitest run test/operation-plan-file.test.ts",
+      "result": "historical exit 1; 2 failed, 5 passed because v1 writing/prepared acceptance remained"
+    },
+    {
+      "id": "u4-final",
+      "command": "operations + diagnostics + typecheck + touched lint/format",
+      "result": "all exit 0; operations 36, diagnostics 29"
+    },
+    {
+      "id": "u5-final",
+      "command": "plan-file + operations + diagnostics + typecheck + touched lint/format",
+      "result": "all exit 0; plan 7, operations 36, diagnostics 29"
+    },
+    {
+      "id": "u6-full",
+      "command": "env -u GIT_PAGER bash -lc 'yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && yarn test:mcp && yarn test:lifecycle && yarn test:cli && yarn test:errors && yarn test:package'",
+      "result": "exit 0; format/lint/typecheck/build green; Vitest 963+2; MCP/lifecycle/CLI/errors/package status ok"
+    },
+    {
+      "id": "u6-harness",
+      "command": "env -u GIT_PAGER bash -lc 'yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts && yarn test:dsh-adapter'",
+      "result": "exit 0; 23 tests; exact pinned Harness revision; catalogs 15/0/15; apply absent; direct UNKNOWN_TOOL; cleanup ok"
+    },
+    {
+      "id": "strict-verify",
+      "command": "/home/yail/.local/bin/gentle-ai sdd-verify-validate --input openspec/changes/2026-09-01-m02-edit-aware-diagnostic-delta/verify-report.md --requirements 7 --scenarios 8",
+      "result": "exit 0; verdict pass; requirements 7/7; scenarios 8/8; focused 74/74; full 965+2; adapter/catalog 23/23; active RED empty"
+    }
+  ],
+  "evidence": {
+    "historicalRed": "Four historical RED runs are retained above; no active RED remains after U2-U5 GREEN/refactor and U6 gate closure.",
+    "coverage": "verify-report.md independently proves all 7 requirements and all 8 scenarios with focused 74/74, full 965+2, and adapter/catalog 23/23 passing.",
+    "verify": "strict validator exit 0 with PASS; task state 20/21; nextRecommended archive; archive/delivery remains pending; active RED empty.",
+    "harness": "Fresh materialization authenticated revision cd5ef8148158c3a752a658978873241fdf8e2bbc and tag dsh-v0.1.2-alpha.1; exactly 15 guarded tools were rendered, apply was absent, and direct apply returned UNKNOWN_TOOL.",
+    "checkout": "The supplied built Harness path has no Git metadata, so HEAD/status commands returned 128 before and after; three read-only identity hashes were byte-identical, and no command wrote there.",
+    "cleanup": "Harness temporary root removed; owned processes 0; H03/H05 resource readbacks zero; lifecycle orphan_processes 0.",
+    "rollback": "Revert evidence.md and task/state/apply-progress 6.1-6.3 updates only; U1-U5 implementation remains intact.",
+    "risk": "Repeated text or coarse fallback may over-block safe edits; legacy applied v1 replay remains limited to exact postimage verification."
+  },
+  "updatedAt": "2026-09-02T00:43:41Z"
+}
