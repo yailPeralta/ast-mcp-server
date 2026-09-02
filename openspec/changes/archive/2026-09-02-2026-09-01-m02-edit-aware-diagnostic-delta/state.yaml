@@ -2,9 +2,9 @@ schemaName: gentle-ai.sdd-status
 schemaVersion: 1
 changeName: 2026-09-01-m02-edit-aware-diagnostic-delta
 artifactStore: hybrid
-changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-01-m02-edit-aware-diagnostic-delta
-nextRecommended: apply
-lastPhase: apply
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-02-2026-09-01-m02-edit-aware-diagnostic-delta
+nextRecommended: delivery
+lastPhase: archive-done
 artifacts:
   exploration: done
   proposal: done
@@ -12,14 +12,19 @@ artifacts:
   design: done
   tasks: done
   applyProgress: done
-  verifyReport: missing
+  verifyReport: done
+  judgmentDay: done
+  archive: done
+  archiveReport: done
 taskProgress:
   total: 21
-  completed: 15
-  pending: 6
+  completed: 20
+  pending: 1
   allComplete: false
 risks:
+  - Judgment Day approved the operation-shared budget correction with no remaining severe findings.
   - Repeated text requires deterministic edit alignment and conservative boundaries.
   - Coarse bounded fallback may block safe operations but must never authorize uncertain errors.
   - Legacy applied v1 receipts remain replayable only while every exact postimage still matches.
   - DeepSeek Harness apply must remain absent and denied.
+  - Delivery remains pending: accumulate child #158 into tracker #145, obtain final CI, merge the tracker, and close issue #144 only after delivery evidence exists.

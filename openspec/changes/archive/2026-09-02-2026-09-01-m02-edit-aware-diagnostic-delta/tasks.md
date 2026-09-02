@@ -61,9 +61,9 @@ Runtime tasks 1.1, 2.1–5.3, 6.1–6.5 MUST acquire, run only on `proceed`, set
 
 ## Phase 6 — Gates/closure
 
-- [ ] 6.1 Full/package: `yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && yarn test:mcp && yarn test:lifecycle && yarn test:cli && yarn test:errors && yarn test:package`.
-- [ ] 6.2 Harness: `yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts && yarn test:dsh-adapter`; prove guarded-15/apply-absent/direct-`UNKNOWN_TOOL`; **no Harness checkout edits**.
-- [ ] 6.3 Generate separate ≤400-line evidence/apply-progress proving exact 7-requirement/8-scenario coverage.
-- [ ] 6.4 Freeze target; blind-dual Judgment Day; ≤2 receipt-bound RED-first remediation/re-judgments; require `APPROVED`.
-- [ ] 6.5 Strict verify: `~/.local/bin/gentle-ai sdd-verify-validate --input openspec/changes/2026-09-01-m02-edit-aware-diagnostic-delta/verify-report.md --requirements 7 --scenarios 8`.
+- [x] 6.1 Full/package: `yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && yarn test:mcp && yarn test:lifecycle && yarn test:cli && yarn test:errors && yarn test:package`.
+- [x] 6.2 Harness: `yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts && yarn test:dsh-adapter`; prove guarded-15/apply-absent/direct-`UNKNOWN_TOOL`; **no Harness checkout edits**.
+- [x] 6.3 Generate separate ≤400-line evidence/apply-progress proving exact 7-requirement/8-scenario coverage.
+- [x] 6.4 Freeze target; blind-dual Judgment Day; ≤2 receipt-bound RED-first remediation/re-judgments; require `APPROVED`.
+- [x] 6.5 Strict verify: `~/.local/bin/gentle-ai sdd-verify-validate --input openspec/changes/2026-09-01-m02-edit-aware-diagnostic-delta/verify-report.md --requirements 7 --scenarios 8`.
 - [ ] 6.6 After GREEN/receipts/CI: merge spec, archive immutably, accumulate U7→#145, merge tracker.
