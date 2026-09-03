@@ -62,7 +62,7 @@ All behavior units add tests before production where feasible and execute RED �
 - [x] **2.1 [U2 RED; HRC-R1-S1, R2-S1, R3-S1, R7-S1]** Acquire receipt; add service tests for all normalized kind×direction×endpoint-class keys, canonical order, precedence, safe empty, missing producer, mixed statuses, monotonic one-request work, exact exhaustion, and legacy-array graph parity.
 - [x] **2.2 [U2 GREEN]** Add frozen coverage/work types, a total producer/N/A/unsupported registry, `CompilerImpactResult`, one request-private tracker/ledger, `work_limit`, and incomplete aggregation in listed service files; make U1 fail closed until U3 supplies the exact call edge.
 - [x] **2.3 [U2 REFACTOR]** Remove test-only missing-producer seams and per-`edgesFor` budget resets; preserve ≤28 ordered entries, status precedence, `consumed_items <= max_items`, legacy `traverseImpact`, checkpoints, and existing truncation order.
-- [ ] **2.4 [U2 evidence]** Run U2 plus U1 commands, diff check, cleanup/hash, and settle U2 as passing only its ledger acceptance; preserve `u1-exact-edge` as the intentional active RED until U3 and do not claim overall GREEN.
+- [x] **2.4 [U2 evidence]** Run U2 plus U1 commands, diff check, cleanup/hash, and settle U2 as passing only its ledger acceptance; preserve `u1-exact-edge` as the intentional active RED until U3 and do not claim overall GREEN.
 
 ## Phase 3 — U3 Scoped Exact Call Producer
 
