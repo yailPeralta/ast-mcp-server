@@ -52,9 +52,9 @@ All behavior units add tests before production where feasible and execute RED �
 
 ## Phase 1 — U1 Registered MCP False-Complete RED
 
-- [ ] **1.1 [U1 RED; HRC-R4-S1, HRC-R11-S1]** Acquire `r01-u1-a1-acquire`; in `test/mcp.integration.test.ts` add the smallest registered `ast_get_impact` incoming-`call` fixture for `result → formatValue`, asserting the exact final edge/coverage and forbidding `edges: []` with `incomplete: false`.
-- [ ] **1.2 [U1 RED proof]** Run the U1 command before any production edit; record the assertion diff showing the current missing scoped producer—not selector, freshness, serialization, or fixture setup—is the failure.
-- [ ] **1.3 [U1 hold/refactor]** Make no production change, run `env -u GIT_PAGER git diff --check`, settle `r01-u1-a1-settle` as expected failed evidence, and preserve this RED as U2/U3’s predecessor.
+- [x] **1.1 [U1 RED; HRC-R4-S1, HRC-R11-S1]** Acquire `r01-u1-a1-acquire`; in `test/mcp.integration.test.ts` add the smallest registered `ast_get_impact` incoming-`call` fixture for `result → formatValue`, asserting the exact final edge/coverage and forbidding `edges: []` with `incomplete: false`.
+- [x] **1.2 [U1 RED proof]** Run the U1 command before any production edit; record the assertion diff showing the current missing scoped producer—not selector, freshness, serialization, or fixture setup—is the failure.
+- [x] **1.3 [U1 hold/refactor]** Make no production change, run `env -u GIT_PAGER git diff --check`, settle `r01-u1-a1-settle` as expected failed evidence, and preserve this RED as U2/U3’s predecessor.
 
 ## Phase 2 — U2 Coverage Types, Total Registry, Shared Operation Budget
 
