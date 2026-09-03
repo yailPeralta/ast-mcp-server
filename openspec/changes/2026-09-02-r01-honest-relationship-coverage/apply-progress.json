@@ -2,8 +2,8 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-02-r01-honest-relationship-coverage",
   "workUnit": "U7",
-  "stage": "evidence-ready-settlement-pending",
-  "delivery": "feature-branch-chain; branch docs/r01-u7-gates; next settle U7",
+  "stage": "u7-settled",
+  "delivery": "feature-branch-chain; branch docs/r01-u7-settlement; next Judgment U8",
   "receipt": {
     "requestId": "r01-u1-a1-acquire-20260902t1640z",
     "token": "sha256:d7caf9f4e1247c8741b1180a1b25fa3a218c0cb23a6b1f3595b614c8ca04a678",
@@ -59,10 +59,15 @@
     "evidenceRevision": "sha256:ded950bfed559eddaf7be9b6e6a5b6418a84b10f5ed32dab8b01b73c584b22fe"
   },
   "u7Receipt": {
+    "requestId": "r01-u7-a1-acquire-20260903t2011z",
     "token": "sha256:430caad4b6dafddf1bd3d92393f7eb5fa79b8cc3adb7d7d5065e2b23b346eadb",
-    "status": "acquired-proceed-settlement-pending"
+    "resetLedgerRevision": "sha256:b3203078dfb9570115e35ed963195d3eefa821eb2961ff76ca8334291fdcf2e4",
+    "status": "settled-passed-complete",
+    "settlementRequestId": "r01-u7-a1-settle-20260903t2038z",
+    "outcome": "passed",
+    "evidenceRevision": "sha256:cdefde3dd3b822a09a8c8f4b53235eb69a11a05c9704fe91552582d722eed4a3"
   },
-  "progress": { "completed": 22, "total": 28, "activeRed": 0 },
+  "progress": { "completed": 23, "total": 28, "activeRed": 0 },
   "tasks": [
     { "id": "1.1", "name": "Registered MCP incoming-call fixture", "status": "completed" },
     { "id": "1.2", "name": "Deterministic RED proof", "status": "completed" },
@@ -86,7 +91,7 @@
     { "id": "7.1", "name": "Documentation", "status": "completed" },
     { "id": "7.2", "name": "Full clean gate", "status": "completed" },
     { "id": "7.3", "name": "Harness denial gate", "status": "completed" },
-    { "id": "7.4", "name": "U7 settlement", "status": "pending" },
+    { "id": "7.4", "name": "U7 settlement", "status": "completed" },
     { "id": "8.1", "name": "Judgment launch", "status": "pending" },
     { "id": "8.2", "name": "Strict verify launch", "status": "pending" },
     { "id": "8.3", "name": "Strict verify settlement", "status": "pending" },
@@ -216,7 +221,7 @@
     "rollback": "Revert README, changelog, three named docs, evidence, and U7 progress marks together; no Harness checkout edit exists to revert.",
     "cleanup": "Harness canonical BEFORE and AFTER are identical at sha256:e9be86fb8ef58a82d9e9b5ef16f1f4ed900e0eecd142d95591e16384d46e40cc; 91215 entries, 73083 files, 11927 directories, 6205 symlinks, 1568220487 regular bytes, zero other; no temporary fixture remains",
     "process": "all task commands ran foreground and exited; adapter cleanup was ok; no delegation, acquire, settle, commit, push, or PR action occurred in this continuation",
-    "settlement": "pending by explicit instruction; active U7 token sha256:430caad4b6dafddf1bd3d92393f7eb5fa79b8cc3adb7d7d5065e2b23b346eadb"
+    "settlement": "U7 settled passed at the exact evidence revision; Judgment requires separate authority"
   },
-  "updatedAt": "2026-09-03T20:36:32Z"
+  "updatedAt": "2026-09-03T20:39:00Z"
 }

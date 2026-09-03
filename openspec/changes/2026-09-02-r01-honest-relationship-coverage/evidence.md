@@ -115,4 +115,4 @@ for key in ('entries', 'files', 'directories', 'symlinks', 'regular_bytes', 'oth
 
 ## Progress and next authority
 
-U7 marks only 7.1–7.3 complete. Task 7.4 remains pending because settlement is explicitly forbidden in this continuation. The resulting apply count is 22/28 with zero active RED. The next action is U7 settlement under the active token; only after that may U8 Judgment acquire its own fresh authority. No settle, commit, push, PR, archive, delivery, or issue close occurs here.
+U7 tasks 7.1–7.4 are complete under the settled receipt and exact evidence revision. Apply is 23/28 with zero active RED. The next action is U8 Judgment under separate fresh authority; archive, delivery, and issue closure remain unclaimed.

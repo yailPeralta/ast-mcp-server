@@ -3,8 +3,8 @@ schemaVersion: 1
 changeName: 2026-09-02-r01-honest-relationship-coverage
 artifactStore: hybrid
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-02-r01-honest-relationship-coverage
-nextRecommended: settle U7
-lastPhase: apply-u7-evidence-ready
+nextRecommended: judgment U8
+lastPhase: apply-u7-settled
 artifacts:
   exploration: done
   proposal: done
@@ -15,8 +15,8 @@ artifacts:
   verifyReport: missing
 taskProgress:
   total: 28
-  completed: 22
-  pending: 6
+  completed: 23
+  pending: 5
   allComplete: false
   activeRed: 0
 risks:
