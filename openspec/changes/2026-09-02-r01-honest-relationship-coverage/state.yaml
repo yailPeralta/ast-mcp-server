@@ -1,0 +1,25 @@
+schemaName: gentle-ai.sdd-status
+schemaVersion: 1
+changeName: 2026-09-02-r01-honest-relationship-coverage
+artifactStore: hybrid
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-02-r01-honest-relationship-coverage
+nextRecommended: apply
+lastPhase: delivery-decision-resolved
+artifacts:
+  exploration: done
+  proposal: done
+  specs: done
+  design: done
+  tasks: done
+  applyProgress: missing
+  verifyReport: missing
+taskProgress:
+  total: 28
+  completed: 0
+  pending: 28
+  allComplete: false
+risks:
+  - Scoped impact accepts call and contains without running a producer, allowing false-complete empty results.
+  - Incoming call and containment discovery can become whole-project scans unless one bounded work tracker is shared.
+  - Containment semantics and affected-test candidate relationship selection require explicit proposal decisions.
+  - DeepSeek Harness apply must remain absent and denied.
