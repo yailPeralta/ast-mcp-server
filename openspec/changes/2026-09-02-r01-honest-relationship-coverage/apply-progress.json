@@ -2,8 +2,8 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-02-r01-honest-relationship-coverage",
   "workUnit": "U5",
-  "stage": "public-candidates-green-awaiting-settlement",
-  "delivery": "feature-branch-chain; branch fix/r01-u5-public-candidates; next settle U5",
+  "stage": "public-candidates-settled",
+  "delivery": "feature-branch-chain; branch docs/r01-u5-settlement; next apply U6",
   "receipt": {
     "requestId": "r01-u1-a1-acquire-20260902t1640z",
     "token": "sha256:d7caf9f4e1247c8741b1180a1b25fa3a218c0cb23a6b1f3595b614c8ca04a678",
@@ -44,9 +44,12 @@
     "requestId": "r01-u5-a1-acquire-20260903t1921z",
     "token": "sha256:9d4b7a7a1c79ba52227c568e64561f52b4900061b6e626135261a3a057d2d3d0",
     "resetLedgerRevision": "sha256:bd816a07cc898c0f4f52232b14808f6eac9306935fdb6d61758bd80298194480",
-    "status": "acquired-proceed-awaiting-settlement"
+    "status": "settled-passed-complete",
+    "settlementRequestId": "r01-u5-a1-settle-20260903t1931z",
+    "outcome": "passed",
+    "evidenceRevision": "sha256:48e535178e0208cd9efbcd5393684a29547228b3dc2e461366e37838b228515c"
   },
-  "progress": { "completed": 15, "total": 28, "activeRed": 0 },
+  "progress": { "completed": 16, "total": 28, "activeRed": 0 },
   "tasks": [
     { "id": "1.1", "name": "Registered MCP incoming-call fixture", "status": "completed" },
     { "id": "1.2", "name": "Deterministic RED proof", "status": "completed" },
@@ -63,7 +66,7 @@
     { "id": "4.3", "name": "Direct contains REFACTOR", "status": "completed" },
     { "id": "5.1", "name": "Public and candidates RED", "status": "completed" },
     { "id": "5.2", "name": "Public and candidates GREEN", "status": "completed" },
-    { "id": "5.3", "name": "Public and candidates REFACTOR", "status": "pending" },
+    { "id": "5.3", "name": "Public and candidates REFACTOR", "status": "completed" },
     { "id": "6.1", "name": "Seven-kind matrix RED", "status": "pending" },
     { "id": "6.2", "name": "Matrix corrections GREEN", "status": "pending" },
     { "id": "6.3", "name": "Matrix REFACTOR", "status": "pending" },
@@ -173,7 +176,7 @@
     "rollback": "Revert the public schemas/projection, six-kind candidate constant/gate, and focused tests together; scoped call/contains producers and T-01 path reconstruction remain unchanged.",
     "cleanup": "afterEach removed disposable compiler fixtures; no generated artifact, Harness path, background job, or surviving process exists",
     "process": "all foreground Vitest and validation commands exited; no background job was started",
-    "settlement": "forbidden by launch; task 5.3 and r01-u5-a1-settle remain pending"
+    "settlement": "U5 settled passed; task 5.3 completed at the exact evidence revision"
   },
-  "updatedAt": "2026-09-03T19:26:00Z"
+  "updatedAt": "2026-09-03T19:32:00Z"
 }
