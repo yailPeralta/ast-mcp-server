@@ -14,6 +14,7 @@ import {
   aggregateRelationshipCoverage,
   CompilerImpactWorkTracker,
   createCompilerRelationshipResolver,
+  MAX_RELATIONSHIP_COVERAGE_ENTRIES,
   RELATIONSHIP_EDGE_KINDS,
   type CompilerImpactWork,
   type RelationshipCoverageEntry,
@@ -101,17 +102,66 @@ export function isExactImpactEdge(edge: RelationshipEdge): boolean {
   );
 }
 
-export function assertExactImpactEvidence(
-  impact: Pick<ImpactResult, "incomplete" | "edges">,
-): void {
-  if (typeof impact !== "object" || impact === null || !Array.isArray(impact.edges)) {
-    throw new Error("Impact evidence is invalid.");
+function hasCompleteCoverage(candidate: Partial<CompilerImpactResult>): boolean {
+  if (
+    !Array.isArray(candidate.coverage) ||
+    !Array.isArray(candidate.relationship_kinds) ||
+    !Array.isArray(candidate.nodes)
+  ) {
+    return false;
   }
-  if (impact.incomplete) {
-    throw new Error("Test candidates require complete impact evidence.");
+  const directions =
+    candidate.direction === "both" ? (["incoming", "outgoing"] as const) : [candidate.direction];
+  if (directions.some((direction) => direction !== "incoming" && direction !== "outgoing")) {
+    return false;
   }
-  if (!impact.edges.every(isExactImpactEdge)) {
-    throw new Error("Test candidates require fresh exact compiler impact evidence.");
+  const endpointClasses = new Set(
+    candidate.nodes.map(({ endpoint }) =>
+      endpoint?.symbol_path === "<module>" ? "module" : "symbol",
+    ),
+  );
+  const expected = candidate.relationship_kinds.flatMap((kind) =>
+    directions.flatMap((direction) =>
+      [...endpointClasses].map((endpointClass) => `${kind}/${direction}/${endpointClass}`),
+    ),
+  );
+  const actual = candidate.coverage.map(
+    ({ kind, direction, endpoint_class }) => `${kind}/${direction}/${endpoint_class}`,
+  );
+  return (
+    expected.length > 0 &&
+    expected.length <= MAX_RELATIONSHIP_COVERAGE_ENTRIES &&
+    actual.length === expected.length &&
+    new Set(actual).size === actual.length &&
+    expected.every((key) => actual.includes(key)) &&
+    candidate.coverage.every(({ status }) => status === "completed" || status === "not_applicable")
+  );
+}
+
+export function isCompleteExactImpactEvidence(impact: unknown): impact is CompilerImpactResult {
+  if (typeof impact !== "object" || impact === null) return false;
+  const candidate = impact as Partial<CompilerImpactResult>;
+  const work = candidate.work;
+  return (
+    candidate.incomplete === false &&
+    candidate.truncation?.truncated === false &&
+    Array.isArray(candidate.edges) &&
+    candidate.edges.every(isExactImpactEdge) &&
+    hasCompleteCoverage(candidate) &&
+    typeof work === "object" &&
+    work !== null &&
+    Number.isSafeInteger(work.max_items) &&
+    work.max_items > 0 &&
+    Number.isSafeInteger(work.consumed_items) &&
+    work.consumed_items >= 0 &&
+    work.consumed_items <= work.max_items &&
+    work.exhausted === false
+  );
+}
+
+export function assertExactImpactEvidence(impact: unknown): asserts impact is CompilerImpactResult {
+  if (!isCompleteExactImpactEvidence(impact)) {
+    throw new Error("Test candidates require complete coverage and fresh exact compiler evidence.");
   }
 }
 

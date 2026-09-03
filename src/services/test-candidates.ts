@@ -1,4 +1,4 @@
-import { assertExactImpactEvidence, type ImpactResult } from "./impact.js";
+import { assertExactImpactEvidence, type CompilerImpactResult } from "./impact.js";
 import type { RelationshipEdge, RelationshipEndpoint } from "./relationships.js";
 
 export const DEFAULT_TEST_FILE_PATTERNS = Object.freeze(["**/*.test.*", "**/*.spec.*"] as const);
@@ -249,7 +249,7 @@ function findPathToRoot(
 }
 
 export function findTestCandidates(
-  impact: ImpactResult,
+  impact: CompilerImpactResult,
   conventions: TestCandidateConventions = {},
 ): readonly TestCandidate[] {
   assertExactImpactEvidence(impact);

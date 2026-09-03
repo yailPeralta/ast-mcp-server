@@ -14,12 +14,11 @@ import {
 import { TRUNCATION_REASONS } from "../services/read-contracts.js";
 import { withProject } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
+import { RELATIONSHIP_EDGE_KINDS } from "../services/relationships.js";
 import {
-  RELATIONSHIP_COVERAGE_STATUSES,
-  RELATIONSHIP_EDGE_KINDS,
-} from "../services/relationships.js";
-import {
+  CompilerImpactWorkSchema,
   FreshnessSchema,
+  RelationshipCoverageSchema,
   RelationshipEdgeSchema,
   RelationshipEndpointSchema,
 } from "./relationship-schema.js";
@@ -82,14 +81,8 @@ const ImpactOutputSchema = z.object({
     }),
   ),
   edges: z.array(RelationshipEdgeSchema),
-  coverage: z.array(
-    z.object({
-      kind: z.enum(RELATIONSHIP_EDGE_KINDS),
-      direction: z.enum(["incoming", "outgoing"]),
-      endpoint_class: z.enum(["module", "symbol"]),
-      status: z.enum(RELATIONSHIP_COVERAGE_STATUSES),
-    }),
-  ),
+  coverage: RelationshipCoverageSchema,
+  work: CompilerImpactWorkSchema,
   visited_nodes: z.number().int().min(0),
   visited_edges: z.number().int().min(0),
   max_depth_reached: z.number().int().min(0),

@@ -448,6 +448,7 @@ export const RELATIONSHIP_COVERAGE_STATUSES = Object.freeze([
   "unfinished",
 ] as const);
 export type RelationshipCoverageStatus = (typeof RELATIONSHIP_COVERAGE_STATUSES)[number];
+export const MAX_RELATIONSHIP_COVERAGE_ENTRIES = 28;
 export interface RelationshipCoverageEntry {
   readonly kind: RelationshipEdgeKind;
   readonly direction: EffectiveRelationshipDirection;

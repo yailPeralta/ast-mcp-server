@@ -78,8 +78,8 @@ All behavior units add tests before production where feasible and execute RED �
 
 ## Phase 5 — U5 Public Schema, Impact, and Six-Kind Candidate Contract
 
-- [ ] **5.1 [U5 RED; HRC-R3-S1, R10-S1; ATC-R1-S1, R2-S2/S3]** Acquire receipt; test additive ordered `coverage`/`work`, logical JSON/TOON equality, unchanged public fields/errors, exact frozen incoming six-kind candidate request excluding `contains`, unsafe-coverage rejection, and authoritative proven-empty.
-- [ ] **5.2 [U5 GREEN]** Add bounded Zod schemas/projection; make candidates explicitly pass `reference/import/export/extends/implements/call`, gate before projection/pagination, and preserve `INCOMPLETE_EVIDENCE`, T-01 paths, pagination, correlation, and MCP/batch implementation identity.
+- [x] **5.1 [U5 RED; HRC-R3-S1, R10-S1; ATC-R1-S1, R2-S2/S3]** Acquire receipt; test additive ordered `coverage`/`work`, logical JSON/TOON equality, unchanged public fields/errors, exact frozen incoming six-kind candidate request excluding `contains`, unsafe-coverage rejection, and authoritative proven-empty.
+- [x] **5.2 [U5 GREEN]** Add bounded Zod schemas/projection; make candidates explicitly pass `reference/import/export/extends/implements/call`, gate before projection/pagination, and preserve `INCOMPLETE_EVIDENCE`, T-01 paths, pagination, correlation, and MCP/batch implementation identity.
 - [ ] **5.3 [U5 REFACTOR]** Remove implicit default-all candidate paths/duplicate safety checks; rerun focused MCP/candidate/batch tests plus schema snapshots, cleanup/hash, and settle U5 without exact-shape fixtures masking behavior.
 
 ## Phase 6 — U6 Seven-Kind, Mixed, Bounds, and Cancellation Matrix

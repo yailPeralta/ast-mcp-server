@@ -9,7 +9,8 @@ import {
   findTestCandidates,
   type TestCandidateConventions,
 } from "../src/services/test-candidates.js";
-import type { ImpactResult } from "../src/services/impact.js";
+import type { CompilerImpactResult } from "../src/services/impact.js";
+import { TEST_CANDIDATE_RELATIONSHIP_KINDS } from "../src/tools/find_test_candidates.js";
 import { paginate } from "../src/services/pagination.js";
 
 const freshness = {
@@ -34,7 +35,7 @@ function impactFixture(
     readonly provenance?: "compiler" | "syntax" | "heuristic";
     readonly resolution?: "resolved" | "unresolved" | "ambiguous";
   } = {},
-): ImpactResult {
+): CompilerImpactResult {
   const service = endpoint("src/service.ts", "Service", "Service@1");
   const intermediate = endpoint("src/adapter.ts", "Adapter", "Adapter@1");
   const test = endpoint(
@@ -90,6 +91,21 @@ function impactFixture(
     max_depth: 3,
     max_nodes: 10,
     max_edges: 10,
+    coverage: [
+      {
+        kind: "reference",
+        direction: "incoming",
+        endpoint_class: "module",
+        status: "not_applicable",
+      },
+      {
+        kind: "reference",
+        direction: "incoming",
+        endpoint_class: "symbol",
+        status: "completed",
+      },
+    ],
+    work: { max_items: 100, consumed_items: 10, exhausted: false },
     incomplete: options.incomplete ?? false,
     truncation: options.incomplete
       ? { truncated: true, reason: "depth_limit" }
@@ -99,6 +115,19 @@ function impactFixture(
 }
 
 describe("test candidate resolver", () => {
+  it("publishes one frozen incoming six-kind relationship set without contains", () => {
+    expect(TEST_CANDIDATE_RELATIONSHIP_KINDS).toEqual([
+      "reference",
+      "import",
+      "export",
+      "extends",
+      "implements",
+      "call",
+    ]);
+    expect(Object.isFrozen(TEST_CANDIDATE_RELATIONSHIP_KINDS)).toBe(true);
+    expect(TEST_CANDIDATE_RELATIONSHIP_KINDS).not.toContain("contains");
+  });
+
   it("returns a direct candidate with exact compiler evidence", () => {
     const [candidate] = findTestCandidates(impactFixture());
 
@@ -194,10 +223,19 @@ describe("test candidate resolver", () => {
     ).toThrow(`must not exceed ${MAX_TEST_CANDIDATE_CONVENTION_LENGTH} characters`);
   });
 
-  it("returns a proven empty result only for complete authoritative evidence", () => {
-    const result = findTestCandidates(impactFixture({ testFile: "src/service-consumer.ts" }));
+  it("returns a proven empty result only for complete authoritative coverage", () => {
+    const complete = impactFixture({ testFile: "src/service-consumer.ts" });
+    expect(findTestCandidates(complete)).toEqual([]);
 
-    expect(result).toEqual([]);
+    for (const status of ["unsupported", "unfinished"] as const) {
+      expect(() =>
+        findTestCandidates({
+          ...complete,
+          coverage: complete.coverage.map((entry) => ({ ...entry, status })),
+          incomplete: false,
+        }),
+      ).toThrow(/complete.*coverage|coverage.*complete/i);
+    }
   });
 
   it("paginates whole candidates without splitting relationship proof", () => {
@@ -228,6 +266,14 @@ describe("test candidate resolver", () => {
   });
 
   it.each([
+    [
+      "exhausted work",
+      {
+        ...impactFixture(),
+        work: { max_items: 100, consumed_items: 100, exhausted: true },
+      },
+    ],
+    ["missing coverage", { ...impactFixture(), coverage: [] }],
     ["stale evidence", impactFixture({ stale: true })],
     ["rebuilding evidence", impactFixture({ freshnessState: "rebuilding" })],
     ["degraded evidence", impactFixture({ freshnessState: "degraded" })],

@@ -879,8 +879,8 @@ export function formatValue(value: number): string { return String(value); }
   it("rejects false-complete incoming call emptiness", async () => {
     clearProjectSessions();
 
-    const impact = structured(
-      await client.callTool({
+    const callImpact = (output_format: "json" | "toon") =>
+      client.callTool({
         name: "ast_get_impact",
         arguments: {
           project_root: fixture.root,
@@ -891,10 +891,17 @@ export function formatValue(value: number): string { return String(value); }
           max_depth: 1,
           max_nodes: 10,
           max_edges: 10,
+          output_format,
         },
-      }),
-    );
+      });
+    const impact = structured(await callImpact("json"));
+    const toonImpact = toon(await callImpact("toon"));
 
+    const normalize = (value: unknown) =>
+      JSON.parse(
+        JSON.stringify(value, (key, item) => (key === "checked_at" ? "<timestamp>" : item)),
+      );
+    expect(normalize(toonImpact)).toEqual(normalize(impact));
     expect(impact).not.toMatchObject({ edges: [], incomplete: false });
     expect(impact.edges).toEqual([
       expect.objectContaining({
@@ -925,6 +932,15 @@ export function formatValue(value: number): string { return String(value); }
         status: "completed",
       },
     ]);
+    expect(impact.work).toMatchObject({
+      max_items: 100_000,
+      consumed_items: expect.any(Number),
+      exhausted: false,
+    });
+    expect(impact.work).toSatisfy(
+      (work: { consumed_items: number; max_items: number }) =>
+        Number.isSafeInteger(work.consumed_items) && work.consumed_items <= work.max_items,
+    );
   });
 
   it("finds exact compiler-backed test candidates with bounded trust metadata", async () => {

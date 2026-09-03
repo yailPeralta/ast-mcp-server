@@ -7,6 +7,7 @@ import {
   MAX_IMPACT_DEPTH,
   MAX_IMPACT_EDGES,
   MAX_IMPACT_NODES,
+  isCompleteExactImpactEvidence,
   resolveImpactRoot,
   traverseCompilerImpact,
 } from "../services/impact.js";
@@ -14,6 +15,7 @@ import { paginate, PaginationInputSchema, PaginationOutputSchema } from "../serv
 import { withProject } from "../services/project.js";
 import { PublicOperationalError } from "../services/public-errors.js";
 import { createRequestContext } from "../services/request-context.js";
+import type { RelationshipEdgeKind } from "../services/relationships.js";
 import {
   findTestCandidates,
   MAX_TEST_CANDIDATE_CONVENTION_ITEMS,
@@ -29,6 +31,15 @@ import {
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
 const TOOL_NAME = "ast_find_test_candidates";
+
+export const TEST_CANDIDATE_RELATIONSHIP_KINDS = Object.freeze([
+  "reference",
+  "import",
+  "export",
+  "extends",
+  "implements",
+  "call",
+] as const) satisfies readonly RelationshipEdgeKind[];
 
 const ConventionSchema = z
   .array(z.string().min(1).max(MAX_TEST_CANDIDATE_CONVENTION_LENGTH))
@@ -140,10 +151,16 @@ export function registerFindTestCandidates(server: McpServer): void {
               context.projectRoot,
               root,
               freshness,
-              { direction: "incoming", max_depth, max_nodes, max_edges },
+              {
+                direction: "incoming",
+                max_depth,
+                max_nodes,
+                max_edges,
+                relationship_kinds: TEST_CANDIDATE_RELATIONSHIP_KINDS,
+              },
               operationContext,
             );
-            if (impact.incomplete || impact.truncation.truncated) {
+            if (!isCompleteExactImpactEvidence(impact)) {
               throw new PublicOperationalError("INCOMPLETE_EVIDENCE", "Evidence is incomplete.");
             }
             const candidates = findTestCandidates(impact, {
