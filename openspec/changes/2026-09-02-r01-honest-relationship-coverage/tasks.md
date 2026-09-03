@@ -86,7 +86,7 @@ All behavior units add tests before production where feasible and execute RED �
 
 - [x] **6.1 [U6 RED; HRC-R2-S1, R7-S1, R8-S1, R9-S1; ATC-R2-S1]** Acquire receipt; add one compiler-backed registered-MCP positive/completed-negative matrix for seven kinds, applicable directions/classes, reordered declarations/IDs, mixed kinds, exact depth/node/edge/work boundaries, and mid-scan abort.
 - [x] **6.2 [U6 GREEN]** Apply only narrow runtime corrections exposed by those REDs; require deterministic `work_limit`, unfinished coverage, candidate `INCOMPLETE_EVIDENCE`, and typed `REQUEST_CANCELLED` with no partial success payload.
-- [ ] **6.3 [U6 REFACTOR]** Consolidate fixture builders/table cases after GREEN; rerun U1–U6 focused commands, prove all 17 scenarios represented without weakened assertions, cleanup/hash, and settle U6.
+- [x] **6.3 [U6 REFACTOR]** Consolidate fixture builders/table cases after GREEN; rerun U1–U6 focused commands, prove all 17 scenarios represented without weakened assertions, cleanup/hash, and settle U6.
 
 ## Phase 7 — U7 Documentation, Clean Gates, Package, and Pinned Harness
 

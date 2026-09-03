@@ -2,8 +2,8 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-02-r01-honest-relationship-coverage",
   "workUnit": "U6",
-  "stage": "green-awaiting-settlement",
-  "delivery": "feature-branch-chain; branch test/r01-u6-relationship-matrix; task 6.3 remains settlement-dependent",
+  "stage": "matrix-settled",
+  "delivery": "feature-branch-chain; branch docs/r01-u6-settlement; next apply U7",
   "receipt": {
     "requestId": "r01-u1-a1-acquire-20260902t1640z",
     "token": "sha256:d7caf9f4e1247c8741b1180a1b25fa3a218c0cb23a6b1f3595b614c8ca04a678",
@@ -49,7 +49,16 @@
     "outcome": "passed",
     "evidenceRevision": "sha256:48e535178e0208cd9efbcd5393684a29547228b3dc2e461366e37838b228515c"
   },
-  "progress": { "completed": 18, "total": 28, "activeRed": 0 },
+  "u6Receipt": {
+    "requestId": "r01-u6-a1-acquire-20260903t1937z",
+    "token": "sha256:48dc913eb4565a3599469ec22fc7f1625a6a7ed454ba6ad3954b950a324f44ad",
+    "resetLedgerRevision": "sha256:8fc9a2e090d8a31326387efcb5a8666c3b23a3578c7308525198e305e6d638bc",
+    "status": "settled-passed-complete",
+    "settlementRequestId": "r01-u6-a1-settle-20260903t2005z",
+    "outcome": "passed",
+    "evidenceRevision": "sha256:ded950bfed559eddaf7be9b6e6a5b6418a84b10f5ed32dab8b01b73c584b22fe"
+  },
+  "progress": { "completed": 19, "total": 28, "activeRed": 0 },
   "tasks": [
     { "id": "1.1", "name": "Registered MCP incoming-call fixture", "status": "completed" },
     { "id": "1.2", "name": "Deterministic RED proof", "status": "completed" },
@@ -69,7 +78,7 @@
     { "id": "5.3", "name": "Public and candidates REFACTOR", "status": "completed" },
     { "id": "6.1", "name": "Seven-kind matrix RED", "status": "completed" },
     { "id": "6.2", "name": "Matrix corrections GREEN", "status": "completed" },
-    { "id": "6.3", "name": "Matrix REFACTOR", "status": "pending" },
+    { "id": "6.3", "name": "Matrix REFACTOR", "status": "completed" },
     { "id": "7.1", "name": "Documentation", "status": "pending" },
     { "id": "7.2", "name": "Full clean gate", "status": "pending" },
     { "id": "7.3", "name": "Harness denial gate", "status": "pending" },
@@ -193,7 +202,7 @@
     "rollback": "Revert the read truncation subset and U6 tests together; impact work_limit, U1-U5 producers, candidate gate, and T-01 reconstruction remain unchanged.",
     "cleanup": "afterEach removed disposable compiler fixtures; build emitted only ignored dist artifacts; no Harness path, temporary fixture, background job, or surviving process exists",
     "process": "all commands ran foreground and exited; no delegation, acquire, settle, commit, push, or PR action occurred",
-    "settlement": "U6 tasks 6.1-6.2 are GREEN; settlement-dependent task 6.3 remains pending under the supplied active token"
+    "settlement": "U6 settled passed; task 6.3 completed at the exact evidence revision"
   },
-  "updatedAt": "2026-09-03T20:00:00Z"
+  "updatedAt": "2026-09-03T20:06:00Z"
 }
