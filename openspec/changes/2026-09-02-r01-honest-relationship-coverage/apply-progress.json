@@ -1,9 +1,9 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-02-r01-honest-relationship-coverage",
-  "workUnit": "U6",
-  "stage": "matrix-settled",
-  "delivery": "feature-branch-chain; branch docs/r01-u6-settlement; next apply U7",
+  "workUnit": "U7",
+  "stage": "evidence-ready-settlement-pending",
+  "delivery": "feature-branch-chain; branch docs/r01-u7-gates; next settle U7",
   "receipt": {
     "requestId": "r01-u1-a1-acquire-20260902t1640z",
     "token": "sha256:d7caf9f4e1247c8741b1180a1b25fa3a218c0cb23a6b1f3595b614c8ca04a678",
@@ -58,7 +58,11 @@
     "outcome": "passed",
     "evidenceRevision": "sha256:ded950bfed559eddaf7be9b6e6a5b6418a84b10f5ed32dab8b01b73c584b22fe"
   },
-  "progress": { "completed": 19, "total": 28, "activeRed": 0 },
+  "u7Receipt": {
+    "token": "sha256:430caad4b6dafddf1bd3d92393f7eb5fa79b8cc3adb7d7d5065e2b23b346eadb",
+    "status": "acquired-proceed-settlement-pending"
+  },
+  "progress": { "completed": 22, "total": 28, "activeRed": 0 },
   "tasks": [
     { "id": "1.1", "name": "Registered MCP incoming-call fixture", "status": "completed" },
     { "id": "1.2", "name": "Deterministic RED proof", "status": "completed" },
@@ -79,9 +83,9 @@
     { "id": "6.1", "name": "Seven-kind matrix RED", "status": "completed" },
     { "id": "6.2", "name": "Matrix corrections GREEN", "status": "completed" },
     { "id": "6.3", "name": "Matrix REFACTOR", "status": "completed" },
-    { "id": "7.1", "name": "Documentation", "status": "pending" },
-    { "id": "7.2", "name": "Full clean gate", "status": "pending" },
-    { "id": "7.3", "name": "Harness denial gate", "status": "pending" },
+    { "id": "7.1", "name": "Documentation", "status": "completed" },
+    { "id": "7.2", "name": "Full clean gate", "status": "completed" },
+    { "id": "7.3", "name": "Harness denial gate", "status": "completed" },
     { "id": "7.4", "name": "U7 settlement", "status": "pending" },
     { "id": "8.1", "name": "Judgment launch", "status": "pending" },
     { "id": "8.2", "name": "Strict verify launch", "status": "pending" },
@@ -191,18 +195,28 @@
       "id": "u6-focused-and-full",
       "command": "U1-U6 six-file matrix; env -u GIT_PAGER yarn test; yarn build/typecheck/lint/format:check",
       "result": "134 focused, then 981 plus 2 supervised full-suite tests passed; build and quality gates passed"
+    },
+    {
+      "id": "u7-full-clean",
+      "command": "env -u GIT_PAGER bash -lc 'yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && yarn test:mcp && yarn test:lifecycle && yarn test:cli && yarn test:errors && yarn test:package'",
+      "result": "sole clean retry exited 0 in 151 seconds: format, lint, typecheck, 981 plus 2 supervised tests, build, MCP/lifecycle/CLI/error/package smokes passed"
+    },
+    {
+      "id": "u7-harness-canonical-rerun",
+      "command": "env -u GIT_PAGER bash -lc 'yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts && yarn test:dsh-adapter'",
+      "result": "exit 0: 2 files/23 tests and adapter phases a,b,c,h03,h05,d passed; canonical Harness BEFORE=AFTER sha256:e9be86fb8ef58a82d9e9b5ef16f1f4ed900e0eecd142d95591e16384d46e40cc with 91215 entries, 73083 files, 11927 directories, 6205 symlinks, 1568220487 regular bytes"
     }
   ],
   "evidence": {
-    "failure": "Pinned inventory RED isolated work_limit leakage from compiler impact into ast_get_project_status and ast_explore schemas; expected hash remained unchanged.",
-    "discrimination": "An explicit frozen read truncation subset restores read/explore schemas while internal TruncationReason and impact schemas retain work_limit.",
-    "expected": "Seven registered compiler kinds each have an exact positive and completed-negative; mixed order, exact bounds/work, candidates, and cancellation fail closed.",
-    "runtimeHarness": "Registered in-memory MCP matrix passed all seven kinds; pinned inventory is 16 unguarded, guarded MCP remains 15 and excludes apply.",
-    "mapping": "All 13 requirements/17 scenarios remain represented: U6 directly covers HRC-R2/R7/R8/R9 and ATC-R2-S1, while repeated U1-U5 gates preserve the remaining trace in tasks.md.",
-    "rollback": "Revert the read truncation subset and U6 tests together; impact work_limit, U1-U5 producers, candidate gate, and T-01 reconstruction remain unchanged.",
-    "cleanup": "afterEach removed disposable compiler fixtures; build emitted only ignored dist artifacts; no Harness path, temporary fixture, background job, or surviving process exists",
-    "process": "all commands ran foreground and exited; no delegation, acquire, settle, commit, push, or PR action occurred",
-    "settlement": "U6 settled passed; task 6.3 completed at the exact evidence revision"
+    "failure": "The first U7 handoff supplied sha256:82c77b... and matching inventory counts without preserving its digest algorithm; it is retained as incomplete and superseded by the reproducible canonical pair.",
+    "discrimination": "Identical inline Python framed raw relative paths, exact entry types, file bytes, and symlink targets with unsigned 64-bit big-endian lengths; no timestamps or mutable metadata.",
+    "expected": "U7 documentation and the full clean/package/Harness gates are GREEN; tasks 7.1-7.3 are complete and 7.4 remains pending settlement.",
+    "runtimeHarness": "Exact task 7.3 command passed 2 files/23 tests and all adapter phases; pinned revision cd5ef814..., guarded catalogs [15,0,15], apply excluded, direct apply UNKNOWN_TOOL.",
+    "mapping": "All 13 requirements/17 scenarios remain represented; U7 directly covers HRC-R10-S1, HRC-R11-S2, and ATC-R1-S1 after U1-U6 behavioral GREEN.",
+    "rollback": "Revert README, changelog, three named docs, evidence, and U7 progress marks together; no Harness checkout edit exists to revert.",
+    "cleanup": "Harness canonical BEFORE and AFTER are identical at sha256:e9be86fb8ef58a82d9e9b5ef16f1f4ed900e0eecd142d95591e16384d46e40cc; 91215 entries, 73083 files, 11927 directories, 6205 symlinks, 1568220487 regular bytes, zero other; no temporary fixture remains",
+    "process": "all task commands ran foreground and exited; adapter cleanup was ok; no delegation, acquire, settle, commit, push, or PR action occurred in this continuation",
+    "settlement": "pending by explicit instruction; active U7 token sha256:430caad4b6dafddf1bd3d92393f7eb5fa79b8cc3adb7d7d5065e2b23b346eadb"
   },
-  "updatedAt": "2026-09-03T20:06:00Z"
+  "updatedAt": "2026-09-03T20:36:32Z"
 }

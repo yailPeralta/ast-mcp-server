@@ -90,9 +90,9 @@ All behavior units add tests before production where feasible and execute RED �
 
 ## Phase 7 — U7 Documentation, Clean Gates, Package, and Pinned Harness
 
-- [ ] **7.1 [U7 docs; HRC-R10-S1, ATC-R1-S1]** Acquire receipt; document additive ledger/work, direct contains, conservative calls, six-kind candidates, cutover/rollback, and R-01 closure only after U6 behavioral GREEN.
-- [ ] **7.2 [U7 full clean gate]** Run only required sanitation: `env -u GIT_PAGER bash -lc 'yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && yarn test:mcp && yarn test:lifecycle && yarn test:cli && yarn test:errors && yarn test:package'`.
-- [ ] **7.3 [U7 Harness; HRC-R11-S2]** Snapshot status of pinned checkout `/home/yail/.local/share/dsh-oauth-cutover/cd5ef8148158c3a752a658978873241fdf8e2bbc/host`; run `env -u GIT_PAGER bash -lc 'yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts && yarn test:dsh-adapter'`; prove package identity revision `cd5ef814…`, exactly 15 guarded AST tools, catalog excludes apply, direct apply is `UNKNOWN_TOOL`, and before/after Harness status is identical with **no Harness edits**.
+- [x] **7.1 [U7 docs; HRC-R10-S1, ATC-R1-S1]** Acquire receipt; document additive ledger/work, direct contains, conservative calls, six-kind candidates, cutover/rollback, and R-01 closure only after U6 behavioral GREEN.
+- [x] **7.2 [U7 full clean gate]** Run only required sanitation: `env -u GIT_PAGER bash -lc 'yarn format:check && yarn lint && yarn typecheck && yarn test && yarn build && yarn test:mcp && yarn test:lifecycle && yarn test:cli && yarn test:errors && yarn test:package'`.
+- [x] **7.3 [U7 Harness; HRC-R11-S2]** Snapshot status of pinned checkout `/home/yail/.local/share/dsh-oauth-cutover/cd5ef8148158c3a752a658978873241fdf8e2bbc/host`; run `env -u GIT_PAGER bash -lc 'yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts && yarn test:dsh-adapter'`; prove package identity revision `cd5ef814…`, exactly 15 guarded AST tools, catalog excludes apply, direct apply is `UNKNOWN_TOOL`, and before/after Harness status is identical with **no Harness edits**.
 - [ ] **7.4 [U7 settle]** Run `env -u GIT_PAGER git diff --check`, record full/package/Harness command outputs and process/temp cleanup, exact evidence revision, settle U7, and reject any stale or partially passing continuation.
 
 ## Phase 8 — U8 Judgment Day, Strict Verify, Immutable Archive, Delivery

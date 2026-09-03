@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `ast_get_impact` now accounts for every requested relationship kind/direction/endpoint class, resolves exact scoped calls and direct named containment, and reports one shared work budget. Unsupported, unfinished, exhausted, cancelled, or otherwise non-authoritative evidence can no longer authorize complete emptiness. `ast_find_test_candidates` now freezes its incoming evidence to six kinds (`reference`, `import`, `export`, `extends`, `implements`, and `call`), excludes containment, and permits `proven_empty` only after complete authoritative coverage. This is an additive response cutover; exact-shape impact clients must accept `coverage` and `work`.
+
 ## [0.13.1] — published to `latest` and `next`, registry verified (2026-09-01)
 
 ### Fixed

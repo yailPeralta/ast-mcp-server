@@ -14,9 +14,9 @@ The public contract must distinguish a proven empty result from missing evidence
 
 Expose `ast_find_test_candidates` as a read-only MCP tool and admit it to `ast-tool run` as a read step.
 
-The tool resolves an exact symbol in the synchronized TypeScript project and forces bounded incoming traversal. Callers cannot provide an impact graph, direction, relationship filters, or MCP TOON output. A candidate is eligible only when every relationship is fresh, exact, resolved, and compiler-authoritative.
+The tool resolves an exact symbol in the synchronized TypeScript project and forces bounded incoming traversal over the frozen set `reference`, `import`, `export`, `extends`, `implements`, and `call`; `contains` is excluded because lexical ownership is not affected-test evidence. Callers cannot provide an impact graph, direction, relationship filters, or MCP TOON output. A candidate is eligible only when every relationship is fresh, exact, resolved, and compiler-authoritative and every requested coverage entry is `completed` or `not_applicable`.
 
-Stale, rebuilding, degraded, truncated, incomplete, unresolved, heuristic, or non-authoritative analysis fails closed with a bounded public error. Only a complete authoritative traversal with no eligible test may return an empty page marked `proven_empty: true`.
+Stale, rebuilding, degraded, truncated, incomplete, unresolved, heuristic, non-authoritative, unsupported, unfinished, or work-exhausted analysis fails closed with `INCOMPLETE_EVIDENCE`. Only complete authoritative six-kind traversal with no eligible test may return an empty page marked `proven_empty: true`.
 
 Pagination applies to deterministic candidate objects, not their evidence. Each returned candidate retains its complete relationship IDs and relationship path. Traversal budgets remain independent from `offset` and `limit`.
 

@@ -103,11 +103,11 @@ The v0.13 diagnostic identity is code, category, file, and message. It omits lin
 
 ### R-01 — Honest relationship coverage
 
-The public relationship vocabulary includes `reference`, `import`, `export`, `extends`, `implements`, `call`, and `contains`. The scoped resolver used by impact installs producers for the first five groups but no equivalent producer for `call` or `contains`. An empty traversal therefore needs an explicit unsupported/incomplete outcome rather than a complete negative.
+The implementation candidate now covers all seven public kinds with an ordered kind/direction/endpoint-class ledger and one shared work budget. Calls require exact compiler resolution; containment is limited to direct named compiler ownership. Candidate discovery freezes six incoming kinds and excludes containment. Unsupported, unfinished, exhausted, cancelled, stale, or otherwise non-authoritative evidence cannot authorize completeness or `proven_empty`.
 
 **Required RED:** one positive and one negative contract case for every public relationship kind, including overloaded functions, methods, and constructors.
 
-**Acceptance gate:** every `proven_empty` result records that all requested kinds ran within budget; unsupported coverage is explicit and incomplete.
+**Acceptance gate:** the U1–U6 behavior matrix is GREEN. U7 documentation, clean/package, and pinned-Harness evidence is in progress; Judgment, strict verification, archive, delivery, and issue closure remain pending. Do not mark R-01 closed or released before those gates complete.
 
 ### F-01 — Executable JSON/TOON contract
 
