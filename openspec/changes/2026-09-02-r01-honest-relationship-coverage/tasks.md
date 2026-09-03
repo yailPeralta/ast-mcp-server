@@ -68,7 +68,7 @@ All behavior units add tests before production where feasible and execute RED �
 
 - [x] **3.1 [U3 RED; HRC-R4-S1/S2]** Acquire receipt; add tests first for incoming/outgoing free functions, methods, constructors, overload normalization, repeated sites, body ownership, stable scans, and ambiguous/dynamic/unresolved unfinished poisoning.
 - [x] **3.2 [U3 GREEN]** Extract pure shared invocation classification, implement local-body outgoing and normalized-path incoming scoped scans under the U2 tracker, and emit only exact canonical caller→callee edges; make U1 GREEN.
-- [ ] **3.3 [U3 REFACTOR]** Deduplicate global/scoped classification without cross-endpoint caches; rerun U3/U1, prove global call-spine discovery unchanged, cleanup/hash, and settle U3.
+- [x] **3.3 [U3 REFACTOR]** Deduplicate global/scoped classification without cross-endpoint caches; rerun U3/U1, prove global call-spine discovery unchanged, cleanup/hash, and settle U3.
 
 ## Phase 4 — U4 Scoped Direct Contains Producer
 
