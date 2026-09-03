@@ -2,8 +2,8 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-02-r01-honest-relationship-coverage",
   "workUnit": "U4",
-  "stage": "direct-contains-refactored-awaiting-settlement",
-  "delivery": "feature-branch-chain; branch feat/r01-u4-direct-contains; next settle U4",
+  "stage": "direct-contains-settled",
+  "delivery": "feature-branch-chain; branch docs/r01-u4-settlement; next apply U5",
   "receipt": {
     "requestId": "r01-u1-a1-acquire-20260902t1640z",
     "token": "sha256:d7caf9f4e1247c8741b1180a1b25fa3a218c0cb23a6b1f3595b614c8ca04a678",
@@ -35,9 +35,12 @@
     "requestId": "r01-u4-a1-acquire-20260903t1901z",
     "token": "sha256:957ad3208231ebec793399d573f004bcaa9cbb2b0d1087d59b950d361d7b1c8a",
     "resetLedgerRevision": "sha256:6201be08727a47839d9d18447b990dc0a5d46d5b9fa83244a06d2f981c665bb0",
-    "status": "active-proceed-settlement-forbidden"
+    "status": "settled-passed-complete",
+    "settlementRequestId": "r01-u4-a1-settle-20260903t1913z",
+    "outcome": "passed",
+    "evidenceRevision": "sha256:d7722d9e2b1339b3fc221a839ccb2c9b10a8da97ba17765e8757cfec15f0c52b"
   },
-  "progress": { "completed": 12, "total": 28, "activeRed": 0 },
+  "progress": { "completed": 13, "total": 28, "activeRed": 0 },
   "tasks": [
     { "id": "1.1", "name": "Registered MCP incoming-call fixture", "status": "completed" },
     { "id": "1.2", "name": "Deterministic RED proof", "status": "completed" },
@@ -51,7 +54,7 @@
     { "id": "3.3", "name": "Scoped calls REFACTOR", "status": "completed" },
     { "id": "4.1", "name": "Direct contains RED", "status": "completed" },
     { "id": "4.2", "name": "Direct contains GREEN", "status": "completed" },
-    { "id": "4.3", "name": "Direct contains REFACTOR", "status": "pending" },
+    { "id": "4.3", "name": "Direct contains REFACTOR", "status": "completed" },
     { "id": "5.1", "name": "Public and candidates RED", "status": "pending" },
     { "id": "5.2", "name": "Public and candidates GREEN", "status": "pending" },
     { "id": "5.3", "name": "Public and candidates REFACTOR", "status": "pending" },
@@ -149,5 +152,5 @@
     "cleanup": "afterEach removed disposable compiler fixtures; no generated artifact or Harness path changed",
     "process": "all foreground Vitest and validation commands exited; no background job was started"
   },
-  "updatedAt": "2026-09-03T19:10:00Z"
+  "updatedAt": "2026-09-03T19:14:00Z"
 }
