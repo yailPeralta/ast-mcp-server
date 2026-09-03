@@ -10,6 +10,7 @@ import {
   type SourceFile,
   type Symbol as MorphSymbol,
   type Type,
+  type TypeChecker,
 } from "ts-morph";
 import {
   createSourceLocation,
@@ -549,6 +550,7 @@ class ScopedRelationshipLimitReached extends Error {
     this.name = "ScopedRelationshipLimitReached";
   }
 }
+class ScopedCallCoverageUnfinished extends Error {}
 
 function consumeRelationshipWork(
   state: ScopedCompilerRelationshipState,
@@ -1496,6 +1498,95 @@ function addScopedIncomingModuleEdges(
   }
 }
 
+function hasNestedNamedCallOwner(node: Node, owner: Node): boolean {
+  for (
+    let current = node.getParent();
+    current && current !== owner;
+    current = current.getParent()
+  ) {
+    if (
+      (Node.isFunctionDeclaration(current) && current.getName()) ||
+      Node.isMethodDeclaration(current) ||
+      Node.isConstructorDeclaration(current) ||
+      Node.isGetAccessorDeclaration(current) ||
+      Node.isSetAccessorDeclaration(current)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function addScopedCallCandidate(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  caller: LocatedSymbol,
+  target: LocatedSymbol,
+  candidates: ScopedCandidateSet,
+): void {
+  consumeScopedWork(state, collector);
+  candidates.push(
+    createScopedEdge(
+      state,
+      symbolEndpoint(caller, state.projectRoot),
+      symbolEndpoint(target, state.projectRoot),
+      "call",
+    ),
+  );
+}
+
+function addScopedOutgoingCalls(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  caller: LocatedSymbol,
+): void {
+  const checker = state.project.getTypeChecker();
+  const candidates = createScopedCandidateSet(collector);
+  let unfinished = false;
+  caller.node.forEachDescendant((node) => {
+    consumeScopedWork(state, collector);
+    const invocation = classifyCompilerInvocation(checker, state.projectRoot, node);
+    if (invocation.state === "not_call" || hasNestedNamedCallOwner(node, caller.node)) return;
+    if (invocation.state === "unfinished") {
+      unfinished = true;
+      return;
+    }
+    if (invocation.state === "exact") {
+      addScopedCallCandidate(state, collector, caller, invocation.target, candidates);
+    }
+  });
+  addScopedCandidates(collector, candidates);
+  if (unfinished) throw new ScopedCallCoverageUnfinished();
+}
+
+function addScopedIncomingCalls(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  target: LocatedSymbol,
+): void {
+  const checker = state.project.getTypeChecker();
+  const candidates = createScopedCandidateSet(collector);
+  let unfinished = false;
+  for (const sourceFile of scopedSourceFiles(state, collector)) {
+    consumeScopedWork(state, collector);
+    sourceFile.forEachDescendant((node) => {
+      consumeScopedWork(state, collector);
+      const invocation = classifyCompilerInvocation(checker, state.projectRoot, node);
+      if (invocation.state === "unfinished") {
+        unfinished = true;
+        return;
+      }
+      if (invocation.state !== "exact" || invocation.target.node !== target.node) return;
+      const caller = scopedContainingSymbol(state, collector, sourceFile, node);
+      if (!caller || caller.node === target.node || hasNestedNamedCallOwner(node, caller.node))
+        return;
+      addScopedCallCandidate(state, collector, caller, target, candidates);
+    });
+  }
+  addScopedCandidates(collector, candidates);
+  if (unfinished) throw new ScopedCallCoverageUnfinished();
+}
+
 function registryCoverageStatus(
   endpointClass: RelationshipEndpointClass,
   direction: EffectiveRelationshipDirection,
@@ -1509,7 +1600,8 @@ function registryCoverageStatus(
   if ((kind === "import" || kind === "export") && direction === "outgoing") {
     return "not_applicable";
   }
-  if (kind === "call" || kind === "contains") return "unsupported";
+  if (kind === "call") return "unfinished";
+  if (kind === "contains") return "unsupported";
   return "unfinished";
 }
 
@@ -1654,6 +1746,18 @@ export function createCompilerRelationshipResolver(
             collect: (collector) => addScopedIncomingReferences(state, collector, located.symbol!),
           });
         }
+        if (outgoing && relationshipKinds.has("call")) {
+          producers.push({
+            kinds: ["call"],
+            collect: (collector) => addScopedOutgoingCalls(state, collector, located.symbol!),
+          });
+        }
+        if (incoming && relationshipKinds.has("call")) {
+          producers.push({
+            kinds: ["call"],
+            collect: (collector) => addScopedIncomingCalls(state, collector, located.symbol!),
+          });
+        }
         if (incoming && relationshipKinds.has("import")) {
           producers.push({
             kinds: ["import"],
@@ -1688,6 +1792,7 @@ export function createCompilerRelationshipResolver(
       let incomplete = false;
       let edgeLimitReached = false;
       let excludedNeighbors = false;
+      const unfinishedKinds = new Set<RelationshipEdgeKind>();
       for (const producer of producers) {
         const collector: ScopedEdgeCollector = {
           edges: new Map(),
@@ -1707,11 +1812,13 @@ export function createCompilerRelationshipResolver(
         } catch (error) {
           if (
             !(error instanceof ScopedRelationshipLimitReached) &&
-            !(error instanceof CompilerImpactWorkExhausted)
+            !(error instanceof CompilerImpactWorkExhausted) &&
+            !(error instanceof ScopedCallCoverageUnfinished)
           ) {
             throw error;
           }
           incomplete = true;
+          producer.kinds.forEach((kind) => unfinishedKinds.add(kind));
           edgeLimitReached ||= error instanceof ScopedRelationshipLimitReached;
         }
         for (const edge of collector.edges.values()) merged.set(edge.relationship_id, edge);
@@ -1726,7 +1833,7 @@ export function createCompilerRelationshipResolver(
         edgeLimitReached = true;
       }
       const finalCoverage = coverage.map((entry) =>
-        entry.status === "unfinished" && !incomplete
+        entry.status === "unfinished" && !workBudget.exhausted && !unfinishedKinds.has(entry.kind)
           ? { ...entry, status: "completed" as const }
           : entry,
       );
@@ -1772,16 +1879,63 @@ function unwrapInvocationExpression(node: Node): Node {
 function locatedCallTarget(projectRoot: string, declaration: Node): LocatedSymbol | undefined {
   if (Node.isParameterDeclaration(declaration) || Node.isMethodSignature(declaration))
     return undefined;
-  const sourceFile = declaration.getSourceFile();
-  if (!isProjectScopedFile(projectRoot, sourceFile.getFilePath())) return undefined;
-  const targetNode = Node.isConstructorDeclaration(declaration)
+  let targetNode = Node.isConstructorDeclaration(declaration)
     ? declaration.getFirstAncestorByKind(SyntaxKind.ClassDeclaration)
     : declaration;
+  if (
+    targetNode &&
+    (Node.isFunctionDeclaration(targetNode) || Node.isMethodDeclaration(targetNode)) &&
+    !targetNode.getBody()
+  ) {
+    const implementations = declarationsForSymbol(targetNode.getSymbol()).filter(
+      (candidate) =>
+        ((Node.isFunctionDeclaration(targetNode) && Node.isFunctionDeclaration(candidate)) ||
+          (Node.isMethodDeclaration(targetNode) && Node.isMethodDeclaration(candidate))) &&
+        candidate.getBody(),
+    );
+    targetNode = implementations.length === 1 ? implementations[0] : undefined;
+  }
   if (!targetNode) return undefined;
+  const sourceFile = targetNode.getSourceFile();
+  if (!isProjectScopedFile(projectRoot, sourceFile.getFilePath())) return undefined;
   return (
     collectSymbols(sourceFile).find((symbol) => symbol.node === targetNode) ??
     containingSymbol(sourceFile, targetNode)
   );
+}
+
+type CompilerInvocation =
+  | { readonly state: "exact"; readonly target: LocatedSymbol }
+  | { readonly state: "not_call" | "disjoint" | "unfinished" };
+
+function classifyCompilerInvocation(
+  checker: TypeChecker,
+  projectRoot: string,
+  node: Node,
+): CompilerInvocation {
+  const expression = callLikeExpression(node);
+  if (!expression) return { state: "not_call" };
+  const invoked = unwrapInvocationExpression(expression);
+  const invokedDeclarations = declarationsForSymbol(invoked.getSymbol());
+  if (invokedDeclarations.some(Node.isParameterDeclaration)) return { state: "unfinished" };
+  const signature = checker.getResolvedSignature(node as never);
+  const implicit = Node.isNewExpression(node) ? invoked.getType().getConstructSignatures() : [];
+  if (!signature && implicit.length !== 1) return { state: "unfinished" };
+  const declarations =
+    invokedDeclarations.length > 0
+      ? invokedDeclarations
+      : signature
+        ? [signature.getDeclaration()]
+        : [];
+  const targets = new Map<string, LocatedSymbol>();
+  for (const declaration of declarations) {
+    const target = locatedCallTarget(projectRoot, declaration);
+    if (target) targets.set(symbolEndpoint(target, projectRoot).selector, target);
+  }
+  if (targets.size === 1) return { state: "exact", target: [...targets.values()][0] };
+  return declarations.length > 0 && targets.size === 0
+    ? { state: "disjoint" }
+    : { state: "unfinished" };
 }
 
 export function collectCompilerCallRelationships(
@@ -1815,29 +1969,11 @@ export function collectCompilerCallRelationships(
         traversal.stop();
         return;
       }
-      const expression = callLikeExpression(node);
-      if (!expression) return;
-      const invoked = unwrapInvocationExpression(expression);
+      const invocation = classifyCompilerInvocation(checker, projectRoot, node);
+      if (invocation.state !== "exact") return;
       const caller = containingSymbol(sourceFile, node);
       if (!caller) return;
-      const signature = checker.getResolvedSignature(node as never);
-      const implicitConstructSignatures = Node.isNewExpression(node)
-        ? invoked.getType().getConstructSignatures()
-        : [];
-      if (!signature && implicitConstructSignatures.length !== 1) return;
-      const signatureDeclaration = signature?.getDeclaration();
-      const declarations = declarationsForSymbol(invoked.getSymbol());
-      const targets = new Map<string, LocatedSymbol>();
-      for (const declaration of declarations.length > 0
-        ? declarations
-        : signatureDeclaration
-          ? [signatureDeclaration]
-          : []) {
-        const target = locatedCallTarget(projectRoot, declaration);
-        if (target) targets.set(symbolEndpoint(target, projectRoot).selector, target);
-      }
-      if (targets.size !== 1) return;
-      const target = [...targets.values()][0];
+      const target = invocation.target;
       const edge = createRelationshipEdge({
         source: symbolEndpoint(caller, projectRoot),
         target: symbolEndpoint(target, projectRoot),

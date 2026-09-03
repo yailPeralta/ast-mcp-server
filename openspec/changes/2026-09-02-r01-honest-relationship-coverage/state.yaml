@@ -3,22 +3,22 @@ schemaVersion: 1
 changeName: 2026-09-02-r01-honest-relationship-coverage
 artifactStore: hybrid
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-02-r01-honest-relationship-coverage
-nextRecommended: apply U3
-lastPhase: apply-u2-settled
+nextRecommended: settle U3 then apply U4
+lastPhase: apply-u3-refactored-awaiting-settlement
 artifacts:
   exploration: done
   proposal: done
   specs: done
   design: done
   tasks: done
-  applyProgress: red
+  applyProgress: refactored
   verifyReport: missing
 taskProgress:
   total: 28
-  completed: 7
-  pending: 21
+  completed: 9
+  pending: 19
   allComplete: false
-  activeRed: 1
+  activeRed: 0
 risks:
   - Scoped impact accepts call and contains without running a producer, allowing false-complete empty results.
   - Incoming call and containment discovery can become whole-project scans unless one bounded work tracker is shared.
