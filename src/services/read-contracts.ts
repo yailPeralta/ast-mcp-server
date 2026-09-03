@@ -122,6 +122,7 @@ export function createSourceLocation(file: string, range: SourceRange): SourceLo
 
 export const TRUNCATION_REASONS = Object.freeze([
   "record_limit",
+  "work_limit",
   "byte_limit",
   "depth_limit",
   "edge_limit",

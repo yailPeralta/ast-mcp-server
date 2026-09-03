@@ -2,9 +2,12 @@ import path from "node:path";
 import { Project } from "ts-morph";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  aggregateRelationshipCoverage,
   collectCompilerRelationships,
   createCompilerRelationshipResolver,
   createRelationshipEdge,
+  RELATIONSHIP_EDGE_KINDS,
+  type RelationshipCoverageEntry,
   type RelationshipEdge,
 } from "../src/services/relationships.js";
 import {
@@ -479,7 +482,7 @@ describe("bounded impact traversal", () => {
       rootRequest("Child.run", "src/child.ts"),
     ]) {
       const root = resolveImpactRoot(project, fixture.root, request);
-      expect(traverseCompilerImpact(project, fixture.root, root, freshness, options)).toEqual(
+      expect(traverseCompilerImpact(project, fixture.root, root, freshness, options)).toMatchObject(
         traverseImpact(root, edges, options),
       );
     }
@@ -515,7 +518,7 @@ describe("bounded impact traversal", () => {
       const actual = traverseCompilerImpact(project, fixture.root, root, freshness, options);
 
       expect(expected.edges).toEqual([]);
-      expect(actual).toEqual(expected);
+      expect(actual).toMatchObject(expected);
     }
   });
 
@@ -555,7 +558,7 @@ describe("bounded impact traversal", () => {
       const actual = traverseCompilerImpact(project, fixture.root, root, freshness, options);
 
       expect(expected.edges).toEqual([]);
-      expect(actual).toEqual(expected);
+      expect(actual).toMatchObject(expected);
     }
   });
 
@@ -647,7 +650,7 @@ describe("bounded impact traversal", () => {
       rootRequest("use", "src/box.ts"),
     ]) {
       const root = resolveImpactRoot(project, fixture.root, request);
-      expect(traverseCompilerImpact(project, fixture.root, root, freshness, options)).toEqual(
+      expect(traverseCompilerImpact(project, fixture.root, root, freshness, options)).toMatchObject(
         traverseImpact(root, edges, options),
       );
     }
@@ -773,7 +776,7 @@ describe("bounded impact traversal", () => {
       relationship_kinds: ["reference" as const],
     };
 
-    expect(traverseCompilerImpact(project, fixture.root, root, freshness, options)).toEqual(
+    expect(traverseCompilerImpact(project, fixture.root, root, freshness, options)).toMatchObject(
       traverseImpact(root, edges, options),
     );
   });
@@ -1374,10 +1377,10 @@ describe("bounded impact traversal", () => {
 
     expect(
       traverseCompilerImpact(project, fixture.root, root, freshness, edgeLimitedOptions),
-    ).toEqual(traverseImpact(root, oracle, edgeLimitedOptions));
+    ).toMatchObject(traverseImpact(root, oracle, edgeLimitedOptions));
     expect(
       traverseCompilerImpact(project, fixture.root, target, freshness, completeOptions),
-    ).toEqual(traverseImpact(target, oracle, completeOptions));
+    ).toMatchObject(traverseImpact(target, oracle, completeOptions));
   });
 
   it("reports simultaneous node and edge exhaustion independently", async () => {
@@ -1405,7 +1408,7 @@ describe("bounded impact traversal", () => {
     const actual = traverseCompilerImpact(project, fixture.root, root, freshness, options);
 
     expect(actual.truncation_reasons).toEqual(["record_limit", "edge_limit"]);
-    expect(actual).toEqual(traverseImpact(root, oracle, options));
+    expect(actual).toMatchObject(traverseImpact(root, oracle, options));
   });
 
   it("walks outgoing exact references deterministically", async () => {
@@ -1521,6 +1524,111 @@ describe("bounded impact traversal", () => {
     expect(() =>
       traverseImpact(root, edges, override as unknown as ImpactTraversalOptions),
     ).toThrow();
+  });
+});
+
+describe("compiler impact coverage and request work", () => {
+  it("normalizes coverage keys in canonical order and fails closed on unsupported producers", async () => {
+    const fixture = await createProjectFixture({
+      "src/target.ts": "export function target(): number { return 1; }\n",
+      "src/use.ts": 'import { target } from "./target.js"; export const value = target();\n',
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("target", "src/target.ts"));
+
+    const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      direction: "both",
+      max_depth: 1,
+      max_nodes: 20,
+      max_edges: 20,
+      relationship_kinds: [...RELATIONSHIP_EDGE_KINDS].reverse(),
+    });
+
+    expect(result.coverage).toHaveLength(28);
+    expect(
+      result.coverage.map(
+        ({ kind, direction, endpoint_class }) => `${kind}/${direction}/${endpoint_class}`,
+      ),
+    ).toEqual(
+      RELATIONSHIP_EDGE_KINDS.flatMap((kind) =>
+        (["incoming", "outgoing"] as const).flatMap((direction) =>
+          (["module", "symbol"] as const).map(
+            (endpointClass) => `${kind}/${direction}/${endpointClass}`,
+          ),
+        ),
+      ),
+    );
+    const statuses = Object.fromEntries(
+      result.coverage.map((entry) => [
+        `${entry.kind}/${entry.direction}/${entry.endpoint_class}`,
+        entry.status,
+      ]),
+    );
+    expect(statuses).toMatchObject({
+      "reference/incoming/symbol": "completed",
+      "import/outgoing/symbol": "not_applicable",
+      "call/incoming/symbol": "unsupported",
+      "contains/outgoing/module": "unsupported",
+    });
+    expect(result.incomplete).toBe(true);
+    expect(result.truncation.truncated).toBe(false);
+  });
+
+  it("merges coverage with fail-closed precedence and permits safe empty N/A", async () => {
+    const observations: RelationshipCoverageEntry[] = [
+      { kind: "reference", direction: "incoming", endpoint_class: "symbol", status: "completed" },
+      { kind: "reference", direction: "incoming", endpoint_class: "symbol", status: "unsupported" },
+      { kind: "reference", direction: "incoming", endpoint_class: "symbol", status: "unfinished" },
+      { kind: "import", direction: "outgoing", endpoint_class: "symbol", status: "not_applicable" },
+    ];
+    expect(aggregateRelationshipCoverage(observations)).toEqual([
+      { kind: "reference", direction: "incoming", endpoint_class: "symbol", status: "unfinished" },
+      { kind: "import", direction: "outgoing", endpoint_class: "symbol", status: "not_applicable" },
+    ]);
+
+    const { fixture, project } = await graphFixture();
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("chain"));
+    const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      direction: "outgoing",
+      relationship_kinds: ["import"],
+    });
+    expect(result.edges).toEqual([]);
+    expect(result.incomplete).toBe(false);
+    expect(result.coverage[0]?.status).toBe("not_applicable");
+  });
+
+  it("shares monotonic request work, exhausts exactly, and preserves legacy parity", async () => {
+    const { fixture, project, edges } = await graphFixture();
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("chain"));
+    const exhausted = traverseCompilerImpact(
+      project,
+      fixture.root,
+      root,
+      freshness,
+      { direction: "outgoing", max_depth: 2, relationship_kinds: ["reference"] },
+      undefined,
+      { max_work_items: 5 },
+    );
+
+    expect(exhausted.work).toEqual({ max_items: 5, consumed_items: 5, exhausted: true });
+    expect(exhausted.truncation_reasons).toContain("work_limit");
+    expect(exhausted.incomplete).toBe(true);
+    expect(exhausted.coverage.some(({ status }) => status === "unfinished")).toBe(true);
+
+    const resolver = createCompilerRelationshipResolver(project, fixture.root, freshness);
+    const baseQuery = { direction: "outgoing", relationship_kinds: ["import"] } as const;
+    const query = { ...baseQuery, max_edges: 1, max_work_items: 1 };
+    expect(resolver.edgesFor(root, query).work_items).toBe(1);
+    expect(resolver.edgesFor(root, query).work_items).toBe(0);
+
+    const legacy = traverseImpact(root, edges, {
+      direction: "outgoing",
+      relationship_kinds: ["reference"],
+    });
+    expect(legacy.nodes.length).toBeGreaterThan(1);
+    expect(legacy).not.toHaveProperty("coverage");
+    expect(legacy).not.toHaveProperty("work");
   });
 });
 
