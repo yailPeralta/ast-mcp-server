@@ -72,8 +72,8 @@ All behavior units add tests before production where feasible and execute RED �
 
 ## Phase 4 — U4 Scoped Direct Contains Producer
 
-- [ ] **4.1 [U4 RED; HRC-R5-S1, R6-S1]** Acquire receipt; add module→top-level, symbol→direct named child, inverse incoming, module-incoming N/A, constructors/members, stable ordering, completed-empty, and all exclusion cases before code.
-- [ ] **4.2 [U4 GREEN]** Implement canonical direct named ownership with existing endpoint/edge constructors and the shared tracker; exclude statements, imports/exports, parameters, anonymous/transitive/runtime/heuristic/index ownership.
+- [x] **4.1 [U4 RED; HRC-R5-S1, R6-S1]** Acquire receipt; add module→top-level, symbol→direct named child, inverse incoming, module-incoming N/A, constructors/members, stable ordering, completed-empty, and all exclusion cases before code.
+- [x] **4.2 [U4 GREEN]** Implement canonical direct named ownership with existing endpoint/edge constructors and the shared tracker; exclude statements, imports/exports, parameters, anonymous/transitive/runtime/heuristic/index ownership.
 - [ ] **4.3 [U4 REFACTOR]** Centralize nearest-owner/direct-child logic after GREEN; rerun U4 plus ledger tests, cleanup/hash, and settle U4 with the whole producer boundary reversible.
 
 ## Phase 5 — U5 Public Schema, Impact, and Six-Kind Candidate Contract

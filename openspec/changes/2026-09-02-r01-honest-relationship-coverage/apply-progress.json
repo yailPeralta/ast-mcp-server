@@ -1,9 +1,9 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-02-r01-honest-relationship-coverage",
-  "workUnit": "U3",
-  "stage": "scoped-calls-settled",
-  "delivery": "feature-branch-chain; branch docs/r01-u3-settlement; next apply U4",
+  "workUnit": "U4",
+  "stage": "direct-contains-refactored-awaiting-settlement",
+  "delivery": "feature-branch-chain; branch feat/r01-u4-direct-contains; next settle U4",
   "receipt": {
     "requestId": "r01-u1-a1-acquire-20260902t1640z",
     "token": "sha256:d7caf9f4e1247c8741b1180a1b25fa3a218c0cb23a6b1f3595b614c8ca04a678",
@@ -31,7 +31,13 @@
     "outcome": "passed",
     "evidenceRevision": "sha256:c40a8dfb583a9c552c0437697d9e58e982e4a5e805894790c65b9627600f8a02"
   },
-  "progress": { "completed": 10, "total": 28, "activeRed": 0 },
+  "u4Receipt": {
+    "requestId": "r01-u4-a1-acquire-20260903t1901z",
+    "token": "sha256:957ad3208231ebec793399d573f004bcaa9cbb2b0d1087d59b950d361d7b1c8a",
+    "resetLedgerRevision": "sha256:6201be08727a47839d9d18447b990dc0a5d46d5b9fa83244a06d2f981c665bb0",
+    "status": "active-proceed-settlement-forbidden"
+  },
+  "progress": { "completed": 12, "total": 28, "activeRed": 0 },
   "tasks": [
     { "id": "1.1", "name": "Registered MCP incoming-call fixture", "status": "completed" },
     { "id": "1.2", "name": "Deterministic RED proof", "status": "completed" },
@@ -43,8 +49,8 @@
     { "id": "3.1", "name": "Scoped calls RED", "status": "completed" },
     { "id": "3.2", "name": "Scoped calls GREEN", "status": "completed" },
     { "id": "3.3", "name": "Scoped calls REFACTOR", "status": "completed" },
-    { "id": "4.1", "name": "Direct contains RED", "status": "pending" },
-    { "id": "4.2", "name": "Direct contains GREEN", "status": "pending" },
+    { "id": "4.1", "name": "Direct contains RED", "status": "completed" },
+    { "id": "4.2", "name": "Direct contains GREEN", "status": "completed" },
     { "id": "4.3", "name": "Direct contains REFACTOR", "status": "pending" },
     { "id": "5.1", "name": "Public and candidates RED", "status": "pending" },
     { "id": "5.2", "name": "Public and candidates GREEN", "status": "pending" },
@@ -78,6 +84,12 @@
         "taskId": "3.2",
         "command": "env -u GIT_PAGER yarn vitest run test/impact.test.ts test/relationships.test.ts test/call-spines.test.ts -t 'call'",
         "result": "12 passed, 56 skipped; refactored shared classifier and scoped producer remain GREEN"
+      },
+      {
+        "id": "u4-direct-contains",
+        "taskId": "4.2",
+        "command": "env -u GIT_PAGER yarn vitest run test/impact.test.ts -t 'coverage|contain'",
+        "result": "5 passed, 47 skipped; direct contains producer and nearest-owner refactor remain GREEN"
       }
     ]
   },
@@ -111,16 +123,31 @@
       "id": "u3-final",
       "command": "env -u GIT_PAGER yarn vitest run test/impact.test.ts; env -u GIT_PAGER yarn vitest run test/relationships.test.ts; env -u GIT_PAGER yarn vitest run test/call-spines.test.ts; U1 MCP command above; yarn format:check; yarn typecheck; yarn lint; git diff --check; node JSON validation",
       "result": "all exit 0: impact 50, relationships 10, call-spines 8, U1 MCP 1; task 3.3 pending because settlement is explicitly forbidden"
+    },
+    {
+      "id": "u4-red",
+      "command": "env -u GIT_PAGER yarn vitest run test/impact.test.ts -t 'scoped direct contains relationships'",
+      "result": "exit 1 before production edit: 2 failed, 50 skipped; module and symbol producers returned no contains edges"
+    },
+    {
+      "id": "u4-green-refactor",
+      "command": "env -u GIT_PAGER yarn vitest run test/impact.test.ts -t 'coverage|contain'",
+      "result": "exit 0: 5 passed, 47 skipped after nearest-owner/direct-child centralization"
+    },
+    {
+      "id": "u4-final",
+      "command": "impact + relationships + call-spines; U1 registered MCP; typecheck; lint; format:check; diff check",
+      "result": "all exit 0: 70 service tests and 1 U1 MCP test passed; quality gates passed"
     }
   ],
   "evidence": {
-    "failure": "AssertionError: expected impact not to match { edges: [], incomplete: false }; returned payload parsed successfully from registered MCP.",
-    "discrimination": "Fixture, exact selector, fresh compiler session, MCP registration, schema parsing, serialization, and timeout completed; failure is the missing scoped incoming call producer and coverage.",
-    "expected": "Exact result@2 to formatValue@2 compiler call edge and ordered call/incoming/symbol completed coverage.",
-    "runtimeHarness": "Registered in-memory MCP client/server boundary exercised by the focused integration test.",
-    "rollback": "Revert relationships scoped-call/classifier changes, get-impact coverage projection, impact tests, and U3 progress metadata together; global collector and Harness remain unchanged.",
-    "cleanup": "afterEach removed the disposable compiler fixture; remaining /tmp/ast-mcp-test-* count is zero; no generated artifact or Harness path changed",
+    "failure": "Before production edits, both direct-contains tests failed because module and symbol scopes returned no contains edges.",
+    "discrimination": "Exact compiler fixtures resolved canonical symbols and module endpoints; failures were absent contains producers rather than selector, freshness, or fixture setup.",
+    "expected": "Direct module and nearest canonical named-owner edges, inverse incoming ownership, completed empty and module-incoming not_applicable coverage.",
+    "runtimeHarness": "Registered in-memory MCP U1 call-impact boundary passed unchanged; contains remains service-scoped until U5 public projection work.",
+    "rollback": "Revert the contains registry/producers/helpers and focused impact tests together; U2 ledger, U3 calls, public schemas, candidates, and global collectors remain unchanged.",
+    "cleanup": "afterEach removed disposable compiler fixtures; no generated artifact or Harness path changed",
     "process": "all foreground Vitest and validation commands exited; no background job was started"
   },
-  "updatedAt": "2026-09-03T18:56:00Z"
+  "updatedAt": "2026-09-03T19:10:00Z"
 }
