@@ -23,8 +23,8 @@ import { withProject } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
 import {
   FRESHNESS_CAUSES,
+  READ_TRUNCATION_REASONS,
   SNAPSHOT_STATES,
-  TRUNCATION_REASONS,
 } from "../services/read-contracts.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 import { RelationshipEndpointSchema } from "./relationship-schema.js";
@@ -244,7 +244,7 @@ const ExploreOutputSchema = z.object({
   }),
   truncation: z.object({
     truncated: z.boolean(),
-    reason: z.enum(TRUNCATION_REASONS).nullable(),
+    reason: z.enum(READ_TRUNCATION_REASONS).nullable(),
   }),
 });
 

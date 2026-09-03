@@ -943,6 +943,120 @@ export function formatValue(value: number): string { return String(value); }
     );
   });
 
+  it("covers all seven compiler relationship kinds with positive and completed negatives", async () => {
+    await fixture.write(
+      "src/matrix-deps.ts",
+      [
+        "export const imported = 1;",
+        "export const exportedValue = 2;",
+        "export const referenced = 3;",
+        "export class Base {}",
+        "export interface Face {}",
+        "export function called(): void {}",
+        "export class Holder { nested(): void {} }",
+        "export const unused = 4;",
+        "export class NoBase {}",
+        "export class NoInterface {}",
+        "export function uncalled(): void {}",
+      ].join("\n"),
+    );
+    await fixture.write(
+      "src/matrix-use.ts",
+      [
+        'import { imported, referenced, Base, Face, called } from "./matrix-deps.js";',
+        'export { exportedValue } from "./matrix-deps.js";',
+        "export const referenceUse = referenced + imported;",
+        "export class Child extends Base implements Face {}",
+        "export function caller(): void { called(); }",
+      ].join("\n"),
+    );
+    clearProjectSessions();
+
+    const cases = [
+      ["reference", "src/matrix-deps.ts", "referenced", "incoming", "referenceUse"],
+      ["import", "src/matrix-deps.ts", "imported", "incoming", "<module>"],
+      ["export", "src/matrix-deps.ts", "exportedValue", "incoming", "<module>"],
+      ["extends", "src/matrix-deps.ts", "Base", "incoming", "Child"],
+      ["implements", "src/matrix-deps.ts", "Face", "incoming", "Child"],
+      ["call", "src/matrix-deps.ts", "called", "incoming", "caller"],
+      ["contains", "src/matrix-deps.ts", "Holder", "outgoing", "Holder.nested"],
+    ] as const;
+    const negatives = [
+      ["reference", "src/matrix-deps.ts", "unused", "incoming"],
+      ["import", "src/matrix-deps.ts", "unused", "incoming"],
+      ["export", "src/matrix-deps.ts", "unused", "incoming"],
+      ["extends", "src/matrix-deps.ts", "NoBase", "outgoing"],
+      ["implements", "src/matrix-deps.ts", "NoInterface", "outgoing"],
+      ["call", "src/matrix-deps.ts", "uncalled", "incoming"],
+      ["contains", "src/matrix-deps.ts", "unused", "outgoing"],
+    ] as const;
+    const request = (kind: string, file_path: string, symbol_path: string, direction: string) =>
+      client.callTool({
+        name: "ast_get_impact",
+        arguments: {
+          project_root: fixture.root,
+          file_path,
+          symbol_path,
+          direction,
+          relationship_kinds: [kind],
+          max_depth: 1,
+          max_nodes: 10,
+          max_edges: 10,
+        },
+      });
+
+    for (const [kind, file, symbol, direction, neighbor] of cases) {
+      const response = await request(kind, file, symbol, direction);
+      expect(response.isError, `${kind} request`).not.toBe(true);
+      const result = structured(response);
+      expect(result.edges, `${kind} positive edge`).toEqual([
+        expect.objectContaining({
+          kind,
+          source: expect.objectContaining({
+            symbol_path: direction === "incoming" ? neighbor : symbol,
+          }),
+          target: expect.objectContaining({
+            symbol_path: direction === "incoming" ? symbol : neighbor,
+          }),
+          compiler_authoritative: true,
+        }),
+      ]);
+      expect(result.incomplete, `${kind} completeness`).toBe(false);
+      expect(result.coverage).toEqual(
+        expect.arrayContaining([
+          {
+            kind,
+            direction,
+            endpoint_class: "symbol",
+            status: "completed",
+          },
+        ]),
+      );
+      expect(
+        (result.coverage as Array<{ status: string }>).every(
+          ({ status }) => status === "completed",
+        ),
+      ).toBe(true);
+    }
+    for (const [kind, file, symbol, direction] of negatives) {
+      const response = await request(kind, file, symbol, direction);
+      expect(response.isError, `${kind} negative request`).not.toBe(true);
+      expect(structured(response)).toMatchObject({
+        edges: [],
+        incomplete: false,
+        truncation: { truncated: false, reason: null },
+        coverage: [
+          {
+            kind,
+            direction,
+            endpoint_class: "symbol",
+            status: "completed",
+          },
+        ],
+      });
+    }
+  });
+
   it("finds exact compiler-backed test candidates with bounded trust metadata", async () => {
     await addCandidateFixtures(fixture);
     const tools = await client.listTools();

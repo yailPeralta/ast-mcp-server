@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FRESHNESS_CAUSES,
+  READ_TRUNCATION_REASONS,
   SNAPSHOT_STATES,
   TRUNCATION_REASONS,
   createFileRange,
@@ -26,12 +27,16 @@ describe("read contracts", () => {
     ]);
     expect(TRUNCATION_REASONS).toEqual([
       "record_limit",
+      "work_limit",
       "byte_limit",
       "depth_limit",
       "edge_limit",
       "invocation_limit",
       "serialization_limit",
     ]);
+    expect(READ_TRUNCATION_REASONS).toEqual(
+      TRUNCATION_REASONS.filter((reason) => reason !== "work_limit"),
+    );
     expect(isSnapshotState("fresh")).toBe(true);
     expect(isSnapshotState("unknown")).toBe(false);
     expect(Object.isFrozen(SNAPSHOT_STATES)).toBe(true);

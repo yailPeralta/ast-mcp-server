@@ -2,8 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   FRESHNESS_CAUSES,
+  READ_TRUNCATION_REASONS,
   SNAPSHOT_STATES,
-  TRUNCATION_REASONS,
 } from "../services/read-contracts.js";
 import { getProjectStatus } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
@@ -19,7 +19,7 @@ const AstGetProjectStatusInputSchema = z.object({
 
 const TruncationMetadataSchema = z.object({
   truncated: z.boolean(),
-  reason: z.enum(TRUNCATION_REASONS).nullable(),
+  reason: z.enum(READ_TRUNCATION_REASONS).nullable(),
 });
 
 const IndexObservabilitySchema = z.object({

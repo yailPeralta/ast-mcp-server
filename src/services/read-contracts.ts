@@ -132,6 +132,15 @@ export const TRUNCATION_REASONS = Object.freeze([
 
 export type TruncationReason = (typeof TRUNCATION_REASONS)[number];
 
+export const READ_TRUNCATION_REASONS = Object.freeze([
+  "record_limit",
+  "byte_limit",
+  "depth_limit",
+  "edge_limit",
+  "invocation_limit",
+  "serialization_limit",
+] as const satisfies readonly Exclude<TruncationReason, "work_limit">[]);
+
 export function isTruncationReason(value: unknown): value is TruncationReason {
   return TRUNCATION_REASONS.some((reason) => reason === value);
 }

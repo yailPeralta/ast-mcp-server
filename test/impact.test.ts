@@ -17,6 +17,7 @@ import {
   type ImpactRootRequest,
   type ImpactTraversalOptions,
 } from "../src/services/impact.js";
+import { createRequestContext } from "../src/services/request-context.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
 const fixtures: ProjectFixture[] = [];
@@ -1597,6 +1598,71 @@ describe("compiler impact coverage and request work", () => {
     expect(result.edges).toEqual([]);
     expect(result.incomplete).toBe(false);
     expect(result.coverage[0]?.status).toBe("not_applicable");
+  });
+
+  it("keeps mixed-kind output stable when request order changes", async () => {
+    const fixture = await createProjectFixture({
+      "src/base.ts": "export class Base {}\nexport interface Face {}\n",
+      "src/child.ts": [
+        'import { Base, Face } from "./base.js";',
+        "export class Child extends Base implements Face {}",
+      ].join("\n"),
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("Child", "src/child.ts"));
+    const run = (relationship_kinds: (typeof RELATIONSHIP_EDGE_KINDS)[number][]) =>
+      traverseCompilerImpact(project, fixture.root, root, freshness, {
+        direction: "outgoing",
+        max_depth: 1,
+        max_nodes: 10,
+        max_edges: 10,
+        relationship_kinds,
+      });
+
+    const reordered = run(["implements", "reference", "extends"]);
+    const canonical = run(["reference", "extends", "implements"]);
+    expect(reordered.relationship_kinds).toEqual(["reference", "extends", "implements"]);
+    expect(reordered.edges).toEqual(canonical.edges);
+    expect(reordered.coverage).toEqual(canonical.coverage);
+    expect(reordered.edges.map(({ relationship_id }) => relationship_id)).toEqual(
+      [...reordered.edges].map(({ relationship_id }) => relationship_id).sort(),
+    );
+    expect(reordered.incomplete).toBe(false);
+  });
+
+  it("propagates deterministic mid-scan request cancellation without a partial result", async () => {
+    const fixture = await createProjectFixture({
+      "src/target.ts": "export function target(): void {}\n",
+      "src/caller.ts":
+        'import { target } from "./target.js"; export function caller(): void { target(); }\n',
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("target", "src/target.ts"));
+    const controller = new AbortController();
+    const source = project.getSourceFileOrThrow(path.join(fixture.root, "src/caller.ts"));
+    const descend = source.forEachDescendant.bind(source);
+    const scan = vi.spyOn(source, "forEachDescendant").mockImplementation((callback) => {
+      controller.abort();
+      return descend(callback);
+    });
+
+    try {
+      expect(() =>
+        traverseCompilerImpact(
+          project,
+          fixture.root,
+          root,
+          freshness,
+          { direction: "incoming", relationship_kinds: ["call"] },
+          createRequestContext(controller.signal),
+        ),
+      ).toThrow(expect.objectContaining({ code: "REQUEST_CANCELLED" }));
+      expect(scan).toHaveBeenCalledOnce();
+    } finally {
+      scan.mockRestore();
+    }
   });
 
   it("shares monotonic request work, exhausts exactly, and preserves legacy parity", async () => {
