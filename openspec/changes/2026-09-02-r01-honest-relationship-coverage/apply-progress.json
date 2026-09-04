@@ -228,7 +228,17 @@
     "rollback": "Revert README, changelog, three named docs, evidence, and U7 progress marks together; no Harness checkout edit exists to revert.",
     "cleanup": "Harness canonical BEFORE and AFTER are identical at sha256:e9be86fb8ef58a82d9e9b5ef16f1f4ed900e0eecd142d95591e16384d46e40cc; 91215 entries, 73083 files, 11927 directories, 6205 symlinks, 1568220487 regular bytes, zero other; no temporary fixture remains",
     "process": "all task commands ran foreground and exited; adapter cleanup was ok; no delegation, acquire, settle, commit, push, or PR action occurred in this continuation",
-    "settlement": "U7 settled passed at the exact evidence revision; Judgment requires separate authority"
+    "settlement": "U7 settled passed at the exact evidence revision; Judgment requires separate authority",
+    "judgmentRoundOne": {
+      "candidateBase": "8f0b879eb939a555843bf92c7aa0a34ae10fc28b",
+      "candidateEvidenceRevision": "sha256:e59f723...",
+      "changedLines": 390,
+      "dualScopedVerdict": "FAILED",
+      "unresolved": ["J-R01-001", "J-R01-002"],
+      "fixCausedSevere": "The correction rejects statically bound super.method().",
+      "correctionReceipt": "settled-failed",
+      "next": "Final allowed correction round 2; task 8.1 remains pending."
+    }
   },
   "updatedAt": "2026-09-04T04:25:45Z"
 }

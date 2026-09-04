@@ -294,6 +294,61 @@
       "settled": false
     }
   ],
+  "rejudgmentRounds": [
+    {
+      "round": 1,
+      "scope": ["J-R01-001", "J-R01-002"],
+      "fixDelta": {
+        "baseCommit": "8f0b879eb939a555843bf92c7aa0a34ae10fc28b",
+        "candidateCommit": "d7cf2331d26d6555bfc94fedfa0ea978620cdf2f",
+        "candidateEvidenceRevision": "sha256:e59f723...",
+        "changedLines": 390
+      },
+      "judges": [
+        {
+          "id": "A",
+          "verdict": "FAILED",
+          "evidence": [
+            "J-R01-001 UNRESOLVED: ordinary interface and override dispatch are handled, but the fix causes HIGH rejection of statically bound super.method().",
+            "J-R01-002 UNRESOLVED: candidate filter, membership, and dedupe work is double-charged by the initial loop and flush, while neighbor-key inspection occurs before its charge."
+          ]
+        },
+        {
+          "id": "B",
+          "verdict": "FAILED",
+          "evidence": [
+            "J-R01-001 UNRESOLVED: the fix causes HIGH rejection of statically bound super.method(); callable PropertySignature and PropertyDeclaration dispatch can still be guessed exact and completed.",
+            "J-R01-002 UNRESOLVED: final cross-producer merged.set, sort, slice, output retention, and emission remain uncharged."
+          ]
+        }
+      ],
+      "merged": [
+        {
+          "id": "J-R01-001",
+          "status": "unresolved",
+          "severity": "HIGH",
+          "fixCausedSevere": "Statically bound super.method() is rejected by the correction.",
+          "additionalGap": "Callable property-signature and property-declaration dispatch can still be guessed exact and completed."
+        },
+        {
+          "id": "J-R01-002",
+          "status": "unresolved",
+          "severity": "HIGH",
+          "remainingGap": "Exact-once accounting is violated by double charges, pre-charge inspection, and uncharged final merge, ordering, retention, and emission work."
+        }
+      ],
+      "contradictions": [],
+      "frozenOutOfScope": ["J-R01-003", "J-R01-I01"],
+      "integrityNote": "Judge A reported a conflicting manifest computation; Judge B and the fix actor verified candidate evidence revision sha256:e59f723....",
+      "correctionReceipt": "settled-failed",
+      "correctionBudget": {
+        "roundsUsed": 1,
+        "roundsRemaining": 1,
+        "next": "final-allowed-correction-round-2"
+      },
+      "scopedVerdict": "FAILED"
+    }
+  ],
   "parentChecks": [
     "Frozen HEAD/tree and both cumulative diff hashes reproduced; Git objects remained available.",
     "git diff --check and workspace cleanliness passed before and after judging.",
