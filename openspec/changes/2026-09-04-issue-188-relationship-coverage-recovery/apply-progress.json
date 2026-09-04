@@ -1,0 +1,112 @@
+{
+  "schema": "dsh-sdd-apply-progress",
+  "change": "2026-09-04-issue-188-relationship-coverage-recovery",
+  "authoritative": true,
+  "stage": "planned",
+  "rddModeAtPlanning": "disabled/unmanaged",
+  "delivery": {
+    "strategy": "feature-branch-chain",
+    "tracker": "feat/issue-188-relationship-coverage-recovery",
+    "maxAuthoredChangedLinesPerChild": 400,
+    "forecastAuthoredChangedLines": "2800-3600",
+    "forecastReviewUnits": "16-18",
+    "mergeable": false
+  },
+  "tasks": [
+    {
+      "id": "0.1",
+      "name": "Recheck authority, RDD, conflicts, main, and hashes",
+      "status": "pending"
+    },
+    { "id": "0.2", "name": "Create one draft tracker and bind U1 base", "status": "pending" },
+    { "id": "0.3", "name": "Admit clean bounded immediate-parent children", "status": "pending" },
+    {
+      "id": "1.1",
+      "name": "Acquire and reproduce U1 registered-MCP RED twice",
+      "status": "pending"
+    },
+    { "id": "1.2", "name": "Freeze, settle, and evidence U1", "status": "pending" },
+    { "id": "2.1", "name": "Acquire and RED U2 coverage and work scenarios", "status": "pending" },
+    {
+      "id": "2.2",
+      "name": "GREEN/REFACTOR U2 with explicit 14-cell adaptation",
+      "status": "pending"
+    },
+    { "id": "2.3", "name": "Verify, freeze, settle, and evidence U2", "status": "pending" },
+    { "id": "3.1", "name": "Acquire and RED U3 scoped call scenarios", "status": "pending" },
+    { "id": "3.2", "name": "GREEN/REFACTOR U3 without absorbing issue 186", "status": "pending" },
+    { "id": "3.3", "name": "Verify, freeze, settle, and evidence U3", "status": "pending" },
+    { "id": "4.1", "name": "Acquire and RED U4 direct containment scenarios", "status": "pending" },
+    { "id": "4.2", "name": "GREEN/REFACTOR U4 without issue 187 accounting", "status": "pending" },
+    { "id": "4.3", "name": "Verify, freeze, settle, and evidence U4", "status": "pending" },
+    { "id": "5.1", "name": "Acquire and RED U5 affected-candidate scenarios", "status": "pending" },
+    { "id": "5.2", "name": "GREEN/REFACTOR U5 fail-closed public contract", "status": "pending" },
+    { "id": "5.3", "name": "Verify, freeze, settle, and evidence U5", "status": "pending" },
+    { "id": "6.1", "name": "Acquire and re-author U6 seven-kind matrix", "status": "pending" },
+    { "id": "6.2", "name": "Verify, freeze, and settle U6", "status": "pending" },
+    { "id": "6.3", "name": "Acquire and re-author truthful U7 documentation", "status": "pending" },
+    { "id": "6.4", "name": "Run gates, freeze, and settle U7", "status": "pending" },
+    { "id": "7.1", "name": "Forecast and conditionally split issue 186", "status": "pending" },
+    {
+      "id": "7.2",
+      "name": "Deliver issue 186 with independent receipts and review",
+      "status": "pending"
+    },
+    { "id": "7.3", "name": "Independently forecast and split issue 187", "status": "pending" },
+    {
+      "id": "7.4",
+      "name": "Deliver issue 187 with exact-bound independent proof",
+      "status": "pending"
+    },
+    {
+      "id": "8.1",
+      "name": "Run final clean, package, and pinned-Harness gates",
+      "status": "pending"
+    },
+    {
+      "id": "8.2",
+      "name": "Recheck RDD and run applicable blind review plus dual Judgment Day",
+      "status": "pending"
+    },
+    {
+      "id": "8.3",
+      "name": "Strictly verify 14 requirements and 31 scenarios",
+      "status": "pending"
+    },
+    { "id": "8.4", "name": "Archive and repeat post-archive candidate proof", "status": "pending" },
+    { "id": "8.5", "name": "Integrate sequentially and close issues in order", "status": "pending" }
+  ],
+  "tdd": {
+    "red": [],
+    "green": [],
+    "refactored": []
+  },
+  "receipts": {
+    "authority": [],
+    "attempts": [],
+    "tdd": [],
+    "identity": [],
+    "gates": [],
+    "review": [],
+    "judgment": [],
+    "verification": [],
+    "archive": [],
+    "delivery": []
+  },
+  "trace": {
+    "requirementsExpected": 14,
+    "requirementsMapped": 14,
+    "scenariosExpected": 31,
+    "scenariosMapped": 31,
+    "activeRed": []
+  },
+  "risks": [
+    "Protected origin/main drift requires complete replay recalculation.",
+    "U2 through U5 may require separate settlement-evidence children to retain the 400-line budget.",
+    "Issue 186 must split when its independent forecast exceeds 400 authored lines.",
+    "Issue 187 has no accepted line forecast until its own planning re-entry.",
+    "Any stale R-01 authority, candidate drift, severe finding, failed gate, or Harness write blocks integration."
+  ],
+  "nextRecommended": "apply:0.1",
+  "updatedAt": "2026-09-04T23:23:24Z"
+}
