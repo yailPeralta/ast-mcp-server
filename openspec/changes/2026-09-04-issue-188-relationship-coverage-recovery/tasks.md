@@ -20,8 +20,8 @@ Delivery strategy: auto-chain
 
 ## Phase 1 — U1 RED
 
-- [ ] 1.1 Acquire U1; re-author `1a08635…` MCP test; reproduce RED twice.
-- [ ] 1.2 Freeze 51-line identity, settle independently, and split evidence if budget-bound.
+- [x] 1.1 Use active U1 acquire; re-author `1a08635…` MCP test; reproduce RED twice.
+- [x] 1.2 Freeze 51-line identity, settle expected failure independently, and split evidence if budget-bound.
 
 ## Phase 2 — U2 coverage/tracker
 
