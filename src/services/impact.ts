@@ -327,6 +327,7 @@ function collectNeighbors(
   const currentKey = endpointKey(current);
   const kinds = new Set(options.relationship_kinds);
   const neighbors = new Map<string, Neighbor>();
+  workTracker?.charge(requestContext, edges.length);
   const orderedEdges = [...edges].sort(edgeOrder);
 
   for (const edge of orderedEdges) {
@@ -561,20 +562,24 @@ function traverseWithNeighborProvider(
     (reason) => truncationReasons.has(reason as TruncationReason),
   ) as TruncationReason[];
   const truncated = orderedReasons.length > 0;
-  workTracker?.charge(requestContext, nodes.size + selectedEdges.size);
+  workTracker?.charge(requestContext, nodes.size);
+  const orderedNodes = [...nodes.values()].sort(
+    (left, right) =>
+      left.depth - right.depth ||
+      left.endpoint.file.localeCompare(right.endpoint.file) ||
+      left.endpoint.selector.localeCompare(right.endpoint.selector) ||
+      left.endpoint.symbol_path.localeCompare(right.endpoint.symbol_path),
+  );
+  workTracker?.charge(requestContext, selectedEdges.size);
+  const orderedEdges = [...selectedEdges.values()].sort(edgeOrder);
+  workTracker?.charge(requestContext, orderedNodes.length + orderedEdges.length);
   requestContext.checkpoint();
   return {
     root,
     direction: normalized.direction,
     relationship_kinds: normalized.relationship_kinds,
-    nodes: [...nodes.values()].sort(
-      (left, right) =>
-        left.depth - right.depth ||
-        left.endpoint.file.localeCompare(right.endpoint.file) ||
-        left.endpoint.selector.localeCompare(right.endpoint.selector) ||
-        left.endpoint.symbol_path.localeCompare(right.endpoint.symbol_path),
-    ),
-    edges: [...selectedEdges.values()].sort(edgeOrder),
+    nodes: orderedNodes,
+    edges: orderedEdges,
     visited_nodes: nodes.size,
     visited_edges: selectedEdges.size,
     max_depth_reached: maxDepthReached,

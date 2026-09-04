@@ -101,14 +101,34 @@
   "tdd": {
     "red": [
       { "id": "j-r01-001", "result": "2 focused tests failed: interface dispatch was completed" },
-      { "id": "j-r01-002", "result": "1 focused test failed: BFS dispatch was uncharged" }
+      { "id": "j-r01-002", "result": "1 focused test failed: BFS dispatch was uncharged" },
+      {
+        "id": "j-r01-001-round2",
+        "result": "2 focused tests failed: callable-property dispatch guessed exact and super dispatch was unfinished"
+      },
+      {
+        "id": "j-r01-002-round2",
+        "result": "1 focused test failed: one-below candidate accounting returned a partial edge page"
+      }
     ],
     "green": [
       { "id": "j-r01-001", "result": "2 focused tests passed; 84 skipped" },
-      { "id": "j-r01-002", "result": "1 focused test passed; 55 skipped" }
+      { "id": "j-r01-002", "result": "1 focused test passed; 55 skipped" },
+      {
+        "id": "j-r01-001-round2",
+        "result": "property/interface fail-closed and super exact tests passed"
+      },
+      {
+        "id": "j-r01-002-round2",
+        "result": "exact-bound and one-below accounting test passed without partial edges"
+      }
     ],
     "refactored": [
       { "id": "j-r01-round1", "result": "87 affected tests passed; task 8.1 remains pending" },
+      {
+        "id": "j-r01-round2",
+        "result": "139 affected and 988 full tests passed; task 8.1 remains pending"
+      },
       { "id": "u2-ledger", "taskId": "2.3", "result": "3 focused and 48 impact pass" },
       {
         "id": "u1-exact-edge",
@@ -217,6 +237,11 @@
       "id": "u7-harness-canonical-rerun",
       "command": "env -u GIT_PAGER bash -lc 'yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts && yarn test:dsh-adapter'",
       "result": "exit 0: 2 files/23 tests and adapter phases a,b,c,h03,h05,d passed; canonical Harness BEFORE=AFTER sha256:e9be86fb8ef58a82d9e9b5ef16f1f4ed900e0eecd142d95591e16384d46e40cc with 91215 entries, 73083 files, 11927 directories, 6205 symlinks, 1568220487 regular bytes"
+    },
+    {
+      "id": "judgment-round2-correction",
+      "command": "focused RED/GREEN; six-file U1-U7 matrix; format, lint, typecheck, full test/build and MCP/lifecycle/CLI/error/package smokes",
+      "result": "RED exit 1 (2 residual failures); GREEN 3/3; affected 139/139; full 986 plus supervised 2; all quality, build, and smoke gates exit 0"
     }
   ],
   "evidence": {
@@ -238,7 +263,15 @@
       "fixCausedSevere": "The correction rejects statically bound super.method().",
       "correctionReceipt": "settled-failed",
       "next": "Final allowed correction round 2; task 8.1 remains pending."
+    },
+    "judgmentRoundTwo": {
+      "authorityToken": "sha256:40d2a58bffce2f9d4ca6f44c54d082eef621dd6fe713c7fceb107178d3220947",
+      "scope": ["J-R01-001", "J-R01-002"],
+      "status": "corrected-awaiting-dual-rejudgment",
+      "accounting": "filter, membership, neighbor parsing, dedupe, retention, merge, ordering, slicing, and emission charge before operation under one tracker; exhaustion returns no partial edge page",
+      "frozenOutOfScope": ["J-R01-003", "J-R01-I01"],
+      "task8.1": "pending"
     }
   },
-  "updatedAt": "2026-09-04T04:25:45Z"
+  "updatedAt": "2026-09-04T05:00:00Z"
 }

@@ -1711,6 +1711,41 @@ describe("compiler impact coverage and request work", () => {
     expect(exhausted.coverage.every(({ status }) => status === "unfinished")).toBe(true);
   });
 
+  it("accounts candidate retention and final emission without partial exact-bound pages", async () => {
+    const fixture = await createProjectFixture({
+      "src/target.ts": "export const target = 1;\n",
+      "src/use.ts":
+        'import { target } from "./target.js";\nexport const first = target;\nexport const second = target + 1;\n',
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("target", "src/target.ts"));
+    const query = {
+      direction: "incoming" as const,
+      relationship_kinds: ["reference" as const],
+      max_edges: 10,
+    };
+    const run = (max_work_items: number) =>
+      createCompilerRelationshipResolver(project, fixture.root, freshness).edgesFor(root, {
+        ...query,
+        max_work_items,
+      });
+    const complete = run(100_000);
+    expect(complete.edges).toHaveLength(2);
+
+    const exact = run(complete.work_items);
+    expect(exact.work_items).toBe(complete.work_items);
+    expect(exact.work_limit_reached).toBe(false);
+    expect(exact.edges).toEqual(complete.edges);
+
+    const oneBelow = run(complete.work_items - 1);
+    expect(oneBelow.work_items).toBe(complete.work_items - 1);
+    expect(oneBelow.work_limit_reached).toBe(true);
+    expect(oneBelow.incomplete).toBe(true);
+    expect(oneBelow.edges).toEqual([]);
+    expect(oneBelow.coverage.every(({ status }) => status === "unfinished")).toBe(true);
+  });
+
   it("shares monotonic request work, exhausts exactly, and preserves legacy parity", async () => {
     const { fixture, project, edges } = await graphFixture();
     const root = resolveImpactRoot(project, fixture.root, rootRequest("chain"));
@@ -2001,7 +2036,7 @@ describe("scoped exact call relationships", () => {
     );
   });
 
-  it("fails closed for interface and override-capable method dispatch", async () => {
+  it("fails closed for method and callable-property dynamic dispatch", async () => {
     const cases = [
       [
         "export interface Contract { run(): void; }\nexport class Implementation implements Contract { run(): void {} }\nexport function caller(value: Contract): void { value.run(); }",
@@ -2010,6 +2045,14 @@ describe("scoped exact call relationships", () => {
       [
         "export class Base { run(): void {} }\nexport class Child extends Base { override run(): void {} }\nexport function caller(value: Base): void { value.run(); }",
         "Base.run",
+      ],
+      [
+        "export interface ContractProp { run: () => void; }\ndeclare const value: ContractProp;\nexport function caller(): void { value.run(); }",
+        "ContractProp.run",
+      ],
+      [
+        "export class BaseProp { run = (): void => {}; }\nexport class ChildProp extends BaseProp { override run = (): void => {}; }\nexport function caller(): void { const value = {} as BaseProp; value.run(); }",
+        "BaseProp.run",
       ],
     ] as const;
     for (const [source, target] of cases) {
@@ -2039,6 +2082,29 @@ describe("scoped exact call relationships", () => {
         expect(result.incomplete, `${target}/${direction}`).toBe(true);
       }
     }
+  });
+
+  it("keeps statically bound super calls exact despite derived overrides", async () => {
+    const fixture = await createProjectFixture({
+      "src/super.ts":
+        "export class Base { run(): void {} }\nexport class Child extends Base { override run(): void { super.run(); } }\nexport class Grandchild extends Child { override run(): void {} }",
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("Child.run", "src/super.ts"));
+    const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      direction: "outgoing",
+      max_depth: 1,
+      max_nodes: 10,
+      max_edges: 10,
+      relationship_kinds: ["call"],
+    });
+
+    expect(result.edges.map(({ target }) => target.symbol_path)).toEqual(["Base.run"]);
+    expect(result.coverage).toEqual([
+      { kind: "call", direction: "outgoing", endpoint_class: "symbol", status: "completed" },
+    ]);
+    expect(result.incomplete).toBe(false);
   });
 
   it("keeps resolved disjoint calls complete but unresolved sites conservatively unfinished", async () => {

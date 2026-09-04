@@ -806,9 +806,11 @@ function addScopedResolvedEdge(collector: ScopedEdgeCollector, edge: Relationshi
   if (!collector.relationshipKinds.has(edge.kind)) return;
   chargeCollector(collector);
   if (collector.excludedRelationshipIds.has(edge.relationship_id)) return;
-  const neighborKey = scopedIncidentNeighborKey(collector, edge);
   chargeCollector(collector);
-  if (!neighborKey || collector.edges.has(edge.relationship_id)) return;
+  const neighborKey = scopedIncidentNeighborKey(collector, edge);
+  if (!neighborKey) return;
+  chargeCollector(collector);
+  if (collector.edges.has(edge.relationship_id)) return;
   if (collector.allowedNeighborKeys) {
     chargeCollector(collector);
     if (!collector.allowedNeighborKeys.has(neighborKey)) {
@@ -884,6 +886,7 @@ function retainScopedCandidate(candidates: ScopedCandidateSet, candidate: Relati
   if (!collector.relationshipKinds.has(candidate.kind)) return;
   chargeCollector(collector);
   if (collector.excludedRelationshipIds.has(candidate.relationship_id)) return;
+  chargeCollector(collector);
   const neighborKey = scopedIncidentNeighborKey(collector, candidate);
   if (!neighborKey) return;
   if (collector.allowedNeighborKeys) {
@@ -895,10 +898,10 @@ function retainScopedCandidate(candidates: ScopedCandidateSet, candidate: Relati
   }
   chargeCollector(collector);
   if (candidates.indexes.has(candidate.relationship_id)) return;
+  chargeCollector(collector);
   const order = (left: RelationshipEdge, right: RelationshipEdge) =>
     scopedNeighborOrder(candidates.collector.endpointKey, left, right);
   if (candidates.values.length < candidates.capacity) {
-    chargeCollector(collector);
     candidates.values.push(candidate);
     let index = candidates.values.length - 1;
     candidates.indexes.set(candidate.relationship_id, index);
@@ -911,7 +914,6 @@ function retainScopedCandidate(candidates: ScopedCandidateSet, candidate: Relati
     return;
   }
   if (order(candidate, candidates.values[0]) >= 0) return;
-  chargeCollector(collector);
   candidates.indexes.delete(candidates.values[0].relationship_id);
   candidates.values[0] = candidate;
   candidates.indexes.set(candidate.relationship_id, 0);
@@ -934,11 +936,14 @@ function retainScopedCandidate(candidates: ScopedCandidateSet, candidate: Relati
 }
 
 function flushScopedCandidates(candidates: ScopedCandidateSet): void {
-  candidates.values.sort((left, right) =>
-    scopedNeighborOrder(candidates.collector.endpointKey, left, right),
-  );
+  const collector = candidates.collector;
+  collector.workBudget.charge(collector.requestContext, candidates.values.length);
+  candidates.values.sort((left, right) => scopedNeighborOrder(collector.endpointKey, left, right));
   for (const candidate of candidates.values) {
-    addScopedResolvedEdge(candidates.collector, candidate);
+    chargeCollector(collector);
+    if (collector.edges.size >= collector.maxEdges) throw new ScopedRelationshipLimitReached();
+    collector.edges.set(candidate.relationship_id, candidate);
+    if (collector.stopAfterFirst) throw new ScopedRelationshipLimitReached();
   }
 }
 
@@ -1966,67 +1971,90 @@ export function createCompilerRelationshipResolver(
       let edgeLimitReached = false;
       let excludedNeighbors = false;
       const unfinishedKinds = new Set<RelationshipEdgeKind>();
-      for (const producer of producers) {
-        const collector: ScopedEdgeCollector = {
-          edges: new Map(),
-          endpointKey: key,
-          direction,
-          relationshipKinds: new Set(producer.kinds.filter((kind) => relationshipKinds.has(kind))),
-          maxEdges: query.max_edges,
-          stopAfterFirst: query.stop_after_first === true,
-          allowedNeighborKeys,
-          allowedNeighborFilePaths: endpointCollector.allowedNeighborFilePaths,
-          excludedRelationshipIds,
-          workBudget,
-          requestContext,
-          excludedNeighbors: false,
-        };
-        try {
-          consumeRelationshipWork(state, workBudget);
-          producer.collect(collector);
-        } catch (error) {
-          if (
-            !(error instanceof ScopedRelationshipLimitReached) &&
-            !(error instanceof CompilerImpactWorkExhausted) &&
-            !(error instanceof ScopedCallCoverageUnfinished)
-          ) {
-            throw error;
+      try {
+        for (const producer of producers) {
+          const collector: ScopedEdgeCollector = {
+            edges: new Map(),
+            endpointKey: key,
+            direction,
+            relationshipKinds: new Set(
+              producer.kinds.filter((kind) => relationshipKinds.has(kind)),
+            ),
+            maxEdges: query.max_edges,
+            stopAfterFirst: query.stop_after_first === true,
+            allowedNeighborKeys,
+            allowedNeighborFilePaths: endpointCollector.allowedNeighborFilePaths,
+            excludedRelationshipIds,
+            workBudget,
+            requestContext,
+            excludedNeighbors: false,
+          };
+          try {
+            consumeRelationshipWork(state, workBudget);
+            producer.collect(collector);
+          } catch (error) {
+            if (
+              !(error instanceof ScopedRelationshipLimitReached) &&
+              !(error instanceof CompilerImpactWorkExhausted) &&
+              !(error instanceof ScopedCallCoverageUnfinished)
+            ) {
+              throw error;
+            }
+            incomplete = true;
+            producer.kinds.forEach((kind) => unfinishedKinds.add(kind));
+            edgeLimitReached ||= error instanceof ScopedRelationshipLimitReached;
           }
-          incomplete = true;
-          producer.kinds.forEach((kind) => unfinishedKinds.add(kind));
-          edgeLimitReached ||= error instanceof ScopedRelationshipLimitReached;
+          for (const edge of collector.edges.values()) {
+            chargeCollector(collector);
+            merged.set(edge.relationship_id, edge);
+          }
+          excludedNeighbors ||= collector.excludedNeighbors;
+          if (workBudget.exhausted) throw new CompilerImpactWorkExhausted();
         }
-        for (const edge of collector.edges.values()) merged.set(edge.relationship_id, edge);
-        excludedNeighbors ||= collector.excludedNeighbors;
-        if (workBudget.exhausted) break;
+        workBudget.charge(requestContext, merged.size);
+        const ordered = [...merged.values()].sort((left, right) =>
+          scopedNeighborOrder(key, left, right),
+        );
+        if (ordered.length > query.max_edges) {
+          incomplete = true;
+          edgeLimitReached = true;
+        }
+        const finalCoverage = coverage.map((entry) =>
+          entry.status === "unfinished" && !unfinishedKinds.has(entry.kind)
+            ? { ...entry, status: "completed" as const }
+            : entry,
+        );
+        incomplete ||= finalCoverage.some(
+          ({ status }) => status === "unsupported" || status === "unfinished",
+        );
+        workBudget.charge(requestContext, ordered.length);
+        const selected = ordered.slice(0, query.max_edges);
+        workBudget.charge(requestContext, selected.length);
+        selected.sort((left, right) => left.relationship_id.localeCompare(right.relationship_id));
+        workBudget.charge(requestContext, selected.length);
+        return {
+          edges: selected,
+          coverage: finalCoverage,
+          incomplete,
+          edge_limit_reached: edgeLimitReached,
+          work_items: workBudget.consumed - workAtStart,
+          work_limit_reached: false,
+          excluded_neighbors: excludedNeighbors,
+        };
+      } catch (error) {
+        if (!(error instanceof CompilerImpactWorkExhausted)) throw error;
+        return {
+          edges: [],
+          coverage: coverage.map((entry) =>
+            entry.status === "not_applicable" ? entry : { ...entry, status: "unfinished" as const },
+          ),
+          incomplete: true,
+          edge_limit_reached: edgeLimitReached,
+          work_items: workBudget.consumed - workAtStart,
+          work_limit_reached: true,
+          excluded_neighbors: excludedNeighbors,
+        };
       }
-      const ordered = [...merged.values()].sort((left, right) =>
-        scopedNeighborOrder(key, left, right),
-      );
-      if (ordered.length > query.max_edges) {
-        incomplete = true;
-        edgeLimitReached = true;
-      }
-      const finalCoverage = coverage.map((entry) =>
-        entry.status === "unfinished" && !workBudget.exhausted && !unfinishedKinds.has(entry.kind)
-          ? { ...entry, status: "completed" as const }
-          : entry,
-      );
-      incomplete ||= finalCoverage.some(
-        ({ status }) => status === "unsupported" || status === "unfinished",
-      );
-      const selected = ordered.slice(0, query.max_edges);
-      return {
-        edges: selected.sort((left, right) =>
-          left.relationship_id.localeCompare(right.relationship_id),
-        ),
-        coverage: finalCoverage,
-        incomplete,
-        edge_limit_reached: edgeLimitReached,
-        work_items: workBudget.consumed - workAtStart,
-        work_limit_reached: workBudget.exhausted,
-        excluded_neighbors: excludedNeighbors,
-      };
     },
   };
 }
@@ -2093,6 +2121,7 @@ function isPotentiallyPolymorphicInvocation(
     Node.isPropertyAccessExpression(invoked) || Node.isElementAccessExpression(invoked)
       ? invoked.getExpression()
       : undefined;
+  if (receiver?.getKind() === SyntaxKind.SuperKeyword) return false;
   if (receiver?.getType().isUnion()) return true;
   if (
     receiver &&
@@ -2105,20 +2134,37 @@ function isPotentiallyPolymorphicInvocation(
   }
   return declarations.some((declaration) => {
     charge();
-    if (Node.isMethodSignature(declaration)) return true;
-    if (!Node.isMethodDeclaration(declaration)) return false;
+    const callableProperty =
+      Node.isPropertySignature(declaration) || Node.isPropertyDeclaration(declaration)
+        ? declaration
+        : declaration.getFirstAncestor(
+            (ancestor) =>
+              Node.isPropertySignature(ancestor) || Node.isPropertyDeclaration(ancestor),
+          );
+    if (Node.isMethodSignature(declaration) || Node.isPropertySignature(callableProperty))
+      return true;
+    const dispatchMember = Node.isMethodDeclaration(declaration)
+      ? declaration
+      : Node.isPropertyDeclaration(callableProperty)
+        ? callableProperty
+        : undefined;
+    if (!dispatchMember) return false;
     if (
-      declaration.hasModifier(SyntaxKind.StaticKeyword) ||
-      declaration.hasModifier(SyntaxKind.PrivateKeyword)
+      dispatchMember.hasModifier(SyntaxKind.StaticKeyword) ||
+      dispatchMember.hasModifier(SyntaxKind.PrivateKeyword)
     ) {
       return false;
     }
-    if (declaration.hasModifier(SyntaxKind.AbstractKeyword)) return true;
-    const owner = declaration.getFirstAncestorByKind(SyntaxKind.ClassDeclaration);
+    const method = Node.isMethodDeclaration(dispatchMember);
+    if (method && dispatchMember.hasModifier(SyntaxKind.AbstractKeyword)) return true;
+    const owner = dispatchMember.getFirstAncestorByKind(SyntaxKind.ClassDeclaration);
+    const memberName = dispatchMember.getName();
     return (
       owner?.getDerivedClasses().some((derived) => {
         charge();
-        return derived.getInstanceMethod(declaration.getName()) !== undefined;
+        return method
+          ? derived.getInstanceMethod(memberName) !== undefined
+          : derived.getInstanceProperty(memberName) !== undefined;
       }) === true
     );
   });
@@ -2134,13 +2180,16 @@ function classifyCompilerInvocation(
   if (!expression) return { state: "not_call" };
   const invoked = unwrapInvocationExpression(expression);
   const invokedDeclarations = declarationsForSymbol(invoked.getSymbol());
+  const signature = checker.getResolvedSignature(node as never);
+  const dispatchDeclarations = signature
+    ? [...invokedDeclarations, signature.getDeclaration()]
+    : invokedDeclarations;
   if (
     invokedDeclarations.some(Node.isParameterDeclaration) ||
-    isPotentiallyPolymorphicInvocation(invoked, invokedDeclarations, charge)
+    isPotentiallyPolymorphicInvocation(invoked, dispatchDeclarations, charge)
   ) {
     return { state: "unfinished" };
   }
-  const signature = checker.getResolvedSignature(node as never);
   const implicit = Node.isNewExpression(node) ? invoked.getType().getConstructSignatures() : [];
   if (!signature && implicit.length !== 1) return { state: "unfinished" };
   const declarations =
