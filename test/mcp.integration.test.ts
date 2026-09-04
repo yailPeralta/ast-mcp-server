@@ -876,6 +876,57 @@ export function formatValue(value: number): string { return String(value); }
     expect(impact).not.toHaveProperty("edits");
   });
 
+  it("rejects false-complete incoming call emptiness", async () => {
+    clearProjectSessions();
+
+    const impact = structured(
+      await client.callTool({
+        name: "ast_get_impact",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/value.ts",
+          symbol_path: "formatValue",
+          direction: "incoming",
+          relationship_kinds: ["call"],
+          max_depth: 1,
+          max_nodes: 10,
+          max_edges: 10,
+        },
+      }),
+    );
+
+    expect(impact).not.toMatchObject({ edges: [], incomplete: false });
+    expect(impact.edges).toEqual([
+      expect.objectContaining({
+        relationship_id:
+          'call:["src/use.ts","result","result@2"]->["src/value.ts","formatValue","formatValue@2"]',
+        source: expect.objectContaining({
+          file: "src/use.ts",
+          symbol_path: "result",
+          selector: "result@2",
+        }),
+        target: expect.objectContaining({
+          file: "src/value.ts",
+          symbol_path: "formatValue",
+          selector: "formatValue@2",
+        }),
+        kind: "call",
+        provenance: "compiler",
+        confidence: "exact",
+        resolution: "resolved",
+        compiler_authoritative: true,
+      }),
+    ]);
+    expect(impact.coverage).toEqual([
+      {
+        kind: "call",
+        direction: "incoming",
+        endpoint_class: "symbol",
+        status: "completed",
+      },
+    ]);
+  });
+
   it("finds exact compiler-backed test candidates with bounded trust metadata", async () => {
     await addCandidateFixtures(fixture);
     const tools = await client.listTools();
