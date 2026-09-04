@@ -2,11 +2,22 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-188-relationship-coverage-recovery",
   "authoritative": true,
-  "stage": "planned",
+  "stage": "phase-0-complete",
   "rddModeAtPlanning": "disabled/unmanaged",
+  "rddModeAtApply": {
+    "effective": "off",
+    "disposition": "disabled/unmanaged",
+    "revision": "sha256:247f9e8823c9d5a6f67058d274ef1ab1df154f5a1682473c7dc778d6323e9ddd",
+    "implication": "No receipt review or RDD approval authority applies; ordinary repository policy remains authoritative."
+  },
   "delivery": {
     "strategy": "feature-branch-chain",
-    "tracker": "feat/issue-188-relationship-coverage-recovery",
+    "tracker": "fix/issue-188-recovery-tracker",
+    "trackerPr": 189,
+    "trackerDraft": true,
+    "trackerGitMergeable": "MERGEABLE",
+    "trackerMergeStateStatus": "UNSTABLE",
+    "trackerMergeAuthorized": false,
     "maxAuthoredChangedLinesPerChild": 400,
     "forecastAuthoredChangedLines": "2800-3600",
     "forecastReviewUnits": "16-18",
@@ -16,10 +27,10 @@
     {
       "id": "0.1",
       "name": "Recheck authority, RDD, conflicts, main, and hashes",
-      "status": "pending"
+      "status": "completed"
     },
-    { "id": "0.2", "name": "Create one draft tracker and bind U1 base", "status": "pending" },
-    { "id": "0.3", "name": "Admit clean bounded immediate-parent children", "status": "pending" },
+    { "id": "0.2", "name": "Create one draft tracker and bind U1 base", "status": "completed" },
+    { "id": "0.3", "name": "Admit clean bounded immediate-parent children", "status": "completed" },
     {
       "id": "1.1",
       "name": "Acquire and reproduce U1 registered-MCP RED twice",
@@ -76,13 +87,129 @@
     { "id": "8.4", "name": "Archive and repeat post-archive candidate proof", "status": "pending" },
     { "id": "8.5", "name": "Integrate sequentially and close issues in order", "status": "pending" }
   ],
+  "phaseZeroEvidence": {
+    "observedAt": "2026-09-04T23:34:31Z",
+    "issues": [
+      { "number": 186, "state": "OPEN", "approved": true, "typeLabels": ["type:bug"] },
+      { "number": 187, "state": "OPEN", "approved": true, "typeLabels": ["type:bug"] },
+      { "number": 188, "state": "OPEN", "approved": true, "typeLabels": ["type:chore"] }
+    ],
+    "plannedBase": {
+      "ref": "origin/main",
+      "commit": "6173a39a73f1540c17335a330ea7f14f982387cb",
+      "tree": "ab8b6b4fe739e9cfc939b7cd8c18cf2e09743051",
+      "matchesPlan": true,
+      "githubProtectedFlag": false
+    },
+    "workspace": {
+      "branch": "docs/issue-188-recovery-tasks",
+      "headCommit": "7c93c4007447abe1ae4d6be0673b99347b5d49e9",
+      "headTree": "bcd4fbf4ea76494417ffa36ddeead77575655e5b",
+      "trackedDiffCleanBeforePhaseZero": true,
+      "foreignUntrackedExcluded": [
+        "openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/exploration.md",
+        "openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/state.yaml"
+      ]
+    },
+    "planningPullRequests": [
+      {
+        "number": 189,
+        "base": "main",
+        "head": "fix/issue-188-recovery-tracker",
+        "commit": "32249b4e3b2742c6ee8895d4816773e9df08cf08",
+        "tree": "fd2fbc6e2609de89fc030404115d97cb2fbbfeac",
+        "diffSha256": "7c83d7e705f3148956c3fa069bebae51bc7c12aa5ae05573ede0de7b6c4e3e2a",
+        "authoredChangedLines": 364,
+        "typeLabels": ["type:docs"],
+        "draft": true,
+        "gitMergeable": "MERGEABLE",
+        "mergeStateStatus": "UNSTABLE",
+        "mergeAuthorized": false
+      },
+      {
+        "number": 190,
+        "base": "fix/issue-188-recovery-tracker",
+        "head": "docs/issue-188-recovery-proposal",
+        "commit": "f724276608233ccbd13f15138ca76b36df7050ba",
+        "tree": "6e2e36b9829bddb4954d3428bf726f9e9d865539",
+        "diffSha256": "50526dd584e34e5081312a216f912974d58147e374ed7d95a3b785f65390e8a2",
+        "authoredChangedLines": 68,
+        "typeLabels": ["type:docs"],
+        "draft": false,
+        "gitMergeable": "MERGEABLE"
+      },
+      {
+        "number": 191,
+        "base": "docs/issue-188-recovery-proposal",
+        "head": "docs/issue-188-recovery-spec",
+        "commit": "0acc91beb567ba3e86013c95cc9b71a092f96e3a",
+        "tree": "b1428df80e937b7060255797900d90b8e18df8a3",
+        "diffSha256": "427f71ee7262d7f7a9f4f622d639036b1f7818e8939e7e2122f71c72f25c5610",
+        "authoredChangedLines": 255,
+        "typeLabels": ["type:docs"],
+        "draft": false,
+        "gitMergeable": "MERGEABLE"
+      },
+      {
+        "number": 192,
+        "base": "docs/issue-188-recovery-spec",
+        "head": "docs/issue-188-recovery-design",
+        "commit": "2f0b94eb6028e99a6a29e639e21d998b5ee6303f",
+        "tree": "9d9c88696ca218c55045f74a84595ade70371e94",
+        "diffSha256": "74a358a878550997343752b4f31a38d97d317487db63469a9df2274952a36571",
+        "authoredChangedLines": 77,
+        "typeLabels": ["type:docs"],
+        "draft": false,
+        "gitMergeable": "MERGEABLE"
+      },
+      {
+        "number": 193,
+        "base": "docs/issue-188-recovery-design",
+        "head": "docs/issue-188-recovery-tasks",
+        "commit": "7c93c4007447abe1ae4d6be0673b99347b5d49e9",
+        "tree": "bcd4fbf4ea76494417ffa36ddeead77575655e5b",
+        "diffSha256": "aa1e4be185e338c6ea541b5589c0110231f85ab85c38c2d54926641b67efb3f3",
+        "authoredChangedLines": 332,
+        "typeLabels": ["type:docs"],
+        "draft": false,
+        "gitMergeable": "MERGEABLE"
+      }
+    ],
+    "planningChain": [189, 190, 191, 192, 193],
+    "planningHashesMatchCommittedHeads": true,
+    "immediateParentBasesVerified": true,
+    "conflictsOrPollution": false,
+    "staleR01Authority": "absent; all R-01 references are rejection/provenance statements only",
+    "u1": {
+      "branch": "test/issue-188-u1-red",
+      "intendedBasePr": 193,
+      "baseRef": "docs/issue-188-recovery-tasks",
+      "baseCommit": "7c93c4007447abe1ae4d6be0673b99347b5d49e9",
+      "baseTree": "bcd4fbf4ea76494417ffa36ddeead77575655e5b",
+      "issueLink": "Refs #188",
+      "receiptAcquired": false
+    },
+    "killSwitches": [
+      "Stop and recalculate before branching if origin/main leaves 6173a39a73f1540c17335a330ea7f14f982387cb.",
+      "Reject any child with ancestor or foreign scope, receipt/tree mismatch, or more than 400 authored changed lines.",
+      "Never import or extend #161 or PR #162-#185 R-01 execution, review, Judgment, settlement, CI, archive, or Harness authority.",
+      "Keep tracker PR #189 draft and merge-unauthorized until #186 and #187 and every final gate pass.",
+      "Abort or rebuild descendants on candidate drift, severe findings, failed verification/CI, or Harness mutation."
+    ],
+    "workUnitEvidence": {
+      "focusedChecks": "Issue/PR/branch/diff/hash admission commands completed with exit 0; PR slices were 364, 68, 255, 77, and 332 lines.",
+      "runtimeHarness": "N/A — Phase 0 is static external-authority and chain admission; no runtime source boundary or U1 receipt was acquired.",
+      "rollbackBoundary": "Revert only Phase 0 checkbox and progress/state metadata; no runtime, branch, PR, issue, or Harness state was mutated."
+    },
+    "strictTddDisposition": "N/A for static process admissions 0.1-0.3; no production behavior was implemented and TDD buckets remain empty."
+  },
   "tdd": {
     "red": [],
     "green": [],
     "refactored": []
   },
   "receipts": {
-    "authority": [],
+    "authority": ["phaseZeroEvidence@2026-09-04T23:34:31Z"],
     "attempts": [],
     "tdd": [],
     "identity": [],
@@ -107,6 +234,6 @@
     "Issue 187 has no accepted line forecast until its own planning re-entry.",
     "Any stale R-01 authority, candidate drift, severe finding, failed gate, or Harness write blocks integration."
   ],
-  "nextRecommended": "apply:0.1",
-  "updatedAt": "2026-09-04T23:23:24Z"
+  "nextRecommended": "apply:1.1",
+  "updatedAt": "2026-09-04T23:34:31Z"
 }

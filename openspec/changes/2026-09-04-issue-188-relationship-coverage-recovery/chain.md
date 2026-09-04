@@ -19,12 +19,15 @@ git diff --check
 
 Stop if approval disappears, main drifts, another authority line conflicts, RDD returns an unsafe/unrecognized state, a child exceeds 400 authored additions+deletions, a child includes ancestor/foreign scope, any receipt/tree differs, #186/#187 is incomplete, review has severe unresolved findings, verification/CI fails, or Harness bytes change. The draft tracker is the primary kill switch; abandon it before merge or revert the final integration after merge.
 
+Phase 0 revalidated this baseline at `2026-09-04T23:34:31Z`: `origin/main` remains `6173a39a73f1540c17335a330ea7f14f982387cb` (tree `ab8b6b4fe739e9cfc939b7cd8c18cf2e09743051`); #186–#188 remain open and approved with exactly one `type:*` label; RDD is `disabled/unmanaged`; planning PRs #189–#193 are clean immediate-parent slices of 364/68/255/77/332 lines with one `type:docs` label each. PR #189 is the draft, merge-unauthorized tracker. U1 branch `test/issue-188-u1-red` will target PR #193 head `7c93c4007447abe1ae4d6be0673b99347b5d49e9` (tree `bcd4fbf4ea76494417ffa36ddeead77575655e5b`) and use `Refs #188`; no U1 receipt has been acquired.
+
 ## Dependency diagram and review forecast
 
 ```text
 main 6173a39
- └── draft tracker feat/issue-188-relationship-coverage-recovery
-      └── U1 RED
+ └── draft tracker #189 fix/issue-188-recovery-tracker
+      └── planning #190 → #191 → #192 → #193
+           └── U1 RED (base: #193)
            └── U2 coverage/tracker ── U2E settlement if budget-bound
                 └── U3 scoped calls ── U3E settlement if budget-bound
                      └── U4 contains ── U4E settlement if budget-bound

@@ -14,9 +14,9 @@ Delivery strategy: auto-chain
 
 ## Phase 0 — Authority/tracker
 
-- [ ] 0.1 Recheck #186–#188 approval, RDD, conflicts, `origin/main`, and planning hashes.
-- [ ] 0.2 Create one draft tracker; bind U1 and record base/tree/`Refs #188`.
-- [ ] 0.3 Reject drift, foreign scope, stale R-01 state, receipt mismatch, or >400-line children.
+- [x] 0.1 Recheck #186–#188 approval, RDD, conflicts, `origin/main`, and planning hashes.
+- [x] 0.2 Create one draft tracker; bind U1 and record base/tree/`Refs #188`.
+- [x] 0.3 Reject drift, foreign scope, stale R-01 state, receipt mismatch, or >400-line children.
 
 ## Phase 1 — U1 RED
 
