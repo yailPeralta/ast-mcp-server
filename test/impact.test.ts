@@ -1665,6 +1665,52 @@ describe("compiler impact coverage and request work", () => {
     }
   });
 
+  it("charges traversal bookkeeping beyond resolver work at exact boundaries", async () => {
+    const { fixture, project } = await graphFixture();
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("chain"));
+    const options = {
+      direction: "outgoing" as const,
+      max_depth: 0,
+      max_nodes: 10,
+      max_edges: 10,
+      relationship_kinds: ["reference" as const],
+    };
+    const sourceLookup = vi.spyOn(project, "getSourceFile");
+    const dispatchBoundary = traverseCompilerImpact(
+      project,
+      fixture.root,
+      root,
+      freshness,
+      options,
+      undefined,
+      { max_work_items: 3 },
+    );
+    expect(sourceLookup).not.toHaveBeenCalled();
+    expect(dispatchBoundary.work).toEqual({ max_items: 3, consumed_items: 3, exhausted: true });
+    expect(dispatchBoundary.truncation_reasons).toContain("work_limit");
+    sourceLookup.mockRestore();
+
+    const run = (max_work_items?: number) =>
+      traverseCompilerImpact(project, fixture.root, root, freshness, options, undefined, {
+        max_work_items,
+      });
+    const complete = run();
+    const exact = run(complete.work.consumed_items);
+    expect(exact.work).toEqual({
+      max_items: complete.work.consumed_items,
+      consumed_items: complete.work.consumed_items,
+      exhausted: false,
+    });
+    expect(exact).toMatchObject({ edges: complete.edges, incomplete: complete.incomplete });
+
+    const exhausted = run(complete.work.consumed_items - 1);
+    expect(exhausted.work.consumed_items).toBe(exhausted.work.max_items);
+    expect(exhausted.work.exhausted).toBe(true);
+    expect(exhausted).toMatchObject({ edges: [], incomplete: true });
+    expect(exhausted.truncation_reasons).toContain("work_limit");
+    expect(exhausted.coverage.every(({ status }) => status === "unfinished")).toBe(true);
+  });
+
   it("shares monotonic request work, exhausts exactly, and preserves legacy parity", async () => {
     const { fixture, project, edges } = await graphFixture();
     const root = resolveImpactRoot(project, fixture.root, rootRequest("chain"));
@@ -1953,6 +1999,46 @@ describe("scoped exact call relationships", () => {
     expect(impact("Box.render", "src/targets.ts", "incoming").edges[0]?.source.symbol_path).toBe(
       "alpha",
     );
+  });
+
+  it("fails closed for interface and override-capable method dispatch", async () => {
+    const cases = [
+      [
+        "export interface Contract { run(): void; }\nexport class Implementation implements Contract { run(): void {} }\nexport function caller(value: Contract): void { value.run(); }",
+        "Contract.run",
+      ],
+      [
+        "export class Base { run(): void {} }\nexport class Child extends Base { override run(): void {} }\nexport function caller(value: Base): void { value.run(); }",
+        "Base.run",
+      ],
+    ] as const;
+    for (const [source, target] of cases) {
+      const fixture = await createProjectFixture({ "src/dispatch.ts": source });
+      fixtures.push(fixture);
+      const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+      for (const [symbol, direction] of [
+        ["caller", "outgoing"],
+        [target, "incoming"],
+      ] as const) {
+        const root = resolveImpactRoot(
+          project,
+          fixture.root,
+          rootRequest(symbol, "src/dispatch.ts"),
+        );
+        const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+          direction,
+          max_depth: 1,
+          max_nodes: 10,
+          max_edges: 10,
+          relationship_kinds: ["call"],
+        });
+        expect(result.edges, `${target}/${direction}`).toEqual([]);
+        expect(result.coverage, `${target}/${direction}`).toEqual([
+          { kind: "call", direction, endpoint_class: "symbol", status: "unfinished" },
+        ]);
+        expect(result.incomplete, `${target}/${direction}`).toBe(true);
+      }
+    }
   });
 
   it("keeps resolved disjoint calls complete but unresolved sites conservatively unfinished", async () => {

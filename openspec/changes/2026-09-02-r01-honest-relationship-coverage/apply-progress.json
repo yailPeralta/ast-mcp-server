@@ -99,9 +99,16 @@
     { "id": "8.5", "name": "Delivery closure", "status": "pending" }
   ],
   "tdd": {
-    "red": [],
-    "green": [],
+    "red": [
+      { "id": "j-r01-001", "result": "2 focused tests failed: interface dispatch was completed" },
+      { "id": "j-r01-002", "result": "1 focused test failed: BFS dispatch was uncharged" }
+    ],
+    "green": [
+      { "id": "j-r01-001", "result": "2 focused tests passed; 84 skipped" },
+      { "id": "j-r01-002", "result": "1 focused test passed; 55 skipped" }
+    ],
     "refactored": [
+      { "id": "j-r01-round1", "result": "87 affected tests passed; task 8.1 remains pending" },
       { "id": "u2-ledger", "taskId": "2.3", "result": "3 focused and 48 impact pass" },
       {
         "id": "u1-exact-edge",
@@ -223,5 +230,5 @@
     "process": "all task commands ran foreground and exited; adapter cleanup was ok; no delegation, acquire, settle, commit, push, or PR action occurred in this continuation",
     "settlement": "U7 settled passed at the exact evidence revision; Judgment requires separate authority"
   },
-  "updatedAt": "2026-09-03T20:39:00Z"
+  "updatedAt": "2026-09-04T04:25:45Z"
 }

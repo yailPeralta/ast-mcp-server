@@ -12,6 +12,7 @@ import { findLocatedDeclaration } from "./symbols.js";
 import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
 import {
   aggregateRelationshipCoverage,
+  CompilerImpactWorkExhausted,
   CompilerImpactWorkTracker,
   createCompilerRelationshipResolver,
   MAX_RELATIONSHIP_COVERAGE_ENTRIES,
@@ -321,6 +322,7 @@ function collectNeighbors(
   edges: readonly RelationshipEdge[],
   options: NormalizedImpactOptions,
   requestContext: RequestContext,
+  workTracker?: CompilerImpactWorkTracker,
 ): Neighbor[] {
   const currentKey = endpointKey(current);
   const kinds = new Set(options.relationship_kinds);
@@ -328,17 +330,20 @@ function collectNeighbors(
   const orderedEdges = [...edges].sort(edgeOrder);
 
   for (const edge of orderedEdges) {
+    workTracker?.charge(requestContext);
     requestContext.checkpoint();
     if (!kinds.has(edge.kind)) continue;
     const matchesSource = endpointKey(edge.source) === currentKey;
     const matchesTarget = endpointKey(edge.target) === currentKey;
     if ((options.direction === "outgoing" || options.direction === "both") && matchesSource) {
+      workTracker?.charge(requestContext, 2);
       neighbors.set(`${edge.relationship_id}\u0000${endpointKey(edge.target)}`, {
         edge,
         endpoint: edge.target,
       });
     }
     if ((options.direction === "incoming" || options.direction === "both") && matchesTarget) {
+      workTracker?.charge(requestContext, 2);
       neighbors.set(`${edge.relationship_id}\u0000${endpointKey(edge.source)}`, {
         edge,
         endpoint: edge.source,
@@ -370,6 +375,7 @@ function traverseWithNeighborProvider(
   neighborsFor: NeighborProvider,
   options: ImpactTraversalOptions = {},
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
+  workTracker?: CompilerImpactWorkTracker,
 ): ImpactResult {
   requestContext.checkpoint();
   if (typeof root !== "object" || root === null) {
@@ -388,6 +394,7 @@ function traverseWithNeighborProvider(
     neighbor: Neighbor,
     edgeBlocked: boolean,
   ): void => {
+    workTracker?.charge(requestContext);
     const nextKey = endpointKey(neighbor.endpoint);
     const isKnownNode = nodes.has(nextKey);
     if (edgeBlocked) truncationReasons.add("edge_limit");
@@ -400,10 +407,12 @@ function traverseWithNeighborProvider(
   };
 
   while (queue.length > 0) {
+    workTracker?.charge(requestContext);
     requestContext.checkpoint();
     const current = queue.shift()!;
     const remainingEdges = normalized.max_edges - selectedEdges.size;
     if (remainingEdges <= 0) {
+      workTracker?.charge(requestContext);
       const probe = neighborsFor(
         current.endpoint,
         normalized,
@@ -429,6 +438,7 @@ function traverseWithNeighborProvider(
           ? "record_limit"
           : undefined;
     const allowedNeighborKeys = restrictionReason ? new Set(nodes.keys()) : undefined;
+    workTracker?.charge(requestContext);
     const batch = neighborsFor(
       current.endpoint,
       normalized,
@@ -442,9 +452,11 @@ function traverseWithNeighborProvider(
     if (batch.workLimitReached) truncationReasons.add("work_limit");
     let skippedNewNode = false;
     for (const neighbor of batch.neighbors) {
+      workTracker?.charge(requestContext);
       requestContext.checkpoint();
       const nextKey = endpointKey(neighbor.endpoint);
       const nextDepth = current.depth + 1;
+      workTracker?.charge(requestContext);
       const isKnownNode = nodes.has(nextKey);
       if (nextDepth > normalized.max_depth && !isKnownNode) {
         truncationReasons.add("depth_limit");
@@ -455,25 +467,30 @@ function traverseWithNeighborProvider(
         skippedNewNode = true;
         continue;
       }
+      workTracker?.charge(requestContext);
       if (!selectedEdges.has(neighbor.edge.relationship_id)) {
         if (selectedEdges.size >= normalized.max_edges) {
           truncationReasons.add("edge_limit");
           continue;
         }
+        workTracker?.charge(requestContext);
         selectedEdges.set(neighbor.edge.relationship_id, neighbor.edge);
       }
       if (isKnownNode) continue;
+      workTracker?.charge(requestContext);
       nodes.set(nextKey, {
         endpoint: neighbor.endpoint,
         depth: nextDepth,
         direct: nextDepth === 1,
       });
+      workTracker?.charge(requestContext);
       queue.push({ key: nextKey, endpoint: neighbor.endpoint, depth: nextDepth });
       maxDepthReached = Math.max(maxDepthReached, nextDepth);
     }
 
     if (restrictionReason) {
       if (batch.incomplete && !batch.workLimitReached) truncationReasons.add("edge_limit");
+      workTracker?.charge(requestContext);
       const probe = neighborsFor(
         current.endpoint,
         normalized,
@@ -495,6 +512,7 @@ function traverseWithNeighborProvider(
       (skippedNewNode || nodes.size >= normalized.max_nodes) &&
       selectedEdges.size < normalized.max_edges
     ) {
+      workTracker?.charge(requestContext);
       const knownBatch = neighborsFor(
         current.endpoint,
         normalized,
@@ -507,11 +525,13 @@ function traverseWithNeighborProvider(
       if (knownBatch.excludedNeighbors) truncationReasons.add("record_limit");
       if (knownBatch.workLimitReached) truncationReasons.add("work_limit");
       for (const neighbor of knownBatch.neighbors) {
+        workTracker?.charge(requestContext, 2);
         requestContext.checkpoint();
         if (selectedEdges.size >= normalized.max_edges) {
           truncationReasons.add("edge_limit");
           break;
         }
+        workTracker?.charge(requestContext);
         selectedEdges.set(neighbor.edge.relationship_id, neighbor.edge);
       }
       if (knownBatch.incomplete && !knownBatch.workLimitReached) {
@@ -519,6 +539,7 @@ function traverseWithNeighborProvider(
       }
     } else if (batch.incomplete && !batch.workLimitReached) {
       truncationReasons.add("edge_limit");
+      workTracker?.charge(requestContext);
       const overflowProbe = neighborsFor(
         current.endpoint,
         normalized,
@@ -540,6 +561,7 @@ function traverseWithNeighborProvider(
     (reason) => truncationReasons.has(reason as TruncationReason),
   ) as TruncationReason[];
   const truncated = orderedReasons.length > 0;
+  workTracker?.charge(requestContext, nodes.size + selectedEdges.size);
   requestContext.checkpoint();
   return {
     root,
@@ -625,38 +647,82 @@ export function traverseCompilerImpact(
     requestContext,
     tracker,
   );
-  const impact = traverseWithNeighborProvider(
-    root,
-    (
-      current,
-      normalized,
-      _context,
-      maxEdges,
-      stopAfterFirst,
-      allowedNeighborKeys,
-      excludedRelationshipIds,
-    ) => {
-      const resolution = resolver.edgesFor(current, {
-        direction: normalized.direction,
-        relationship_kinds: normalized.relationship_kinds,
-        max_edges: maxEdges,
-        allowed_neighbor_keys: allowedNeighborKeys ? [...allowedNeighborKeys] : undefined,
-        excluded_relationship_ids: excludedRelationshipIds
-          ? [...excludedRelationshipIds]
-          : undefined,
-        stop_after_first: stopAfterFirst,
-      });
-      observations.push(...resolution.coverage);
-      return {
-        neighbors: collectNeighbors(current, resolution.edges, normalized, requestContext),
-        incomplete: resolution.edge_limit_reached,
-        excludedNeighbors: resolution.excluded_neighbors,
-        workLimitReached: resolution.work_limit_reached,
-      };
-    },
-    options,
-    requestContext,
-  );
+  let impact: ImpactResult;
+  try {
+    impact = traverseWithNeighborProvider(
+      root,
+      (
+        current,
+        normalized,
+        _context,
+        maxEdges,
+        stopAfterFirst,
+        allowedNeighborKeys,
+        excludedRelationshipIds,
+      ) => {
+        const resolution = resolver.edgesFor(current, {
+          direction: normalized.direction,
+          relationship_kinds: normalized.relationship_kinds,
+          max_edges: maxEdges,
+          allowed_neighbor_keys: allowedNeighborKeys ? [...allowedNeighborKeys] : undefined,
+          excluded_relationship_ids: excludedRelationshipIds
+            ? [...excludedRelationshipIds]
+            : undefined,
+          stop_after_first: stopAfterFirst,
+        });
+        tracker.charge(requestContext, resolution.coverage.length);
+        observations.push(...resolution.coverage);
+        return {
+          neighbors: collectNeighbors(
+            current,
+            resolution.edges,
+            normalized,
+            requestContext,
+            tracker,
+          ),
+          incomplete: resolution.edge_limit_reached,
+          excludedNeighbors: resolution.excluded_neighbors,
+          workLimitReached: resolution.work_limit_reached,
+        };
+      },
+      options,
+      requestContext,
+      tracker,
+    );
+  } catch (error) {
+    if (!(error instanceof CompilerImpactWorkExhausted)) throw error;
+    const normalized = normalizeOptions(options);
+    impact = {
+      root,
+      direction: normalized.direction,
+      relationship_kinds: normalized.relationship_kinds,
+      nodes: [{ endpoint: root, depth: 0, direct: false }],
+      edges: [],
+      visited_nodes: 1,
+      visited_edges: 0,
+      max_depth_reached: 0,
+      max_depth: normalized.max_depth,
+      max_nodes: normalized.max_nodes,
+      max_edges: normalized.max_edges,
+      incomplete: true,
+      truncation: createTruncationMetadata(true, "work_limit"),
+      truncation_reasons: ["work_limit"],
+    };
+  }
+  if (tracker.exhausted) {
+    const directions =
+      impact.direction === "both" ? (["incoming", "outgoing"] as const) : [impact.direction];
+    for (const kind of impact.relationship_kinds) {
+      for (const direction of directions) {
+        observations.push({
+          kind,
+          direction,
+          endpoint_class: root.symbol_path === "<module>" ? "module" : "symbol",
+          status: "unfinished",
+        });
+      }
+    }
+  }
   const coverage = aggregateRelationshipCoverage(observations);
   const coverageComplete = coverage.every(
     ({ status }) => status === "completed" || status === "not_applicable",

@@ -460,7 +460,7 @@ export interface CompilerImpactWork {
   readonly consumed_items: number;
   readonly exhausted: boolean;
 }
-class CompilerImpactWorkExhausted extends Error {}
+export class CompilerImpactWorkExhausted extends Error {}
 export class CompilerImpactWorkTracker {
   consumed = 0;
   exhausted = false;
@@ -538,6 +538,7 @@ interface ScopedEdgeCollector {
   readonly allowedNeighborFilePaths?: readonly string[];
   readonly excludedRelationshipIds: ReadonlySet<string>;
   readonly workBudget: ScopedRelationshipWorkBudget;
+  readonly requestContext: RequestContext;
   excludedNeighbors: boolean;
 }
 
@@ -796,16 +797,27 @@ function scopedIncidentNeighborKey(
   return undefined;
 }
 
+function chargeCollector(collector: ScopedEdgeCollector): void {
+  collector.workBudget.charge(collector.requestContext);
+}
+
 function addScopedResolvedEdge(collector: ScopedEdgeCollector, edge: RelationshipEdge): void {
+  chargeCollector(collector);
   if (!collector.relationshipKinds.has(edge.kind)) return;
+  chargeCollector(collector);
   if (collector.excludedRelationshipIds.has(edge.relationship_id)) return;
   const neighborKey = scopedIncidentNeighborKey(collector, edge);
+  chargeCollector(collector);
   if (!neighborKey || collector.edges.has(edge.relationship_id)) return;
-  if (collector.allowedNeighborKeys && !collector.allowedNeighborKeys.has(neighborKey)) {
-    collector.excludedNeighbors = true;
-    return;
+  if (collector.allowedNeighborKeys) {
+    chargeCollector(collector);
+    if (!collector.allowedNeighborKeys.has(neighborKey)) {
+      collector.excludedNeighbors = true;
+      return;
+    }
   }
   if (collector.edges.size >= collector.maxEdges) throw new ScopedRelationshipLimitReached();
+  chargeCollector(collector);
   collector.edges.set(edge.relationship_id, edge);
   if (collector.stopAfterFirst) throw new ScopedRelationshipLimitReached();
 }
@@ -867,21 +879,26 @@ function swapScopedCandidates(candidates: ScopedCandidateSet, left: number, righ
 }
 
 function retainScopedCandidate(candidates: ScopedCandidateSet, candidate: RelationshipEdge): void {
-  if (!candidates.collector.relationshipKinds.has(candidate.kind)) return;
-  if (candidates.collector.excludedRelationshipIds.has(candidate.relationship_id)) return;
-  const neighborKey = scopedIncidentNeighborKey(candidates.collector, candidate);
+  const collector = candidates.collector;
+  chargeCollector(collector);
+  if (!collector.relationshipKinds.has(candidate.kind)) return;
+  chargeCollector(collector);
+  if (collector.excludedRelationshipIds.has(candidate.relationship_id)) return;
+  const neighborKey = scopedIncidentNeighborKey(collector, candidate);
   if (!neighborKey) return;
-  if (
-    candidates.collector.allowedNeighborKeys &&
-    !candidates.collector.allowedNeighborKeys.has(neighborKey)
-  ) {
-    candidates.collector.excludedNeighbors = true;
-    return;
+  if (collector.allowedNeighborKeys) {
+    chargeCollector(collector);
+    if (!collector.allowedNeighborKeys.has(neighborKey)) {
+      collector.excludedNeighbors = true;
+      return;
+    }
   }
+  chargeCollector(collector);
   if (candidates.indexes.has(candidate.relationship_id)) return;
   const order = (left: RelationshipEdge, right: RelationshipEdge) =>
     scopedNeighborOrder(candidates.collector.endpointKey, left, right);
   if (candidates.values.length < candidates.capacity) {
+    chargeCollector(collector);
     candidates.values.push(candidate);
     let index = candidates.values.length - 1;
     candidates.indexes.set(candidate.relationship_id, index);
@@ -894,6 +911,7 @@ function retainScopedCandidate(candidates: ScopedCandidateSet, candidate: Relati
     return;
   }
   if (order(candidate, candidates.values[0]) >= 0) return;
+  chargeCollector(collector);
   candidates.indexes.delete(candidates.values[0].relationship_id);
   candidates.values[0] = candidate;
   candidates.indexes.set(candidate.relationship_id, 0);
@@ -1546,7 +1564,9 @@ function addScopedOutgoingCalls(
   let unfinished = false;
   caller.node.forEachDescendant((node) => {
     consumeScopedWork(state, collector);
-    const invocation = classifyCompilerInvocation(checker, state.projectRoot, node);
+    const invocation = classifyCompilerInvocation(checker, state.projectRoot, node, () =>
+      consumeScopedWork(state, collector),
+    );
     if (invocation.state === "not_call" || hasNestedNamedCallOwner(node, caller.node)) return;
     if (invocation.state === "unfinished") {
       unfinished = true;
@@ -1572,7 +1592,9 @@ function addScopedIncomingCalls(
     consumeScopedWork(state, collector);
     sourceFile.forEachDescendant((node) => {
       consumeScopedWork(state, collector);
-      const invocation = classifyCompilerInvocation(checker, state.projectRoot, node);
+      const invocation = classifyCompilerInvocation(checker, state.projectRoot, node, () =>
+        consumeScopedWork(state, collector),
+      );
       if (invocation.state === "unfinished") {
         unfinished = true;
         return;
@@ -1780,6 +1802,7 @@ export function createCompilerRelationshipResolver(
         ? new Set(query.allowed_neighbor_keys)
         : undefined;
       const allowedNeighborFilePaths = allowedNeighborKeys ? new Set<string>() : undefined;
+      const excludedRelationshipIds = new Set<string>();
       try {
         consumeRelationshipWork(state, workBudget);
         for (const neighborKey of query.allowed_neighbor_keys ?? []) {
@@ -1787,6 +1810,10 @@ export function createCompilerRelationshipResolver(
           allowedNeighborFilePaths!.add(
             path.resolve(projectRoot, neighborKey.split("\u0000", 1)[0]),
           );
+        }
+        for (const relationshipId of query.excluded_relationship_ids ?? []) {
+          consumeRelationshipWork(state, workBudget);
+          excludedRelationshipIds.add(relationshipId);
         }
       } catch (error) {
         if (!(error instanceof CompilerImpactWorkExhausted)) throw error;
@@ -1800,7 +1827,6 @@ export function createCompilerRelationshipResolver(
           excluded_neighbors: false,
         };
       }
-      const excludedRelationshipIds = new Set(query.excluded_relationship_ids ?? []);
       const endpointCollector: ScopedEdgeCollector = {
         edges: new Map(),
         endpointKey: key,
@@ -1814,6 +1840,7 @@ export function createCompilerRelationshipResolver(
           : undefined,
         excludedRelationshipIds,
         workBudget,
+        requestContext,
         excludedNeighbors: false,
       };
       let located: { readonly sourceFile: SourceFile; readonly symbol?: LocatedSymbol };
@@ -1951,9 +1978,11 @@ export function createCompilerRelationshipResolver(
           allowedNeighborFilePaths: endpointCollector.allowedNeighborFilePaths,
           excludedRelationshipIds,
           workBudget,
+          requestContext,
           excludedNeighbors: false,
         };
         try {
+          consumeRelationshipWork(state, workBudget);
           producer.collect(collector);
         } catch (error) {
           if (
@@ -2054,16 +2083,63 @@ type CompilerInvocation =
   | { readonly state: "exact"; readonly target: LocatedSymbol }
   | { readonly state: "not_call" | "disjoint" | "unfinished" };
 
+function isPotentiallyPolymorphicInvocation(
+  invoked: Node,
+  declarations: readonly Node[],
+  charge: () => void = () => undefined,
+): boolean {
+  charge();
+  const receiver =
+    Node.isPropertyAccessExpression(invoked) || Node.isElementAccessExpression(invoked)
+      ? invoked.getExpression()
+      : undefined;
+  if (receiver?.getType().isUnion()) return true;
+  if (
+    receiver &&
+    declarationsForSymbol(receiver.getSymbol()).some((declaration) => {
+      charge();
+      return Node.isParameterDeclaration(declaration);
+    })
+  ) {
+    return true;
+  }
+  return declarations.some((declaration) => {
+    charge();
+    if (Node.isMethodSignature(declaration)) return true;
+    if (!Node.isMethodDeclaration(declaration)) return false;
+    if (
+      declaration.hasModifier(SyntaxKind.StaticKeyword) ||
+      declaration.hasModifier(SyntaxKind.PrivateKeyword)
+    ) {
+      return false;
+    }
+    if (declaration.hasModifier(SyntaxKind.AbstractKeyword)) return true;
+    const owner = declaration.getFirstAncestorByKind(SyntaxKind.ClassDeclaration);
+    return (
+      owner?.getDerivedClasses().some((derived) => {
+        charge();
+        return derived.getInstanceMethod(declaration.getName()) !== undefined;
+      }) === true
+    );
+  });
+}
+
 function classifyCompilerInvocation(
   checker: TypeChecker,
   projectRoot: string,
   node: Node,
+  charge?: () => void,
 ): CompilerInvocation {
   const expression = callLikeExpression(node);
   if (!expression) return { state: "not_call" };
   const invoked = unwrapInvocationExpression(expression);
   const invokedDeclarations = declarationsForSymbol(invoked.getSymbol());
-  if (invokedDeclarations.some(Node.isParameterDeclaration)) return { state: "unfinished" };
+  if (
+    invokedDeclarations.some(Node.isParameterDeclaration) ||
+    isPotentiallyPolymorphicInvocation(invoked, invokedDeclarations, charge)
+  ) {
+    return { state: "unfinished" };
+  }
   const signature = checker.getResolvedSignature(node as never);
   const implicit = Node.isNewExpression(node) ? invoked.getType().getConstructSignatures() : [];
   if (!signature && implicit.length !== 1) return { state: "unfinished" };

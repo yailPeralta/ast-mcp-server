@@ -943,6 +943,48 @@ export function formatValue(value: number): string { return String(value); }
     );
   });
 
+  it("publishes no guessed interface or override dispatch edges", async () => {
+    const cases = [
+      [
+        "export interface Contract { run(): void; }\nexport class Implementation implements Contract { run(): void {} }\nexport function caller(value: Contract): void { value.run(); }",
+        "Contract.run",
+      ],
+      [
+        "export class Base { run(): void {} }\nexport class Child extends Base { override run(): void {} }\nexport function caller(value: Base): void { value.run(); }",
+        "Base.run",
+      ],
+    ] as const;
+    for (const [source, target] of cases) {
+      await fixture.write("src/dispatch.ts", source);
+      clearProjectSessions();
+      for (const [symbol_path, direction] of [
+        ["caller", "outgoing"],
+        [target, "incoming"],
+      ] as const) {
+        const impact = structured(
+          await client.callTool({
+            name: "ast_get_impact",
+            arguments: {
+              project_root: fixture.root,
+              file_path: "src/dispatch.ts",
+              symbol_path,
+              direction,
+              relationship_kinds: ["call"],
+              max_depth: 1,
+              max_nodes: 10,
+              max_edges: 10,
+            },
+          }),
+        );
+        expect(impact.edges, `${target}/${direction}`).toEqual([]);
+        expect(impact.coverage, `${target}/${direction}`).toEqual([
+          { kind: "call", direction, endpoint_class: "symbol", status: "unfinished" },
+        ]);
+        expect(impact.incomplete, `${target}/${direction}`).toBe(true);
+      }
+    }
+  });
+
   it("covers all seven compiler relationship kinds with positive and completed negatives", async () => {
     await fixture.write(
       "src/matrix-deps.ts",

@@ -285,6 +285,15 @@
     "scopedRejudgment": "not_run",
     "roundBudget": { "maximumCorrectionRounds": 2, "used": 0, "remaining": 2 }
   },
+  "correctionRounds": [
+    {
+      "round": 1,
+      "token": "sha256:f420e6d82ec52d8bf9098bb0e451fbb0c67714540d27e1d52c33f6cbec717f45",
+      "ids": ["J-R01-001", "J-R01-002"],
+      "status": "corrected-awaiting-dual-rejudgment",
+      "settled": false
+    }
+  ],
   "parentChecks": [
     "Frozen HEAD/tree and both cumulative diff hashes reproduced; Git objects remained available.",
     "git diff --check and workspace cleanliness passed before and after judging.",
