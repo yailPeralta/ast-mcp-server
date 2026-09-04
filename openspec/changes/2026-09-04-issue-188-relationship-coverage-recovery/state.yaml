@@ -61,8 +61,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 30
-  completed: 0
-  pending: 30
+  completed: 3
+  pending: 27
   allComplete: false
 dependencies:
   proposal: all_done
@@ -116,7 +116,7 @@ phaseInstructions:
     - "Archive only after #186 and #187 independently pass and the draft tracker is eligible to merge."
 nextRecommended: apply
 blockedReasons: []
-lastPhase: tasks
+lastPhase: apply
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
@@ -125,15 +125,66 @@ persistence:
 issueAuthority:
   recoveryIssue: 188
   recoveryStatus: approved
+  recoveryTypeLabel: type:chore
   childIssues:
-    - 186
-    - 187
+    - number: 186
+      status: approved
+      typeLabel: type:bug
+    - number: 187
+      status: approved
+      typeLabel: type:bug
   immutableEvidenceIssue: 161
   immutableEvidencePullRequests: "162-185"
 reviewModeAtTasks:
   effective: off
   disposition: disabled/unmanaged
   revision: sha256:247f9e8823c9d5a6f67058d274ef1ab1df154f5a1682473c7dc778d6323e9ddd
+reviewModeAtApply:
+  effective: off
+  disposition: disabled/unmanaged
+  revision: sha256:247f9e8823c9d5a6f67058d274ef1ab1df154f5a1682473c7dc778d6323e9ddd
+  implication: "No receipt review or RDD approval authority applies; ordinary repository policy remains authoritative."
+phaseZeroAuthority:
+  observedAt: "2026-09-04T23:34:31Z"
+  plannedBase:
+    ref: origin/main
+    commit: 6173a39a73f1540c17335a330ea7f14f982387cb
+    tree: ab8b6b4fe739e9cfc939b7cd8c18cf2e09743051
+    matchesPlan: true
+    githubProtectedFlag: false
+  workspace:
+    branch: docs/issue-188-recovery-tasks
+    headCommit: 7c93c4007447abe1ae4d6be0673b99347b5d49e9
+    headTree: bcd4fbf4ea76494417ffa36ddeead77575655e5b
+    trackedDiffCleanBeforePhaseZero: true
+    foreignUntrackedExcluded:
+      - openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/exploration.md
+      - openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/state.yaml
+  planningPullRequests:
+    - "#189 main <- fix/issue-188-recovery-tracker @ 32249b4e3b2742c6ee8895d4816773e9df08cf08; tree fd2fbc6e2609de89fc030404115d97cb2fbbfeac; 364 lines; type:docs; draft; merge-unauthorized"
+    - "#190 fix/issue-188-recovery-tracker <- docs/issue-188-recovery-proposal @ f724276608233ccbd13f15138ca76b36df7050ba; tree 6e2e36b9829bddb4954d3428bf726f9e9d865539; 68 lines; type:docs"
+    - "#191 docs/issue-188-recovery-proposal <- docs/issue-188-recovery-spec @ 0acc91beb567ba3e86013c95cc9b71a092f96e3a; tree b1428df80e937b7060255797900d90b8e18df8a3; 255 lines; type:docs"
+    - "#192 docs/issue-188-recovery-spec <- docs/issue-188-recovery-design @ 2f0b94eb6028e99a6a29e639e21d998b5ee6303f; tree 9d9c88696ca218c55045f74a84595ade70371e94; 77 lines; type:docs"
+    - "#193 docs/issue-188-recovery-design <- docs/issue-188-recovery-tasks @ 7c93c4007447abe1ae4d6be0673b99347b5d49e9; tree bcd4fbf4ea76494417ffa36ddeead77575655e5b; 332 lines; type:docs"
+  planningHashesMatchCommittedHeads: true
+  immediateParentBasesVerified: true
+  conflictsOrPollution: false
+  staleR01Authority: "absent; every R-01 mention rejects authority or marks immutable provenance"
+  u1:
+    branch: test/issue-188-u1-red
+    intendedBasePr: 193
+    baseRef: docs/issue-188-recovery-tasks
+    baseCommit: 7c93c4007447abe1ae4d6be0673b99347b5d49e9
+    baseTree: bcd4fbf4ea76494417ffa36ddeead77575655e5b
+    issueLink: "Refs #188"
+    receiptAcquired: false
+  killSwitches:
+    - "Stop and recalculate if origin/main leaves the planned 6173a39 commit."
+    - "Reject ancestor/foreign scope, receipt/tree mismatch, or any child above 400 authored changed lines."
+    - "Never resume, import, or extend #161 or PR #162-#185 R-01 authority."
+    - "Keep tracker PR #189 draft and merge-unauthorized until #186, #187, and every final gate pass."
+    - "Candidate drift, severe findings, failed verification/CI, or Harness mutation blocks integration."
+  nextApply: "U1 task 1.1 from PR #193; no U1 receipt acquired"
 reviewBudget:
   strategy: feature-branch-chain
   maxAuthoredChangedLinesPerChild: 400
