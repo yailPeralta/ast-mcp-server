@@ -1,0 +1,150 @@
+schemaName: gentle-ai.sdd-status
+schemaVersion: 1
+changeName: 2026-09-04-issue-188-relationship-coverage-recovery
+artifactStore: hybrid
+planningHome:
+  mode: repo-local
+  path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery
+artifactPaths:
+  proposal:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/proposal.md
+  specs:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/specs/relationship-coverage-recovery/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/specs/recovery-chain-authority/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/specs/affected-test-candidates/spec.md
+  design:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/design.md
+  tasks:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/tasks.md
+  applyProgress:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/apply-progress.json
+  verifyReport: []
+  reviewPolicy: []
+  reviewLedger: []
+  reviewReceipt: []
+  reviewBundle: []
+  reviewContext: []
+  reviewState: []
+contextFiles:
+  proposal:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/proposal.md
+  specs:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/specs/relationship-coverage-recovery/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/specs/recovery-chain-authority/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/specs/affected-test-candidates/spec.md
+  design:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/design.md
+  tasks:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/tasks.md
+  applyProgress:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery/apply-progress.json
+  verifyReport: []
+  reviewPolicy: []
+  reviewLedger: []
+  reviewReceipt: []
+  reviewBundle: []
+  reviewContext: []
+  reviewState: []
+artifacts:
+  exploration: done
+  proposal: done
+  specs: done
+  design: done
+  tasks: done
+  applyProgress: done
+  verifyReport: missing
+  reviewLedger: missing
+  reviewReceipt: missing
+  reviewBundle: missing
+  reviewContext: missing
+  reviewState: missing
+taskProgress:
+  total: 30
+  completed: 0
+  pending: 30
+  allComplete: false
+dependencies:
+  proposal: all_done
+  specs: all_done
+  design: all_done
+  tasks: all_done
+  apply: ready
+  verify: blocked
+  archive: blocked
+applyState: ready
+actionContext:
+  mode: repo-local
+  workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
+  allowedEditRoots:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-188-relationship-coverage-recovery
+relationships:
+  dependsOn: []
+  supersedes: []
+  amends: []
+  conflictsWith:
+    - "2026-09-02-r01-honest-relationship-coverage (#161 and PRs #162-185 are closed immutable evidence; never resume or extend)"
+  sameDomainActiveChanges:
+    - "2026-09-04-issue-186-polymorphic-call-authority (independent approved child; depends on recovered U1-U7 baseline)"
+    - "Issue #187 request-wide work accounting (independent approved child; follows #186 in the recovery chain)"
+remediationState:
+  required: false
+  complete: false
+  failedEvidenceRevision: ""
+  lineageId: ""
+  generation: 0
+  fixBatch: 0
+  reason: ""
+phaseInstructions:
+  specs:
+    - "Create fresh delta specs for relationship-coverage-recovery and recovery-chain-authority; do not copy or import closed R-01 specs or approval language."
+    - "Modify affected-test-candidates to freeze six incoming kinds, exclude contains, and fail closed on unsafe coverage or exhausted work."
+    - "Keep #186 callable authority and #187 request-work accounting as separate approved child specifications and mandatory integration gates."
+  tasks:
+    - "Preserve the complete 14-requirement/31-scenario trace and map every scenario to a RED, static admission check, or explicit process verification."
+    - "Create U1-U7 immediate-parent work units from the exact allowlists and budgets in design.md; adapt old 28-entry endpoint-class assertions to the authoritative 14-cell public contract."
+    - "Keep #186 and #187 as independent kill-switch children, then plan pre-archive verification, final spec merge, post-archive candidate freeze, fresh review/verify/CI, and read-only Harness denial."
+  apply:
+    - "Do not apply until fresh proposal, specs, design, and tasks define the U1-U7 allowlists and Feature Branch Chain."
+    - "Re-author source/test/docs behavior from exact evidence commits; do not directly cherry-pick old commits or import old OpenSpec/Judgment artifacts."
+    - "Keep every child at or below 400 authored changed lines and target its immediate predecessor branch."
+  verify:
+    - "Bind fresh focused tests, full gates, required CI, no-write Harness checks, and review evidence to the same final candidate."
+  remediate:
+    - "Never recover or extend the exhausted #161 Judgment lineage; any new candidate follows fresh ordinary review authority."
+  archive:
+    - "Archive only after #186 and #187 independently pass and the draft tracker is eligible to merge."
+nextRecommended: apply
+blockedReasons: []
+lastPhase: tasks
+persistence:
+  requestedMode: hybrid
+  authoritativeStore: openspec
+  mirrorStatus: skipped
+  mirrorReason: "The user prohibited Harness/control-plane writes; only the authorized OpenSpec change directory was written."
+issueAuthority:
+  recoveryIssue: 188
+  recoveryStatus: approved
+  childIssues:
+    - 186
+    - 187
+  immutableEvidenceIssue: 161
+  immutableEvidencePullRequests: "162-185"
+reviewModeAtTasks:
+  effective: off
+  disposition: disabled/unmanaged
+  revision: sha256:247f9e8823c9d5a6f67058d274ef1ab1df154f5a1682473c7dc778d6323e9ddd
+reviewBudget:
+  strategy: feature-branch-chain
+  maxAuthoredChangedLinesPerChild: 400
+  foundationMergeable: false
+  mergeConditions:
+    - "Issue #186 child closes callable-authority limitations."
+    - "Issue #187 child closes request-work accounting limitations."
+    - "Fresh final-candidate review has no unresolved severe finding."
+    - "Strict verification, archive readiness, required CI, and no-write Harness checks pass."
+risks:
+  - "Direct cherry-picks import stale R-01 execution and approval artifacts."
+  - "The U3 callable classifier remains non-mergeable until issue #186 closes its known authority defects."
+  - "The U2 work tracker remains non-mergeable until issue #187 charges all request-wide sorting and finalization work."
+  - "Any main advance requires replay conflict and line-budget recalculation before branching."
