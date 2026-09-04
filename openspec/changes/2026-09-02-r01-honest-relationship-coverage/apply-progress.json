@@ -1,9 +1,9 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-02-r01-honest-relationship-coverage",
-  "workUnit": "U7",
-  "stage": "u7-settled",
-  "delivery": "feature-branch-chain; branch docs/r01-u7-settlement; next Judgment U8",
+  "workUnit": "U8",
+  "stage": "judgment-escalated",
+  "delivery": "terminal Judgment Day escalation; task 8.1 pending; tasks 8.2-8.5 prohibited; no verify or archive authority",
   "receipt": {
     "requestId": "r01-u1-a1-acquire-20260902t1640z",
     "token": "sha256:d7caf9f4e1247c8741b1180a1b25fa3a218c0cb23a6b1f3595b614c8ca04a678",
@@ -99,18 +99,7 @@
     { "id": "8.5", "name": "Delivery closure", "status": "pending" }
   ],
   "tdd": {
-    "red": [
-      { "id": "j-r01-001", "result": "2 focused tests failed: interface dispatch was completed" },
-      { "id": "j-r01-002", "result": "1 focused test failed: BFS dispatch was uncharged" },
-      {
-        "id": "j-r01-001-round2",
-        "result": "2 focused tests failed: callable-property dispatch guessed exact and super dispatch was unfinished"
-      },
-      {
-        "id": "j-r01-002-round2",
-        "result": "1 focused test failed: one-below candidate accounting returned a partial edge page"
-      }
-    ],
+    "red": [],
     "green": [
       { "id": "j-r01-001", "result": "2 focused tests passed; 84 skipped" },
       { "id": "j-r01-002", "result": "1 focused test passed; 55 skipped" },
@@ -242,6 +231,11 @@
       "id": "judgment-round2-correction",
       "command": "focused RED/GREEN; six-file U1-U7 matrix; format, lint, typecheck, full test/build and MCP/lifecycle/CLI/error/package smokes",
       "result": "RED exit 1 (2 residual failures); GREEN 3/3; affected 139/139; full 986 plus supervised 2; all quality, build, and smoke gates exit 0"
+    },
+    {
+      "id": "judgment-round2-scoped-rejudgment",
+      "command": "blind dual scoped rejudgment over J-R01-001/J-R01-002 and immutable round-two fix delta; focused 139 tests; typecheck; diff check",
+      "result": "both judges FAILED; focused 139 passed; typecheck and diff check passed; terminal ESCALATED"
     }
   ],
   "evidence": {
@@ -267,11 +261,29 @@
     "judgmentRoundTwo": {
       "authorityToken": "sha256:40d2a58bffce2f9d4ca6f44c54d082eef621dd6fe713c7fceb107178d3220947",
       "scope": ["J-R01-001", "J-R01-002"],
-      "status": "corrected-awaiting-dual-rejudgment",
-      "accounting": "filter, membership, neighbor parsing, dedupe, retention, merge, ordering, slicing, and emission charge before operation under one tracker; exhaustion returns no partial edge page",
+      "status": "dual-rejudgment-failed-terminal-escalation",
+      "candidateBase": "bff8251e7948278c9760e42eb06ae1b7dfd57392",
+      "candidateCommit": "22e38d2db5e8c23f0b1e98f455e755a5ba5405ed",
+      "candidateEvidenceRevision": "sha256:856bd24a01d72ec809ea7521259e05889b68b95a5211139b1bd4f220e97bb7ea",
+      "changedLines": 333,
+      "focusedTestsPassed": 139,
+      "typecheck": "passed",
+      "diffCheck": "passed",
+      "dualScopedVerdict": "FAILED",
+      "unresolved": ["J-R01-001", "J-R01-002"],
+      "blockers": [
+        "J-R01-001: callable getter/accessor override dispatch can still be certified exact; exact private method calls through parameter receivers can be falsely marked unfinished.",
+        "J-R01-002: collectNeighbors final neighbor-array sorting/emission, sorted compiler source paths, and containment candidate sorting remain uncharged."
+      ],
+      "newSevere": [],
       "frozenOutOfScope": ["J-R01-003", "J-R01-I01"],
-      "task8.1": "pending"
+      "correctionReceipt": "settled-failed",
+      "roundBudget": { "used": 2, "remaining": 0, "mayResetOrExtend": false },
+      "terminalVerdict": "ESCALATED",
+      "nextRecommended": "resolve-blockers",
+      "task8.1": "pending",
+      "tasks8.2Through8.5": "prohibited"
     }
   },
-  "updatedAt": "2026-09-04T05:00:00Z"
+  "updatedAt": "2026-09-04T05:02:37Z"
 }

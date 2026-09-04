@@ -2,7 +2,7 @@
   "schema": "judgment-day",
   "schemaVersion": 1,
   "change": "2026-09-02-r01-honest-relationship-coverage",
-  "round": 1,
+  "round": 2,
   "targetIdentity": "sha256:58be9f061fdd171c5652122aa3e1a095c2a6da244f06ddbaca08b09ff76d19df",
   "frozenInputs": {
     "repository": "/home/yail/Documentos/proyects/ast-mcp-server",
@@ -281,9 +281,11 @@
   "correction": {
     "authorized": false,
     "workUnits": ["J-R01-001", "J-R01-002"],
-    "launched": false,
-    "scopedRejudgment": "not_run",
-    "roundBudget": { "maximumCorrectionRounds": 2, "used": 0, "remaining": 2 }
+    "launched": true,
+    "scopedRejudgment": "escalated",
+    "roundBudget": { "maximumCorrectionRounds": 2, "used": 2, "remaining": 0 },
+    "exhausted": true,
+    "mayResetOrExtend": false
   },
   "correctionRounds": [
     {
@@ -355,6 +357,66 @@
         "next": "final-allowed-correction-round-2"
       },
       "scopedVerdict": "FAILED"
+    },
+    {
+      "round": 2,
+      "scope": ["J-R01-001", "J-R01-002"],
+      "fixDelta": {
+        "baseCommit": "bff8251e7948278c9760e42eb06ae1b7dfd57392",
+        "candidateCommit": "22e38d2db5e8c23f0b1e98f455e755a5ba5405ed",
+        "candidateEvidenceRevision": "sha256:856bd24a01d72ec809ea7521259e05889b68b95a5211139b1bd4f220e97bb7ea",
+        "changedLines": 333
+      },
+      "judges": [
+        {
+          "id": "A",
+          "verdict": "FAILED",
+          "evidence": [
+            "J-R01-001 UNRESOLVED: runtime and source proof shows callable getter/accessor override dispatch can still be certified exact because recognized member kinds omit accessor and function-type ownership.",
+            "J-R01-002 UNRESOLVED: collectNeighbors final neighbor-array sorting and emission around src/services/impact.ts:355 remain uncharged; sorted compiler source paths and containment candidate sorting are also uncharged."
+          ]
+        },
+        {
+          "id": "B",
+          "verdict": "FAILED",
+          "evidence": [
+            "J-R01-001 UNRESOLVED: exact private method calls through parameter receivers are falsely classified unfinished because the parameter polymorphism check precedes the private/static exemption.",
+            "J-R01-002 UNRESOLVED: collectNeighbors final neighbor-array sorting and emission around src/services/impact.ts:355 remain uncharged."
+          ]
+        }
+      ],
+      "merged": [
+        {
+          "id": "J-R01-001",
+          "status": "unresolved",
+          "severity": "HIGH",
+          "remainingGap": "Callable getter/accessor override dispatch can still be certified exact, while exact private method calls through parameter receivers are falsely marked unfinished by check ordering."
+        },
+        {
+          "id": "J-R01-002",
+          "status": "unresolved",
+          "severity": "HIGH",
+          "remainingGap": "Request-wide accounting omits collectNeighbors final sorting and emission, sorted compiler source paths, and containment candidate sorting."
+        }
+      ],
+      "newSevere": [],
+      "newSevereDisposition": "No round-two-new severe finding exists beyond residual or fix-caused scope.",
+      "contradictions": [],
+      "frozenOutOfScope": ["J-R01-003", "J-R01-I01"],
+      "focusedVerification": {
+        "testsPassed": 139,
+        "typecheck": "passed",
+        "diffCheck": "passed"
+      },
+      "correctionReceipt": "settled-failed",
+      "correctionBudget": {
+        "roundsUsed": 2,
+        "roundsRemaining": 0,
+        "next": "none-terminal-escalation",
+        "mayResetOrExtend": false
+      },
+      "scopedVerdict": "FAILED",
+      "terminalVerdict": "ESCALATED"
     }
   ],
   "parentChecks": [
@@ -362,17 +424,31 @@
     "git diff --check and workspace cleanliness passed before and after judging.",
     "Focused relationship matrix passed 6 files/134 tests; typecheck, build, and package smoke passed.",
     "PR #180 CI later failed only at yarn audit for vulnerable fast-uri 3.1.5 and qs 6.15.3; package.json and yarn.lock are unchanged from root base, so this was recorded as pre-existing external audit evidence rather than a candidate-caused ledger finding.",
-    "Both judges reported clean final Git status and zero judge-owned surviving processes."
+    "Both judges reported clean final Git status and zero judge-owned surviving processes.",
+    "Final round-two focused verification passed 139 tests, typecheck, and diff check at evidence revision sha256:856bd24a01d72ec809ea7521259e05889b68b95a5211139b1bd4f220e97bb7ea.",
+    "Round-two correction changed 333 lines from bff8251e7948278c9760e42eb06ae1b7dfd57392 to 22e38d2db5e8c23f0b1e98f455e755a5ba5405ed."
   ],
   "taskProgress": {
     "completed": 23,
     "total": 28,
     "task8.1": "pending",
-    "next": "human correction authorization for J-R01-001 and J-R01-002"
+    "tasks8.2Through8.5": "prohibited",
+    "next": "resolve-blockers"
   },
+  "blockedReasons": [
+    "J-R01-001 remains unresolved: callable getter/accessor override dispatch can still be certified exact, and exact private method calls through parameter receivers can be falsely marked unfinished.",
+    "J-R01-002 remains unresolved: collectNeighbors final neighbor-array sorting/emission, sorted compiler source paths, and containment candidate sorting are not charged to the request-wide work budget.",
+    "Two correction rounds and two scoped rejudgments are exhausted; Judgment Day cannot reset or extend the budget.",
+    "Task 8.1 requires APPROVED and remains pending; tasks 8.2-8.5 have no verify, archive, or delivery authority."
+  ],
   "preCorrectionState": "NEEDS_CORRECTION",
   "terminalVerdict": "ESCALATED",
+  "terminalState": "escalated",
   "deliveryAuthority": false,
+  "verifyAuthority": false,
+  "archiveAuthority": false,
   "outerReceiptSettled": false,
-  "createdAt": "2026-09-03T20:57:17Z"
+  "finalCorrectionReceipt": "settled-failed",
+  "createdAt": "2026-09-03T20:57:17Z",
+  "updatedAt": "2026-09-04T05:02:37Z"
 }

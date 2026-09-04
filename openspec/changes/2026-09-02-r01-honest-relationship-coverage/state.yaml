@@ -3,8 +3,8 @@ schemaVersion: 1
 changeName: 2026-09-02-r01-honest-relationship-coverage
 artifactStore: hybrid
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-02-r01-honest-relationship-coverage
-nextRecommended: judgment U8
-lastPhase: apply-u7-settled
+nextRecommended: resolve-blockers
+lastPhase: judgment-u8-escalated
 artifacts:
   exploration: done
   proposal: done
@@ -19,8 +19,11 @@ taskProgress:
   pending: 5
   allComplete: false
   activeRed: 0
+blockedReasons:
+  - "J-R01-001 remains unresolved: callable getter/accessor override dispatch can still be certified exact, and exact private method calls through parameter receivers can be falsely marked unfinished."
+  - "J-R01-002 remains unresolved: collectNeighbors final neighbor-array sorting/emission, sorted compiler source paths, and containment candidate sorting are not charged to the request-wide work budget."
+  - "Two correction rounds and two scoped rejudgments are exhausted; Judgment Day cannot reset or extend the budget."
+  - "Task 8.1 requires APPROVED and remains pending; tasks 8.2-8.5 have no verify, archive, or delivery authority."
 risks:
-  - Scoped impact accepts call and contains without running a producer, allowing false-complete empty results.
-  - Incoming call and containment discovery can become whole-project scans unless one bounded work tracker is shared.
-  - Containment semantics and affected-test candidate relationship selection require explicit proposal decisions.
-  - DeepSeek Harness apply must remain absent and denied.
+  - Judgment Day terminated ESCALATED with both confirmed severe findings unresolved.
+  - Strict verify and archive are prohibited because task 8.1 did not achieve APPROVED.
