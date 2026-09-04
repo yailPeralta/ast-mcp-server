@@ -1,0 +1,306 @@
+{
+  "schema": "judgment-day",
+  "schemaVersion": 1,
+  "change": "2026-09-02-r01-honest-relationship-coverage",
+  "round": 1,
+  "targetIdentity": "sha256:58be9f061fdd171c5652122aa3e1a095c2a6da244f06ddbaca08b09ff76d19df",
+  "frozenInputs": {
+    "repository": "/home/yail/Documentos/proyects/ast-mcp-server",
+    "branch": "review/r01-u8-judgment",
+    "cleanWorkspace": true,
+    "rootBase": {
+      "commit": "6173a39a73f1540c17335a330ea7f14f982387cb",
+      "tree": "ab8b6b4fe739e9cfc939b7cd8c18cf2e09743051"
+    },
+    "tracker": {
+      "commit": "507b234f69f8d150a71ab0adb2f9395b97cc9daf",
+      "tree": "bbadb46e25700f1e31fa3fa7089a3ba00d1cfd81"
+    },
+    "target": {
+      "commit": "e15e879314dc3c002cd5758f6ced07c10a53b414",
+      "tree": "e779a70815c86b7d1819e44aab1c95d5ae87c867"
+    },
+    "diffs": {
+      "rootSha256": "b650dd1ed1ca3a4295551db7c0649ba5d99e251ccb7002412ce6c318ae6a020b",
+      "trackerSha256": "49b4a1da0f13e15277b2bbe57bc985e6a6b80b364628911aeae763d9e687c32d",
+      "rootTotals": { "files": 29, "additions": 2495, "deletions": 126, "total": 2621 },
+      "trackerTotals": { "files": 28, "additions": 2469, "deletions": 126, "total": 2595 },
+      "u7Totals": { "files": 9, "additions": 186, "deletions": 35, "total": 221 }
+    },
+    "artifactManifestSha256": "79430db00c46f3af3d8eee20c7c8d1178e920940b6aa39313919e78f849cd3fa",
+    "artifacts": [
+      "openspec/changes/2026-09-02-r01-honest-relationship-coverage/exploration.md",
+      "openspec/changes/2026-09-02-r01-honest-relationship-coverage/proposal.md",
+      "openspec/changes/2026-09-02-r01-honest-relationship-coverage/specs/affected-test-candidates/spec.md",
+      "openspec/changes/2026-09-02-r01-honest-relationship-coverage/specs/honest-relationship-coverage/spec.md",
+      "openspec/changes/2026-09-02-r01-honest-relationship-coverage/design.md",
+      "openspec/changes/2026-09-02-r01-honest-relationship-coverage/chain.md",
+      "openspec/changes/2026-09-02-r01-honest-relationship-coverage/tasks.md",
+      "openspec/changes/2026-09-02-r01-honest-relationship-coverage/state.yaml",
+      "openspec/changes/2026-09-02-r01-honest-relationship-coverage/apply-progress.json",
+      "openspec/changes/2026-09-02-r01-honest-relationship-coverage/evidence.md"
+    ],
+    "requirements": 13,
+    "scenarios": 17,
+    "u7EvidenceRevision": "sha256:cdefde3dd3b822a09a8c8f4b53235eb69a11a05c9704fe91552582d722eed4a3",
+    "issue": {
+      "number": 161,
+      "state": "OPEN",
+      "labels": ["status:approved", "type:bug"],
+      "url": "https://github.com/yailPeralta/ast-mcp-server/issues/161",
+      "snapshotSha256": "65819dfda1c15e4201fe97c11e790da36740dfcba380cb086bc14a11be37347b"
+    },
+    "pullRequestChain": [
+      "162:main<-fix/r01-honest-relationship-coverage@507b234f69f8d150a71ab0adb2f9395b97cc9daf:OPEN:DRAFT",
+      "163:fix/r01-honest-relationship-coverage<-docs/r01-explore@183eb700975d1be3ff4c462f04150df1da5e640c:OPEN",
+      "164:docs/r01-explore<-docs/r01-proposal@9ca37282a8bdc2aa43564713e9d4302899a0e3da:OPEN",
+      "165:docs/r01-proposal<-docs/r01-spec@3366e99cc30bdedf7d07d8cf34f5251409bb55f2:OPEN",
+      "166:docs/r01-spec<-docs/r01-design@5b5aa2a1f75b485ac7aee1033bffaedb6b1046f8:OPEN",
+      "167:docs/r01-design<-docs/r01-tasks@7be90221626c55ab8922e04fc8f20cf1c1cf18e7:OPEN",
+      "168:docs/r01-tasks<-test/r01-u1-red@1a08635520d0d961c5c2887847a664065674f3f8:OPEN",
+      "169:test/r01-u1-red<-feat/r01-u2-coverage-ledger@13af89de4976799ccc233c1613699395c378ccf9:OPEN",
+      "170:feat/r01-u2-coverage-ledger<-docs/r01-u2-settlement@32e4109b1abfa3fdb95147d2ebc4f1cdb3e1f021:OPEN",
+      "171:docs/r01-u2-settlement<-feat/r01-u3-scoped-calls@92db7e2f3ed162ecd69a27d5cc73217e821b4fe0:OPEN",
+      "172:feat/r01-u3-scoped-calls<-docs/r01-u3-settlement@6e9412ff5dd144cf17e5f9137fe2c7c6c8f22dfb:OPEN",
+      "173:docs/r01-u3-settlement<-feat/r01-u4-direct-contains@19a96218ba7bc3800b1932b7599fca32512f1c37:OPEN",
+      "174:feat/r01-u4-direct-contains<-docs/r01-u4-settlement@5ab9185a30399bf588e7906192b5f025c26bb994:OPEN",
+      "175:docs/r01-u4-settlement<-fix/r01-u5-public-candidates@15e252e957139f113cec8735afdc10adb77a0a92:OPEN",
+      "176:fix/r01-u5-public-candidates<-docs/r01-u5-settlement@5e74c1d43227621688ecd302e08365fb8deff76d:OPEN",
+      "177:docs/r01-u5-settlement<-test/r01-u6-relationship-matrix@3af4fe67f3b3f50947e9a93dce9bf377c9cc5132:OPEN",
+      "178:test/r01-u6-relationship-matrix<-docs/r01-u6-settlement@77842a3e847945e9582f9173f4fa1d0c0068a4f6:OPEN",
+      "179:docs/r01-u6-settlement<-docs/r01-u7-gates@bac52a4de598e0c01412d0d54efdfe9cef3a4353:OPEN",
+      "180:docs/r01-u7-gates<-docs/r01-u7-settlement@e15e879314dc3c002cd5758f6ced07c10a53b414:OPEN"
+    ],
+    "pullRequestChainSnapshotSha256": "525f002df148c751445735549a3c32d5afea1614ec0e7476cb58bc0400f690d8",
+    "outerReceipt": {
+      "token": "sha256:0d074965158dddebd24fb32a24b1fc4bbdedd42f0dda81a52525f794def9ce14",
+      "acquire": "r01-u8-judgment-a1-acquire-20260903t2046z",
+      "reset": "sha256:049b7d699f0c4da97967c391dd4d8b3aafeac896ea3fa87fe92e313d5349684c",
+      "settled": false
+    },
+    "scope": [
+      "all R-01 artifacts and cumulative code, tests, docs, and evidence",
+      "issue #161 and PR chain #162-#180",
+      "13 requirements and 17 scenarios",
+      "compiler-exact call and direct-contains semantics",
+      "coverage completeness, precedence, deterministic order, and request-wide work",
+      "typed cancellation without partial success",
+      "six-kind incoming candidate authority, contains exclusion, fail-closed coverage, and proven_empty",
+      "JSON/TOON logical equivalence and additive API compatibility",
+      "build, package, CI, and pinned Harness apply denial"
+    ],
+    "skills": [
+      "/home/yail/.agents/skills/judgment-day/SKILL.md",
+      "/home/yail/.agents/skills/judgment-day/references/prompts-and-formats.md",
+      "/home/yail/.agents/skills/sdd-apply/SKILL.md",
+      "/home/yail/.agents/skills/_shared/openspec-convention.md",
+      "/home/yail/.agents/skills/_shared/persistence-contract.md",
+      "/home/yail/.agents/skills/_shared/review-ledger-contract.md"
+    ]
+  },
+  "judges": [
+    {
+      "id": "A",
+      "agentId": "71e5909f-5e72-443f-ba48-6de7377a246a",
+      "result": {
+        "findings": [
+          {
+            "location": "src/services/relationships.ts:2082",
+            "severity": "HIGH",
+            "claim": "Outgoing call impact falsely certifies some dynamic dispatch as a completed empty result: an invocation resolved only to an interface method signature is classified as disjoint, so the outgoing producer neither emits an edge nor marks coverage unfinished, allowing callers to trust a false negative.",
+            "evidence_class": "deterministic",
+            "causal_disposition": "introduced",
+            "proof_refs": [
+              "src/services/relationships.ts:2025-2027 makes every MethodSignature non-canonical; lines 2065-2084 return disjoint when declarations exist but normalize to zero targets, including interface-method calls.",
+              "src/services/relationships.ts:1547-1560 marks only unfinished invocations unsafe and ignores disjoint; lines 1981-1984 then upgrade call coverage to completed.",
+              "test/impact.test.ts:1958-1993 covers parameter uncertainty and exact disjoint free-function calls but not interface-method outgoing dispatch.",
+              "minimal_correction: classify method signatures without one canonical implementation as unfinished for outgoing coverage and add service/MCP regressions for interface-typed method invocation."
+            ]
+          },
+          {
+            "location": "src/services/impact.ts:628",
+            "severity": "HIGH",
+            "claim": "The request-wide work budget excludes BFS and required retention/probe operations, so traversal can perform work beyond work.max_items while reporting only producer charges; consumed_items is therefore not an authoritative performance bound.",
+            "evidence_class": "deterministic",
+            "causal_disposition": "introduced",
+            "proof_refs": [
+              "src/services/impact.ts:617-627 creates the tracker and passes it only to the relationship resolver; lines 628-659 invoke traversal without passing the tracker.",
+              "src/services/impact.ts:402-536 performs dequeue, dispatch, probing, classification, and node/edge admission without tracker charges; lines 319-349 sort and filter edges outside the tracker.",
+              "src/services/relationships.ts:799-810 and 869-899 perform membership checks, dedupe, retention, and emission without tracker charges.",
+              "The R-01 spec at lines 71-79 requires one budget for BFS, producers, and probes; design.md:69-77 explicitly requires these charges.",
+              "minimal_correction: thread the same tracker through traversal and candidate retention, charge every specified BFS/probe/filter/retention/emission unit, and add exact-bound exhaustion tests."
+            ]
+          },
+          {
+            "location": "src/services/relationships.ts:1941",
+            "severity": "WARNING",
+            "claim": "Coverage failures are tracked only by relationship kind, so in a both request an unfinished incoming producer also marks an independently completed outgoing entry unfinished, making the per-direction ledger inaccurate and unnecessarily incomplete.",
+            "evidence_class": "deterministic",
+            "causal_disposition": "introduced",
+            "proof_refs": [
+              "src/services/relationships.ts:1841-1911 installs separate incoming and outgoing producers, but lines 1941-1968 record failures in Set<RelationshipEdgeKind> and discard direction.",
+              "src/services/relationships.ts:1981-1984 leaves every coverage entry of that kind unfinished regardless of entry.direction.",
+              "minimal_correction: key producer failures by kind and effective direction, then add a both regression where only one direction is unresolved."
+            ]
+          }
+        ],
+        "evidence": [
+          "Read the Judgment Day contracts, repository instructions, relevant ADRs, all 10 R-01 OpenSpec artifacts, cumulative runtime/schema/docs diffs, and focused implementation/tests for calls, contains, coverage, budgets, candidates, JSON/TOON, and cancellation.",
+          "Confirmed HEAD/tree e15e879314dc3c002cd5758f6ced07c10a53b414/e779a70815c86b7d1819e44aab1c95d5ae87c867; reproduced full-index root/tracker diff SHA-256 values b650dd1ed1ca3a4295551db7c0649ba5d99e251ccb7002412ce6c318ae6a020b and 49b4a1da0f13e15277b2bbe57bc985e6a6b80b364628911aeae763d9e687c32d; counted exactly 13 requirements and 17 scenarios.",
+          "Fetched issue #161 read-only and confirmed OPEN with status:approved/type:bug; fetched open PRs #162-#180 and confirmed the immediate-predecessor chain, draft tracker #162, and #180 head e15e879314dc3c002cd5758f6ced07c10a53b414. PR #180 CI was still pending when inspected (gh pr checks exit 8), so no green-CI claim was made.",
+          "Focused Vitest matrix passed 6 files/134 tests; yarn typecheck exited 0. The checks exposed no existing regression but do not cover the proven branches above.",
+          "Inspected pinned-Harness evidence recording revision cd5ef8148158c3a752a658978873241fdf8e2bbc, guarded counts [15,0,15], apply absence, direct UNKNOWN_TOOL, and identical before/after canonical snapshots; no Harness action or write was performed.",
+          "Final Git status remained clean on review/r01-u8-judgment at the frozen commit/tree. All judge-started commands were foreground and exited; no judge-owned process remained. Pre-existing AST server processes and unrelated concurrent pack/tsc processes observed in the final process listing were left untouched."
+        ]
+      }
+    },
+    {
+      "id": "B",
+      "agentId": "ad5d08c0-d39a-4fd4-9058-16d52a5ee34e",
+      "result": {
+        "findings": [
+          {
+            "location": "src/services/relationships.ts:2081",
+            "severity": "HIGH",
+            "claim": "Dynamic method dispatch is published as a single exact compiler-authoritative call instead of unfinished: a call through a base-class-typed receiver resolves to the base implementation even when an override is a possible runtime target, so consumers can trust a guessed callee and unsafe call coverage as complete.",
+            "evidence_class": "deterministic",
+            "causal_disposition": "introduced",
+            "proof_refs": [
+              "src/services/relationships.ts:2065-2081 selects declarations from the invoked symbol and returns exact whenever they collapse to one LocatedSymbol, with no proof that receiver dispatch is final; lines 1981-1988 then upgrade coverage to completed.",
+              "An in-memory target-build Base/Child override probe returned caller->Base.m with completed coverage and incomplete=false.",
+              "The R-01 spec lines 35-49 and ADR 0007 lines 33-35 require dynamic targets to be unfinished without guessed edges.",
+              "minimal_correction: classify potentially polymorphic/interface/union receiver dispatch as unfinished unless compiler evidence proves one final canonical implementation; emit no edge and add outgoing/incoming override and interface MCP regressions."
+            ]
+          },
+          {
+            "location": "src/services/relationships.ts:1582",
+            "severity": "HIGH",
+            "claim": "Incoming call discovery silently drops exact recursive self-calls and still reports completed coverage, so ast_get_impact can return a false complete-empty incoming result while outgoing returns the exact self-edge.",
+            "evidence_class": "deterministic",
+            "causal_disposition": "introduced",
+            "proof_refs": [
+              "src/services/relationships.ts:1580-1584 returns when caller.node equals target.node without an unfinished marker; lines 1981-1988 upgrade coverage to completed.",
+              "An in-memory recursive-function probe returned no incoming edges with completed coverage and incomplete=false while outgoing returned recur->recur.",
+              "The R-01 spec lines 35-43 requires exact caller-to-callee free-function edges and defines no recursive-call exclusion.",
+              "minimal_correction: retain exact self-call edges in incoming discovery and add registered-MCP recursive free-function and method cases."
+            ]
+          },
+          {
+            "location": "src/services/impact.ts:402",
+            "severity": "HIGH",
+            "claim": "The advertised request-wide work budget does not cover BFS or neighbor processing, so work.consumed_items underreports request work and max_items is not the promised aggregate safety bound.",
+            "evidence_class": "deterministic",
+            "causal_disposition": "introduced",
+            "proof_refs": [
+              "src/services/impact.ts:617-627 passes the tracker only to createCompilerRelationshipResolver; traverseWithNeighborProvider has no tracker parameter.",
+              "src/services/impact.ts:402-405 dequeues without a charge, lines 444-473 classify/adopt neighbors using cancellation checkpoints only, and lines 319-349 sort and scan edges without charges.",
+              "The R-01 spec lines 71-79 and ADR 0007 require one budget covering BFS, producers, and probes.",
+              "minimal_correction: thread the same tracker through traversal and collectNeighbors, charge dequeue/dispatch/bookkeeping/emission, and add exact-bound traversal exhaustion tests."
+            ]
+          },
+          {
+            "location": "src/services/relationships.ts:1941",
+            "severity": "WARNING",
+            "claim": "A limit or unfinished result in one direction contaminates the other direction's coverage during direction=both because unfinished state is tracked only by relationship kind.",
+            "evidence_class": "deterministic",
+            "causal_disposition": "introduced",
+            "proof_refs": [
+              "src/services/relationships.ts:1941 and 1967 record only producer.kinds in unfinishedKinds; lines 1981-1984 apply it to every direction entry.",
+              "An asymmetric max_edges=1 probe marked both incoming and outgoing call entries unfinished although only outgoing hit the limit.",
+              "The R-01 spec lines 5-13 defines coverage per kind/effective direction/endpoint class.",
+              "minimal_correction: key producer state by kind plus effective direction and add a both-direction asymmetric-limit regression."
+            ]
+          }
+        ],
+        "evidence": [
+          "Confirmed HEAD e15e879314dc3c002cd5758f6ced07c10a53b414, tree e779a70815c86b7d1819e44aab1c95d5ae87c867, branch review/r01-u8-judgment; root and tracker git diff --full-index SHA-256 values matched b650dd1e... and 49b4a1da....",
+          "Inspected all ten R-01 artifacts, both delta specs (13 requirements/17 scenarios), cumulative changed implementation/tests/docs, accepted ADRs 0007/0012, issue #161, and the #162-#180 PR chain; chain bases/heads, one type label each, #161 links, tracker draft state, and #180 target OID matched the frozen scope. Per-commit changed-line counts were <=400.",
+          "Focused target tests passed: 6 files and 134 tests covering impact, MCP, relationships, call spines, candidates, and batch. Additional read-only in-memory target-build probes deterministically reproduced dynamic-dispatch false authority, recursive incoming-call omission, and bidirectional status contamination.",
+          "AST MCP status/outline/diagnostics calls returned no model-visible payload, so source conclusions use exact line reads, git history/blame, executable target-build probes, and passing tests rather than claiming compiler-backed AST-tool evidence.",
+          "Pinned Harness evidence and assertions were inspected only: revision cd5ef814..., guarded count 15, apply absent, direct UNKNOWN_TOOL, and recorded canonical before/after snapshot equality; the Harness gate was not rerun or modified.",
+          "Final git status remained clean on review/r01-u8-judgment. All judge-started commands were foreground and exited; no process was started or left by this judge. Process inspection showed only pre-existing MCP server processes owned by the surrounding session."
+        ]
+      }
+    }
+  ],
+  "ledger": [
+    {
+      "id": "J-R01-001",
+      "classification": "confirmed-severe",
+      "severity": "HIGH",
+      "status": "needs-correction",
+      "rootDefect": "Dynamic method dispatch is certified as exact or disjoint-complete without proving a single non-polymorphic implementation.",
+      "confirmedBy": ["A", "B"],
+      "locations": ["src/services/relationships.ts:2081", "src/services/relationships.ts:2082"],
+      "impact": "Impact can publish a guessed callee or false complete-empty result for interface/override dispatch, violating compiler-exact fail-closed authority.",
+      "minimalCorrection": "Classify interface, override-capable, union, or otherwise polymorphic receiver dispatch as unfinished unless compiler evidence proves one final implementation; emit no guessed edge and add service/MCP interface and override regressions."
+    },
+    {
+      "id": "J-R01-002",
+      "classification": "confirmed-severe",
+      "severity": "HIGH",
+      "status": "needs-correction",
+      "rootDefect": "The shared work tracker is confined to relationship producers and omits BFS, probes, retention, dedupe, and emission work.",
+      "confirmedBy": ["A", "B"],
+      "locations": [
+        "src/services/impact.ts:402",
+        "src/services/impact.ts:628",
+        "src/services/relationships.ts:799",
+        "src/services/relationships.ts:869"
+      ],
+      "impact": "Requests can exceed max_items while reporting a lower consumed_items value, so the public request-wide performance bound is non-authoritative.",
+      "minimalCorrection": "Thread one tracker through traversal and relationship retention; charge all specified dequeue, dispatch, probe, filtering, dedupe, retention, and emission units; add exact-bound exhaustion regressions."
+    },
+    {
+      "id": "J-R01-003",
+      "classification": "suspect-severe",
+      "severity": "HIGH",
+      "status": "suspect",
+      "reportedBy": ["B"],
+      "locations": ["src/services/relationships.ts:1582"],
+      "rootDefect": "Incoming call discovery drops exact recursive self-call edges while reporting completed coverage.",
+      "disposition": "Single-judge severe finding; do not auto-fix unless independently corroborated or explicitly decided by the human."
+    },
+    {
+      "id": "J-R01-I01",
+      "classification": "info",
+      "severity": "WARNING",
+      "status": "info",
+      "reportedBy": ["A", "B"],
+      "locations": ["src/services/relationships.ts:1941"],
+      "rootDefect": "Unfinished coverage state is keyed only by relationship kind and contaminates the opposite direction in a both request.",
+      "disposition": "WARNING is informational under Judgment Day and does not authorize correction."
+    }
+  ],
+  "counts": {
+    "confirmedSevere": 2,
+    "suspect": 1,
+    "contradictions": 0,
+    "info": 1
+  },
+  "correction": {
+    "authorized": false,
+    "workUnits": ["J-R01-001", "J-R01-002"],
+    "launched": false,
+    "scopedRejudgment": "not_run",
+    "roundBudget": { "maximumCorrectionRounds": 2, "used": 0, "remaining": 2 }
+  },
+  "parentChecks": [
+    "Frozen HEAD/tree and both cumulative diff hashes reproduced; Git objects remained available.",
+    "git diff --check and workspace cleanliness passed before and after judging.",
+    "Focused relationship matrix passed 6 files/134 tests; typecheck, build, and package smoke passed.",
+    "PR #180 CI later failed only at yarn audit for vulnerable fast-uri 3.1.5 and qs 6.15.3; package.json and yarn.lock are unchanged from root base, so this was recorded as pre-existing external audit evidence rather than a candidate-caused ledger finding.",
+    "Both judges reported clean final Git status and zero judge-owned surviving processes."
+  ],
+  "taskProgress": {
+    "completed": 23,
+    "total": 28,
+    "task8.1": "pending",
+    "next": "human correction authorization for J-R01-001 and J-R01-002"
+  },
+  "preCorrectionState": "NEEDS_CORRECTION",
+  "terminalVerdict": "ESCALATED",
+  "deliveryAuthority": false,
+  "outerReceiptSettled": false,
+  "createdAt": "2026-09-03T20:57:17Z"
+}
