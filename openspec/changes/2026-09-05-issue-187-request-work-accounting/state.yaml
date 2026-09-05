@@ -9,7 +9,9 @@ changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-
 artifactPaths:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/proposal.md
-  specs: []
+  specs:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/specs/request-work-accounting/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/specs/affected-test-candidates/spec.md
   design: []
   tasks: []
   applyProgress: []
@@ -23,7 +25,9 @@ artifactPaths:
 contextFiles:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/proposal.md
-  specs: []
+  specs:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/specs/request-work-accounting/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/specs/affected-test-candidates/spec.md
   design: []
   tasks: []
   applyProgress: []
@@ -37,7 +41,7 @@ contextFiles:
 artifacts:
   exploration: done
   proposal: done
-  specs: missing
+  specs: done
   design: missing
   tasks: missing
   applyProgress: missing
@@ -54,8 +58,8 @@ taskProgress:
   allComplete: false
 dependencies:
   proposal: all_done
-  specs: ready
-  design: blocked
+  specs: all_done
+  design: ready
   tasks: blocked
   apply: blocked
   verify: blocked
@@ -88,9 +92,9 @@ phaseInstructions:
   verify: []
   remediate: []
   archive: []
-nextRecommended: spec
+nextRecommended: design
 blockedReasons: []
-lastPhase: propose
+lastPhase: spec
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
@@ -103,10 +107,10 @@ issueAuthority:
   url: https://github.com/yailPeralta/ast-mcp-server/issues/187
   approvedScope: "Exact-once request-wide sorting and finalization accounting with exact-bound and one-below tests."
 baseline:
-  relationship: proposal-base
-  pullRequest: 221
-  branch: docs/issue-187-exploration
-  commit: 56eed439f67e9e19da130765b6d06f6b59066ae8
+  relationship: spec-base
+  pullRequest: 222
+  branch: docs/issue-187-proposal
+  commit: c872a1114c6752cb1aaf19b067eb16b81f654b1e
   state: open
 recoveryBaseline:
   relationship: sibling
@@ -137,14 +141,14 @@ reviewBudget:
   slices:
     - id: "#187A"
       scope: "Relationship-stage accounting and focused exact-bound tests."
-      base: "PR #221 at 56eed439f67e9e19da130765b6d06f6b59066ae8"
+      base: "PR #222 at c872a1114c6752cb1aaf19b067eb16b81f654b1e"
       targetAuthoredChangedLines: "<=400"
     - id: "#187B"
       scope: "Impact/BFS transactional accounting plus MCP and candidate parity."
       base: "#187A immediate predecessor"
       targetAuthoredChangedLines: "<=400"
-  integrationRule: "#187A starts from the exact #221 head; #187B targets #187A, and both slices must integrate before #187 is accepted."
+  integrationRule: "#187A starts from the exact #222 head; #187B targets #187A, and both slices must integrate before #187 is accepted."
 risks:
   - "The 500-985 authored-line forecast exceeds one 400-line review budget and requires the two-slice #187A -> #187B chain."
-  - "Base drift from PR #221 commit 56eed43 requires refreshed probes, forecasts, and clean-diff ancestry checks before apply."
+  - "Base drift from PR #222 commit c872a11 requires refreshed probes, forecasts, and clean-diff ancestry checks before apply."
   - "Stage/item semantics must be frozen before implementation to prevent omitted or duplicate accounting."
