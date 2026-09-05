@@ -2224,6 +2224,39 @@ function classifyCompilerInvocation(
   return { state: "unfinished" };
 }
 
+function reachableCallEndpoints(
+  root: RelationshipEndpoint,
+  edges: readonly RelationshipEdge[],
+  direction: "incoming" | "outgoing",
+): Set<string> {
+  const reachable = new Set([endpointKey(root)]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const edge of edges) {
+      const from = direction === "outgoing" ? edge.source : edge.target;
+      const to = direction === "outgoing" ? edge.target : edge.source;
+      if (!reachable.has(endpointKey(from)) || reachable.has(endpointKey(to))) continue;
+      reachable.add(endpointKey(to));
+      changed = true;
+    }
+  }
+  return reachable;
+}
+
+function locatedEndpointTarget(
+  project: Project,
+  projectRoot: string,
+  endpoint: RelationshipEndpoint,
+): LocatedSymbol | undefined {
+  const sourceFile = project.getSourceFile(path.resolve(projectRoot, endpoint.file));
+  if (!sourceFile || endpoint.symbol_path === "<module>") return undefined;
+  const located = findLocatedSymbol(sourceFile, endpoint.selector);
+  return located && endpointKey(symbolEndpoint(located, projectRoot)) === endpointKey(endpoint)
+    ? located
+    : undefined;
+}
+
 export function collectCompilerCallRelationships(
   project: Project,
   projectRoot: string,
@@ -2232,6 +2265,8 @@ export function collectCompilerCallRelationships(
     readonly max_edges?: number;
     readonly max_work_items?: number;
     readonly work_tracker?: CompilerImpactWorkTracker;
+    readonly authority_root?: RelationshipEndpoint;
+    readonly authority_direction?: "incoming" | "outgoing";
   } = {},
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ) {
@@ -2245,8 +2280,8 @@ export function collectCompilerCallRelationships(
   const normalizedFreshness = normalizeFreshness(freshness);
   const checker = project.getTypeChecker();
   const edges = new Map<string, RelationshipEdge>();
+  const unfinishedSites: Node[] = [];
   let workLimitReached = false;
-  let dispatchUnfinished = false;
   for (const sourceFile of project
     .getSourceFiles()
     .sort((left, right) => left.getFilePath().localeCompare(right.getFilePath()))) {
@@ -2260,7 +2295,7 @@ export function collectCompilerCallRelationships(
         return;
       }
       const invocation = classifyCompilerInvocation(checker, projectRoot, node);
-      if (invocation.state === "unfinished") dispatchUnfinished = true;
+      if (invocation.state === "unfinished") unfinishedSites.push(node);
       if (invocation.state !== "exact") return;
       const caller = containingSymbol(sourceFile, node);
       if (!caller) return;
@@ -2281,6 +2316,39 @@ export function collectCompilerCallRelationships(
   const ordered = [...edges.values()].sort((left, right) =>
     left.relationship_id.localeCompare(right.relationship_id),
   );
+  let dispatchUnfinished = unfinishedSites.length > 0;
+  if (options.authority_root && options.authority_direction) {
+    const reachable = reachableCallEndpoints(
+      options.authority_root,
+      ordered,
+      options.authority_direction,
+    );
+    if (options.authority_direction === "outgoing") {
+      dispatchUnfinished = unfinishedSites.some((node) => {
+        const caller = containingSymbol(node.getSourceFile(), node);
+        return !!caller && reachable.has(endpointKey(symbolEndpoint(caller, projectRoot)));
+      });
+    } else {
+      const endpoints = new Map<string, RelationshipEndpoint>([
+        [endpointKey(options.authority_root), options.authority_root],
+        ...ordered.flatMap((edge) =>
+          [edge.source, edge.target].map((item) => [endpointKey(item), item] as const),
+        ),
+      ]);
+      const targets = [...reachable]
+        .map((key) => {
+          const endpoint = endpoints.get(key);
+          return endpoint && locatedEndpointTarget(project, projectRoot, endpoint);
+        })
+        .filter((target): target is LocatedSymbol => !!target);
+      dispatchUnfinished = unfinishedSites.some((node) =>
+        targets.some(
+          (target) =>
+            classifyCompilerInvocation(checker, projectRoot, node, target).state === "unfinished",
+        ),
+      );
+    }
+  }
   return Object.freeze({
     edges: Object.freeze(ordered.slice(0, maxEdges)),
     incomplete: dispatchUnfinished || workLimitReached || ordered.length > maxEdges,

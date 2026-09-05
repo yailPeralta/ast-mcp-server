@@ -30,8 +30,8 @@ artifacts:
   verifyReport: missing
 taskProgress:
   total: 16
-  completed: 9
-  pending: 7
+  completed: 13
+  pending: 3
   allComplete: false
 dependencies:
   proposal: all_done
@@ -63,12 +63,12 @@ persistence:
   mirrorStatus: skipped
   mirrorReason: "Runtime/control-plane edits are prohibited; only the authorized OpenSpec #186 change directory was written."
 phase0Admission:
-  status: active-token-authenticated-a-candidate-ready
+  status: active-token-authenticated-b-candidate-ready
   authority: "#186 type:bug and #188 type:chore approved; #187 separate; RDD disabled/unmanaged; no conflicting implementation PR"
   chain: "#206 5d839bb runtime ancestor -> #211 1fa8a6b immediate base -> #186A working tree"
   workUnitA: "fix/issue-186-a-call-authority; active token authenticated; runtime allowlist in apply-progress.json"
   attemptStatus: "delegated active token supplied; acquire/settle intentionally not executed"
-  nextTask: "Root settles A, then B acquires from the frozen A candidate"
+  nextTask: "Root settles frozen B, then launches independent review"
 reviewBudget:
   forecastAuthoredChangedLines: "300-480"
   forecastChildren: 2

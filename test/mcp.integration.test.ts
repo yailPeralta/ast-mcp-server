@@ -927,6 +927,147 @@ export function formatValue(value: number): string { return String(value); }
     ]);
   });
 
+  it("keeps polymorphic call uncertainty aligned across registered consumers", async () => {
+    await fixture.write(
+      "src/dispatch.ts",
+      [
+        "export function exact(): void {}",
+        "export class Base {",
+        "  get callback(): () => void { return exact; }",
+        "  property: () => void = exact;",
+        "  method(): void {}",
+        "}",
+        "export class Child extends Base {",
+        "  override get callback(): () => void { return () => {}; }",
+        "  override property = (): void => {};",
+        "  override method(): void {}",
+        "}",
+        "export function uncertain(base: Base): void {",
+        "  base.callback(); base.property(); base.method();",
+        "}",
+        "export class Owner {",
+        "  private hidden(): void {}",
+        "  #secret(): void {}",
+        "  static exact(other: Owner): void { other.hidden(); other.#secret(); }",
+        "}",
+      ].join("\n"),
+    );
+    await fixture.write(
+      "src/private.test.ts",
+      'import { Owner } from "./dispatch.js";\nexport function privateCase(owner: Owner): void { Owner.exact(owner); }\n',
+    );
+    clearProjectSessions();
+
+    const impact = async (symbol_path: string, direction: "incoming" | "outgoing" | "both") =>
+      structured(
+        await client.callTool({
+          name: "ast_get_impact",
+          arguments: {
+            project_root: fixture.root,
+            file_path: "src/dispatch.ts",
+            symbol_path,
+            direction,
+            relationship_kinds: ["call"],
+            max_depth: 2,
+            max_nodes: 20,
+            max_edges: 20,
+          },
+        }),
+      );
+
+    expect(await impact("uncertain", "outgoing")).toMatchObject({ edges: [], incomplete: true });
+    for (const symbol of ["Base.callback", "Base.property", "Base.method"]) {
+      const incoming = await impact(symbol, "incoming");
+      expect(incoming).toMatchObject({ incomplete: true });
+      expect(incoming.edges).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: expect.objectContaining({ symbol_path: "uncertain" }),
+          }),
+        ]),
+      );
+    }
+    expect(await impact("Base.callback", "both")).toMatchObject({ incomplete: true });
+
+    for (const symbol of ["Owner.hidden", "Owner.#secret"]) {
+      const incoming = await impact(symbol, "incoming");
+      expect(incoming).toMatchObject({ incomplete: false });
+      expect(incoming.edges).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: expect.objectContaining({ symbol_path: "Owner.exact" }),
+            target: expect.objectContaining({ symbol_path: symbol }),
+            compiler_authoritative: true,
+          }),
+        ]),
+      );
+    }
+    expect(await impact("Owner.exact", "outgoing")).toMatchObject({ incomplete: false });
+    expect(await impact("Owner.hidden", "both")).toMatchObject({ incomplete: false });
+
+    const ambiguousSpine = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/dispatch.ts",
+          symbol_path: "Base.callback",
+          call_spines: { direction: "incoming" },
+        },
+      }),
+    );
+    expect(ambiguousSpine).toMatchObject({
+      call_spines: {
+        paths: [],
+        incomplete: true,
+        authority_state: "incomplete",
+        empty_proven: false,
+      },
+    });
+    expect(
+      publicFailure(
+        await callCandidates(client, fixture, {
+          file_path: "src/dispatch.ts",
+          symbol_path: "Base.callback",
+        }),
+      ),
+    ).toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
+
+    const privateSpine = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/dispatch.ts",
+          symbol_path: "Owner.hidden",
+          call_spines: { direction: "incoming" },
+        },
+      }),
+    );
+    expect(privateSpine).toMatchObject({
+      call_spines: {
+        paths: expect.arrayContaining([
+          expect.objectContaining({
+            endpoint: expect.objectContaining({ symbol_path: "Owner.exact" }),
+          }),
+        ]),
+        incomplete: false,
+        authority_state: "authoritative",
+        empty_proven: false,
+      },
+    });
+    const privateCandidates = structured(
+      await callCandidates(client, fixture, {
+        file_path: "src/dispatch.ts",
+        symbol_path: "Owner.hidden",
+      }),
+    );
+    expect(privateCandidates).toMatchObject({
+      incomplete: false,
+      candidates: [expect.objectContaining({ file: "src/private.test.ts" })],
+    });
+  });
+
   it("publishes the seven-kind root-class matrix with JSON, TOON, and MCP schema parity", async () => {
     await fixture.write(
       "src/matrix-deps.ts",

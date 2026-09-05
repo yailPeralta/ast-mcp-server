@@ -1,7 +1,7 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-186-polymorphic-call-authority",
-  "stage": "a-candidate-ready-awaiting-root-settlement",
+  "stage": "b-candidate-ready-awaiting-root-settlement",
   "delivery": {
     "strategy": "feature-branch-chain",
     "deliveryStrategy": "auto-chain",
@@ -86,8 +86,8 @@
       "nextAction": "begin",
       "resetNeeded": false
     },
-    "rootInstruction": "Settle frozen A; this delegated actor did not acquire or settle.",
-    "activeTokenDigest": "sha256:df28e3651c9a827cd1ab3408105fdee498426784dfacab8f5a1394198646aa3d",
+    "rootInstruction": "Settle frozen B, then launch independent read-only review; this delegated actor did not acquire or settle.",
+    "activeTokenDigest": "sha256:fee71c846efa1dba017caaa2733d3d74e341cc8489d0af0056eb5b30623f586c",
     "baseTree": "1b3268b531c59c52a4d1be205018d066517c4a08",
     "baselineStatusSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "baselineProcessSha256": "b170c0f357b5231146347bc1d446aae8ab212e4df770f3969764a35ed1edc72a"
@@ -104,6 +104,12 @@
       "focusedTest": "PASS: 65/65 impact+relationships; 103/103 with call-spines+MCP",
       "runtimeHarness": "PASS: yarn test:mcp stdio smoke; Harness N/A by prohibition",
       "rollbackBoundary": "Revert only A runtime allowlist and compact #186 metadata; B remains pending"
+    },
+    {
+      "tasks": ["3.1", "3.2", "3.3", "3.4"],
+      "focusedTest": "PASS: 119/119 MCP+spine+candidate+impact+relationships; full 982/982 plus supervised 2/2",
+      "runtimeHarness": "PASS: yarn test:mcp stdio smoke; lifecycle/CLI/errors/package smoke also passed; Harness N/A by prohibition",
+      "rollbackBoundary": "Revert only B consumer-parity runtime/test changes and compact #186 metadata"
     }
   ],
   "workUnits": [
@@ -149,9 +155,10 @@
     {
       "id": "B",
       "name": "MCP, call-spine, and candidate parity",
-      "status": "pending",
+      "status": "candidate-ready-awaiting-root-settlement",
+      "branch": "fix/issue-186-b-consumer-parity",
       "budget": "80-160",
-      "base": "accepted #186A candidate",
+      "base": "PR #212 / a2d3fbca40cb2caa0bdc58d3238428180d65d5f7",
       "issueLinkage": ["Fixes #186", "Refs #188"],
       "allowlist": [
         "src/services/relationships.ts",
@@ -209,10 +216,10 @@
       "status": "complete"
     },
     { "id": "2.3", "name": "REFACTOR verify and freeze A", "status": "complete" },
-    { "id": "3.1", "name": "Acquire B from accepted A baselines", "status": "pending" },
-    { "id": "3.2", "name": "RED registered MCP directional parity", "status": "pending" },
-    { "id": "3.3", "name": "RED spine and candidate fail-closed parity", "status": "pending" },
-    { "id": "3.4", "name": "GREEN REFACTOR global and consumer parity", "status": "pending" },
+    { "id": "3.1", "name": "Authenticate B from accepted A baselines", "status": "complete" },
+    { "id": "3.2", "name": "RED registered MCP directional parity", "status": "complete" },
+    { "id": "3.3", "name": "RED spine and candidate fail-closed parity", "status": "complete" },
+    { "id": "3.4", "name": "GREEN REFACTOR global and consumer parity", "status": "complete" },
     {
       "id": "4.1",
       "name": "Run full package gates freeze cleanup and settle B",
@@ -231,16 +238,19 @@
   ],
   "taskProgress": {
     "total": 16,
-    "completed": 9,
-    "pending": 7,
+    "completed": 13,
+    "pending": 3,
     "allComplete": false
   },
   "tdd": {
     "red": [
-      "Two unchanged runs: 3 defect tests failed, 62 controls passed; exits 1; sha256 f2cee3dc... and c8c0cdfc..."
+      "A: two unchanged runs failed 3 defect tests with 62 controls passing",
+      "B: two unchanged runs failed private-spine authority with ambiguity correctly unfinished; sha256 a479a8ed047e09733a4e7b906b6bf68bca86468fa076f591bcb58d10643ac509 and eaf6c767444aa7c40919eac87609cb755bc0265cce85ef8c9389f94f182ee9c2"
     ],
-    "green": ["Focused A: 65/65 passed; sha256 64ac3371..."],
-    "refactored": ["Frozen: focused 103/103; full 983/983; sha256 8466c5e8..."]
+    "green": ["A focused 65/65", "B focused parity 1/1 and typecheck passed"],
+    "refactored": [
+      "B focused 119/119; full 982/982 plus supervised 2/2; full output sha256 43dd86dff69b1be2ca75c9841c491ab7a0b2c08b4cf141ff253c10da88203a65"
+    ]
   },
   "receiptPlan": {
     "attempts": [
@@ -296,5 +306,5 @@
     "Any child over 400 authored lines requires replanning rather than a size exception."
   ],
   "nextRecommended": "apply",
-  "updatedAt": "2026-09-05T03:30:00Z"
+  "updatedAt": "2026-09-05T03:47:59Z"
 }

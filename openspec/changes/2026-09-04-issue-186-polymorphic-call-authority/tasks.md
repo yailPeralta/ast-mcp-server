@@ -41,10 +41,10 @@ Chain strategy: feature-branch-chain
 
 ## Phase 3 — #186B RED/GREEN
 
-- [ ] 3.1 Acquire #186B from accepted A with its unique ID/token and fresh baselines.
-- [ ] 3.2 RED registered MCP parity for accessor ambiguity and private exactness in incoming, outgoing, and both directions.
-- [ ] 3.3 RED spine/candidate tests: ambiguity grants no spine, candidate, or proven emptiness; exact private evidence remains eligible.
-- [ ] 3.4 GREEN/REFACTOR global collection and consumers through shared authority; do not edit #187 accounting.
+- [x] 3.1 Authenticate #186B from accepted A using the supplied active token and fresh baselines; acquire remains parent-owned by instruction.
+- [x] 3.2 RED registered MCP parity for accessor ambiguity and private exactness in incoming, outgoing, and both directions.
+- [x] 3.3 RED spine/candidate tests: ambiguity grants no spine, candidate, or proven emptiness; exact private evidence remains eligible.
+- [x] 3.4 GREEN/REFACTOR global collection and consumers through shared authority; do not edit #187 accounting.
 
 ## Phase 4 — Evidence, review, handoff
 

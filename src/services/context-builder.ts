@@ -338,7 +338,11 @@ export async function buildExploreContext(
       effectiveContext.project,
       effectiveContext.projectRoot,
       freshness,
-      { max_edges: request.callSpines.maxEdges },
+      {
+        max_edges: request.callSpines.maxEdges,
+        authority_root: root,
+        authority_direction: request.callSpines.direction,
+      },
       requestContext,
     );
     callSpines = planCallSpines(root, projected.edges, {
