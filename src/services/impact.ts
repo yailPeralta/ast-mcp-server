@@ -14,6 +14,7 @@ import {
   createCompilerRelationshipResolver,
   RELATIONSHIP_EDGE_KINDS,
   type CompilerImpactWork,
+  type CompilerImpactWorkEvent,
   type RelationshipCoverageEntry,
   type RelationshipEdge,
   type RelationshipEdgeKind,
@@ -325,24 +326,30 @@ function collectNeighbors(
   edges: readonly RelationshipEdge[],
   options: NormalizedImpactOptions,
   requestContext: RequestContext,
+  tracker?: CompilerImpactWorkTracker,
 ): Neighbor[] {
+  const charge = (stage: string, count = 1) =>
+    tracker ? tracker.charge(requestContext, count, stage) : requestContext.checkpoint();
   const currentKey = endpointKey(current);
   const kinds = new Set(options.relationship_kinds);
   const neighbors = new Map<string, Neighbor>();
+  charge("neighbor.edge_sort", edges.length);
   const orderedEdges = [...edges].sort(edgeOrder);
 
   for (const edge of orderedEdges) {
-    requestContext.checkpoint();
+    charge("neighbor.edge_scan");
     if (!kinds.has(edge.kind)) continue;
     const matchesSource = endpointKey(edge.source) === currentKey;
     const matchesTarget = endpointKey(edge.target) === currentKey;
     if ((options.direction === "outgoing" || options.direction === "both") && matchesSource) {
+      charge("neighbor.retain_attempt");
       neighbors.set(`${edge.relationship_id}\u0000${endpointKey(edge.target)}`, {
         edge,
         endpoint: edge.target,
       });
     }
     if ((options.direction === "incoming" || options.direction === "both") && matchesTarget) {
+      charge("neighbor.retain_attempt");
       neighbors.set(`${edge.relationship_id}\u0000${endpointKey(edge.source)}`, {
         edge,
         endpoint: edge.source,
@@ -350,7 +357,10 @@ function collectNeighbors(
     }
   }
 
-  return [...neighbors.values()].sort(neighborOrder);
+  charge("neighbor.sort", neighbors.size);
+  const ordered = [...neighbors.values()].sort(neighborOrder);
+  charge("neighbor.emit", ordered.length);
+  return ordered;
 }
 
 type NeighborProvider = (
@@ -374,7 +384,10 @@ function traverseWithNeighborProvider(
   neighborsFor: NeighborProvider,
   options: ImpactTraversalOptions = {},
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
+  tracker?: CompilerImpactWorkTracker,
 ): ImpactResult {
+  const charge = (stage: string, count = 1) =>
+    tracker ? tracker.charge(requestContext, count, stage) : requestContext.checkpoint();
   requestContext.checkpoint();
   if (typeof root !== "object" || root === null) {
     throw new Error("Impact traversal input is invalid.");
@@ -392,6 +405,7 @@ function traverseWithNeighborProvider(
     neighbor: Neighbor,
     edgeBlocked: boolean,
   ): void => {
+    charge("bfs.classify_filter");
     const nextKey = endpointKey(neighbor.endpoint);
     const isKnownNode = nodes.has(nextKey);
     if (edgeBlocked) truncationReasons.add("edge_limit");
@@ -404,10 +418,11 @@ function traverseWithNeighborProvider(
   };
 
   while (queue.length > 0) {
-    requestContext.checkpoint();
+    charge("bfs.dequeue");
     const current = queue.shift()!;
     const remainingEdges = normalized.max_edges - selectedEdges.size;
     if (remainingEdges <= 0) {
+      charge("bfs.dispatch");
       const probe = neighborsFor(
         current.endpoint,
         normalized,
@@ -433,6 +448,7 @@ function traverseWithNeighborProvider(
           ? "record_limit"
           : undefined;
     const allowedNeighborKeys = restrictionReason ? new Set(nodes.keys()) : undefined;
+    charge("bfs.dispatch");
     const batch = neighborsFor(
       current.endpoint,
       normalized,
@@ -446,7 +462,7 @@ function traverseWithNeighborProvider(
     if (batch.workLimitReached) truncationReasons.add("work_limit");
     let skippedNewNode = false;
     for (const neighbor of batch.neighbors) {
-      requestContext.checkpoint();
+      charge("bfs.classify_filter");
       const nextKey = endpointKey(neighbor.endpoint);
       const nextDepth = current.depth + 1;
       const isKnownNode = nodes.has(nextKey);
@@ -459,6 +475,7 @@ function traverseWithNeighborProvider(
         skippedNewNode = true;
         continue;
       }
+      charge("bfs.edge_retain");
       if (!selectedEdges.has(neighbor.edge.relationship_id)) {
         if (selectedEdges.size >= normalized.max_edges) {
           truncationReasons.add("edge_limit");
@@ -467,17 +484,20 @@ function traverseWithNeighborProvider(
         selectedEdges.set(neighbor.edge.relationship_id, neighbor.edge);
       }
       if (isKnownNode) continue;
+      charge("bfs.node_retain");
       nodes.set(nextKey, {
         endpoint: neighbor.endpoint,
         depth: nextDepth,
         direct: nextDepth === 1,
       });
+      charge("bfs.enqueue");
       queue.push({ key: nextKey, endpoint: neighbor.endpoint, depth: nextDepth });
       maxDepthReached = Math.max(maxDepthReached, nextDepth);
     }
 
     if (restrictionReason) {
       if (batch.incomplete && !batch.workLimitReached) truncationReasons.add("edge_limit");
+      charge("bfs.dispatch");
       const probe = neighborsFor(
         current.endpoint,
         normalized,
@@ -499,6 +519,7 @@ function traverseWithNeighborProvider(
       (skippedNewNode || nodes.size >= normalized.max_nodes) &&
       selectedEdges.size < normalized.max_edges
     ) {
+      charge("bfs.dispatch");
       const knownBatch = neighborsFor(
         current.endpoint,
         normalized,
@@ -511,11 +532,12 @@ function traverseWithNeighborProvider(
       if (knownBatch.excludedNeighbors) truncationReasons.add("record_limit");
       if (knownBatch.workLimitReached) truncationReasons.add("work_limit");
       for (const neighbor of knownBatch.neighbors) {
-        requestContext.checkpoint();
+        charge("bfs.classify_filter");
         if (selectedEdges.size >= normalized.max_edges) {
           truncationReasons.add("edge_limit");
           break;
         }
+        charge("bfs.edge_retain");
         selectedEdges.set(neighbor.edge.relationship_id, neighbor.edge);
       }
       if (knownBatch.incomplete && !knownBatch.workLimitReached) {
@@ -523,6 +545,7 @@ function traverseWithNeighborProvider(
       }
     } else if (batch.incomplete && !batch.workLimitReached) {
       truncationReasons.add("edge_limit");
+      charge("bfs.dispatch");
       const overflowProbe = neighborsFor(
         current.endpoint,
         normalized,
@@ -544,19 +567,23 @@ function traverseWithNeighborProvider(
     (reason) => truncationReasons.has(reason as ImpactTruncationReason),
   ) as ImpactTruncationReason[];
   const truncated = orderedReasons.length > 0;
+  charge("result.node_sort", nodes.size);
+  const orderedNodes = [...nodes.values()].sort(
+    (left, right) =>
+      left.depth - right.depth ||
+      left.endpoint.file.localeCompare(right.endpoint.file) ||
+      left.endpoint.selector.localeCompare(right.endpoint.selector) ||
+      left.endpoint.symbol_path.localeCompare(right.endpoint.symbol_path),
+  );
+  charge("result.edge_sort", selectedEdges.size);
+  const orderedEdges = [...selectedEdges.values()].sort(edgeOrder);
   requestContext.checkpoint();
   return {
     root,
     direction: normalized.direction,
     relationship_kinds: normalized.relationship_kinds,
-    nodes: [...nodes.values()].sort(
-      (left, right) =>
-        left.depth - right.depth ||
-        left.endpoint.file.localeCompare(right.endpoint.file) ||
-        left.endpoint.selector.localeCompare(right.endpoint.selector) ||
-        left.endpoint.symbol_path.localeCompare(right.endpoint.symbol_path),
-    ),
-    edges: [...selectedEdges.values()].sort(edgeOrder),
+    nodes: orderedNodes,
+    edges: orderedEdges,
     visited_nodes: nodes.size,
     visited_edges: selectedEdges.size,
     max_depth_reached: maxDepthReached,
@@ -609,6 +636,31 @@ export function traverseImpact(
   );
 }
 
+function interruptedCoverage(
+  options: NormalizedImpactOptions,
+  endpointClass: "module" | "symbol",
+): readonly RelationshipCoverageEntry[] {
+  const directions =
+    options.direction === "both" ? (["incoming", "outgoing"] as const) : [options.direction];
+  return options.relationship_kinds.flatMap((kind) =>
+    directions.map((direction) => ({
+      kind,
+      direction,
+      endpoint_class: endpointClass,
+      status:
+        (endpointClass === "module" &&
+          kind !== "import" &&
+          kind !== "export" &&
+          !(kind === "contains" && direction === "outgoing")) ||
+        (endpointClass === "symbol" &&
+          (kind === "import" || kind === "export") &&
+          direction === "outgoing")
+          ? ("not_applicable" as const)
+          : ("unfinished" as const),
+    })),
+  );
+}
+
 export function traverseCompilerImpact(
   project: Project,
   projectRoot: string,
@@ -616,12 +668,18 @@ export function traverseCompilerImpact(
   freshness: FreshnessMetadata,
   options: ImpactTraversalOptions = {},
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
-  controls: { readonly max_work_items?: number } = {},
+  controls: {
+    readonly max_work_items?: number;
+    readonly observe_work?: (event: CompilerImpactWorkEvent) => void;
+  } = {},
 ): CompilerImpactResult {
+  const normalized = normalizeOptions(options);
   const tracker = new CompilerImpactWorkTracker(
     controls.max_work_items ?? IMPACT_RELATIONSHIP_WORK_ITEMS,
+    controls.observe_work,
   );
   const observations: RelationshipCoverageEntry[] = [];
+  const endpointClass = root.symbol_path === "<module>" ? "module" : "symbol";
   const resolver = createCompilerRelationshipResolver(
     project,
     projectRoot,
@@ -629,57 +687,90 @@ export function traverseCompilerImpact(
     requestContext,
     tracker,
   );
-  const impact = traverseWithNeighborProvider(
-    root,
-    (
-      current,
+  try {
+    const impact = traverseWithNeighborProvider(
+      root,
+      (
+        current,
+        traversalOptions,
+        _context,
+        maxEdges,
+        stopAfterFirst,
+        allowedNeighborKeys,
+        excludedRelationshipIds,
+      ) => {
+        const resolution = resolver.edgesFor(current, {
+          direction: traversalOptions.direction,
+          relationship_kinds: traversalOptions.relationship_kinds,
+          max_edges: maxEdges,
+          allowed_neighbor_keys: allowedNeighborKeys ? [...allowedNeighborKeys] : undefined,
+          excluded_relationship_ids: excludedRelationshipIds
+            ? [...excludedRelationshipIds]
+            : undefined,
+          stop_after_first: stopAfterFirst,
+          allow_provisional_call: options.relationship_kinds?.includes("call") === true,
+        });
+        observations.push(...resolution.coverage);
+        return {
+          neighbors: collectNeighbors(
+            current,
+            resolution.edges,
+            traversalOptions,
+            requestContext,
+            tracker,
+          ),
+          incomplete: resolution.edge_limit_reached,
+          excludedNeighbors: resolution.excluded_neighbors,
+          workLimitReached: resolution.work_limit_reached,
+        };
+      },
       normalized,
-      _context,
-      maxEdges,
-      stopAfterFirst,
-      allowedNeighborKeys,
-      excludedRelationshipIds,
-    ) => {
-      const resolution = resolver.edgesFor(current, {
-        direction: normalized.direction,
-        relationship_kinds: normalized.relationship_kinds,
-        max_edges: maxEdges,
-        allowed_neighbor_keys: allowedNeighborKeys ? [...allowedNeighborKeys] : undefined,
-        excluded_relationship_ids: excludedRelationshipIds
-          ? [...excludedRelationshipIds]
-          : undefined,
-        stop_after_first: stopAfterFirst,
-        allow_provisional_call: options.relationship_kinds?.includes("call") === true,
-      });
-      observations.push(...resolution.coverage);
-      return {
-        neighbors: collectNeighbors(current, resolution.edges, normalized, requestContext),
-        incomplete: resolution.edge_limit_reached,
-        excludedNeighbors: resolution.excluded_neighbors,
-        workLimitReached: resolution.work_limit_reached,
-      };
-    },
-    options,
-    requestContext,
-  );
-  const endpointClass = root.symbol_path === "<module>" ? "module" : "symbol";
-  const coverage = aggregateRelationshipCoverage(observations, endpointClass);
-  const coverageComplete = coverage.every(
-    ({ status }) => status === "completed" || status === "not_applicable",
-  );
-  const work = tracker.snapshot();
-  const authorityComplete =
-    freshness.state === "fresh" && freshness.causes.length === 0 && !work.exhausted;
-  const incomplete =
-    impact.incomplete ||
-    (options.relationship_kinds !== undefined && !coverageComplete) ||
-    !authorityComplete;
-  return {
-    ...impact,
-    coverage,
-    work,
-    freshness,
-    incomplete,
-    proven_empty: !incomplete && impact.edges.length === 0,
-  };
+      requestContext,
+      tracker,
+    );
+    tracker.charge(requestContext, observations.length, "coverage.aggregate");
+    const coverage = aggregateRelationshipCoverage(observations, endpointClass);
+    tracker.charge(requestContext, impact.nodes.length, "result.node_emit");
+    tracker.charge(requestContext, impact.edges.length, "result.edge_emit");
+    const coverageComplete = coverage.every(
+      ({ status }) => status === "completed" || status === "not_applicable",
+    );
+    const work = tracker.snapshot();
+    const authorityComplete = freshness.state === "fresh" && freshness.causes.length === 0;
+    const incomplete =
+      impact.incomplete ||
+      (options.relationship_kinds !== undefined && !coverageComplete) ||
+      !authorityComplete;
+    return {
+      ...impact,
+      coverage,
+      work,
+      freshness,
+      incomplete,
+      proven_empty: !incomplete && impact.edges.length === 0,
+    };
+  } catch (error) {
+    if (!tracker.exhausted) throw error;
+    requestContext.checkpoint();
+    return {
+      root,
+      direction: normalized.direction,
+      relationship_kinds: normalized.relationship_kinds,
+      nodes: [{ endpoint: root, depth: 0, direct: false }],
+      edges: [],
+      visited_nodes: 1,
+      visited_edges: 0,
+      max_depth_reached: 0,
+      max_depth: normalized.max_depth,
+      max_nodes: normalized.max_nodes,
+      max_edges: normalized.max_edges,
+      coverage: interruptedCoverage(normalized, endpointClass),
+      work: tracker.snapshot(),
+      freshness,
+      incomplete: true,
+      truncation: { truncated: true, reason: "work_limit" },
+      truncation_reasons: ["work_limit"],
+      proven_empty: false,
+    };
+  }
 }

@@ -59,8 +59,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 16
-  completed: 6
-  pending: 10
+  completed: 13
+  pending: 3
   allComplete: false
 dependencies:
   proposal: all_done
@@ -105,7 +105,7 @@ phaseInstructions:
     - "Issue #188 merge/archive is excluded."
 nextRecommended: apply
 blockedReasons: []
-lastPhase: apply-a-candidate-ready-unsettled
+lastPhase: apply-b-candidate-ready-unreviewed
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec

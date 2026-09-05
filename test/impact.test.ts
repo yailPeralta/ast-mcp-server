@@ -1687,6 +1687,138 @@ describe("compiler impact coverage and request work", () => {
     });
   });
 
+  it("discards late-exhausted authority, preserves fourteen cells, and lets cancellation win", async () => {
+    const { fixture, project } = await graphFixture();
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("middle", "src/middle.ts"));
+    const options = {
+      direction: "both" as const,
+      max_depth: 1,
+      max_nodes: 10,
+      max_edges: 10,
+      relationship_kinds: RELATIONSHIP_EDGE_KINDS,
+    };
+    const generousEvents: Array<{ stage: string; count: number; before: number; after: number }> =
+      [];
+    const generous = traverseCompilerImpact(
+      project,
+      fixture.root,
+      root,
+      freshness,
+      options,
+      undefined,
+      { max_work_items: 100_000, observe_work: (event) => generousEvents.push(event) },
+    );
+    const required = generous.work.consumed_items;
+    const counts = Object.fromEntries(
+      [...new Set(generousEvents.map(({ stage }) => stage))].map((stage) => [
+        stage,
+        generousEvents
+          .filter((event) => event.stage === stage)
+          .reduce((sum, event) => sum + event.count, 0),
+      ]),
+    );
+    expect(
+      generousEvents.every(
+        (event, index) => index === 0 || event.before === generousEvents[index - 1]!.after,
+      ),
+    ).toBe(true);
+    expect(counts).toMatchObject({
+      "neighbor.edge_sort": 9,
+      "neighbor.edge_scan": 9,
+      "neighbor.retain_attempt": 9,
+      "neighbor.sort": 9,
+      "neighbor.emit": 9,
+      "bfs.dequeue": 5,
+      "bfs.dispatch": 9,
+      "bfs.classify_filter": 9,
+      "bfs.edge_retain": 8,
+      "bfs.node_retain": 4,
+      "bfs.enqueue": 4,
+      "result.node_sort": 5,
+      "result.edge_sort": 8,
+      "coverage.aggregate": 126,
+      "result.node_emit": 5,
+      "result.edge_emit": 8,
+    });
+    expect(required).toBe(2_624);
+    const exactEvents: typeof generousEvents = [];
+    const exact = traverseCompilerImpact(
+      project,
+      fixture.root,
+      root,
+      freshness,
+      options,
+      undefined,
+      {
+        max_work_items: required,
+        observe_work: (event) => exactEvents.push(event),
+      },
+    );
+    const below = traverseCompilerImpact(
+      project,
+      fixture.root,
+      root,
+      freshness,
+      options,
+      undefined,
+      {
+        max_work_items: required - 1,
+      },
+    );
+    const normalizeLimit = (result: typeof exact) => ({
+      ...result,
+      work: { ...result.work, max_items: required },
+    });
+
+    expect(exactEvents).toEqual(generousEvents);
+    expect(JSON.stringify(exact)).toBe(JSON.stringify(normalizeLimit(generous)));
+    expect(exact.work).toEqual({ max_items: required, consumed_items: required, exhausted: false });
+    expect(below).toMatchObject({
+      nodes: [{ endpoint: root, depth: 0, direct: false }],
+      edges: [],
+      visited_nodes: 1,
+      visited_edges: 0,
+      incomplete: true,
+      truncation: { truncated: true, reason: "work_limit" },
+      truncation_reasons: ["work_limit"],
+      work: { max_items: required - 1, consumed_items: required - 1, exhausted: true },
+      proven_empty: false,
+    });
+    expect(below.coverage).toHaveLength(14);
+    expect(below.coverage.map(({ kind, direction }) => `${kind}/${direction}`)).toEqual(
+      RELATIONSHIP_EDGE_KINDS.flatMap((kind) => [`${kind}/incoming`, `${kind}/outgoing`]),
+    );
+    expect(
+      below.coverage.every(({ kind, direction, status }) =>
+        (kind === "import" || kind === "export") && direction === "outgoing"
+          ? status === "not_applicable"
+          : status === "unfinished",
+      ),
+    ).toBe(true);
+
+    const controller = new AbortController();
+    const cancelledEvents: typeof generousEvents = [];
+    const cancellationLimit = generousEvents.at(-1)!.before;
+    expect(() =>
+      traverseCompilerImpact(
+        project,
+        fixture.root,
+        root,
+        freshness,
+        options,
+        createRequestContext(controller.signal),
+        {
+          max_work_items: cancellationLimit,
+          observe_work: (event) => {
+            cancelledEvents.push(event);
+            if (event.after === cancellationLimit) controller.abort();
+          },
+        },
+      ),
+    ).toThrow(expect.objectContaining({ code: "REQUEST_CANCELLED" }));
+    expect(cancelledEvents.at(-1)?.after).toBe(cancellationLimit);
+  });
+
   it("propagates cancellation observed during call scanning without partial authority", async () => {
     const fixture = await createProjectFixture({
       "src/target.ts": "export function target(): void {}\n",
