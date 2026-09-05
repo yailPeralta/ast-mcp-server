@@ -61,8 +61,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 30
-  completed: 18
-  pending: 12
+  completed: 19
+  pending: 11
   allComplete: false
 dependencies:
   proposal: all_done
@@ -117,8 +117,8 @@ phaseInstructions:
 nextRecommended: apply
 blockedReasons: []
 lastPhase: apply
-activeWorkUnit: "U6 task 6.1 characterized test-only; task 6.2 settlement evidence next"
-evidenceCandidate: "pending exact U6 tracked-plus-untracked hash"
+activeWorkUnit: "U6 tasks 6.1-6.2 settled and refactored; U7 task 6.3 next"
+evidenceCandidate: "sha256:6ed025157f199c7036beac17e346c185f66bb018b8f7c39bc61bdc2800f2b772"
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
@@ -268,13 +268,34 @@ phaseZeroAuthority:
     nextTask: "6.1"
     nextBranch: test/issue-188-u6-matrix
     nextBase: docs/issue-188-u5-evidence
+  u6:
+    branch: test/issue-188-u6-matrix
+    pullRequest: 204
+    commit: 0728d81d26508d2acde4ea4c072be832e5beb0b7
+    evidenceBranch: docs/issue-188-u6-evidence
+    acquireRequest: issue188-u6-a1-acquire-20260905t0156z
+    settleRequest: issue188-u6-a1-settle-20260905t0220z
+    outcome: passed
+    evidenceRevision: "sha256:6ed025157f199c7036beac17e346c185f66bb018b8f7c39bc61bdc2800f2b772"
+    authoredChangedLines:
+      additions: 315
+      deletions: 10
+      total: 325
+      budget: 400
+    tdd: "Characterization only with no product RED; pre-matrix 117/117, final 120/120, full 979/979 plus supervised 2/2; U6 refactored"
+    gates: "typecheck, lint, build, format, test:mcp, and diff pass"
+    issue186Status: "Polymorphic callable authority remains explicitly unresolved as an independent integration gate."
+    issue187Status: "Request-wide exact-once accounting remains explicitly unresolved as an independent integration gate."
+    nextTask: "6.3"
+    nextBranch: docs/issue-188-u7-docs
+    nextBase: docs/issue-188-u6-evidence
   killSwitches:
     - "Stop and recalculate if origin/main leaves the planned 6173a39 commit."
     - "Reject ancestor/foreign scope, receipt/tree mismatch, or any child above 400 authored changed lines."
     - "Never resume, import, or extend #161 or PR #162-#185 R-01 authority."
     - "Keep tracker PR #189 draft and merge-unauthorized until #186, #187, and every final gate pass."
     - "Candidate drift, severe findings, failed verification/CI, or Harness mutation blocks integration."
-  nextApply: "U6 task 6.2 settlement evidence child; preserve the test-only matrix, exact hashes, six-kind no-contains candidate boundary, and unresolved #186/#187 exclusions"
+  nextApply: "U7 task 6.3 on docs/issue-188-u7-docs from evidence child docs/issue-188-u6-evidence; rewrite current docs without stale R-01 claims and preserve unresolved #186/#187 gates"
 reviewBudget:
   strategy: feature-branch-chain
   maxAuthoredChangedLinesPerChild: 400

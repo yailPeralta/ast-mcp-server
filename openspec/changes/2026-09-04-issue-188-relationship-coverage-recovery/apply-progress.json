@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-188-relationship-coverage-recovery",
   "authoritative": true,
-  "stage": "u6-matrix-characterized-ready-settlement",
+  "stage": "u6-settled-u7-ready",
   "rddModeAtPlanning": "disabled/unmanaged",
   "rddModeAtApply": {
     "effective": "off",
@@ -74,7 +74,7 @@
       "status": "completed"
     },
     { "id": "6.1", "name": "Acquire and re-author U6 seven-kind matrix", "status": "completed" },
-    { "id": "6.2", "name": "Verify, freeze, and settle U6", "status": "pending" },
+    { "id": "6.2", "name": "Verify, freeze, and settle U6", "status": "completed" },
     { "id": "6.3", "name": "Acquire and re-author truthful U7 documentation", "status": "pending" },
     { "id": "6.4", "name": "Run gates, freeze, and settle U7", "status": "pending" },
     { "id": "7.1", "name": "Forecast and conditionally split issue 186", "status": "pending" },
@@ -107,6 +107,7 @@
     { "id": "8.4", "name": "Archive and repeat post-archive candidate proof", "status": "pending" },
     { "id": "8.5", "name": "Integrate sequentially and close issues in order", "status": "pending" }
   ],
+  "taskProgress": { "total": 30, "completed": 19, "pending": 11, "allComplete": false },
   "phaseZeroEvidence": {
     "observedAt": "2026-09-04T23:34:31Z",
     "issues": [
@@ -432,35 +433,52 @@
     }
   },
   "u6Evidence": {
-    "observedAt": "2026-09-05T03:00:00Z",
+    "observedAt": "2026-09-05T02:20:00Z",
     "branch": "test/issue-188-u6-matrix",
+    "evidenceBranch": "docs/issue-188-u6-evidence",
+    "pullRequest": 204,
+    "commit": "0728d81d26508d2acde4ea4c072be832e5beb0b7",
     "baseCommit": "d5404ba1a6eb259afecf1dabea2bda0214215567",
     "provenanceCommit": "3af4fe67f3b3f50947e9a93dce9bf377c9cc5132",
-    "scope": "Task 6.1 complete; test-only characterization, with task 6.2 settlement intentionally pending.",
+    "acquireRequest": "issue188-u6-a1-acquire-20260905t0156z",
+    "settleRequest": "issue188-u6-a1-settle-20260905t0220z",
+    "outcome": "passed",
+    "evidenceRevision": "sha256:6ed025157f199c7036beac17e346c185f66bb018b8f7c39bc61bdc2800f2b772",
+    "authoredChangedLines": { "additions": 315, "deletions": 10, "total": 325, "budget": 400 },
+    "scope": "Tasks 6.1-6.2 complete; U6 is settled, test-only characterization, and refactored.",
     "tddCycle": {
-      "safetyNet": "Pre-edit six-file matrix passed 117/117.",
-      "red": "No product RED was warranted. One draft containment case exposed depth-bound setup rather than missing behavior and was corrected to the direct root-class contract.",
+      "safetyNet": "Pre-matrix six-file baseline passed 117/117.",
+      "red": "Characterization only; no product RED was warranted or retained.",
       "green": "New focused impact cases passed 2/2 and the public matrix passed 1/1 without production changes.",
       "triangulate": "Fourteen applicable kind/direction cells, safe empty evidence, exact/one-below bounds, mid-scan cancellation, and JSON/TOON/MCP schema parity are covered.",
-      "refactor": "Formatted six-file matrix passed 120/120; full suite passed 979/979 plus supervised 2/2."
+      "refactor": "Final six-file matrix passed 120/120; full suite passed 979/979 plus supervised 2/2; U6 is refactored."
     },
     "qualityGates": {
-      "focused": "Six-file matrix passed 120/120.",
-      "full": "Full suite passed 979/979 plus supervised tests 2/2 after unsetting ambient GIT_PAGER.",
+      "focused": "Pre-matrix baseline passed 117/117; final six-file matrix passed 120/120.",
+      "full": "Full suite passed 979/979 plus supervised tests 2/2.",
       "runtimeHarness": "yarn test:mcp passed: status ok, tool_count 16.",
-      "formatLintTypecheckBuildDiff": "All passed."
+      "typecheck": "yarn typecheck => exit 0",
+      "lint": "yarn lint => exit 0",
+      "build": "yarn build => exit 0",
+      "format": "yarn format:check => exit 0",
+      "diff": "git diff --check => exit 0"
     },
     "workUnitEvidence": {
-      "focusedChecks": "Six-file matrix passed 120/120; full suite passed 979/979 plus supervised 2/2.",
+      "focusedChecks": "Pre-matrix baseline passed 117/117; final six-file matrix passed 120/120; full suite passed 979/979 plus supervised 2/2.",
       "runtimeHarness": "MCP smoke passed with status ok and tool_count 16.",
-      "rollbackBoundary": "Revert the two U6 test files and compact task/progress/state metadata; production behavior is unchanged."
+      "rollbackBoundary": "Revert PR #204 commit 0728d81 to remove only the U6 characterization tests and matrix metadata; revert this evidence child to remove only current-change settlement records. Production behavior is unchanged."
     },
-    "deviations": "Per direct instruction, no acquire or settle command ran; task 6.2 remains the settlement evidence child.",
+    "deviations": "Characterization-only apply: no production RED and no product source change.",
     "knownExclusions": [
-      "Issue #186 polymorphic callable finality",
-      "Issue #187 exact-once sorting/finalization accounting",
-      "Harness execution"
-    ]
+      "Issue #186 polymorphic callable finality remains an independent integration gate.",
+      "Issue #187 exact-once sorting/finalization accounting remains an independent integration gate.",
+      "Harness execution remains prohibited for this evidence settlement."
+    ],
+    "next": {
+      "task": "6.3",
+      "branch": "docs/issue-188-u7-docs",
+      "base": "docs/issue-188-u6-evidence"
+    }
   },
   "tdd": {
     "red": [],
@@ -498,9 +516,9 @@
       },
       {
         "id": "u6-seven-kind-matrix",
-        "name": "Characterize the seven-kind public matrix, bounds, and cancellation",
+        "name": "Characterize and settle the seven-kind public matrix, bounds, and cancellation",
         "file": "test/mcp.integration.test.ts",
-        "taskId": "6.1"
+        "taskId": "6.1-6.2"
       }
     ]
   },
@@ -511,33 +529,39 @@
       "issue188-u2-a1-acquire-20260904t2353z:settled-passed@issue188-u2-a1-settle-20260905t0029z",
       "issue188-u3-a1-acquire-20260905t0033z:settled-passed@issue188-u3-a1-settle-20260905t0045z",
       "issue188-u4-a1-acquire-20260905t0051z:settled-passed@issue188-u4-a1-settle-20260905t0102z",
-      "issue188-u5-a1-acquire-20260905t0121z:settled-passed@issue188-u5-a1-settle-20260905t0150z"
+      "issue188-u5-a1-acquire-20260905t0121z:settled-passed@issue188-u5-a1-settle-20260905t0150z",
+      "issue188-u6-a1-acquire-20260905t0156z:settled-passed@issue188-u6-a1-settle-20260905t0220z"
     ],
     "tdd": [
       "u1-red-remediated@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
       "u2-red-green-refactor@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
       "u3-red-green-refactor@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90",
       "u4-red-green-refactor@sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977",
-      "u5-red-green-refactor@sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a"
+      "u5-red-green-refactor@sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a",
+      "u6-characterization-refactor@sha256:6ed025157f199c7036beac17e346c185f66bb018b8f7c39bc61bdc2800f2b772"
     ],
     "identity": [
       "u1-runtime-patch@sha256:c3de6e1ecfaf62e645e94e35d7d8fb473c363dd2e8ed1efc6d875580972ccab5",
       "u2-runtime-pr196-d73c1ec@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
       "u3-runtime-pr198-37a2084@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90",
       "u4-runtime-pr200-3a0d5f7@sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977",
-      "u5-runtime-pr202-cdc6e44@sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a"
+      "u5-runtime-pr202-cdc6e44@sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a",
+      "u6-runtime-pr204-0728d81@sha256:6ed025157f199c7036beac17e346c185f66bb018b8f7c39bc61bdc2800f2b772"
     ],
     "gates": [
       "u2-focused-runtime-quality-pass@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
       "u3-focused-call-runtime-quality-pass@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90",
       "u4-focused-contains-runtime-quality-pass@sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977",
-      "u5-focused-full-supervised-mcp-quality-pass@sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a"
+      "u5-focused-full-supervised-mcp-quality-pass@sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a",
+      "u6-matrix-full-supervised-mcp-quality-pass@sha256:6ed025157f199c7036beac17e346c185f66bb018b8f7c39bc61bdc2800f2b772"
     ],
     "review": [],
     "judgment": [],
     "verification": [],
     "archive": [],
-    "delivery": []
+    "delivery": [
+      "u6-pr204-0728d81:315-additions+10-deletions=325@sha256:6ed025157f199c7036beac17e346c185f66bb018b8f7c39bc61bdc2800f2b772"
+    ]
   },
   "trace": {
     "requirementsExpected": 14,
@@ -548,11 +572,11 @@
   },
   "risks": [
     "Protected origin/main drift requires complete replay recalculation.",
-    "U2 through U5 may require separate settlement-evidence children to retain the 400-line budget.",
+    "U7 must start from docs/issue-188-u6-evidence and remain within its docs-only allowlist and 400-line budget.",
     "Issue 186 must split when its independent forecast exceeds 400 authored lines.",
     "Issue 187 has no accepted line forecast until its own planning re-entry.",
     "Any stale R-01 authority, candidate drift, severe finding, failed gate, or Harness write blocks integration."
   ],
-  "nextRecommended": "apply:6.2",
-  "updatedAt": "2026-09-05T03:00:00Z"
+  "nextRecommended": "apply:6.3",
+  "updatedAt": "2026-09-05T02:20:00Z"
 }
