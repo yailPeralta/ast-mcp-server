@@ -37,8 +37,8 @@ Delivery strategy: auto-chain
 
 ## Phase 4 — U4 contains
 
-- [ ] 4.1 Acquire; RED RCR-009..010 direct/inverse and exclusion cases.
-- [ ] 4.2 GREEN/REFACTOR `19a9621…` allowlist; exclude #187 accounting.
+- [x] 4.1 Acquire waived by direct scope; RED RCR-009..010 direct/inverse and exclusion cases.
+- [x] 4.2 GREEN/REFACTOR `19a9621…` allowlist; exclude #187 accounting.
 - [ ] 4.3 Run impact/U1; freeze ≤400, settle, and split evidence when required.
 
 ## Phase 5 — U5 public candidates

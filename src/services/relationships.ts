@@ -1593,6 +1593,128 @@ function addScopedIncomingCalls(
   if (unfinished) throw new ScopedCallCoverageUnfinished();
 }
 
+function scopedNamedSymbols(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  sourceFile: SourceFile,
+): readonly LocatedSymbol[] {
+  const symbols: LocatedSymbol[] = [];
+  forEachScopedSymbol(state, collector, sourceFile, (symbol) => symbols.push(symbol));
+  return symbols;
+}
+
+function nearestScopedNamedOwner(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  candidate: LocatedSymbol,
+  symbols: readonly LocatedSymbol[],
+): LocatedSymbol | undefined {
+  let owner: LocatedSymbol | undefined;
+  for (const possible of symbols) {
+    consumeScopedWork(state, collector);
+    if (
+      possible.node === candidate.node ||
+      possible.node.getStart() > candidate.node.getStart() ||
+      possible.node.getEnd() < candidate.node.getEnd()
+    ) {
+      continue;
+    }
+    if (
+      !owner ||
+      possible.node.getEnd() - possible.node.getStart() <
+        owner.node.getEnd() - owner.node.getStart()
+    ) {
+      owner = possible;
+    }
+  }
+  return owner;
+}
+
+interface ScopedContainsCandidate {
+  readonly edge: RelationshipEdge;
+  readonly target: LocatedSymbol;
+}
+
+function retainScopedContainsEdge(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  candidates: ScopedContainsCandidate[],
+  source: RelationshipEndpointInput,
+  target: LocatedSymbol,
+): void {
+  consumeScopedWork(state, collector);
+  candidates.push({
+    edge: createScopedEdge(state, source, symbolEndpoint(target, state.projectRoot), "contains"),
+    target,
+  });
+}
+
+function flushScopedContainsEdges(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  candidates: ScopedContainsCandidate[],
+): void {
+  candidates.sort(
+    (left, right) =>
+      left.target.node.getStart() - right.target.node.getStart() ||
+      left.target.symbolPath.localeCompare(right.target.symbolPath) ||
+      left.edge.target.selector.localeCompare(right.edge.target.selector) ||
+      left.edge.relationship_id.localeCompare(right.edge.relationship_id),
+  );
+  for (const candidate of candidates) {
+    consumeScopedWork(state, collector);
+    addScopedResolvedEdge(collector, candidate.edge);
+  }
+}
+
+function addScopedOutgoingContains(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  sourceFile: SourceFile,
+  owner?: LocatedSymbol,
+): void {
+  const symbols = scopedNamedSymbols(state, collector, sourceFile);
+  const candidates: ScopedContainsCandidate[] = [];
+  for (const candidate of symbols) {
+    consumeScopedWork(state, collector);
+    if (candidate.node === owner?.node) continue;
+    const nearestOwner = nearestScopedNamedOwner(state, collector, candidate, symbols);
+    if (nearestOwner?.node !== owner?.node || (!owner && nearestOwner)) continue;
+    retainScopedContainsEdge(
+      state,
+      collector,
+      candidates,
+      owner
+        ? symbolEndpoint(owner, state.projectRoot)
+        : moduleEndpoint(sourceFile, state.projectRoot, candidate.node),
+      candidate,
+    );
+  }
+  flushScopedContainsEdges(state, collector, candidates);
+}
+
+function addScopedIncomingContains(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  target: LocatedSymbol,
+): void {
+  const sourceFile = target.node.getSourceFile();
+  const symbols = scopedNamedSymbols(state, collector, sourceFile);
+  consumeScopedWork(state, collector);
+  const owner = nearestScopedNamedOwner(state, collector, target, symbols);
+  const candidates: ScopedContainsCandidate[] = [];
+  retainScopedContainsEdge(
+    state,
+    collector,
+    candidates,
+    owner
+      ? symbolEndpoint(owner, state.projectRoot)
+      : moduleEndpoint(sourceFile, state.projectRoot, target.node),
+    target,
+  );
+  flushScopedContainsEdges(state, collector, candidates);
+}
+
 function registryCoverageStatus(
   endpointClass: RelationshipEndpointClass,
   direction: EffectiveRelationshipDirection,
@@ -1600,13 +1722,12 @@ function registryCoverageStatus(
 ): RelationshipCoverageStatus {
   if (endpointClass === "module") {
     if (kind === "import" || kind === "export") return "unfinished";
-    if (kind === "contains" && direction === "outgoing") return "unsupported";
+    if (kind === "contains" && direction === "outgoing") return "unfinished";
     return "not_applicable";
   }
   if ((kind === "import" || kind === "export") && direction === "outgoing") {
     return "not_applicable";
   }
-  if (kind === "contains") return "unsupported";
   return "unfinished";
 }
 
@@ -1788,6 +1909,24 @@ export function createCompilerRelationshipResolver(
             });
           }
         }
+        if (outgoing && relationshipKinds.has("contains")) {
+          producers.push({
+            kinds: ["contains"],
+            collect: (collector) =>
+              addScopedOutgoingContains(
+                state,
+                collector,
+                located.symbol!.node.getSourceFile(),
+                located.symbol!,
+              ),
+          });
+        }
+        if (incoming && relationshipKinds.has("contains")) {
+          producers.push({
+            kinds: ["contains"],
+            collect: (collector) => addScopedIncomingContains(state, collector, located.symbol!),
+          });
+        }
       } else {
         for (const kind of ["import", "export"] as const) {
           if (!relationshipKinds.has(kind)) continue;
@@ -1803,6 +1942,12 @@ export function createCompilerRelationshipResolver(
               collect: (collector) => addScopedIncomingModuleEdges(state, collector),
             });
           }
+        }
+        if (outgoing && relationshipKinds.has("contains")) {
+          producers.push({
+            kinds: ["contains"],
+            collect: (collector) => addScopedOutgoingContains(state, collector, located.sourceFile),
+          });
         }
       }
 
