@@ -43,8 +43,8 @@ Delivery strategy: auto-chain
 
 ## Phase 5 — U5 public candidates
 
-- [ ] 5.1 Acquire; RED ATC-001..007: six kinds, no-contains, rejection, proven-empty.
-- [ ] 5.2 GREEN/REFACTOR `15e252e…` allowlist; expose 14 cells and fail closed.
+- [x] 5.1 Acquire waived by direct scope; RED ATC-001..007: six kinds, no-contains, rejection, proven-empty.
+- [x] 5.2 GREEN/REFACTOR `15e252e…` allowlist; expose 14 cells and fail closed.
 - [ ] 5.3 Run candidate/schema/MCP; freeze ≤400, settle, and split evidence when required.
 
 ## Phase 6 — U6/U7

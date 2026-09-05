@@ -16,7 +16,9 @@ import { withProject } from "../services/project.js";
 import { createRequestContext } from "../services/request-context.js";
 import { RELATIONSHIP_EDGE_KINDS } from "../services/relationships.js";
 import {
+  CompilerImpactWorkSchema,
   FreshnessSchema,
+  RelationshipCoverageSchema,
   RelationshipEdgeSchema,
   RelationshipEndpointSchema,
 } from "./relationship-schema.js";
@@ -80,6 +82,8 @@ const ImpactOutputSchema = z.object({
     }),
   ),
   edges: z.array(RelationshipEdgeSchema),
+  coverage: RelationshipCoverageSchema,
+  work: CompilerImpactWorkSchema,
   visited_nodes: z.number().int().min(0),
   visited_edges: z.number().int().min(0),
   max_depth_reached: z.number().int().min(0),
