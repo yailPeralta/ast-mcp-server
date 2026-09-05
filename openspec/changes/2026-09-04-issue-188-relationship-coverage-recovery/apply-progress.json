@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-188-relationship-coverage-recovery",
   "authoritative": true,
-  "stage": "u1-red-settled",
+  "stage": "u2-coverage-settled",
   "rddModeAtPlanning": "disabled/unmanaged",
   "rddModeAtApply": {
     "effective": "off",
@@ -37,13 +37,21 @@
       "status": "completed"
     },
     { "id": "1.2", "name": "Freeze, settle, and evidence U1", "status": "completed" },
-    { "id": "2.1", "name": "Acquire and RED U2 coverage and work scenarios", "status": "pending" },
+    {
+      "id": "2.1",
+      "name": "Acquire and RED U2 coverage and work scenarios",
+      "status": "completed"
+    },
     {
       "id": "2.2",
       "name": "GREEN/REFACTOR U2 with explicit 14-cell adaptation",
-      "status": "pending"
+      "status": "completed"
     },
-    { "id": "2.3", "name": "Verify, freeze, settle, and evidence U2", "status": "pending" },
+    {
+      "id": "2.3",
+      "name": "Verify, freeze, settle, and evidence U2",
+      "status": "completed"
+    },
     { "id": "3.1", "name": "Acquire and RED U3 scoped call scenarios", "status": "pending" },
     { "id": "3.2", "name": "GREEN/REFACTOR U3 without absorbing issue 186", "status": "pending" },
     { "id": "3.3", "name": "Verify, freeze, settle, and evidence U3", "status": "pending" },
@@ -230,28 +238,83 @@
     },
     "settlement": "failed as expected; request issue188-u1-a1-settle-20260904t2347z admitted evidence sha256:c3de6e1ecfaf62e645e94e35d7d8fb473c363dd2e8ed1efc6d875580972ccab5"
   },
+  "u2Evidence": {
+    "observedAt": "2026-09-05T00:29:00Z",
+    "branch": "feat/issue-188-u2-coverage",
+    "evidenceBranch": "docs/issue-188-u2-evidence",
+    "pullRequest": 196,
+    "commit": "d73c1ece777505043c5c4622db818b137671fde7",
+    "acquireRequest": "issue188-u2-a1-acquire-20260904t2353z",
+    "acquireTokenPersisted": false,
+    "settleRequest": "issue188-u2-a1-settle-20260905t0029z",
+    "outcome": "passed",
+    "evidenceRevision": "sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
+    "remediatesEvidenceRevision": "sha256:c3de6e1ecfaf62e645e94e35d7d8fb473c363dd2e8ed1efc6d875580972ccab5",
+    "authoredChangedLines": { "additions": 312, "deletions": 82, "total": 394, "budget": 400 },
+    "tddCycle": {
+      "red": "Focused U2 Vitest selection failed as expected with 3 failures before implementation.",
+      "green": "yarn vitest run test/impact.test.ts test/mcp.integration.test.ts => exit 0; 2 files, 76/76 tests passed.",
+      "refactor": "U1 and U2 coverage/work tests remained green after refactor; no active RED remains."
+    },
+    "qualityGates": {
+      "typecheck": "yarn typecheck => exit 0",
+      "build": "yarn build => exit 0",
+      "runtimeHarness": "yarn test:mcp => exit 0; status ok 16",
+      "format": "yarn format:check => exit 0",
+      "lint": "yarn lint => exit 0",
+      "diff": "git diff --check => exit 0"
+    },
+    "regressionCorrection": "Full MCP inventory hash regression was corrected by making work_limit impact-only; unrelated inventories remain stable.",
+    "workUnitEvidence": {
+      "focusedChecks": "yarn vitest run test/impact.test.ts test/mcp.integration.test.ts => exit 0; 76/76 tests passed.",
+      "runtimeHarness": "yarn test:mcp => exit 0; status ok 16.",
+      "rollbackBoundary": "Revert PR #196 commit d73c1ec to remove only the U2 impact coverage ledger, shared tracker behavior, projection, and paired impact tests."
+    },
+    "delegatedLimitations": {
+      "issue186": "Callable dispatch finality remains a required independent child.",
+      "issue187": "Request-wide exact-once sorting and finalization accounting remains unimplemented and is a required independent child."
+    },
+    "next": {
+      "task": "3.1",
+      "branch": "feat/issue-188-u3-calls",
+      "base": "docs/issue-188-u2-evidence"
+    }
+  },
   "tdd": {
-    "red": [
+    "red": [],
+    "green": [],
+    "refactored": [
       {
         "id": "u1-incoming-call-coverage",
         "name": "Reject false-complete incoming call emptiness",
         "file": "test/mcp.integration.test.ts",
         "taskId": "1.1"
+      },
+      {
+        "id": "u2-coverage-work",
+        "name": "Recover 14-cell coverage, completeness, and shared work tracking",
+        "file": "test/impact.test.ts",
+        "taskId": "2.1-2.3"
       }
-    ],
-    "green": [],
-    "refactored": []
+    ]
   },
   "receipts": {
     "authority": ["phaseZeroEvidence@2026-09-04T23:34:31Z"],
     "attempts": [
-      "issue188-u1-a1-acquire-20260904t2340z:settled-failed-as-expected@issue188-u1-a1-settle-20260904t2347z"
+      "issue188-u1-a1-acquire-20260904t2340z:settled-failed-as-expected@issue188-u1-a1-settle-20260904t2347z",
+      "issue188-u2-a1-acquire-20260904t2353z:settled-passed@issue188-u2-a1-settle-20260905t0029z"
     ],
-    "tdd": ["u1-red-twice@sha256:c3de6e1ecfaf62e645e94e35d7d8fb473c363dd2e8ed1efc6d875580972ccab5"],
+    "tdd": [
+      "u1-red-remediated@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
+      "u2-red-green-refactor@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50"
+    ],
     "identity": [
-      "u1-runtime-patch@sha256:c3de6e1ecfaf62e645e94e35d7d8fb473c363dd2e8ed1efc6d875580972ccab5"
+      "u1-runtime-patch@sha256:c3de6e1ecfaf62e645e94e35d7d8fb473c363dd2e8ed1efc6d875580972ccab5",
+      "u2-runtime-pr196-d73c1ec@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50"
     ],
-    "gates": [],
+    "gates": [
+      "u2-focused-runtime-quality-pass@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50"
+    ],
     "review": [],
     "judgment": [],
     "verification": [],
@@ -272,6 +335,6 @@
     "Issue 187 has no accepted line forecast until its own planning re-entry.",
     "Any stale R-01 authority, candidate drift, severe finding, failed gate, or Harness write blocks integration."
   ],
-  "nextRecommended": "apply:2.1",
-  "updatedAt": "2026-09-04T23:47:00Z"
+  "nextRecommended": "apply:3.1",
+  "updatedAt": "2026-09-05T00:29:00Z"
 }

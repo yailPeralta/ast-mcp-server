@@ -25,9 +25,9 @@ Delivery strategy: auto-chain
 
 ## Phase 2 — U2 coverage/tracker
 
-- [ ] 2.1 Acquire; RED RCR-001..006: 14 cells, precedence, completeness, work, cancellation.
-- [ ] 2.2 GREEN/REFACTOR `13af89d…` allowlist; adapt every 28-row assertion to 14 cells.
-- [ ] 2.3 Run impact+U1; freeze ≤400, settle, and split evidence when required.
+- [x] 2.1 Acquire; RED RCR-001..006: 14 cells, precedence, completeness, work, cancellation.
+- [x] 2.2 GREEN/REFACTOR `13af89d…` allowlist; adapt every 28-row assertion to 14 cells.
+- [x] 2.3 Run impact+U1; freeze ≤400, settle, and split evidence when required.
 
 ## Phase 3 — U3 calls
 
