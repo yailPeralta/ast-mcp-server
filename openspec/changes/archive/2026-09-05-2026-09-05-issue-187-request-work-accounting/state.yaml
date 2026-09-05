@@ -5,45 +5,45 @@ artifactStore: openspec
 planningHome:
   mode: repo-local
   path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
-changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting
 artifactPaths:
   proposal:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/proposal.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/proposal.md
   specs:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/specs/request-work-accounting/spec.md
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/specs/affected-test-candidates/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/specs/request-work-accounting/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/specs/affected-test-candidates/spec.md
   design:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/design.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/design.md
   tasks:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/tasks.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/tasks.md
   applyProgress:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/apply-progress.json
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/apply-progress.json
   verifyReport:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/verify-report.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/verify-report.md
   reviewPolicy: []
   reviewLedger:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/reviews/ledger.json
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/reviews/ledger.json
   reviewReceipt: []
   reviewBundle: []
   reviewContext: []
   reviewState: []
 contextFiles:
   proposal:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/proposal.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/proposal.md
   specs:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/specs/request-work-accounting/spec.md
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/specs/affected-test-candidates/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/specs/request-work-accounting/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/specs/affected-test-candidates/spec.md
   design:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/design.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/design.md
   tasks:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/tasks.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/tasks.md
   applyProgress:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/apply-progress.json
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/apply-progress.json
   verifyReport:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/verify-report.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/verify-report.md
   reviewPolicy: []
   reviewLedger:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/reviews/ledger.json
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/reviews/ledger.json
   reviewReceipt: []
   reviewBundle: []
   reviewContext: []
@@ -61,6 +61,8 @@ artifacts:
   reviewBundle: missing
   reviewContext: missing
   reviewState: missing
+  archive: done
+  archiveReport: done
 taskProgress:
   total: 16
   completed: 16
@@ -73,13 +75,13 @@ dependencies:
   tasks: all_done
   apply: all_done
   verify: all_done
-  archive: ready
+  archive: all_done
 applyState: all_done
 actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
   allowedEditRoots:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting
 relationships:
   dependsOn:
     - "PR #225 (docs/issue-187-tasks) at 8fe8553097c169b7bba769c7e7f8fc8e90c97678; exact immediate base for #187A"
@@ -107,12 +109,24 @@ phaseInstructions:
     - "Keep the four INFO/SUSPECT rows non-blocking and unresolved; they are outside correction-C scope."
   remediate: []
   archive:
-    - "Archive is only the next recommended SDD phase; this verification grants no archive or merge authority."
-    - "Issue #188 remains unmergeable because the #186 kill switch failed; archiving #187 must not imply recovery integration."
-nextRecommended: archive
+    - "Archived only #187 under 2026-09-05 after strict 9/9 and 13/13 verification, 16/16 tasks, terminal Judgment Day approval, and zero blockers."
+    - "Canonical request-work-accounting was created and affected-test-candidates was modified while preserving all unrelated recovery requirements."
+    - "Issue #188 remains active and unmergeable because the #186 kill switch failed; this archive grants no recovery integration or delivery authority."
+nextRecommended: delivery
 blockedReasons: []
-lastPhase: strict-verify-passed
-updatedAt: "2026-09-05T20:37:22Z"
+lastPhase: archive-done
+updatedAt: "2026-09-05T20:46:31Z"
+archive:
+  date: "2026-09-05"
+  baseBranch: docs/issue-187-verify
+  basePullRequest: 233
+  baseHead: bc59b71f0a9eaac17b8f8da5e72f8cdd0e68fa54
+  canonicalSpecs:
+    - openspec/specs/request-work-accounting/spec.md
+    - openspec/specs/affected-test-candidates/spec.md
+  report: archive-report.md
+  deliveryAuthority: false
+  recoveryIntegration: false
 verification:
   verdict: pass
   requirements: 9/9
@@ -133,7 +147,7 @@ documentationCleanup:
   status: formatting-gate-cleared
   runtimeCandidate: "Frozen correction HEAD 152ffa4f87011e66103f0ded83fa0b6a9186c119 (tree 4b5b1ef6a5255a8da5e00ccd654a226c51ea6f63); Judgment Day APPROVED for strict verify"
 judgmentDay:
-  ledger: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/reviews/ledger.json
+  ledger: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-05-2026-09-05-issue-187-request-work-accounting/reviews/ledger.json
   target:
     projection: base-diff
     baseCommit: 1dbbf441b32cd9f226115785725b82142600a749
