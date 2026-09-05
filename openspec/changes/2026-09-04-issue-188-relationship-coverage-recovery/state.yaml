@@ -61,8 +61,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 30
-  completed: 11
-  pending: 19
+  completed: 14
+  pending: 16
   allComplete: false
 dependencies:
   proposal: all_done
@@ -117,8 +117,8 @@ phaseInstructions:
 nextRecommended: apply
 blockedReasons: []
 lastPhase: apply
-activeWorkUnit: "U3 scoped calls settled passed; next task 4.1 U4 contains"
-evidenceCandidate: "sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90"
+activeWorkUnit: "U4 direct contains settled passed and refactored; next task 5.1 U5 candidates"
+evidenceCandidate: "sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977"
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
@@ -223,13 +223,35 @@ phaseZeroAuthority:
     issue187Status: "Request-wide accounting remains untouched and independently unresolved."
     nextBranch: feat/issue-188-u4-contains
     nextBase: docs/issue-188-u3-evidence
+  u4:
+    branch: feat/issue-188-u4-contains
+    pullRequest: 200
+    commit: 3a0d5f7
+    evidenceBranch: docs/issue-188-u4-evidence
+    acquireRequest: issue188-u4-a1-acquire-20260905t0051z
+    settleRequest: issue188-u4-a1-settle-20260905t0102z
+    outcome: passed
+    evidenceRevision: "sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977"
+    authoredChangedLines:
+      additions: 373
+      deletions: 11
+      total: 384
+      budget: 400
+    tdd: "Baseline 78/78; focused RED 2/2; GREEN; final impact+MCP 80/80; relationships 18/18; U4 refactored"
+    gates: "typecheck, build, test:mcp, Prettier, ESLint, and diff pass"
+    issue186Status: "Callable authority remains explicitly unresolved as an independent integration gate."
+    issue187Status: "Request-wide accounting remains explicitly unresolved as an independent integration gate."
+    candidateTraversal: "contains remains excluded from affected-test candidate traversal and proof"
+    nextTask: "5.1"
+    nextBranch: fix/issue-188-u5-candidates
+    nextBase: docs/issue-188-u4-evidence
   killSwitches:
     - "Stop and recalculate if origin/main leaves the planned 6173a39 commit."
     - "Reject ancestor/foreign scope, receipt/tree mismatch, or any child above 400 authored changed lines."
     - "Never resume, import, or extend #161 or PR #162-#185 R-01 authority."
     - "Keep tracker PR #189 draft and merge-unauthorized until #186, #187, and every final gate pass."
     - "Candidate drift, severe findings, failed verification/CI, or Harness mutation blocks integration."
-  nextApply: "U4 task 4.1 on branch feat/issue-188-u4-contains based on evidence child docs/issue-188-u3-evidence; acquire a fresh receipt and author direct/inverse containment RED"
+  nextApply: "U5 task 5.1 on branch fix/issue-188-u5-candidates based on evidence child docs/issue-188-u4-evidence; acquire a fresh receipt and author ATC-001..007 RED while excluding contains from candidate traversal"
 reviewBudget:
   strategy: feature-branch-chain
   maxAuthoredChangedLinesPerChild: 400
@@ -241,6 +263,6 @@ reviewBudget:
     - "Strict verification, archive readiness, required CI, and no-write Harness checks pass."
 risks:
   - "Direct cherry-picks import stale R-01 execution and approval artifacts."
-  - "U3 remains non-mergeable because issue #186 callable getter and private-parameter authority defects are explicitly unresolved."
-  - "Issue #187 request-wide accounting is untouched; sorting and finalization work remain independently unresolved."
+  - "U4 remains non-mergeable because issue #186 callable authority remains explicitly unresolved."
+  - "Issue #187 request-wide accounting remains explicitly unresolved; sorting and finalization work are untouched."
   - "Any main advance requires replay conflict and line-budget recalculation before branching."
