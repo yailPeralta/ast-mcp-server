@@ -1,0 +1,142 @@
+schemaName: gentle-ai.sdd-status
+schemaVersion: 1
+changeName: 2026-09-05-issue-187-request-work-accounting
+artifactStore: openspec
+planningHome:
+  mode: repo-local
+  path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting
+artifactPaths:
+  proposal: []
+  specs: []
+  design: []
+  tasks: []
+  applyProgress: []
+  verifyReport: []
+  reviewPolicy: []
+  reviewLedger: []
+  reviewReceipt: []
+  reviewBundle: []
+  reviewContext: []
+  reviewState: []
+contextFiles:
+  proposal: []
+  specs: []
+  design: []
+  tasks: []
+  applyProgress: []
+  verifyReport: []
+  reviewPolicy: []
+  reviewLedger: []
+  reviewReceipt: []
+  reviewBundle: []
+  reviewContext: []
+  reviewState: []
+artifacts:
+  exploration: done
+  proposal: missing
+  specs: missing
+  design: missing
+  tasks: missing
+  applyProgress: missing
+  verifyReport: missing
+  reviewLedger: missing
+  reviewReceipt: missing
+  reviewBundle: missing
+  reviewContext: missing
+  reviewState: missing
+taskProgress:
+  total: 0
+  completed: 0
+  pending: 0
+  allComplete: false
+dependencies:
+  proposal: ready
+  specs: blocked
+  design: blocked
+  tasks: blocked
+  apply: blocked
+  verify: blocked
+  archive: blocked
+applyState: blocked
+actionContext:
+  mode: repo-local
+  workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
+  allowedEditRoots:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting
+relationships:
+  dependsOn:
+    - "PR #206 (docs/issue-188-u7-docs) at 5d839bb1ee2550e5d0a6404784baa21121e188fa; sibling U7 candidate baseline"
+  supersedes: []
+  amends: []
+  conflictsWith: []
+  sameDomainActiveChanges:
+    - "Issue #219 computed-key call alternatives; separate, unapproved, and excluded"
+    - "Issue #220 external call-convergence alternatives; separate, unapproved, and excluded"
+remediationState:
+  required: false
+  complete: false
+  failedEvidenceRevision: ""
+  lineageId: ""
+  generation: 0
+  fixBatch: 0
+  reason: ""
+phaseInstructions:
+  apply: []
+  verify: []
+  remediate: []
+  archive: []
+nextRecommended: propose
+blockedReasons: []
+lastPhase: explore
+persistence:
+  requestedMode: hybrid
+  authoritativeStore: openspec
+  mirrorStatus: skipped
+  mirrorReason: "The user prohibited runtime and Harness writes; this state is persisted only in the authoritative OpenSpec change directory."
+issueAuthority:
+  issue: 187
+  status: approved
+  typeLabel: type:bug
+  url: https://github.com/yailPeralta/ast-mcp-server/issues/187
+  approvedScope: "Exact-once request-wide sorting and finalization accounting with exact-bound and one-below tests."
+baseline:
+  relationship: sibling
+  pullRequest: 206
+  branch: docs/issue-188-u7-docs
+  commit: 5d839bb1ee2550e5d0a6404784baa21121e188fa
+  state: open
+terminalExclusions:
+  - "Issue #186 and PRs #207-#218 are closed, unmerged, terminal historical evidence only; no code, receipts, correction rounds, ancestry, or review authority may enter #187."
+separateIssues:
+  - number: 219
+    status: open
+    approval: unapproved
+    disposition: "Separate computed-key callable-dispatch defect; excluded from #187."
+  - number: 220
+    status: open
+    approval: unapproved
+    disposition: "Separate external-alternative callable-dispatch defect; excluded from #187."
+reviewBudget:
+  authoredChangedLinesForecast:
+    minimum: 500
+    maximum: 985
+  budgetPerPullRequest: 400
+  risk: high
+  decisionNeededBeforeApply: true
+  chainedPullRequestsRecommended: true
+  requiredDelivery: feature-branch-chain
+  slices:
+    - id: "#187A"
+      scope: "Relationship-stage accounting and focused exact-bound tests."
+      base: "PR #206 at 5d839bb1ee2550e5d0a6404784baa21121e188fa"
+      targetAuthoredChangedLines: "<=400"
+    - id: "#187B"
+      scope: "Impact/BFS transactional accounting plus MCP and candidate parity."
+      base: "#187A immediate predecessor"
+      targetAuthoredChangedLines: "<=400"
+  integrationRule: "#187A starts from the exact #206 head; #187B targets #187A, and both slices must integrate before #187 is accepted."
+risks:
+  - "The 500-985 authored-line forecast exceeds one 400-line review budget and requires the two-slice #187A -> #187B chain."
+  - "Base drift from PR #206 commit 5d839bb requires refreshed probes, forecasts, and clean-diff ancestry checks before apply."
+  - "Stage/item semantics must be frozen before implementation to prevent omitted or duplicate accounting."
