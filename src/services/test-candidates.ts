@@ -1,5 +1,18 @@
-import { assertExactImpactEvidence, type ImpactResult } from "./impact.js";
-import type { RelationshipEdge, RelationshipEndpoint } from "./relationships.js";
+import { assertExactImpactEvidence, type CompilerImpactResult } from "./impact.js";
+import type {
+  RelationshipEdge,
+  RelationshipEdgeKind,
+  RelationshipEndpoint,
+} from "./relationships.js";
+
+export const TEST_CANDIDATE_RELATIONSHIP_KINDS = Object.freeze([
+  "reference",
+  "import",
+  "export",
+  "extends",
+  "implements",
+  "call",
+] as const) satisfies readonly RelationshipEdgeKind[];
 
 export const DEFAULT_TEST_FILE_PATTERNS = Object.freeze(["**/*.test.*", "**/*.spec.*"] as const);
 export const DEFAULT_TEST_DIRECTORIES = Object.freeze(["test", "tests", "__tests__"] as const);
@@ -249,9 +262,21 @@ function findPathToRoot(
 }
 
 export function findTestCandidates(
-  impact: ImpactResult,
+  impact: CompilerImpactResult,
   conventions: TestCandidateConventions = {},
 ): readonly TestCandidate[] {
+  if (impact.work?.exhausted) {
+    throw new Error("Test candidate evidence failed: work_limit.");
+  }
+  const exactKinds =
+    impact.direction === "incoming" &&
+    impact.relationship_kinds.length === TEST_CANDIDATE_RELATIONSHIP_KINDS.length &&
+    impact.relationship_kinds.every(
+      (kind, index) => kind === TEST_CANDIDATE_RELATIONSHIP_KINDS[index],
+    );
+  if (!exactKinds) {
+    throw new Error("Test candidates require the canonical six-kind incoming coverage.");
+  }
   assertExactImpactEvidence(impact);
   if (
     typeof impact.root !== "object" ||

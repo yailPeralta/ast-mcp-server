@@ -956,6 +956,16 @@ export function formatValue(value: number): string { return String(value); }
       compiler_authoritative: true,
       root: { file: "src/value.ts", symbol_path: "formatValue", selector: "formatValue@2" },
       direction: "incoming",
+      relationship_kinds: ["reference", "import", "export", "extends", "implements", "call"],
+      coverage: [
+        { kind: "reference", direction: "incoming", endpoint_class: "symbol" },
+        { kind: "import", direction: "incoming", endpoint_class: "symbol" },
+        { kind: "export", direction: "incoming", endpoint_class: "symbol" },
+        { kind: "extends", direction: "incoming", endpoint_class: "symbol" },
+        { kind: "implements", direction: "incoming", endpoint_class: "symbol" },
+        { kind: "call", direction: "incoming", endpoint_class: "symbol" },
+      ],
+      work: { max_items: 100_000, consumed_items: expect.any(Number), exhausted: false },
       max_depth: 3,
       max_nodes: 100,
       max_edges: 200,
@@ -979,6 +989,18 @@ export function formatValue(value: number): string { return String(value); }
       ["src/value.test.ts", "direct_compiler_reference", 1],
       ["src/transitive.test.ts", "transitive_compiler_reference", 2],
     ]);
+    expect(candidates.coverage).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "contains" })]),
+    );
+    expect(candidates.candidates).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          evidence: expect.objectContaining({
+            relationships: expect.arrayContaining([expect.objectContaining({ kind: "contains" })]),
+          }),
+        }),
+      ]),
+    );
     expect(candidates).not.toHaveProperty("operation_id");
     expect(candidates).not.toHaveProperty("plan_hash");
     expect(candidates).not.toHaveProperty("edits");

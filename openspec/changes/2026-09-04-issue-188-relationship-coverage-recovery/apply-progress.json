@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-188-relationship-coverage-recovery",
   "authoritative": true,
-  "stage": "u4-refactored-settled-next-u5",
+  "stage": "u5-red-green-refactored-awaiting-5.3",
   "rddModeAtPlanning": "disabled/unmanaged",
   "rddModeAtApply": {
     "effective": "off",
@@ -62,8 +62,12 @@
       "status": "completed"
     },
     { "id": "4.3", "name": "Verify, freeze, settle, and evidence U4", "status": "completed" },
-    { "id": "5.1", "name": "Acquire and RED U5 affected-candidate scenarios", "status": "pending" },
-    { "id": "5.2", "name": "GREEN/REFACTOR U5 fail-closed public contract", "status": "pending" },
+    {
+      "id": "5.1",
+      "name": "Acquire and RED U5 affected-candidate scenarios",
+      "status": "completed"
+    },
+    { "id": "5.2", "name": "GREEN/REFACTOR U5 fail-closed public contract", "status": "completed" },
     { "id": "5.3", "name": "Verify, freeze, settle, and evidence U5", "status": "pending" },
     { "id": "6.1", "name": "Acquire and re-author U6 seven-kind matrix", "status": "pending" },
     { "id": "6.2", "name": "Verify, freeze, and settle U6", "status": "pending" },
@@ -369,6 +373,25 @@
       "base": "docs/issue-188-u4-evidence"
     }
   },
+  "u5ApplyEvidence": {
+    "branch": "fix/issue-188-u5-candidates",
+    "baseCommit": "a9acab625e6f1db20b5757c2a04cb3cd775679ee",
+    "provenanceCommit": "15e252e957139f113cec8735afdc10adb77a0a92",
+    "scope": "Tasks 5.1-5.2 only; task 5.3 settlement remains pending.",
+    "tddCycle": {
+      "safetyNet": "Candidate, impact, and registered MCP baseline passed 93/93 before edits.",
+      "red": "Focused U5 selection failed as expected: 3 suites, 3 tests failed, 28 passed; candidate constant and schemas were absent and MCP coverage/work projection was missing.",
+      "green": "Candidate/schema/MCP/impact suites passed 97/97 after minimal implementation.",
+      "triangulate": "Missing, reversed, unsupported, unfinished, exhausted, stale, unresolved, heuristic, non-authoritative, and contains evidence are rejected; complete empty evidence remains admitted.",
+      "refactor": "Formatting, typecheck, build, MCP smoke, lint, and focused suites pass with no active U5 RED."
+    },
+    "workUnitEvidence": {
+      "focusedChecks": "yarn vitest run test/test-candidates.test.ts test/relationship-schema.test.ts test/mcp.integration.test.ts test/impact.test.ts => exit 0; 97/97 passed.",
+      "runtimeHarness": "yarn test:mcp => exit 0; status ok, tool_count 16.",
+      "rollbackBoundary": "Revert only U5 candidate authority, bounded coverage/work projections and schemas, paired tests, inventory hashes, and current-change task/progress metadata."
+    },
+    "limitations": "Issue #186 callable authority and issue #187 request-wide exact-once accounting remain independent integration gates."
+  },
   "tdd": {
     "red": [],
     "green": [],
@@ -396,6 +419,12 @@
         "name": "Recover exact direct containment relationships",
         "file": "test/impact.test.ts",
         "taskId": "4.1-4.3"
+      },
+      {
+        "id": "u5-public-candidates",
+        "name": "Require complete six-kind candidate authority and bounded public schemas",
+        "file": "test/test-candidates.test.ts",
+        "taskId": "5.1-5.2"
       }
     ]
   },
@@ -444,6 +473,6 @@
     "Issue 187 has no accepted line forecast until its own planning re-entry.",
     "Any stale R-01 authority, candidate drift, severe finding, failed gate, or Harness write blocks integration."
   ],
-  "nextRecommended": "apply:5.1",
-  "updatedAt": "2026-09-05T01:08:57Z"
+  "nextRecommended": "apply:5.3",
+  "updatedAt": "2026-09-05T02:36:00Z"
 }

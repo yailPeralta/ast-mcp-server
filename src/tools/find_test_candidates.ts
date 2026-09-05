@@ -7,6 +7,7 @@ import {
   MAX_IMPACT_DEPTH,
   MAX_IMPACT_EDGES,
   MAX_IMPACT_NODES,
+  isCompleteExactImpactEvidence,
   resolveImpactRoot,
   traverseCompilerImpact,
 } from "../services/impact.js";
@@ -18,11 +19,14 @@ import {
   findTestCandidates,
   MAX_TEST_CANDIDATE_CONVENTION_ITEMS,
   MAX_TEST_CANDIDATE_CONVENTION_LENGTH,
+  TEST_CANDIDATE_RELATIONSHIP_KINDS,
   TEST_CANDIDATE_CONFIDENCES,
   TEST_CANDIDATE_REASONS,
 } from "../services/test-candidates.js";
 import {
+  CompilerImpactWorkSchema,
   FreshnessSchema,
+  RelationshipCoverageSchema,
   RelationshipEdgeSchema,
   RelationshipEndpointSchema,
 } from "./relationship-schema.js";
@@ -65,6 +69,19 @@ const FindTestCandidatesOutputSchema = z.object({
   compiler_authoritative: z.literal(true),
   root: RelationshipEndpointSchema,
   direction: z.literal("incoming"),
+  relationship_kinds: z.tuple([
+    z.literal("reference"),
+    z.literal("import"),
+    z.literal("export"),
+    z.literal("extends"),
+    z.literal("implements"),
+    z.literal("call"),
+  ]),
+  coverage: RelationshipCoverageSchema.refine(
+    (entries) => entries.length === TEST_CANDIDATE_RELATIONSHIP_KINDS.length,
+    { message: "Candidate coverage must contain six entries." },
+  ),
+  work: CompilerImpactWorkSchema,
   candidates: z.array(TestCandidateSchema),
   ...PaginationOutputSchema,
   visited_nodes: z.number().int().min(0),
@@ -140,11 +157,22 @@ export function registerFindTestCandidates(server: McpServer): void {
               context.projectRoot,
               root,
               freshness,
-              { direction: "incoming", max_depth, max_nodes, max_edges },
+              {
+                direction: "incoming",
+                max_depth,
+                max_nodes,
+                max_edges,
+                relationship_kinds: TEST_CANDIDATE_RELATIONSHIP_KINDS,
+              },
               operationContext,
             );
-            if (impact.incomplete || impact.truncation.truncated) {
-              throw new PublicOperationalError("INCOMPLETE_EVIDENCE", "Evidence is incomplete.");
+            if (!isCompleteExactImpactEvidence(impact)) {
+              const reason = impact.work.exhausted
+                ? "work_limit"
+                : impact.coverage.some(({ status }) => status === "unsupported")
+                  ? "unsupported relationship coverage"
+                  : "incomplete relationship evidence";
+              throw new PublicOperationalError("INCOMPLETE_EVIDENCE", reason);
             }
             const candidates = findTestCandidates(impact, {
               test_file_patterns,
@@ -156,6 +184,9 @@ export function registerFindTestCandidates(server: McpServer): void {
               compiler_authoritative: true as const,
               root: impact.root,
               direction: "incoming" as const,
+              relationship_kinds: TEST_CANDIDATE_RELATIONSHIP_KINDS,
+              coverage: impact.coverage,
+              work: impact.work,
               candidates: page.items,
               offset: page.offset,
               limit: page.limit,

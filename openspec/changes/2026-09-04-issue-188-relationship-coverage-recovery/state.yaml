@@ -61,8 +61,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 30
-  completed: 14
-  pending: 16
+  completed: 16
+  pending: 14
   allComplete: false
 dependencies:
   proposal: all_done
@@ -117,7 +117,7 @@ phaseInstructions:
 nextRecommended: apply
 blockedReasons: []
 lastPhase: apply
-activeWorkUnit: "U4 direct contains settled passed and refactored; next task 5.1 U5 candidates"
+activeWorkUnit: "U5 tasks 5.1-5.2 RED/GREEN/refactor complete; task 5.3 freeze/settlement pending"
 evidenceCandidate: "sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977"
 persistence:
   requestedMode: hybrid

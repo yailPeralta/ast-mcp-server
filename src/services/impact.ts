@@ -73,6 +73,7 @@ export interface ImpactResult {
 export interface CompilerImpactResult extends ImpactResult {
   readonly coverage: readonly RelationshipCoverageEntry[];
   readonly work: CompilerImpactWork;
+  readonly freshness: FreshnessMetadata;
   readonly proven_empty: boolean;
 }
 
@@ -105,17 +106,66 @@ export function isExactImpactEdge(edge: RelationshipEdge): boolean {
   );
 }
 
-export function assertExactImpactEvidence(
-  impact: Pick<ImpactResult, "incomplete" | "edges">,
-): void {
-  if (typeof impact !== "object" || impact === null || !Array.isArray(impact.edges)) {
-    throw new Error("Impact evidence is invalid.");
+function hasCompleteCoverage(candidate: Partial<CompilerImpactResult>): boolean {
+  if (
+    !Array.isArray(candidate.coverage) ||
+    !Array.isArray(candidate.relationship_kinds) ||
+    typeof candidate.root !== "object" ||
+    candidate.root === null
+  ) {
+    return false;
   }
-  if (impact.incomplete) {
-    throw new Error("Test candidates require complete impact evidence.");
+  const directions =
+    candidate.direction === "both" ? (["incoming", "outgoing"] as const) : [candidate.direction];
+  if (directions.some((direction) => direction !== "incoming" && direction !== "outgoing")) {
+    return false;
   }
-  if (!impact.edges.every(isExactImpactEdge)) {
-    throw new Error("Test candidates require fresh exact compiler impact evidence.");
+  const endpointClass = candidate.root.symbol_path === "<module>" ? "module" : "symbol";
+  const expected = candidate.relationship_kinds.flatMap((kind) =>
+    directions.map((direction) => `${kind}/${direction}/${endpointClass}`),
+  );
+  const actual = candidate.coverage.map(
+    ({ kind, direction, endpoint_class }) => `${kind}/${direction}/${endpoint_class}`,
+  );
+  return (
+    actual.length === expected.length &&
+    actual.every((entry, index) => entry === expected[index]) &&
+    candidate.coverage.every(({ status }) => status === "completed" || status === "not_applicable")
+  );
+}
+
+export function isCompleteExactImpactEvidence(impact: unknown): boolean {
+  if (typeof impact !== "object" || impact === null) return false;
+  const candidate = impact as Partial<CompilerImpactResult>;
+  const work = candidate.work;
+  return (
+    candidate.incomplete === false &&
+    candidate.truncation?.truncated === false &&
+    Array.isArray(candidate.truncation_reasons) &&
+    candidate.truncation_reasons.length === 0 &&
+    candidate.freshness?.state === "fresh" &&
+    Array.isArray(candidate.freshness.causes) &&
+    candidate.freshness.causes.length === 0 &&
+    Array.isArray(candidate.edges) &&
+    candidate.edges.every(
+      (edge) =>
+        isExactImpactEdge(edge) && candidate.relationship_kinds?.includes(edge.kind) === true,
+    ) &&
+    hasCompleteCoverage(candidate) &&
+    typeof work === "object" &&
+    work !== null &&
+    Number.isSafeInteger(work.max_items) &&
+    work.max_items > 0 &&
+    Number.isSafeInteger(work.consumed_items) &&
+    work.consumed_items >= 0 &&
+    work.consumed_items <= work.max_items &&
+    work.exhausted === false
+  );
+}
+
+export function assertExactImpactEvidence(impact: unknown): asserts impact is CompilerImpactResult {
+  if (!isCompleteExactImpactEvidence(impact)) {
+    throw new Error("Test candidates require complete coverage and fresh exact compiler evidence.");
   }
 }
 
@@ -628,6 +678,7 @@ export function traverseCompilerImpact(
     ...impact,
     coverage,
     work,
+    freshness,
     incomplete,
     proven_empty: !incomplete && impact.edges.length === 0,
   };
