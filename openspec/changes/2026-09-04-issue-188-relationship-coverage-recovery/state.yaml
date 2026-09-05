@@ -61,8 +61,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 30
-  completed: 16
-  pending: 14
+  completed: 17
+  pending: 13
   allComplete: false
 dependencies:
   proposal: all_done
@@ -117,8 +117,8 @@ phaseInstructions:
 nextRecommended: apply
 blockedReasons: []
 lastPhase: apply
-activeWorkUnit: "U5 tasks 5.1-5.2 RED/GREEN/refactor complete; task 5.3 freeze/settlement pending"
-evidenceCandidate: "sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977"
+activeWorkUnit: "U5 tasks 5.1-5.3 settled and refactored; U6 task 6.1 next"
+evidenceCandidate: "sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a"
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
@@ -245,13 +245,36 @@ phaseZeroAuthority:
     nextTask: "5.1"
     nextBranch: fix/issue-188-u5-candidates
     nextBase: docs/issue-188-u4-evidence
+  u5:
+    branch: fix/issue-188-u5-candidates
+    pullRequest: 202
+    commit: cdc6e44
+    evidenceBranch: docs/issue-188-u5-evidence
+    acquireRequest: issue188-u5-a1-acquire-20260905t0121z
+    settleRequest: issue188-u5-a1-settle-20260905t0150z
+    outcome: passed
+    evidenceRevision: "sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a"
+    authoredChangedLines:
+      additions: 331
+      deletions: 34
+      total: 365
+      budget: 400
+    tdd: "Baseline 93/93; focused RED 3 failures; GREEN 97/97; full 976/976 plus supervised 2/2; U5 refactored"
+    gates: "MCP smoke status ok 16; format, lint, typecheck, build, and diff pass; GIT_PAGER unset"
+    inventoryHashes: "Synchronized only affected inventory expectations: canary c7146092cd2664cf4eccaefcb786a737339bc34b292c91a3129bd7f12030e0db; registry/fixture 4c3275f09a7abbb4fadf7254c26d566209506a4009fa7ad08aac8e674c4700fa."
+    candidateTraversal: "Exactly six incoming kinds ordered reference, import, export, extends, implements, call; contains explicitly excluded."
+    issue186Status: "Callable authority remains explicitly unresolved as an independent integration gate."
+    issue187Status: "Request-wide exact-once accounting remains explicitly unresolved as an independent integration gate."
+    nextTask: "6.1"
+    nextBranch: test/issue-188-u6-matrix
+    nextBase: docs/issue-188-u5-evidence
   killSwitches:
     - "Stop and recalculate if origin/main leaves the planned 6173a39 commit."
     - "Reject ancestor/foreign scope, receipt/tree mismatch, or any child above 400 authored changed lines."
     - "Never resume, import, or extend #161 or PR #162-#185 R-01 authority."
     - "Keep tracker PR #189 draft and merge-unauthorized until #186, #187, and every final gate pass."
     - "Candidate drift, severe findings, failed verification/CI, or Harness mutation blocks integration."
-  nextApply: "U5 task 5.1 on branch fix/issue-188-u5-candidates based on evidence child docs/issue-188-u4-evidence; acquire a fresh receipt and author ATC-001..007 RED while excluding contains from candidate traversal"
+  nextApply: "U6 task 6.1 on branch test/issue-188-u6-matrix based on evidence child docs/issue-188-u5-evidence; acquire a fresh receipt and re-author the seven-kind/cancellation matrix while preserving the six-kind no-contains candidate boundary"
 reviewBudget:
   strategy: feature-branch-chain
   maxAuthoredChangedLinesPerChild: 400
@@ -263,6 +286,6 @@ reviewBudget:
     - "Strict verification, archive readiness, required CI, and no-write Harness checks pass."
 risks:
   - "Direct cherry-picks import stale R-01 execution and approval artifacts."
-  - "U4 remains non-mergeable because issue #186 callable authority remains explicitly unresolved."
+  - "U5 remains non-mergeable because issue #186 callable authority remains explicitly unresolved."
   - "Issue #187 request-wide accounting remains explicitly unresolved; sorting and finalization work are untouched."
   - "Any main advance requires replay conflict and line-budget recalculation before branching."
