@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-188-relationship-coverage-recovery",
   "authoritative": true,
-  "stage": "u3-implementation-ready-for-settlement",
+  "stage": "u3-settled-passed-ready-for-u4",
   "rddModeAtPlanning": "disabled/unmanaged",
   "rddModeAtApply": {
     "effective": "off",
@@ -54,7 +54,7 @@
     },
     { "id": "3.1", "name": "Acquire and RED U3 scoped call scenarios", "status": "completed" },
     { "id": "3.2", "name": "GREEN/REFACTOR U3 without absorbing issue 186", "status": "completed" },
-    { "id": "3.3", "name": "Verify, freeze, settle, and evidence U3", "status": "pending" },
+    { "id": "3.3", "name": "Verify, freeze, settle, and evidence U3", "status": "completed" },
     { "id": "4.1", "name": "Acquire and RED U4 direct containment scenarios", "status": "pending" },
     { "id": "4.2", "name": "GREEN/REFACTOR U4 without issue 187 accounting", "status": "pending" },
     { "id": "4.3", "name": "Verify, freeze, settle, and evidence U4", "status": "pending" },
@@ -280,15 +280,47 @@
       "base": "docs/issue-188-u2-evidence"
     }
   },
-  "u3ApplyEvidence": {
-    "activeToken": "sha256:b83d129d1e4a7564d5f0597da82e28fd3b0ef4e117fb769a6cfc137bf87d2a41",
-    "safetyNet": "76/76 impact plus registered MCP tests passed before edits.",
-    "red": "Focused scoped-call selection failed 2/2 before implementation.",
-    "green": "Focused scoped-call selection passed 2/2 after implementation.",
-    "triangulate": "Exact overload calls, both directions, stable IDs, dedupe, scope filters, nested exclusion, and ambiguity isolation covered.",
-    "refactor": "Shared compiler invocation classifier; post-format impact plus MCP passed 78/78.",
-    "runtimeHarness": "yarn test:mcp passed with status ok and 16 registered tools.",
-    "rollback": "Revert U3 relationships producer, paired impact tests, and current-change metadata only."
+  "u3Evidence": {
+    "observedAt": "2026-09-05T00:45:00Z",
+    "branch": "feat/issue-188-u3-calls",
+    "evidenceBranch": "docs/issue-188-u3-evidence",
+    "pullRequest": 198,
+    "commit": "37a20845db7093e378630e52a07206a9b5385b13",
+    "acquireRequest": "issue188-u3-a1-acquire-20260905t0033z",
+    "settleRequest": "issue188-u3-a1-settle-20260905t0045z",
+    "outcome": "passed",
+    "evidenceRevision": "sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90",
+    "authoredChangedLines": { "additions": 338, "deletions": 51, "total": 389, "budget": 400 },
+    "tddCycle": {
+      "safetyNet": "Impact plus registered MCP baseline passed 76/76 before edits.",
+      "red": "Focused scoped-call selection failed 2/2 before implementation.",
+      "green": "Focused scoped-call selection passed 2/2 twice after implementation.",
+      "triangulate": "Exact overload calls, both directions, stable IDs, dedupe, scope filters, nested exclusion, and ambiguity isolation were covered.",
+      "refactor": "The shared compiler invocation classifier remained green; final impact plus registered MCP passed 78/78."
+    },
+    "qualityGates": {
+      "focused": "Impact plus registered MCP passed 78/78; call suite passed 67/67.",
+      "typecheck": "yarn typecheck => exit 0",
+      "build": "yarn build => exit 0",
+      "runtimeHarness": "yarn test:mcp => exit 0; status ok 16",
+      "format": "yarn format:check => exit 0",
+      "lint": "yarn lint => exit 0",
+      "diff": "git diff --check => exit 0"
+    },
+    "workUnitEvidence": {
+      "focusedChecks": "Final impact plus registered MCP passed 78/78; call suite passed 67/67.",
+      "runtimeHarness": "yarn test:mcp => exit 0; status ok 16.",
+      "rollbackBoundary": "Revert PR #198 commit 37a2084 to remove only the U3 scoped-call producer and paired impact tests; revert this evidence child to remove only current-change metadata."
+    },
+    "delegatedLimitations": {
+      "issue186": "Callable getter and private-parameter issues remain explicitly unresolved.",
+      "issue187": "Request-wide accounting is untouched and remains independently unresolved."
+    },
+    "next": {
+      "task": "4.1",
+      "branch": "feat/issue-188-u4-contains",
+      "base": "docs/issue-188-u3-evidence"
+    }
   },
   "tdd": {
     "red": [],
@@ -305,6 +337,12 @@
         "name": "Recover 14-cell coverage, completeness, and shared work tracking",
         "file": "test/impact.test.ts",
         "taskId": "2.1-2.3"
+      },
+      {
+        "id": "u3-scoped-calls",
+        "name": "Recover exact directional scoped call relationships",
+        "file": "test/impact.test.ts",
+        "taskId": "3.1-3.3"
       }
     ]
   },
@@ -312,18 +350,22 @@
     "authority": ["phaseZeroEvidence@2026-09-04T23:34:31Z"],
     "attempts": [
       "issue188-u1-a1-acquire-20260904t2340z:settled-failed-as-expected@issue188-u1-a1-settle-20260904t2347z",
-      "issue188-u2-a1-acquire-20260904t2353z:settled-passed@issue188-u2-a1-settle-20260905t0029z"
+      "issue188-u2-a1-acquire-20260904t2353z:settled-passed@issue188-u2-a1-settle-20260905t0029z",
+      "issue188-u3-a1-acquire-20260905t0033z:settled-passed@issue188-u3-a1-settle-20260905t0045z"
     ],
     "tdd": [
       "u1-red-remediated@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
-      "u2-red-green-refactor@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50"
+      "u2-red-green-refactor@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
+      "u3-red-green-refactor@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90"
     ],
     "identity": [
       "u1-runtime-patch@sha256:c3de6e1ecfaf62e645e94e35d7d8fb473c363dd2e8ed1efc6d875580972ccab5",
-      "u2-runtime-pr196-d73c1ec@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50"
+      "u2-runtime-pr196-d73c1ec@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
+      "u3-runtime-pr198-37a2084@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90"
     ],
     "gates": [
-      "u2-focused-runtime-quality-pass@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50"
+      "u2-focused-runtime-quality-pass@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
+      "u3-focused-call-runtime-quality-pass@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90"
     ],
     "review": [],
     "judgment": [],
@@ -345,6 +387,6 @@
     "Issue 187 has no accepted line forecast until its own planning re-entry.",
     "Any stale R-01 authority, candidate drift, severe finding, failed gate, or Harness write blocks integration."
   ],
-  "nextRecommended": "apply:3.3",
-  "updatedAt": "2026-09-05T00:52:58Z"
+  "nextRecommended": "apply:4.1",
+  "updatedAt": "2026-09-05T00:59:38Z"
 }
