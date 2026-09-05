@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-188-relationship-coverage-recovery",
   "authoritative": true,
-  "stage": "u6-settled-u7-ready",
+  "stage": "u7-gates-passed-no-settlement",
   "rddModeAtPlanning": "disabled/unmanaged",
   "rddModeAtApply": {
     "effective": "off",
@@ -75,8 +75,12 @@
     },
     { "id": "6.1", "name": "Acquire and re-author U6 seven-kind matrix", "status": "completed" },
     { "id": "6.2", "name": "Verify, freeze, and settle U6", "status": "completed" },
-    { "id": "6.3", "name": "Acquire and re-author truthful U7 documentation", "status": "pending" },
-    { "id": "6.4", "name": "Run gates, freeze, and settle U7", "status": "pending" },
+    {
+      "id": "6.3",
+      "name": "Acquire and re-author truthful U7 documentation",
+      "status": "completed"
+    },
+    { "id": "6.4", "name": "Run gates, freeze, and settle U7", "status": "completed" },
     { "id": "7.1", "name": "Forecast and conditionally split issue 186", "status": "pending" },
     {
       "id": "7.2",
@@ -107,7 +111,7 @@
     { "id": "8.4", "name": "Archive and repeat post-archive candidate proof", "status": "pending" },
     { "id": "8.5", "name": "Integrate sequentially and close issues in order", "status": "pending" }
   ],
-  "taskProgress": { "total": 30, "completed": 19, "pending": 11, "allComplete": false },
+  "taskProgress": { "total": 30, "completed": 21, "pending": 9, "allComplete": false },
   "phaseZeroEvidence": {
     "observedAt": "2026-09-04T23:34:31Z",
     "issues": [
@@ -480,6 +484,61 @@
       "base": "docs/issue-188-u6-evidence"
     }
   },
+  "u7Evidence": {
+    "observedAt": "2026-09-05T02:23:09Z",
+    "branch": "docs/issue-188-u7-docs",
+    "baseCommit": "0e96772feec61b8cfbeb02b6e99e7dff590598c8",
+    "baseTree": "f87c58f86ccc7d3d2a6bcf626d9b6efbff9bbbbf",
+    "provenanceCommit": "bac52a4de598e0c01412d0d54efdfe9cef3a4353",
+    "activeToken": "sha256:1041a9fdcd650089d456bbfece7c9517dc9b8ad91ad3c41b520de44927122f5b",
+    "attemptDisposition": "No acquire or settle was run because the direct U7 instruction prohibited both; no settlement authority is claimed.",
+    "scope": "README, changelog, ADR 0007, ADR 0012, Harness improvement report, and current-change metadata only; no runtime source or tests changed.",
+    "docsPatchSha256": "ad8c43a2b4b1e33480d101af543c0b6bb47d9421723ee193b3f4f03aa622a2dd",
+    "publicTruth": {
+      "coverage": "At most 14 root-endpoint-class cells ordered by seven kinds then incoming/outgoing; unfinished > unsupported > completed > not_applicable.",
+      "completeness": "Only fresh, untruncated, uncancelled, unexhausted completed/not_applicable evidence may be complete or proven_empty.",
+      "candidates": "Exactly six ordered incoming kinds: reference, import, export, extends, implements, call; contains excluded.",
+      "compatibility": "Four JSON/TOON tools retain output_format and no universal MCP outputSchema is introduced.",
+      "delivery": "Unmerged recovery candidate blocked by approved #186 and #187; closed #161 supplies no delivery, approval, verification, archive, release, or merge authority."
+    },
+    "tddCycle": {
+      "safetyNet": "U6 cumulative baseline already passed 979/979 plus supervised 2/2 before this docs-only unit.",
+      "red": "N/A — truthful documentation and metadata only; no production behavior or test source was changed.",
+      "green": "Cumulative repository and Harness gates passed after the documentation edits.",
+      "triangulate": "Docs cross-check impact, candidates, cancellation, work-limit, compatibility, and unresolved-child boundaries.",
+      "refactor": "Prettier, ESLint, typecheck, build, and git diff --check remained green."
+    },
+    "qualityGates": {
+      "ambient": "GIT_PAGER was unset for every cumulative repository and Harness command.",
+      "format": "Initial post-doc env -u GIT_PAGER yarn format:check => exit 0; after metadata it exited 1 on apply-progress.json, targeted yarn prettier --write fixed only that file, and the sole retry exited 0.",
+      "lint": "env -u GIT_PAGER yarn lint => exit 0.",
+      "typecheck": "env -u GIT_PAGER yarn typecheck => exit 0.",
+      "full": "env -u GIT_PAGER yarn test => exit 0; 75 files/979 tests plus 1 file/2 supervised tests passed.",
+      "build": "env -u GIT_PAGER yarn build => exit 0.",
+      "mcp": "env -u GIT_PAGER yarn test:mcp => exit 0; status ok, tool_count 16.",
+      "lifecycle": "env -u GIT_PAGER yarn test:lifecycle => exit 0; status ok, orphan_processes 0.",
+      "cli": "env -u GIT_PAGER yarn test:cli => exit 0; status ok.",
+      "errors": "env -u GIT_PAGER yarn test:errors => exit 0; status ok.",
+      "package": "env -u GIT_PAGER yarn test:package => exit 0; status ok, version 0.13.1, six installed/idempotent targets.",
+      "diff": "env -u GIT_PAGER git diff --check => exit 0."
+    },
+    "harness": {
+      "root": "/home/yail/.local/share/dsh-oauth-cutover/cd5ef8148158c3a752a658978873241fdf8e2bbc/host",
+      "revision": "cd5ef8148158c3a752a658978873241fdf8e2bbc",
+      "command": "env -u GIT_PAGER bash -lc 'yarn vitest run test/dsh-adapter.test.ts test/tool-catalog.test.ts && yarn test:dsh-adapter'",
+      "result": "exit 0; 2 files/23 tests; adapter phases a,b,c,h03,h05,d ok; cleanup ok.",
+      "guard": "catalogs 15→0→15; each guarded 15-name catalog omits mcp__ast__ast_apply_operation; direct apply is rejected as UNKNOWN_TOOL.",
+      "snapshotAlgorithm": "Raw-byte path sort; unsigned 64-bit big-endian length framing for path/type and regular-file bytes or symlink target; no symlink following; root and mutable metadata excluded.",
+      "beforeAfter": "identical sha256:e9be86fb8ef58a82d9e9b5ef16f1f4ed900e0eecd142d95591e16384d46e40cc; 91215 entries, 73083 files, 11927 directories, 6205 symlinks, 1568220487 regular bytes, 0 other."
+    },
+    "workUnitEvidence": {
+      "focusedChecks": "Docs-only checks and the cumulative full/package/Harness gates above all exited 0.",
+      "runtimeHarness": "Pinned read-only Harness adapter/catalog gate passed; identical before/after snapshots prove no checkout write.",
+      "rollbackBoundary": "Revert the five public documentation files and this change's task/progress/state metadata; U1-U6 runtime and test behavior remains intact."
+    },
+    "cleanup": "Harness adapter cleanup ok; lifecycle orphan_processes=0; supervised cleanup readback active=0, held=0, abortListeners=0, timers=0, staleSettlements=0; ownedProcesses=0.",
+    "next": "Re-enter approved #186; do not verify, archive, run Judgment, merge, or claim #186/#187 pass."
+  },
   "tdd": {
     "red": [],
     "green": [],
@@ -572,11 +631,11 @@
   },
   "risks": [
     "Protected origin/main drift requires complete replay recalculation.",
-    "U7 must start from docs/issue-188-u6-evidence and remain within its docs-only allowlist and 400-line budget.",
+    "U7 is docs-only and gate-complete but intentionally has no acquire or settlement authority under the direct execution constraint.",
     "Issue 186 must split when its independent forecast exceeds 400 authored lines.",
     "Issue 187 has no accepted line forecast until its own planning re-entry.",
     "Any stale R-01 authority, candidate drift, severe finding, failed gate, or Harness write blocks integration."
   ],
-  "nextRecommended": "apply:6.3",
-  "updatedAt": "2026-09-05T02:20:00Z"
+  "nextRecommended": "apply:7.1-issue-186-re-entry",
+  "updatedAt": "2026-09-05T02:23:09Z"
 }

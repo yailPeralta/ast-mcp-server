@@ -103,11 +103,11 @@ The v0.13 diagnostic identity is code, category, file, and message. It omits lin
 
 ### R-01 — Honest relationship coverage
 
-The public relationship vocabulary includes `reference`, `import`, `export`, `extends`, `implements`, `call`, and `contains`. The scoped resolver used by impact installs producers for the first five groups but no equivalent producer for `call` or `contains`. An empty traversal therefore needs an explicit unsupported/incomplete outcome rather than a complete negative.
+The unmerged #188 recovery candidate exposes at most 14 ordered root-class cells across `reference`, `import`, `export`, `extends`, `implements`, `call`, and `contains`, incoming before outgoing. Status precedence is `unfinished > unsupported > completed > not_applicable`. Only fresh, uncancelled, unexhausted coverage containing safe statuses can authorize `proven_empty`; cancellation and `work_limit` return no partial authority. Affected-test discovery freezes six incoming kinds and excludes `contains`.
 
 **Required RED:** one positive and one negative contract case for every public relationship kind, including overloaded functions, methods, and constructors.
 
-**Acceptance gate:** every `proven_empty` result records that all requested kinds ran within budget; unsupported coverage is explicit and incomplete.
+**Acceptance gate:** U1–U6 characterization is green, but the feature remains a recovery candidate blocked by approved #186 callable finality and #187 exact-once accounting. The four JSON/TOON tools retain `output_format` without a universal MCP `outputSchema`. Pinned Harness proof must show 15 guarded tools, absent apply, and direct `ast_apply_operation` as `UNKNOWN_TOOL`. Closed #161 supplies no delivery, approval, verification, archive, release, or merge authority.
 
 ### F-01 — Executable JSON/TOON contract
 

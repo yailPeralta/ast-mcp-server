@@ -61,8 +61,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 30
-  completed: 19
-  pending: 11
+  completed: 21
+  pending: 9
   allComplete: false
 dependencies:
   proposal: all_done
@@ -117,8 +117,8 @@ phaseInstructions:
 nextRecommended: apply
 blockedReasons: []
 lastPhase: apply
-activeWorkUnit: "U6 tasks 6.1-6.2 settled and refactored; U7 task 6.3 next"
-evidenceCandidate: "sha256:6ed025157f199c7036beac17e346c185f66bb018b8f7c39bc61bdc2800f2b772"
+activeWorkUnit: "U7 tasks 6.3-6.4 docs and cumulative gates complete; acquire/settle prohibited and no settlement claimed; #186 re-entry next"
+evidenceCandidate: "sha256:ad8c43a2b4b1e33480d101af543c0b6bb47d9421723ee193b3f4f03aa622a2dd"
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
@@ -289,13 +289,25 @@ phaseZeroAuthority:
     nextTask: "6.3"
     nextBranch: docs/issue-188-u7-docs
     nextBase: docs/issue-188-u6-evidence
+  u7:
+    branch: docs/issue-188-u7-docs
+    baseCommit: 0e96772feec61b8cfbeb02b6e99e7dff590598c8
+    provenanceCommit: bac52a4de598e0c01412d0d54efdfe9cef3a4353
+    activeToken: "sha256:1041a9fdcd650089d456bbfece7c9517dc9b8ad91ad3c41b520de44927122f5b"
+    attemptDisposition: "Acquire and settle explicitly prohibited; no settlement authority claimed."
+    docsPatchSha256: ad8c43a2b4b1e33480d101af543c0b6bb47d9421723ee193b3f4f03aa622a2dd
+    gates: "Format, lint, typecheck, 979 full + 2 supervised tests, build, MCP/lifecycle/CLI/error/package smokes, diff check, and pinned Harness adapter/catalog all passed."
+    harness: "Revision cd5ef8148158c3a752a658978873241fdf8e2bbc; 15→0→15 catalogs, apply absent, direct apply UNKNOWN_TOOL, cleanup ok."
+    harnessSnapshot: "Before/after sha256:e9be86fb8ef58a82d9e9b5ef16f1f4ed900e0eecd142d95591e16384d46e40cc; 91215 entries; no checkout write."
+    delivery: "Unmerged recovery candidate remains blocked by approved #186/#187; no #161 delivery, approval, verification, archive, release, or merge authority."
+    nextTask: "7.1 #186 re-entry"
   killSwitches:
     - "Stop and recalculate if origin/main leaves the planned 6173a39 commit."
     - "Reject ancestor/foreign scope, receipt/tree mismatch, or any child above 400 authored changed lines."
     - "Never resume, import, or extend #161 or PR #162-#185 R-01 authority."
     - "Keep tracker PR #189 draft and merge-unauthorized until #186, #187, and every final gate pass."
     - "Candidate drift, severe findings, failed verification/CI, or Harness mutation blocks integration."
-  nextApply: "U7 task 6.3 on docs/issue-188-u7-docs from evidence child docs/issue-188-u6-evidence; rewrite current docs without stale R-01 claims and preserve unresolved #186/#187 gates"
+  nextApply: "Re-enter approved #186 from the U7 candidate; keep #187 independent and do not verify, archive, run Judgment, or merge."
 reviewBudget:
   strategy: feature-branch-chain
   maxAuthoredChangedLinesPerChild: 400

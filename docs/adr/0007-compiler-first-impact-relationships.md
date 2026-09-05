@@ -30,9 +30,9 @@ Represent each relationship as a normalized edge with project-relative endpoints
 
 A derived index may provide candidates for routing, but exact selector resolution and semantic relationship evidence are rechecked through the active compiler project. Index state never upgrades an edge's authority.
 
-`ast_get_impact` is read-only and accepts one exact root selector. It performs deterministic bounded traversal with explicit direction, relationship-kind filters, maximum depth, node and edge budgets. The response reports visited counts, maximum depth, direct versus transitive nodes, per-edge trust metadata, incomplete state and machine-readable truncation reasons. If the relationship set is not fresh, the tool fails closed instead of presenting cached impact as current.
+The unmerged #188 recovery candidate keeps `ast_get_impact` read-only and adds one request-scoped work record plus a root-endpoint-class coverage ledger. The ledger has at most 14 cells: `reference`, `import`, `export`, `extends`, `implements`, `call`, and `contains`, each ordered incoming then outgoing. Status is `completed`, `not_applicable`, `unsupported`, or `unfinished`; aggregation uses `unfinished > unsupported > completed > not_applicable`. Freshness, traversal bounds, cancellation, shared-work exhaustion, and every requested cell jointly determine completeness. Only complete zero-edge evidence may be `proven_empty`; exhaustion returns `work_limit`, and cancellation returns `REQUEST_CANCELLED` without partial authority.
 
-The initial authoritative relationship set is limited to compiler-backed relationships that the project can resolve exactly, including references, imports, exports, inheritance and implemented interfaces where represented by the existing compiler service. Syntax or heuristic relationships may be represented as non-authoritative context only when their provenance is preserved. Unsupported relationship kinds remain incomplete; traversal must not claim runtime or whole-program completeness.
+Calls require exact scoped compiler resolution; ambiguity remains unfinished, with final polymorphic callable authority still delegated to approved #186. Containment is direct named compiler ownership only: module→top-level declaration or named owner→direct named child, with incoming as its inverse. Statements, parameters, anonymous/runtime owners, and producer-transitive edges are excluded. Syntax, heuristic, and index evidence never upgrades authority. Approved #187 still owns exact-once request-wide sorting/finalization accounting.
 
 The internal test-candidate resolver is a pure read-side projection over exact impact evidence. It accepts only fresh, exact compiler-authoritative impact, applies bounded project conventions for test filenames/directories, and returns candidates with direct/transitive reason, confidence, relationship IDs and full bounded paths to the root. It never executes Jest, Vitest or another test runner, does not inspect coverage, and does not authorize a mutation.
 
@@ -83,6 +83,8 @@ Rejected. It adds side effects, runtime/framework coupling and unbounded executi
 Rejected. Depth, node, edge and unsupported-kind gaps must be visible so callers do not interpret a bounded graph as a complete impact closure.
 
 ## Evidence and verification
+
+> Candidate status: the #188 recovery is not merged, approved for delivery, archived, released, or merge-authorized. Its integration is blocked until #186 and #187 pass independently. Closed #161 evidence grants none of those authorities.
 
 - `test/relationships.test.ts` covers compiler-resolved references/imports/exports/heritage, negative same-name and dynamic-dispatch controls, provenance and freshness authority.
 - `test/impact.test.ts` covers exact roots, direction/kind filters, deterministic bounded traversal and depth/node/edge truncation.

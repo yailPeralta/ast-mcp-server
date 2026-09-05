@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Recovery candidate (not merged or released)
+
+- #188 re-authors relationship completeness as an unmerged candidate: `ast_get_impact` reports at most 14 ordered root-class kind/direction coverage cells plus shared work, distinguishes `completed`, `not_applicable`, `unsupported`, and `unfinished`, and permits `proven_empty` only for fresh, uncancelled, unexhausted complete evidence. Candidate discovery uses six ordered incoming kinds (`reference`, `import`, `export`, `extends`, `implements`, `call`) and excludes `contains`; cancellation and `work_limit` fail closed. The four JSON/TOON tools preserve `output_format` without a universal MCP `outputSchema`. Integration remains blocked by approved #186 and #187. Closed #161 supplies no delivery, approval, verification, archive, release, or merge authority.
+
 ## [0.13.1] — published to `latest` and `next`, registry verified (2026-09-01)
 
 ### Fixed
