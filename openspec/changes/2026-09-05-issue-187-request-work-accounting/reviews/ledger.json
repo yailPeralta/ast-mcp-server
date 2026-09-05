@@ -38,7 +38,7 @@
         "confirmedBy": ["judgeA", "judgeB"],
         "corroborated": true,
         "fixAuthorized": true,
-        "status": "open"
+        "status": "correction-applied-pending-scoped-dual-rejudgment"
       }
     ],
     "suspect": [
@@ -85,10 +85,10 @@
   ],
   "correction": {
     "round": 1,
-    "state": "planned",
+    "state": "applied-pending-scoped-dual-rejudgment",
     "authorizedFindingIds": ["JD-R1-SEV-001"],
     "workUnit": "issue187-c-member-reference-pair-sort-accounting",
-    "immediateBase": "PR #229 @ 4bce66b6adf87735e9ba640b561f383d8199dd81",
+    "immediateBase": "PR #230 @ ff7d9efba5a854d0c3b5c92f347502dfbb2bb3b9",
     "forecastChangedLines": "<=120",
     "allowedClasses": ["source", "focused-test", "issue-187-meta"],
     "allowedSourcePaths": [
@@ -116,8 +116,8 @@
     "scopedRejudgment": "required; both blind judges inspect only this frozen ledger and the immutable correction-C delta"
   },
   "candidateVerdict": "ESCALATED",
-  "workflowState": "pending-correction-round-1",
+  "workflowState": "pending-scoped-dual-rejudgment",
   "terminal": false,
   "task3_1": "pending until both scoped re-judges approve the correction delta",
-  "updatedAt": "2026-09-05T19:30:09Z"
+  "updatedAt": "2026-09-05T19:46:41Z"
 }

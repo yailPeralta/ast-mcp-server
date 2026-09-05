@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-05-issue-187-request-work-accounting",
   "authoritative": true,
-  "stage": "judgment-day-round1-escalated-pending-correction-c",
+  "stage": "correction-c-applied-pending-scoped-dual-rejudgment",
   "rddModeAtPlanning": "disabled/unmanaged",
   "delivery": {
     "strategy": "feature-branch-chain",
@@ -150,8 +150,8 @@
     "terminal": false,
     "correction": {
       "id": "C",
-      "state": "planned",
-      "base": "PR #229@4bce66b6adf87735e9ba640b561f383d8199dd81",
+      "state": "applied-pending-scoped-dual-rejudgment",
+      "base": "PR #230@ff7d9efba5a854d0c3b5c92f347502dfbb2bb3b9",
       "findingIds": ["JD-R1-SEV-001"],
       "forecast": "<=120",
       "roundsRemaining": 1,
@@ -159,11 +159,11 @@
     },
     "budgets": { "A": 398, "B": 395, "format": 83 }
   },
-  "review": "Judgment Day round 1 ESCALATED; correction C pending; RDD disabled/unmanaged; no receipt authority",
+  "review": "Correction C applied for JD-R1-SEV-001 only; not approved; scoped dual re-judgment pending; RDD disabled/unmanaged; no receipt authority",
   "verify": {
     "requirements": 9,
     "scenarios": 13,
-    "status": "blocked-pending-correction-and-scoped-rejudgment"
+    "status": "blocked-pending-scoped-dual-rejudgment"
   },
-  "updatedAt": "2026-09-05T19:30:09Z"
+  "updatedAt": "2026-09-05T19:46:41Z"
 }

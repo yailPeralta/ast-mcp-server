@@ -1355,6 +1355,7 @@ function addScopedMemberRelationships(
         [candidateEndpoint, targetEndpoint],
         [targetEndpoint, candidateEndpoint],
       ];
+      reserveScopedWork(state, edges, pairs.length, "candidate.sort");
       pairs.sort((left, right) =>
         [left[0].file, left[0].selector, left[1].file, left[1].selector]
           .join("\u0000")

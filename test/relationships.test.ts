@@ -244,6 +244,84 @@ function stageCounts(events: readonly WorkEvent[]): Record<string, number> {
 }
 
 describe("request-wide relationship work accounting", () => {
+  it("charges the two-item member-reference pair sort before sorting and fails closed one below", async () => {
+    const fixture = await createProjectFixture({
+      "src/base.ts": "export interface Base { target(): void; }\n",
+      "src/impl.ts":
+        'import { Base } from "./base.js"; export class Impl implements Base { target(): void {} }\n',
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const target = resolveImpactRoot(project, fixture.root, {
+      file_path: "src/base.ts",
+      symbol_path: "Base.target",
+    });
+    const run = (max: number) => {
+      const events: WorkEvent[] = [];
+      const tracker = new CompilerImpactWorkTracker(max, (event: WorkEvent) => events.push(event));
+      const originalSort = Array.prototype.sort;
+      Array.prototype.sort = function (
+        this: unknown[],
+        compareFn?: (left: unknown, right: unknown) => number,
+      ) {
+        if (
+          this.length === 2 &&
+          this.every(
+            (pair) =>
+              Array.isArray(pair) &&
+              pair.length === 2 &&
+              pair.every(
+                (endpoint) =>
+                  typeof endpoint === "object" && endpoint !== null && "file" in endpoint,
+              ),
+          )
+        ) {
+          expect(events.at(-1)).toMatchObject({ stage: "candidate.sort", count: 2 });
+        }
+        return originalSort.call(this, compareFn);
+      } as typeof Array.prototype.sort;
+      try {
+        const resolver = createCompilerRelationshipResolver(
+          project,
+          fixture.root,
+          freshness(),
+          undefined,
+          tracker,
+        );
+        const result = resolver.edgesFor(target, {
+          direction: "both",
+          relationship_kinds: ["reference"],
+          max_edges: 10,
+        });
+        return { events, result, tracker };
+      } finally {
+        Array.prototype.sort = originalSort;
+      }
+    };
+
+    const generous = run(100_000);
+    expect(generous.result.edges).toHaveLength(2);
+    expect(
+      generous.events
+        .filter(({ stage, count }) => stage === "candidate.sort" && count > 0)
+        .map(({ count }) => count),
+    ).toEqual([2, 2]);
+
+    const required = generous.tracker.consumed;
+    expect(required).toBe(235);
+    const exact = run(required);
+    expect(exact.result).toEqual(generous.result);
+
+    const below = run(required - 1);
+    expect(below.result).toMatchObject({
+      edges: [],
+      incomplete: true,
+      work_limit_reached: true,
+      work_items: required - 1,
+    });
+    expect(below.tracker.exhausted).toBe(true);
+  });
+
   it("uses a fixed exact relationship finalization bound and saturates one below", async () => {
     const fixture = await createProjectFixture({
       "src/target.ts": "export function target(): void {}\n",

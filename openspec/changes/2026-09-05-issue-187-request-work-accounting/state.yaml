@@ -97,10 +97,8 @@ remediationState:
   reason: ""
 phaseInstructions:
   apply:
-    - "Judgment Day round 1 rejected frozen PR #229 candidate 4bce66b6adf87735e9ba640b561f383d8199dd81 for corroborated JD-R1-SEV-001 only."
-    - "Plan correction C from exact PR #229 head; forecast <=120; allow only relationship source, focused tests, and this change's metadata."
-    - "Next runtime-bearing action is a fresh bounded C acquire. No acquire/reset was performed here; do not reset unless compact authority requires a changed objective and a maintainer explicitly authorizes the exact reset."
-    - "After C freezes, both blind judges re-judge only reviews/ledger.json plus the immutable C delta; task 3.1 remains pending until both approve."
+    - "Correction C is applied for JD-R1-SEV-001 only from ff7d9ef; exact member-reference work rose 233->235, with N=235 successful and N-1=234 authority-free work_limit. No acquire/reset/settle or delivery action was performed."
+    - "Correction C is not approved; both blind judges must re-judge only reviews/ledger.json plus the immutable C delta, and task 3.1 remains pending until both approve."
   verify:
     - "Blocked until correction C passes scoped dual re-judgment; then strictly validate 9 requirements/13 scenarios."
   remediate: []
@@ -108,10 +106,10 @@ phaseInstructions:
     - "Issue #188 merge/archive is excluded."
 nextRecommended: apply
 blockedReasons: []
-lastPhase: apply-judgment-day-round1-escalated
+lastPhase: apply-correction-c-pending-scoped-dual-rejudgment
 documentationCleanup:
   status: formatting-gate-cleared
-  runtimeCandidate: "Frozen A+B plus format PR #229 commit 4bce66b6adf87735e9ba640b561f383d8199dd81; Judgment Day correction C pending"
+  runtimeCandidate: "PR #229 commit 4bce66b6adf87735e9ba640b561f383d8199dd81 plus applied correction C; scoped dual re-judgment pending"
 judgmentDay:
   ledger: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/reviews/ledger.json
   target:
@@ -132,15 +130,15 @@ judgmentDay:
     - JD-R1-INFO-004
   verdict: ESCALATED
   terminal: false
-  workflowState: pending-correction-round-1
+  workflowState: pending-scoped-dual-rejudgment
   correction:
     id: C
-    immediateBase: "PR #229 @ 4bce66b6adf87735e9ba640b561f383d8199dd81"
+    immediateBase: "PR #230 @ ff7d9efba5a854d0c3b5c92f347502dfbb2bb3b9"
     forecast: "<=120"
     authorizedFindingIds:
       - JD-R1-SEV-001
     roundsRemaining: 1
-    acquireNeeded: true
+    acquireDisposition: "not performed; prohibited for correction C"
     resetPerformed: false
     resetAuthorized: false
     scopedRejudgmentRequired: true
