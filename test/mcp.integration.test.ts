@@ -927,6 +927,155 @@ export function formatValue(value: number): string { return String(value); }
     ]);
   });
 
+  it("publishes the seven-kind root-class matrix with JSON, TOON, and MCP schema parity", async () => {
+    await fixture.write(
+      "src/matrix-deps.ts",
+      [
+        "export const imported = 1;",
+        "export const exportedValue = 2;",
+        "export const referenced = 3;",
+        "export const unused = 4;",
+        "export class Base {}",
+        "export interface Face {}",
+        "export function called(): void {}",
+        "export function uncalled(): void {}",
+        "export class Holder { nested(): void {} }",
+        "export class Empty {}",
+      ].join("\n"),
+    );
+    await fixture.write(
+      "src/matrix-use.ts",
+      [
+        'import { imported, referenced, Base, Face, called } from "./matrix-deps.js";',
+        'export { exportedValue } from "./matrix-deps.js";',
+        "export const referenceUse = referenced;",
+        "export class Child extends Base implements Face {}",
+        "export function caller(): void { called(); }",
+        "export const importUse = imported;",
+      ].join("\n"),
+    );
+    clearProjectSessions();
+
+    const cases = [
+      ["reference", "src/matrix-deps.ts", "referenced", "incoming", "referenceUse"],
+      ["reference", "src/matrix-use.ts", "referenceUse", "outgoing", "referenced"],
+      ["import", "src/matrix-deps.ts", "imported", "incoming", "<module>"],
+      ["import", "src/matrix-deps.ts", "imported", "outgoing", null],
+      ["export", "src/matrix-deps.ts", "exportedValue", "incoming", "<module>"],
+      ["export", "src/matrix-deps.ts", "exportedValue", "outgoing", null],
+      ["extends", "src/matrix-deps.ts", "Base", "incoming", "Child"],
+      ["extends", "src/matrix-use.ts", "Child", "outgoing", "Base"],
+      ["implements", "src/matrix-deps.ts", "Face", "incoming", "Child"],
+      ["implements", "src/matrix-use.ts", "Child", "outgoing", "Face"],
+      ["call", "src/matrix-deps.ts", "called", "incoming", "caller"],
+      ["call", "src/matrix-use.ts", "caller", "outgoing", "called"],
+      ["contains", "src/matrix-deps.ts", "Holder", "incoming", "<module>"],
+      ["contains", "src/matrix-deps.ts", "Holder", "outgoing", "Holder.nested"],
+    ] as const;
+    const request = (
+      kind: (typeof cases)[number][0],
+      file_path: string,
+      symbol_path: string,
+      direction: (typeof cases)[number][3],
+      output_format: "json" | "toon" = "json",
+    ) =>
+      client.callTool({
+        name: "ast_get_impact",
+        arguments: {
+          project_root: fixture.root,
+          file_path,
+          symbol_path,
+          direction,
+          relationship_kinds: [kind],
+          max_depth: 1,
+          max_nodes: 100,
+          max_edges: 100,
+          output_format,
+        },
+      });
+
+    for (const [kind, file, symbol, direction, neighbor] of cases) {
+      const result = structured(await request(kind, file, symbol, direction));
+      expect(result.coverage, `${kind}/${direction} coverage`).toEqual([
+        {
+          kind,
+          direction,
+          endpoint_class: "symbol",
+          status: neighbor === null ? "not_applicable" : "completed",
+        },
+      ]);
+      expect(result.incomplete, `${kind}/${direction} completeness`).toBe(false);
+      if (neighbor === null) {
+        expect(result).toMatchObject({ edges: [], proven_empty: true });
+      } else {
+        expect(result.edges, `${kind}/${direction} edge`).toEqual([
+          expect.objectContaining({
+            kind,
+            source: expect.objectContaining({
+              symbol_path: direction === "incoming" ? neighbor : symbol,
+            }),
+            target: expect.objectContaining({
+              symbol_path: direction === "incoming" ? symbol : neighbor,
+            }),
+            provenance: "compiler",
+            confidence: "exact",
+            resolution: "resolved",
+            compiler_authoritative: true,
+          }),
+        ]);
+      }
+    }
+
+    for (const [kind, symbol] of [
+      ["reference", "unused"],
+      ["call", "uncalled"],
+      ["contains", "Empty"],
+    ] as const) {
+      const result = structured(
+        await request(
+          kind,
+          "src/matrix-deps.ts",
+          symbol,
+          kind === "contains" ? "outgoing" : "incoming",
+        ),
+      );
+      expect(result).toMatchObject({
+        edges: [],
+        incomplete: false,
+        proven_empty: true,
+        truncation: { truncated: false, reason: null },
+        coverage: [{ kind, status: "completed" }],
+      });
+    }
+
+    const [parityKind, parityFile, paritySymbol, parityDirection] = cases[0];
+    clearProjectSessions();
+    const json = structured(await request(parityKind, parityFile, paritySymbol, parityDirection));
+    clearProjectSessions();
+    const compact = toon(
+      await request(parityKind, parityFile, paritySymbol, parityDirection, "toon"),
+    );
+    const withoutTimestamps = (value: Record<string, unknown>) =>
+      JSON.parse(
+        JSON.stringify(value).replace(/"checked_at":"[^"]+"/g, '"checked_at":"<timestamp>"'),
+      ) as Record<string, unknown>;
+    expect(withoutTimestamps(compact)).toEqual(withoutTimestamps(json));
+
+    const registered = (await client.listTools()).tools.find(
+      ({ name }) => name === "ast_get_impact",
+    );
+    expect(registered?.inputSchema.properties?.relationship_kinds).toMatchObject({
+      items: {
+        enum: ["reference", "import", "export", "extends", "implements", "call", "contains"],
+      },
+    });
+    expect(registered?.inputSchema.properties?.output_format).toMatchObject({
+      enum: ["json", "toon"],
+      default: "json",
+    });
+    expect(registered?.outputSchema).toBeUndefined();
+  });
+
   it("finds exact compiler-backed test candidates with bounded trust metadata", async () => {
     await addCandidateFixtures(fixture);
     const tools = await client.listTools();

@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-188-relationship-coverage-recovery",
   "authoritative": true,
-  "stage": "u5-settled-refactored-ready-u6",
+  "stage": "u6-matrix-characterized-ready-settlement",
   "rddModeAtPlanning": "disabled/unmanaged",
   "rddModeAtApply": {
     "effective": "off",
@@ -73,7 +73,7 @@
       "name": "Verify, freeze, settle, and evidence U5",
       "status": "completed"
     },
-    { "id": "6.1", "name": "Acquire and re-author U6 seven-kind matrix", "status": "pending" },
+    { "id": "6.1", "name": "Acquire and re-author U6 seven-kind matrix", "status": "completed" },
     { "id": "6.2", "name": "Verify, freeze, and settle U6", "status": "pending" },
     { "id": "6.3", "name": "Acquire and re-author truthful U7 documentation", "status": "pending" },
     { "id": "6.4", "name": "Run gates, freeze, and settle U7", "status": "pending" },
@@ -431,6 +431,37 @@
       "base": "docs/issue-188-u5-evidence"
     }
   },
+  "u6Evidence": {
+    "observedAt": "2026-09-05T03:00:00Z",
+    "branch": "test/issue-188-u6-matrix",
+    "baseCommit": "d5404ba1a6eb259afecf1dabea2bda0214215567",
+    "provenanceCommit": "3af4fe67f3b3f50947e9a93dce9bf377c9cc5132",
+    "scope": "Task 6.1 complete; test-only characterization, with task 6.2 settlement intentionally pending.",
+    "tddCycle": {
+      "safetyNet": "Pre-edit six-file matrix passed 117/117.",
+      "red": "No product RED was warranted. One draft containment case exposed depth-bound setup rather than missing behavior and was corrected to the direct root-class contract.",
+      "green": "New focused impact cases passed 2/2 and the public matrix passed 1/1 without production changes.",
+      "triangulate": "Fourteen applicable kind/direction cells, safe empty evidence, exact/one-below bounds, mid-scan cancellation, and JSON/TOON/MCP schema parity are covered.",
+      "refactor": "Formatted six-file matrix passed 120/120; full suite passed 979/979 plus supervised 2/2."
+    },
+    "qualityGates": {
+      "focused": "Six-file matrix passed 120/120.",
+      "full": "Full suite passed 979/979 plus supervised tests 2/2 after unsetting ambient GIT_PAGER.",
+      "runtimeHarness": "yarn test:mcp passed: status ok, tool_count 16.",
+      "formatLintTypecheckBuildDiff": "All passed."
+    },
+    "workUnitEvidence": {
+      "focusedChecks": "Six-file matrix passed 120/120; full suite passed 979/979 plus supervised 2/2.",
+      "runtimeHarness": "MCP smoke passed with status ok and tool_count 16.",
+      "rollbackBoundary": "Revert the two U6 test files and compact task/progress/state metadata; production behavior is unchanged."
+    },
+    "deviations": "Per direct instruction, no acquire or settle command ran; task 6.2 remains the settlement evidence child.",
+    "knownExclusions": [
+      "Issue #186 polymorphic callable finality",
+      "Issue #187 exact-once sorting/finalization accounting",
+      "Harness execution"
+    ]
+  },
   "tdd": {
     "red": [],
     "green": [],
@@ -464,6 +495,12 @@
         "name": "Require complete six-kind candidate authority and bounded public schemas",
         "file": "test/test-candidates.test.ts",
         "taskId": "5.1-5.2"
+      },
+      {
+        "id": "u6-seven-kind-matrix",
+        "name": "Characterize the seven-kind public matrix, bounds, and cancellation",
+        "file": "test/mcp.integration.test.ts",
+        "taskId": "6.1"
       }
     ]
   },
@@ -516,6 +553,6 @@
     "Issue 187 has no accepted line forecast until its own planning re-entry.",
     "Any stale R-01 authority, candidate drift, severe finding, failed gate, or Harness write blocks integration."
   ],
-  "nextRecommended": "apply:6.1",
-  "updatedAt": "2026-09-05T02:36:00Z"
+  "nextRecommended": "apply:6.2",
+  "updatedAt": "2026-09-05T03:00:00Z"
 }

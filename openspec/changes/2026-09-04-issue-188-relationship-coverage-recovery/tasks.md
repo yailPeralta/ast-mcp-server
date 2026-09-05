@@ -49,7 +49,7 @@ Delivery strategy: auto-chain
 
 ## Phase 6 — U6/U7
 
-- [ ] 6.1 Acquire U6; re-author `3af4fe6…`; prove seven-kind/cancellation matrix.
+- [x] 6.1 Acquire U6; re-author `3af4fe6…`; prove seven-kind/cancellation matrix.
 - [ ] 6.2 Run six-file matrix+U1; freeze ≤400 and settle U6.
 - [ ] 6.3 Acquire U7; rewrite `bac52a4…` docs without stale R-01 claims.
 - [ ] 6.4 Run full/package/diff gates; freeze ≤400 and settle U7.

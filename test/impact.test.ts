@@ -1602,6 +1602,125 @@ describe("compiler impact coverage and request work", () => {
       ),
     ).toThrow(expect.objectContaining({ code: "REQUEST_CANCELLED" }));
   });
+
+  it("distinguishes exact bounds from one-below work, edge, and traversal limits", async () => {
+    const fixture = await createProjectFixture({
+      "src/target.ts": "export function target(): void {}\n",
+      "src/a.ts": 'import { target } from "./target.js"; export function a(): void { target(); }\n',
+      "src/b.ts": 'import { target } from "./target.js"; export function b(): void { target(); }\n',
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("target", "src/target.ts"));
+    const options = {
+      direction: "incoming" as const,
+      max_depth: 1,
+      max_nodes: 3,
+      max_edges: 2,
+      relationship_kinds: ["call" as const],
+    };
+    const generous = traverseCompilerImpact(
+      project,
+      fixture.root,
+      root,
+      freshness,
+      options,
+      undefined,
+      { max_work_items: 100_000 },
+    );
+    expect(generous).toMatchObject({
+      visited_nodes: 3,
+      visited_edges: 2,
+      incomplete: false,
+      truncation_reasons: [],
+      work: { exhausted: false },
+    });
+
+    const exactWork = traverseCompilerImpact(
+      project,
+      fixture.root,
+      root,
+      freshness,
+      options,
+      undefined,
+      { max_work_items: generous.work.consumed_items },
+    );
+    expect(exactWork).toMatchObject({
+      visited_edges: 2,
+      incomplete: false,
+      work: { consumed_items: generous.work.consumed_items, exhausted: false },
+    });
+    const belowWork = traverseCompilerImpact(
+      project,
+      fixture.root,
+      root,
+      freshness,
+      options,
+      undefined,
+      { max_work_items: generous.work.consumed_items - 1 },
+    );
+    expect(belowWork).toMatchObject({
+      incomplete: true,
+      work: { max_items: generous.work.consumed_items - 1, exhausted: true },
+    });
+    expect(belowWork.truncation_reasons).toContain("work_limit");
+    expect(belowWork.coverage.some(({ status }) => status === "unfinished")).toBe(true);
+
+    const belowEdge = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      ...options,
+      max_edges: 1,
+    });
+    expect(belowEdge).toMatchObject({
+      visited_edges: 1,
+      incomplete: true,
+      truncation: { truncated: true, reason: "edge_limit" },
+    });
+    const belowTraversal = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      ...options,
+      max_depth: 0,
+    });
+    expect(belowTraversal).toMatchObject({
+      visited_nodes: 1,
+      visited_edges: 0,
+      incomplete: true,
+      truncation: { truncated: true, reason: "depth_limit" },
+    });
+  });
+
+  it("propagates cancellation observed during call scanning without partial authority", async () => {
+    const fixture = await createProjectFixture({
+      "src/target.ts": "export function target(): void {}\n",
+      "src/caller.ts":
+        'import { target } from "./target.js"; export function caller(): void { target(); }\n',
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("target", "src/target.ts"));
+    const controller = new AbortController();
+    const source = project.getSourceFileOrThrow(path.join(fixture.root, "src/caller.ts"));
+    const descend = source.forEachDescendant.bind(source);
+    const scan = vi.spyOn(source, "forEachDescendant").mockImplementation((callback) => {
+      controller.abort();
+      return descend(callback);
+    });
+
+    try {
+      expect(() =>
+        traverseCompilerImpact(
+          project,
+          fixture.root,
+          root,
+          freshness,
+          { direction: "incoming", relationship_kinds: ["call"] },
+          createRequestContext(controller.signal),
+          { max_work_items: 100_000 },
+        ),
+      ).toThrow(expect.objectContaining({ code: "REQUEST_CANCELLED" }));
+      expect(scan).toHaveBeenCalledOnce();
+    } finally {
+      scan.mockRestore();
+    }
+  });
 });
 
 describe("scoped direct contains relationships", () => {
