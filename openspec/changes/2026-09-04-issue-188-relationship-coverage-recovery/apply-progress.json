@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-188-relationship-coverage-recovery",
   "authoritative": true,
-  "stage": "u2-coverage-settled",
+  "stage": "u3-implementation-ready-for-settlement",
   "rddModeAtPlanning": "disabled/unmanaged",
   "rddModeAtApply": {
     "effective": "off",
@@ -52,8 +52,8 @@
       "name": "Verify, freeze, settle, and evidence U2",
       "status": "completed"
     },
-    { "id": "3.1", "name": "Acquire and RED U3 scoped call scenarios", "status": "pending" },
-    { "id": "3.2", "name": "GREEN/REFACTOR U3 without absorbing issue 186", "status": "pending" },
+    { "id": "3.1", "name": "Acquire and RED U3 scoped call scenarios", "status": "completed" },
+    { "id": "3.2", "name": "GREEN/REFACTOR U3 without absorbing issue 186", "status": "completed" },
     { "id": "3.3", "name": "Verify, freeze, settle, and evidence U3", "status": "pending" },
     { "id": "4.1", "name": "Acquire and RED U4 direct containment scenarios", "status": "pending" },
     { "id": "4.2", "name": "GREEN/REFACTOR U4 without issue 187 accounting", "status": "pending" },
@@ -280,6 +280,16 @@
       "base": "docs/issue-188-u2-evidence"
     }
   },
+  "u3ApplyEvidence": {
+    "activeToken": "sha256:b83d129d1e4a7564d5f0597da82e28fd3b0ef4e117fb769a6cfc137bf87d2a41",
+    "safetyNet": "76/76 impact plus registered MCP tests passed before edits.",
+    "red": "Focused scoped-call selection failed 2/2 before implementation.",
+    "green": "Focused scoped-call selection passed 2/2 after implementation.",
+    "triangulate": "Exact overload calls, both directions, stable IDs, dedupe, scope filters, nested exclusion, and ambiguity isolation covered.",
+    "refactor": "Shared compiler invocation classifier; post-format impact plus MCP passed 78/78.",
+    "runtimeHarness": "yarn test:mcp passed with status ok and 16 registered tools.",
+    "rollback": "Revert U3 relationships producer, paired impact tests, and current-change metadata only."
+  },
   "tdd": {
     "red": [],
     "green": [],
@@ -335,6 +345,6 @@
     "Issue 187 has no accepted line forecast until its own planning re-entry.",
     "Any stale R-01 authority, candidate drift, severe finding, failed gate, or Harness write blocks integration."
   ],
-  "nextRecommended": "apply:3.1",
-  "updatedAt": "2026-09-05T00:29:00Z"
+  "nextRecommended": "apply:3.3",
+  "updatedAt": "2026-09-05T00:52:58Z"
 }
