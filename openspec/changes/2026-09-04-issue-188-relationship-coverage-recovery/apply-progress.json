@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-188-relationship-coverage-recovery",
   "authoritative": true,
-  "stage": "u4-red-green-refactored-awaiting-4.3-settlement",
+  "stage": "u4-refactored-settled-next-u5",
   "rddModeAtPlanning": "disabled/unmanaged",
   "rddModeAtApply": {
     "effective": "off",
@@ -61,7 +61,7 @@
       "name": "GREEN/REFACTOR U4 without issue 187 accounting",
       "status": "completed"
     },
-    { "id": "4.3", "name": "Verify, freeze, settle, and evidence U4", "status": "pending" },
+    { "id": "4.3", "name": "Verify, freeze, settle, and evidence U4", "status": "completed" },
     { "id": "5.1", "name": "Acquire and RED U5 affected-candidate scenarios", "status": "pending" },
     { "id": "5.2", "name": "GREEN/REFACTOR U5 fail-closed public contract", "status": "pending" },
     { "id": "5.3", "name": "Verify, freeze, settle, and evidence U5", "status": "pending" },
@@ -326,13 +326,48 @@
       "base": "docs/issue-188-u3-evidence"
     }
   },
-  "u4CurrentEvidence": {
-    "safetyNet": "impact+MCP 78/78",
-    "red": "focused contains 2/2 failed before source edits",
-    "greenRefactor": "focused 2/2; impact+MCP 80/80; relationships+call-spines 18/18",
-    "runtimeHarness": "test:mcp status ok, tool_count 16",
-    "rollback": "relationships.ts contains producer plus paired impact tests",
-    "settlement": "deferred to task 4.3 by direct user scope"
+  "u4Evidence": {
+    "observedAt": "2026-09-05T01:02:00Z",
+    "branch": "feat/issue-188-u4-contains",
+    "evidenceBranch": "docs/issue-188-u4-evidence",
+    "pullRequest": 200,
+    "commit": "3a0d5f7",
+    "acquireRequest": "issue188-u4-a1-acquire-20260905t0051z",
+    "settleRequest": "issue188-u4-a1-settle-20260905t0102z",
+    "outcome": "passed",
+    "evidenceRevision": "sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977",
+    "authoredChangedLines": { "additions": 373, "deletions": 11, "total": 384, "budget": 400 },
+    "tddCycle": {
+      "safetyNet": "Impact plus registered MCP baseline passed 78/78 before edits.",
+      "red": "Focused direct/inverse containment selection failed 2/2 before implementation.",
+      "green": "Focused direct/inverse containment selection passed after implementation.",
+      "triangulate": "Direct module/declaration containment, exact inverse, and statement, anonymous, and transitive exclusions were covered.",
+      "refactor": "Final impact plus registered MCP passed 80/80; relationships passed 18/18; U4 is refactored with zero active RED."
+    },
+    "qualityGates": {
+      "focused": "Final impact plus registered MCP passed 80/80; relationships passed 18/18.",
+      "typecheck": "yarn typecheck => exit 0",
+      "build": "yarn build => exit 0",
+      "runtimeHarness": "yarn test:mcp => exit 0",
+      "format": "yarn format:check => exit 0",
+      "lint": "yarn lint => exit 0",
+      "diff": "git diff --check => exit 0"
+    },
+    "workUnitEvidence": {
+      "focusedChecks": "Final impact plus registered MCP passed 80/80; relationships passed 18/18.",
+      "runtimeHarness": "yarn test:mcp => exit 0.",
+      "rollbackBoundary": "Revert PR #200 commit 3a0d5f7 to remove only the U4 direct contains producer and paired impact tests; revert this evidence child to remove only current-change metadata."
+    },
+    "delegatedLimitations": {
+      "issue186": "Callable authority remains explicitly unresolved and is a required independent integration gate.",
+      "issue187": "Request-wide accounting remains explicitly unresolved and is a required independent integration gate.",
+      "candidateTraversal": "Contains remains excluded from affected-test candidate traversal and proof."
+    },
+    "next": {
+      "task": "5.1",
+      "branch": "fix/issue-188-u5-candidates",
+      "base": "docs/issue-188-u4-evidence"
+    }
   },
   "tdd": {
     "red": [],
@@ -360,7 +395,7 @@
         "id": "u4-direct-contains",
         "name": "Recover exact direct containment relationships",
         "file": "test/impact.test.ts",
-        "taskId": "4.1-4.2"
+        "taskId": "4.1-4.3"
       }
     ]
   },
@@ -369,21 +404,25 @@
     "attempts": [
       "issue188-u1-a1-acquire-20260904t2340z:settled-failed-as-expected@issue188-u1-a1-settle-20260904t2347z",
       "issue188-u2-a1-acquire-20260904t2353z:settled-passed@issue188-u2-a1-settle-20260905t0029z",
-      "issue188-u3-a1-acquire-20260905t0033z:settled-passed@issue188-u3-a1-settle-20260905t0045z"
+      "issue188-u3-a1-acquire-20260905t0033z:settled-passed@issue188-u3-a1-settle-20260905t0045z",
+      "issue188-u4-a1-acquire-20260905t0051z:settled-passed@issue188-u4-a1-settle-20260905t0102z"
     ],
     "tdd": [
       "u1-red-remediated@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
       "u2-red-green-refactor@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
-      "u3-red-green-refactor@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90"
+      "u3-red-green-refactor@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90",
+      "u4-red-green-refactor@sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977"
     ],
     "identity": [
       "u1-runtime-patch@sha256:c3de6e1ecfaf62e645e94e35d7d8fb473c363dd2e8ed1efc6d875580972ccab5",
       "u2-runtime-pr196-d73c1ec@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
-      "u3-runtime-pr198-37a2084@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90"
+      "u3-runtime-pr198-37a2084@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90",
+      "u4-runtime-pr200-3a0d5f7@sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977"
     ],
     "gates": [
       "u2-focused-runtime-quality-pass@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
-      "u3-focused-call-runtime-quality-pass@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90"
+      "u3-focused-call-runtime-quality-pass@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90",
+      "u4-focused-contains-runtime-quality-pass@sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977"
     ],
     "review": [],
     "judgment": [],
@@ -405,6 +444,6 @@
     "Issue 187 has no accepted line forecast until its own planning re-entry.",
     "Any stale R-01 authority, candidate drift, severe finding, failed gate, or Harness write blocks integration."
   ],
-  "nextRecommended": "apply:4.3",
+  "nextRecommended": "apply:5.1",
   "updatedAt": "2026-09-05T01:08:57Z"
 }
