@@ -1601,6 +1601,156 @@ describe("compiler impact coverage and request work", () => {
   });
 });
 
+describe("scoped exact call relationships", () => {
+  it("emits stable directional edges while excluding unrelated, repeated, and nested sites", async () => {
+    const fixture = await createProjectFixture({
+      "src/targets.ts": [
+        "export function format(value: string): string;",
+        "export function format(value: number): number;",
+        "export function format(value: string | number): string | number { return value; }",
+        "export function unrelated(): void {}",
+      ].join("\n"),
+      "src/callers.ts": [
+        'import { format, unrelated } from "./targets.js";',
+        "export function alpha(): void {",
+        "  format(1); format(2);",
+        '  function nested(): void { format("nested"); }',
+        "  void nested;",
+        "}",
+        "export function other(): void { unrelated(); }",
+      ].join("\n"),
+      "src/zed.ts": [
+        'import { format } from "./targets.js";',
+        'export function zed(): void { format("z"); }',
+      ].join("\n"),
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const impact = (symbol_path: string, file_path: string, direction: "incoming" | "outgoing") =>
+      traverseCompilerImpact(
+        project,
+        fixture.root,
+        resolveImpactRoot(project, fixture.root, rootRequest(symbol_path, file_path)),
+        freshness,
+        {
+          direction,
+          max_depth: 1,
+          max_nodes: 20,
+          max_edges: 20,
+          relationship_kinds: ["call"],
+        },
+        undefined,
+        { max_work_items: 100_000 },
+      );
+
+    const outgoing = impact("alpha", "src/callers.ts", "outgoing");
+    expect(outgoing.coverage).toEqual([
+      { kind: "call", direction: "outgoing", endpoint_class: "symbol", status: "completed" },
+    ]);
+    expect(outgoing.edges.map(({ relationship_id }) => relationship_id)).toEqual([
+      'call:["src/callers.ts","alpha","alpha@2"]->["src/targets.ts","format","format@3"]',
+    ]);
+    expect(outgoing.edges.every(({ compiler_authoritative }) => compiler_authoritative)).toBe(true);
+
+    const incoming = impact("format", "src/targets.ts", "incoming");
+    expect(incoming.coverage).toEqual([
+      { kind: "call", direction: "incoming", endpoint_class: "symbol", status: "completed" },
+    ]);
+    expect(incoming.edges.map(({ relationship_id }) => relationship_id)).toEqual([
+      'call:["src/callers.ts","alpha","alpha@2"]->["src/targets.ts","format","format@3"]',
+      'call:["src/zed.ts","zed","zed@2"]->["src/targets.ts","format","format@3"]',
+    ]);
+
+    const formatEdge = outgoing.edges[0]!;
+    const alpha = resolveImpactRoot(project, fixture.root, rootRequest("alpha", "src/callers.ts"));
+    const resolver = createCompilerRelationshipResolver(project, fixture.root, freshness);
+    const scopedQuery = {
+      direction: "outgoing" as const,
+      relationship_kinds: ["call" as const],
+      max_edges: 20,
+      max_work_items: 100_000,
+      allow_provisional_call: true,
+    };
+    expect(
+      resolver
+        .edgesFor(alpha, {
+          ...scopedQuery,
+          allowed_neighbor_keys: [
+            `${formatEdge.target.file}\u0000${formatEdge.target.symbol_path}\u0000${formatEdge.target.selector}`,
+          ],
+        })
+        .edges.map(({ relationship_id }) => relationship_id),
+    ).toEqual([formatEdge.relationship_id]);
+    expect(
+      resolver.edgesFor(alpha, {
+        ...scopedQuery,
+        excluded_relationship_ids: [formatEdge.relationship_id],
+      }).edges,
+    ).toEqual([]);
+  });
+
+  it("isolates unfinished compiler ambiguity to the applicable call direction", async () => {
+    const fixture = await createProjectFixture({
+      "src/targets.ts": "export function target(): void {}\nexport function other(): void {}\n",
+      "src/use.ts": [
+        'import { other } from "./targets.js";',
+        "export function exactOnly(): void { other(); }",
+        "export function uncertain(dynamic: unknown): void {",
+        '  if (typeof dynamic === "function") dynamic();',
+        "}",
+      ].join("\n"),
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const resolver = createCompilerRelationshipResolver(project, fixture.root, freshness);
+    const resolve = (symbol_path: string, file_path: string, direction: "incoming" | "outgoing") =>
+      resolver.edgesFor(
+        resolveImpactRoot(project, fixture.root, rootRequest(symbol_path, file_path)),
+        {
+          direction,
+          relationship_kinds: ["call"],
+          max_edges: 20,
+          max_work_items: 100_000,
+          allow_provisional_call: true,
+        },
+      );
+
+    const incoming = resolve("target", "src/targets.ts", "incoming");
+    expect(incoming.edges).toEqual([]);
+    expect(incoming.coverage).toEqual([
+      { kind: "call", direction: "incoming", endpoint_class: "symbol", status: "unfinished" },
+    ]);
+    expect(incoming.incomplete).toBe(true);
+    const both = resolver.edgesFor(
+      resolveImpactRoot(project, fixture.root, rootRequest("target", "src/targets.ts")),
+      {
+        direction: "both",
+        relationship_kinds: ["call"],
+        max_edges: 20,
+        max_work_items: 100_000,
+        allow_provisional_call: true,
+      },
+    );
+    expect(both.coverage.map(({ direction, status }) => `${direction}/${status}`)).toEqual([
+      "incoming/unfinished",
+      "outgoing/completed",
+    ]);
+
+    const outgoing = resolve("exactOnly", "src/use.ts", "outgoing");
+    expect(outgoing.coverage).toEqual([
+      { kind: "call", direction: "outgoing", endpoint_class: "symbol", status: "completed" },
+    ]);
+    expect(outgoing.edges.map(({ target }) => target.symbol_path)).toEqual(["other"]);
+
+    const unsupported = resolver.edgesFor(
+      resolveImpactRoot(project, fixture.root, rootRequest("exactOnly", "src/use.ts")),
+      { direction: "outgoing", relationship_kinds: ["call"], max_edges: 20 },
+    );
+    expect(unsupported.edges).toEqual([]);
+    expect(unsupported.coverage[0]?.status).toBe("unsupported");
+  });
+});
+
 function sameEndpoint(
   left: { file: string; symbol_path: string; selector: string },
   right: { file: string; symbol_path: string; selector: string },
