@@ -16,15 +16,15 @@ Chain strategy: feature-branch-chain
 
 ### Suggested Work Units
 
-| Unit | Goal                                           | Base                |  Budget | Focused test                                                            | Runtime harness                 | Rollback           |
-| ---- | ---------------------------------------------- | ------------------- | ------: | ----------------------------------------------------------------------- | ------------------------------- | ------------------ |
-| A    | Descriptor/classifier and scoped producers     | PR #206 / `5d839bb` | 220–320 | `yarn vitest run test/impact.test.ts test/relationships.test.ts`        | service-level compiler fixtures | revert A allowlist |
-| B    | MCP, call-spine, candidate parity and evidence | #186A               |  80–160 | `yarn vitest run test/mcp.integration.test.ts test/call-spines.test.ts` | `yarn test:mcp`                 | revert B allowlist |
+| Unit | Goal                                           | Base                                                       |  Budget | Focused test                                                            | Runtime harness                 | Rollback           |
+| ---- | ---------------------------------------------- | ---------------------------------------------------------- | ------: | ----------------------------------------------------------------------- | ------------------------------- | ------------------ |
+| A    | Descriptor/classifier and scoped producers     | PR #210 / `8ba1050` (runtime ancestor PR #206 / `5d839bb`) | 220–320 | `yarn vitest run test/impact.test.ts test/relationships.test.ts`        | service-level compiler fixtures | revert A allowlist |
+| B    | MCP, call-spine, candidate parity and evidence | #186A                                                      |  80–160 | `yarn vitest run test/mcp.integration.test.ts test/call-spines.test.ts` | `yarn test:mcp`                 | revert B allowlist |
 
 ## Phase 0 — Authority and attempts
 
-- [ ] 0.1 Recheck approved issue [#186](https://github.com/yailPeralta/ast-mcp-server/issues/186), recovery [#188](https://github.com/yailPeralta/ast-mcp-server/issues/188), RDD mode, conflicts, and immediate base [PR #206](https://github.com/yailPeralta/ast-mcp-server/pull/206) at `5d839bb`.
-- [ ] 0.2 Inspect attempt status; only explicitly authorized terminal recovery may use unique reset IDs; never reset automatically.
+- [x] 0.1 Rechecked approved and exactly typed issues [#186](https://github.com/yailPeralta/ast-mcp-server/issues/186) (`type:bug`) and [#188](https://github.com/yailPeralta/ast-mcp-server/issues/188) (`type:chore`); [#187](https://github.com/yailPeralta/ast-mcp-server/issues/187) remains a separate approved `type:bug` authority. RDD is `disabled/unmanaged`; no conflicting callable-authority implementation PR is open. Recovery U7 PR #206 (`5d839bb`) and planning PRs #207–#210 form a clean immediate-parent chain, each ≤400 changed lines. A's actual immediate base is PR #210 (`docs/issue-186-state`, `8ba1050`), with runtime ancestor PR #206 (`5d839bb`); `main` and closed #161 authority remain forbidden.
+- [x] 0.2 Inspected the #186 attempt ledger: revision and binding revision are empty, objective generation is `0`, no attempts or active objective exist, `next_ordinal` is `1`, and `next_action` is `begin`. No reset is needed or authorized; root must acquire A using the frozen fields in `chain.md` and `apply-progress.json`.
 - [ ] 0.3 Acquire #186A with its unique ID/token and freeze base tree, allowlist, cleanup, and process baselines.
 
 ## Phase 1 — #186A RED

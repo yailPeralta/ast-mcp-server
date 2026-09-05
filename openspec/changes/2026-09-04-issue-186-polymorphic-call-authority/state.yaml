@@ -7,7 +7,7 @@ planningHome:
   path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority
 nextRecommended: apply
-lastPhase: tasks
+lastPhase: apply
 artifactPaths:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/proposal.md
@@ -30,8 +30,8 @@ artifacts:
   verifyReport: missing
 taskProgress:
   total: 16
-  completed: 0
-  pending: 16
+  completed: 2
+  pending: 14
   allComplete: false
 dependencies:
   proposal: all_done
@@ -49,7 +49,7 @@ actionContext:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority
 relationships:
   dependsOn:
-    - "2026-09-04-issue-188-relationship-coverage-recovery (U7 candidate PR #206 at 5d839bb; unmerged and non-authoritative until #186, #187, and final gates pass)"
+    - "Planning PR #210 at 8ba1050 is A's actual immediate base; its runtime ancestor is 2026-09-04-issue-188-relationship-coverage-recovery U7 PR #206 at 5d839bb, unmerged and non-authoritative until #186, #187, and final gates pass."
   supersedes: []
   amends: []
   conflictsWith:
@@ -62,15 +62,16 @@ persistence:
   authoritativeStore: openspec
   mirrorStatus: skipped
   mirrorReason: "Runtime/control-plane edits are prohibited; only the authorized OpenSpec #186 change directory was written."
+phase0Admission:
+  status: admitted-awaiting-root-acquire
+  authority: "#186 type:bug and #188 type:chore approved; #187 separate; RDD disabled/unmanaged; no conflicting implementation PR"
+  chain: "#206 5d839bb -> #207 -> #208 -> #209 -> #210 8ba1050; clean immediate parents; each <=400"
+  workUnitA: "fix/issue-186-a-call-authority from PR #210; runtime ancestor PR #206; allowlist in apply-progress.json"
+  attemptStatus: 'revision ""; binding ""; generation 0; attempts []; next ordinal 1; next action begin; no reset'
+  nextTask: "0.3 pending: root acquires A; this actor did not acquire or reset"
 reviewBudget:
   forecastAuthoredChangedLines: "300-480"
   forecastChildren: 2
   maxAuthoredChangedLinesPerChild: 400
   splitRule: "Auto-chain two children: A descriptor/classifier/scoped producers, then B MCP/relationship/spine/candidate parity."
   sizeException: false
-risks:
-  - "Callable accessor, property, or method override dispatch can be falsely compiler-authoritative without convergent receiver alternatives."
-  - "Private and #private owner-slot calls through typed parameter receivers can be falsely unfinished if parameter uncertainty precedes nominal dispatch proof."
-  - "Incoming ambiguity can over-poison unrelated targets unless compiler-proven disjointness is preserved."
-  - "Issue #187 accounting and the unmerged #188 recovery remain independent integration gates."
-  - "A final plan above 400 authored lines requires the defined two-child split and fresh review."

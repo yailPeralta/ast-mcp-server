@@ -1,14 +1,16 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-186-polymorphic-call-authority",
-  "authoritative": true,
-  "stage": "planned",
+  "stage": "phase-0-admitted-awaiting-root-acquire",
   "delivery": {
     "strategy": "feature-branch-chain",
     "deliveryStrategy": "auto-chain",
-    "immediateBasePullRequest": 206,
-    "immediateBaseBranch": "docs/issue-188-u7-docs",
-    "immediateBaseCommit": "5d839bb1ee2550e5d0a6404784baa21121e188fa",
+    "immediateBasePullRequest": 210,
+    "immediateBaseBranch": "docs/issue-186-state",
+    "immediateBaseCommit": "8ba1050609f74c26892a7f44d6207304af5ea15c",
+    "runtimeAncestorPullRequest": 206,
+    "runtimeAncestorBranch": "docs/issue-188-u7-docs",
+    "runtimeAncestorCommit": "5d839bb1ee2550e5d0a6404784baa21121e188fa",
     "maxAuthoredChangedLinesPerChild": 400,
     "forecastAuthoredChangedLines": "300-480",
     "forecastChildren": 2,
@@ -20,16 +22,35 @@
       "number": 186,
       "url": "https://github.com/yailPeralta/ast-mcp-server/issues/186",
       "requiredState": "OPEN",
-      "requiredLabel": "status:approved"
+      "requiredLabel": "status:approved",
+      "requiredType": "type:bug"
     },
     "recoveryIssue": {
       "number": 188,
       "url": "https://github.com/yailPeralta/ast-mcp-server/issues/188",
+      "requiredState": "OPEN",
+      "requiredLabel": "status:approved",
+      "requiredType": "type:chore",
       "relationship": "U7 foundation and integration tracker only"
     },
+    "separateAccountingIssue": {
+      "number": 187,
+      "url": "https://github.com/yailPeralta/ast-mcp-server/issues/187",
+      "state": "OPEN",
+      "label": "status:approved",
+      "type": "type:bug",
+      "relationship": "separate successor; grants no issue 186 scope"
+    },
     "immediateBase": {
+      "pullRequest": 210,
+      "url": "https://github.com/yailPeralta/ast-mcp-server/pull/210",
+      "branch": "docs/issue-186-state",
+      "commit": "8ba1050609f74c26892a7f44d6207304af5ea15c"
+    },
+    "runtimeAncestor": {
       "pullRequest": 206,
       "url": "https://github.com/yailPeralta/ast-mcp-server/pull/206",
+      "branch": "docs/issue-188-u7-docs",
       "commit": "5d839bb1ee2550e5d0a6404784baa21121e188fa"
     },
     "forbiddenAuthority": [
@@ -39,13 +60,50 @@
       "Harness inspection, execution, or modification"
     ]
   },
+  "phase0Admission": {
+    "status": "admitted-awaiting-root-acquire",
+    "rddMode": "disabled/unmanaged",
+    "conflictingCallableAuthorityPullRequest": null,
+    "issueEvidence": {
+      "issue186": "OPEN; status:approved; exactly type:bug",
+      "issue188": "OPEN; status:approved; exactly type:chore",
+      "issue187": "OPEN; status:approved; exactly type:bug; separate authority"
+    },
+    "planningChain": "#206 5d839bb (137) -> #207 fb4ee5f (295) -> #208 a8b8dd6 (187) -> #209 40ecdd5 (179) -> #210 8ba1050 (288 before admission); exact immediate-parent bases verified",
+    "attemptStatus": {
+      "revision": "",
+      "bindingRevision": "",
+      "attempts": [],
+      "objectiveGeneration": 0,
+      "nextOrdinal": 1,
+      "cumulativeAttempts": 0,
+      "cumulativeChangedLines": 0,
+      "lifetimeAttempts": 0,
+      "lifetimeChangedLines": 0,
+      "evidenceRevision": "",
+      "decisionRequired": false,
+      "complete": false,
+      "nextAction": "begin",
+      "resetNeeded": false
+    },
+    "rootInstruction": "Acquire work unit A only; do not reset."
+  },
+  "workUnitEvidence": [
+    {
+      "tasks": ["0.1", "0.2"],
+      "focusedTest": "PASS: JSON/YAML parse, Prettier, exact 2/16 task assertion, git diff --check, and PR #210 metadata budget at 400 changed lines",
+      "runtimeHarness": "N/A: Phase 0 admission changes metadata only and runtime/Harness execution is explicitly prohibited",
+      "rollbackBoundary": "Revert only Phase 0 edits in tasks.md, state.yaml, apply-progress.json, and chain.md"
+    }
+  ],
   "workUnits": [
     {
       "id": "A",
       "name": "Classifier and scoped producer authority",
-      "status": "pending",
+      "status": "pending-root-acquire",
+      "branch": "fix/issue-186-a-call-authority",
       "budget": "220-320",
-      "base": "PR #206 at 5d839bb1ee2550e5d0a6404784baa21121e188fa",
+      "base": "PR #210 at 8ba1050609f74c26892a7f44d6207304af5ea15c; runtime ancestor PR #206 at 5d839bb1ee2550e5d0a6404784baa21121e188fa",
       "issueLinkage": ["Refs #186", "Refs #188"],
       "allowlist": [
         "src/services/relationships.ts",
@@ -56,6 +114,15 @@
         "conditionalReset": "issue186-a-reset-r1",
         "acquire": "issue186-a-acquire-a1",
         "settle": "issue186-a-settle-a1"
+      },
+      "acquire": {
+        "cwd": "/home/yail/Documentos/proyects/ast-mcp-server",
+        "change": "2026-09-04-issue-186-polymorphic-call-authority",
+        "requestId": "issue186-a-acquire-a1",
+        "workUnit": "issue186-a-classifier-producer",
+        "evidenceGoal": "RED GREEN REFACTOR compiler-proven callable dispatch",
+        "maxAttempts": 2,
+        "maxChangedLines": 400
       },
       "candidate": null,
       "rollback": "Revert only A allowlisted classifier/producer behavior and paired tests."
@@ -84,13 +151,13 @@
   "tasks": [
     {
       "id": "0.1",
-      "name": "Recheck approved authority, conflicts, RDD, and PR 206 base",
-      "status": "pending"
+      "name": "Recheck approved authority, conflicts, RDD, PR 210 base, and PR 206 runtime ancestor",
+      "status": "complete"
     },
     {
       "id": "0.2",
       "name": "Inspect attempt status and conditionally reset only with authority",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "id": "0.3",
@@ -145,8 +212,8 @@
   ],
   "taskProgress": {
     "total": 16,
-    "completed": 0,
-    "pending": 16,
+    "completed": 2,
+    "pending": 14,
     "allComplete": false
   },
   "tdd": {
@@ -208,5 +275,5 @@
     "Any child over 400 authored lines requires replanning rather than a size exception."
   ],
   "nextRecommended": "apply",
-  "updatedAt": "2026-09-05T02:51:28Z"
+  "updatedAt": "2026-09-05T03:30:00Z"
 }
