@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-05-issue-187-request-work-accounting",
   "authoritative": true,
-  "stage": "judgment-day-approved-ready-strict-verify",
+  "stage": "strict-verify-passed-archive-recommended",
   "rddModeAtPlanning": "disabled/unmanaged",
   "delivery": {
     "strategy": "feature-branch-chain",
@@ -33,9 +33,14 @@
       "status": "completed",
       "detail": "Terminal APPROVED after both scoped blind re-judges closed JD-R1-SEV-001; no delivery authority or receipt"
     },
-    { "id": "3.2", "name": "Strict verify 9/13", "status": "pending" }
+    {
+      "id": "3.2",
+      "name": "Strict verify 9/13",
+      "status": "completed",
+      "detail": "9/9 requirements and 13/13 scenarios passed at frozen candidate 152ffa4; validator admitted evidence revision sha256:7895396bd5f0482f0d2449de64e02a4e29e1ed05e0725a7a30e1eb6c8819638a"
+    }
   ],
-  "taskProgress": { "total": 16, "completed": 15, "pending": 1, "allComplete": false },
+  "taskProgress": { "total": 16, "completed": 16, "pending": 0, "allComplete": true },
   "tdd": {
     "red": ["A.1-A.3", "B.1-B.3 twice unchanged"],
     "green": ["A.1-A.4", "B.1-B.5"],
@@ -173,8 +178,20 @@
   "review": "Terminal Judgment Day APPROVED for strict verify; four INFO/SUSPECT rows remain non-blocking and unresolved; RDD disabled/unmanaged; no delivery authority or receipt",
   "verify": {
     "requirements": 9,
+    "requirementsPassed": 9,
     "scenarios": 13,
-    "status": "ready"
+    "scenariosPassed": 13,
+    "status": "passed",
+    "verdict": "pass",
+    "evidenceRevision": "sha256:7895396bd5f0482f0d2449de64e02a4e29e1ed05e0725a7a30e1eb6c8819638a",
+    "runtimeCandidate": "152ffa4f87011e66103f0ded83fa0b6a9186c119",
+    "reviewHead": "a1e05a971644839b603028ad0436509ff38efcf4",
+    "blockers": 0,
+    "activeSevere": 0,
+    "activeRed": 0,
+    "nextRecommended": "archive",
+    "deliveryAuthority": false,
+    "recoveryIntegration": "#188 remains unmergeable because the #186 kill switch failed; #187 archive cannot imply integration authority"
   },
-  "updatedAt": "2026-09-05T20:03:31Z"
+  "updatedAt": "2026-09-05T20:37:22Z"
 }
