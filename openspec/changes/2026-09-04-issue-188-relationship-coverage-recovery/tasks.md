@@ -33,7 +33,7 @@ Delivery strategy: auto-chain
 
 - [x] 3.1 Acquire; RED RCR-007..008 directional exactness and isolated ambiguity.
 - [x] 3.2 GREEN/REFACTOR `92db7e2…` allowlist; preserve #186 ownership and generous work limits.
-- [ ] 3.3 Run call/impact/U1; freeze ≤400, settle, and split evidence when required.
+- [x] 3.3 Run call/impact/U1; freeze ≤400, settle, and split evidence when required.
 
 ## Phase 4 — U4 contains
 

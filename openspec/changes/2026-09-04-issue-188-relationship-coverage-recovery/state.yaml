@@ -61,8 +61,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 30
-  completed: 8
-  pending: 22
+  completed: 11
+  pending: 19
   allComplete: false
 dependencies:
   proposal: all_done
@@ -117,8 +117,8 @@ phaseInstructions:
 nextRecommended: apply
 blockedReasons: []
 lastPhase: apply
-activeWorkUnit: "U2 coverage/tracker settled passed; next task 3.1 U3 calls"
-evidenceCandidate: "sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50"
+activeWorkUnit: "U3 scoped calls settled passed; next task 4.1 U4 contains"
+evidenceCandidate: "sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90"
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
@@ -203,13 +203,33 @@ phaseZeroAuthority:
     issue187Status: "unimplemented; remains an independent integration kill switch with issue #186"
     nextBranch: feat/issue-188-u3-calls
     nextBase: docs/issue-188-u2-evidence
+  u3:
+    branch: feat/issue-188-u3-calls
+    pullRequest: 198
+    commit: 37a20845db7093e378630e52a07206a9b5385b13
+    evidenceBranch: docs/issue-188-u3-evidence
+    acquireRequest: issue188-u3-a1-acquire-20260905t0033z
+    settleRequest: issue188-u3-a1-settle-20260905t0045z
+    outcome: passed
+    evidenceRevision: "sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90"
+    authoredChangedLines:
+      additions: 338
+      deletions: 51
+      total: 389
+      budget: 400
+    tdd: "Baseline 76/76; focused RED 2/2; GREEN twice; final impact+MCP 78/78; call suite 67/67; U3 refactored"
+    gates: "typecheck, build, test:mcp, Prettier, ESLint, and diff pass"
+    issue186Status: "Callable getter and private-parameter issues remain explicitly unresolved."
+    issue187Status: "Request-wide accounting remains untouched and independently unresolved."
+    nextBranch: feat/issue-188-u4-contains
+    nextBase: docs/issue-188-u3-evidence
   killSwitches:
     - "Stop and recalculate if origin/main leaves the planned 6173a39 commit."
     - "Reject ancestor/foreign scope, receipt/tree mismatch, or any child above 400 authored changed lines."
     - "Never resume, import, or extend #161 or PR #162-#185 R-01 authority."
     - "Keep tracker PR #189 draft and merge-unauthorized until #186, #187, and every final gate pass."
     - "Candidate drift, severe findings, failed verification/CI, or Harness mutation blocks integration."
-  nextApply: "U3 task 3.1 on branch feat/issue-188-u3-calls based on evidence child docs/issue-188-u2-evidence; acquire a fresh receipt and author directional scoped-call RED"
+  nextApply: "U4 task 4.1 on branch feat/issue-188-u4-contains based on evidence child docs/issue-188-u3-evidence; acquire a fresh receipt and author direct/inverse containment RED"
 reviewBudget:
   strategy: feature-branch-chain
   maxAuthoredChangedLinesPerChild: 400
@@ -221,6 +241,6 @@ reviewBudget:
     - "Strict verification, archive readiness, required CI, and no-write Harness checks pass."
 risks:
   - "Direct cherry-picks import stale R-01 execution and approval artifacts."
-  - "The U3 callable classifier remains non-mergeable until issue #186 closes its known authority defects."
-  - "The U2 work tracker remains non-mergeable until issue #187 charges all request-wide sorting and finalization work."
+  - "U3 remains non-mergeable because issue #186 callable getter and private-parameter authority defects are explicitly unresolved."
+  - "Issue #187 request-wide accounting is untouched; sorting and finalization work remain independently unresolved."
   - "Any main advance requires replay conflict and line-budget recalculation before branching."
