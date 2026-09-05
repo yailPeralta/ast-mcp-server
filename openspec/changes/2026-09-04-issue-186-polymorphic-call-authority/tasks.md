@@ -49,7 +49,7 @@ Chain strategy: feature-branch-chain
 ## Phase 4 — Evidence, review, handoff
 
 - [ ] 4.1 Run focused/full/package gates; freeze correction hashes/cleanup and settle uniquely with `Fixes #186`/`Refs #188`. The original B receipts are historical only after review invalidation.
-- [ ] 4.2 Obtain fresh independent read-only adversarial review limited to the corrected frozen #186 diff; the review of `1fa8a6b..8fe0e84` returned `CHANGES_REQUESTED`, invalidated that candidate, granted no approval, and did not complete this task.
+- [ ] 4.2 Obtain fresh independent read-only adversarial review limited to the corrected frozen #186 diff; the dual scoped re-review of `8fe0e84..d882e01` returned `CHANGES_REQUESTED`, confirmed four bypasses, invalidated the candidate again, granted no approval, and did not complete this task.
 - [ ] 4.3 Validate 6 requirements/14 scenarios, zero active RED, and hand an accepted corrected candidate to #187 without implementing, archiving, merging, or closing #188.
 
 ## Phase 5 — #186C bounded review correction
@@ -59,4 +59,13 @@ Correction forecast: **260–380 authored changed lines**, hard maximum **400**,
 - [x] 5.1 RED all confirmed review findings: F1 cross-file selector convergence collision; F2 `new ctor()` false exact instance method; F3 anonymous IIFE false self-edge; F4 unproven disjointness causing false proven_empty/spine/candidates; F5 unrelated virtual endpoint over-poisoning; F6 uncharged/uncheckpointed global reclassification with cancellation failure and #187 overlap.
 - [x] 5.2 GREEN/REFACTOR F1–F5 through compiler-proven identity, callable-kind authority, anonymous-owner exclusion, proven endpoint disjointness, and endpoint-local uncertainty.
 - [x] 5.3 Correct only the cancellation/checkpoint portion of F6 with bounded checkpoints. Preserve exact-once/global work-budget accounting acceptance for #187 and prohibit all unbounded or uncheckpointed work in #186.
-- [ ] 5.4 Run correction-focused/full/package gates, freeze a new candidate, and return to 4.1–4.3 for fresh settlement/review/acceptance evidence.
+- [ ] 5.4 Run correction-focused/full/package gates, freeze a new candidate, and return to 4.1–4.3 for fresh settlement/review/acceptance evidence. The frozen #186C re-review ran, returned `CHANGES_REQUESTED`, and left this acceptance task pending.
+
+## Phase 6 — #186D bounded scoped re-review correction
+
+Correction forecast: **≤240 authored changed lines**, hard maximum **400**. Stop before runtime edits if the refreshed forecast exceeds 240; split before any edit if it exceeds 400. Exact-once/global work-budget accounting remains excluded as #187 authority, but cooperative in-loop cancellation is required here.
+
+- [ ] 6.1 RED/GREEN named function-expression IIFE identity so it cannot produce a false self-edge while anonymous arrow and unnamed-function controls remain closed.
+- [ ] 6.2 RED/GREEN compiler-library provenance so a project-owned `lib.custom.d.ts` is not classified as a compiler library by basename; preserve ordinary ambient callable-parameter controls.
+- [ ] 6.3 RED/GREEN structurally open class disjointness so mutual non-assignability alone cannot prove endpoint disjointness; preserve basic endpoint isolation and private controls.
+- [ ] 6.4 RED/GREEN an in-loop cooperative cancellation checkpoint in `reachableCallEndpoints` without #187 exact-once/accounting behavior; run focused/full/package gates, freeze/settle #186D, and obtain a fresh dual scoped re-review.

@@ -1,7 +1,7 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-186-polymorphic-call-authority",
-  "stage": "correction-candidate-ready-awaiting-root-settlement-and-rereview",
+  "stage": "dual-scoped-rereview-changes-requested-correction-d-pending",
   "delivery": {
     "strategy": "feature-branch-chain",
     "deliveryStrategy": "auto-chain",
@@ -206,6 +206,29 @@
         "requiredNext": "root settlement then fresh independent scoped re-review"
       },
       "rollback": "Revert only C correction code, tests, and #186 evidence updates."
+    },
+    {
+      "id": "D",
+      "name": "Bounded dual scoped re-review correction",
+      "status": "planned-pending-acquire",
+      "branch": "pending",
+      "budget": "<=240 forecast; hard maximum 400",
+      "base": "invalidated C candidate d882e013807acc5285837eff0136fe6f5324de61",
+      "issueLinkage": ["Fixes #186", "Refs #188"],
+      "scope": ["R2-F1", "R2-F2", "R2-F3", "R2-F4"],
+      "preservedClosures": [
+        "cross-file identity and dynamic constructor calls",
+        "anonymous arrow and unnamed function IIFEs",
+        "callable parameter ordinary ambient declarations",
+        "private controls and basic endpoint isolation"
+      ],
+      "accountingBoundary": "Exact-once/global work-budget accounting remains exclusively #187; add only the cooperative in-loop checkpoint required by #186.",
+      "splitDecision": "Stop before runtime edits above the 240-line forecast; split before any edit above the 400-line hard maximum.",
+      "attemptIds": {
+        "acquire": "issue186-d-acquire-a1",
+        "settle": "issue186-d-settle-a1"
+      },
+      "rollback": "Revert only D correction runtime tests/code and cumulative #186 evidence updates."
     }
   ],
   "tasks": [
@@ -286,19 +309,39 @@
     },
     {
       "id": "5.4",
-      "name": "Run correction gates freeze and fresh review",
+      "name": "Run correction gates freeze and fresh review; #186C review returned changes requested",
+      "status": "pending"
+    },
+    {
+      "id": "6.1",
+      "name": "Correct named function-expression IIFE false self-edge with closure controls",
+      "status": "pending"
+    },
+    {
+      "id": "6.2",
+      "name": "Correct compiler-library provenance for project-owned lib.custom.d.ts",
+      "status": "pending"
+    },
+    {
+      "id": "6.3",
+      "name": "Correct open-class disjointness without regressing endpoint isolation",
+      "status": "pending"
+    },
+    {
+      "id": "6.4",
+      "name": "Add reachableCallEndpoints in-loop cooperative checkpoint without #187 accounting and gate/re-review D",
       "status": "pending"
     }
   ],
   "taskProgress": {
-    "total": 20,
+    "total": 24,
     "completed": 16,
-    "pending": 4,
+    "pending": 8,
     "allComplete": false
   },
   "tdd": {
-    "receiptStatus": "historical-only; invalidated candidate evidence cannot approve #186C",
-    "correctionCycle": "tasks 5.1-5.3 complete; 5.4 awaits root settlement and fresh independent re-review",
+    "receiptStatus": "historical-or-closure-control-only; invalidated #186C evidence cannot approve #186D",
+    "correctionCycle": "tasks 5.1-5.3 remain complete as closure evidence; dual scoped re-review invalidated #186C; tasks 6.1-6.4 are pending",
     "red": [
       "A: two unchanged runs failed 3 defect tests with 62 controls passing",
       "B: two unchanged runs failed private-spine authority with ambiguity correctly unfinished; sha256 a479a8ed047e09733a4e7b906b6bf68bca86468fa076f591bcb58d10643ac509 and eaf6c767444aa7c40919eac87609cb755bc0265cce85ef8c9389f94f182ee9c2",
@@ -355,25 +398,46 @@
       "Exact acceptance boundary": "3.2-3.3 -> 3.4-4.2"
     },
     "activeRed": [],
-    "status": "6/6 requirements and 14/14 scenarios mapped; correction tests green; independent re-review pending"
+    "status": "6/6 requirements and 14/14 scenarios mapped; #186C controls remain green but dual scoped re-review invalidated the candidate; #186D pending"
   },
   "independentReview": {
     "artifact": "reviews/ledger.json",
-    "kind": "fresh-independent-read-only-adversarial",
+    "kind": "fresh-dual-scoped-read-only-adversarial-rereview",
     "rddMode": "disabled/unmanaged",
-    "frozenBase": "1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11",
-    "frozenHead": "8fe0e84a241be7e293176afefe86c6e9941a86ed",
+    "target": {
+      "base": "8fe0e84a241be7e293176afefe86c6e9941a86ed",
+      "head": "d882e013807acc5285837eff0136fe6f5324de61",
+      "headTree": "3ab244c0c750b31c8696595a81a1c5378661b1fa",
+      "patchSha256": "sha256:95949ff8fbfadeb5bd0316e20549e820f4a9c3174ecad5b6ce03346eb599ab1e",
+      "changedFiles": 9,
+      "additions": 515,
+      "deletions": 44,
+      "changedLines": 559,
+      "runtimeAuthoredChangedLines": 264
+    },
+    "reviewers": {
+      "requested": 2,
+      "completed": 2,
+      "confirmedByBoth": 4,
+      "suspect": 0,
+      "contradictions": 0,
+      "info": 0
+    },
     "verdict": "CHANGES_REQUESTED",
     "approval": false,
     "candidateValid": false,
     "task4_2Complete": false,
-    "confirmedFindings": [
-      "F1 cross-file selector convergence collision",
-      "F2 `new ctor()` false exact instance method",
-      "F3 anonymous IIFE false self-edge",
-      "F4 unproven disjointness causing false proven_empty/spine/candidates",
-      "F5 unrelated virtual endpoint over-poisoning",
-      "F6 uncharged/uncheckpointed global reclassification with cancellation failure and #187 overlap"
+    "openConfirmedFindings": [
+      "R2-F1 named function-expression IIFE false self-edge",
+      "R2-F2 project-owned lib.custom.d.ts falsely treated as compiler library by basename",
+      "R2-F3 structurally open mutually non-assignable classes falsely treated as disjoint",
+      "R2-F4 reachableCallEndpoints lacks an in-loop cooperative cancellation checkpoint"
+    ],
+    "preservedClosures": [
+      "cross-file identity and dynamic constructor calls",
+      "anonymous arrow and unnamed function IIFEs",
+      "callable parameter ordinary ambient declarations",
+      "private controls and basic endpoint isolation"
     ],
     "priorAuthority": "No old #161 Judgment, lineage, receipt, approval, or settlement is reused."
   },
@@ -385,7 +449,7 @@
     "Any child over 400 authored lines requires replanning rather than a size exception."
   ],
   "nextRecommended": "apply",
-  "nextAction": "root settlement then fresh independent scoped re-review of corrected #186C",
+  "nextAction": "acquire bounded #186D, correct R2-F1 through R2-F4, gate/freeze/settle, then fresh dual scoped re-review",
   "nextReset": {
     "required": false,
     "authorized": false,
@@ -393,9 +457,12 @@
   },
   "nextAcquire": {
     "requiredBeforeRuntimeCorrection": true,
-    "status": "parent-owned; not executed by review-evidence recorder",
-    "workUnit": "issue186-c-review-correction",
+    "status": "pending; not executed by review-evidence recorder",
+    "requestId": "issue186-d-acquire-a1",
+    "workUnit": "issue186-d-rereview-correction",
+    "evidenceGoal": "RED GREEN REFACTOR four dual scoped re-review bypasses with cooperative checkpoint and no #187 accounting",
+    "forecastChangedLines": 240,
     "maxChangedLines": 400
   },
-  "updatedAt": "2026-09-05T14:50:51Z"
+  "updatedAt": "2026-09-05T15:11:17Z"
 }

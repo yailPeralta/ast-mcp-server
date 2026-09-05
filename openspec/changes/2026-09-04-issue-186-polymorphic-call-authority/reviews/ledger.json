@@ -1,7 +1,7 @@
 {
   "schema": "issue-186-independent-review-ledger/v1",
   "change": "2026-09-04-issue-186-polymorphic-call-authority",
-  "reviewKind": "fresh-independent-read-only-adversarial",
+  "reviewKind": "fresh-dual-scoped-read-only-adversarial-rereview",
   "authority": {
     "rddMode": "disabled/unmanaged",
     "deliveryAuthority": false,
@@ -12,77 +12,154 @@
   },
   "target": {
     "repository": "/home/yail/Documentos/proyects/ast-mcp-server",
-    "branch": "fix/issue-186-b-consumer-parity",
-    "base": "1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11",
-    "baseTree": "1b3268b531c59c52a4d1be205018d066517c4a08",
-    "head": "8fe0e84a241be7e293176afefe86c6e9941a86ed",
-    "headTree": "3335d99fe6f5ef8fcffca71d30fcdf48894eae82",
-    "patchSha256": "sha256:e48b0c1216f84d181ec0e8695ead7a75a61afbe34a306eaf0e0296a3fbab7e8b",
+    "branch": "fix/issue-186-c-review-corrections",
+    "base": "8fe0e84a241be7e293176afefe86c6e9941a86ed",
+    "head": "d882e013807acc5285837eff0136fe6f5324de61",
+    "headTree": "3ab244c0c750b31c8696595a81a1c5378661b1fa",
+    "patchSha256": "sha256:95949ff8fbfadeb5bd0316e20549e820f4a9c3174ecad5b6ce03346eb599ab1e",
     "cleanupSha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "changedFiles": 9,
+    "additions": 515,
+    "deletions": 44,
+    "changedLines": 559,
+    "runtimeAuthoredChangedLines": 264,
     "frozen": true
   },
+  "reviewers": {
+    "requested": 2,
+    "completed": 2,
+    "partialAccepted": false,
+    "scope": "Frozen #186C delta 8fe0e84..d882e01, prior finding closure, correction-caused bypasses, cancellation, and #187 exclusion",
+    "agreement": "Both reviewers confirmed R2-F1 through R2-F4."
+  },
+  "reviewHistory": [
+    {
+      "round": 1,
+      "kind": "fresh-independent-read-only-adversarial",
+      "base": "1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11",
+      "head": "8fe0e84a241be7e293176afefe86c6e9941a86ed",
+      "patchSha256": "sha256:e48b0c1216f84d181ec0e8695ead7a75a61afbe34a306eaf0e0296a3fbab7e8b",
+      "changedFiles": 9,
+      "additions": 570,
+      "deletions": 77,
+      "changedLines": 647,
+      "confirmed": 6,
+      "verdict": "CHANGES_REQUESTED",
+      "approval": false
+    },
+    {
+      "round": 2,
+      "kind": "fresh-dual-scoped-read-only-adversarial-rereview",
+      "base": "8fe0e84a241be7e293176afefe86c6e9941a86ed",
+      "head": "d882e013807acc5285837eff0136fe6f5324de61",
+      "changedFiles": 9,
+      "additions": 515,
+      "deletions": 44,
+      "changedLines": 559,
+      "reviewersCompleted": 2,
+      "confirmed": 4,
+      "verdict": "CHANGES_REQUESTED",
+      "approval": false
+    }
+  ],
   "verdict": "CHANGES_REQUESTED",
   "candidate": {
     "valid": false,
-    "invalidatedBy": ["F1", "F2", "F3", "F4", "F5", "F6"],
+    "invalidatedBy": ["R2-F1", "R2-F2", "R2-F3", "R2-F4"],
     "approval": false,
     "task4_2Complete": false
   },
-  "findings": [
+  "priorFindings": [
     {
       "id": "F1",
-      "status": "confirmed",
-      "summary": "cross-file selector convergence collision"
+      "status": "closed",
+      "summary": "cross-file callable identity remains corrected"
     },
     {
       "id": "F2",
-      "status": "confirmed",
-      "summary": "`new ctor()` false exact instance method"
+      "status": "closed",
+      "summary": "dynamic constructor calls remain excluded from false exact instance-method authority"
     },
     {
       "id": "F3",
-      "status": "confirmed",
-      "summary": "anonymous IIFE false self-edge"
+      "status": "partially-closed-with-new-bypass",
+      "summary": "anonymous arrow and unnamed function IIFEs remain corrected; named function-expression IIFEs expose R2-F1"
     },
     {
       "id": "F4",
-      "status": "confirmed",
-      "summary": "unproven disjointness causing false proven_empty/spine/candidates"
+      "status": "partially-closed-with-new-bypass",
+      "summary": "previous disjointness fixtures remain corrected; structurally open mutually non-assignable classes expose R2-F3"
     },
     {
       "id": "F5",
-      "status": "confirmed",
-      "summary": "unrelated virtual endpoint over-poisoning"
+      "status": "closed",
+      "summary": "basic endpoint isolation remains corrected"
     },
     {
       "id": "F6",
-      "status": "confirmed",
-      "summary": "uncharged/uncheckpointed global reclassification with cancellation failure and #187 overlap"
+      "status": "partially-closed-with-new-bypass",
+      "summary": "existing bounded cancellation controls remain corrected; reachableCallEndpoints exposes R2-F4"
     }
   ],
-  "correction": {
-    "child": "#186C",
-    "status": "corrected-awaiting-root-settlement-and-independent-rereview",
-    "branch": "fix/issue-186-c-review-corrections",
-    "maxAuthoredChangedLines": 400,
-    "forecastAuthoredChangedLines": "260-380",
-    "splitRequiredBeforeEdit": false,
-    "scope": ["F1 through F5", "F6 cancellation and checkpoint portion only"],
-    "correctedFindings": ["F1", "F2", "F3", "F4", "F5", "F6-cancellation-checkpoints"],
-    "evidence": {
-      "red": "Two unchanged final runs: 3 failing files, 3 failing tests, 96 passing; F1-F6 reviewer assertions reproduced.",
-      "green": "99/99 correction-focused and 122/122 consumer tests passed; full 985/985 plus supervised 2/2 passed after removing ambient GIT_PAGER.",
-      "gates": "typecheck, build, lint, format, test:mcp, package, diff-check, and 6/14 trace passed."
+  "preservedControls": [
+    "cross-file identity",
+    "dynamic constructor calls",
+    "anonymous arrow and unnamed function IIFEs",
+    "callable parameter ordinary ambient declarations",
+    "private and #private exact controls",
+    "basic endpoint isolation"
+  ],
+  "findings": [
+    {
+      "id": "R2-F1",
+      "status": "confirmed-by-both",
+      "severity": "severe",
+      "summary": "named function-expression IIFE produces a false self-edge"
     },
-    "approval": false,
-    "requiredNext": "Root settlement, then fresh independent scoped re-review of the corrected frozen candidate.",
-    "preservedForIssue187": "Exact-once/global work-budget accounting acceptance remains exclusively #187 scope.",
-    "prohibitedInIssue186": "No charging, sorting, retention, finalization, exact-bound, or one-below accounting was implemented.",
-    "splitTrigger": "Stop before editing and split #186C if the refreshed forecast exceeds 400 authored additions plus deletions."
+    {
+      "id": "R2-F2",
+      "status": "confirmed-by-both",
+      "severity": "severe",
+      "summary": "project-owned lib.custom.d.ts is falsely treated as a compiler library by basename"
+    },
+    {
+      "id": "R2-F3",
+      "status": "confirmed-by-both",
+      "severity": "severe",
+      "summary": "structurally open mutually non-assignable classes are falsely treated as disjoint"
+    },
+    {
+      "id": "R2-F4",
+      "status": "confirmed-by-both",
+      "severity": "severe",
+      "summary": "reachableCallEndpoints loop lacks an in-loop cooperative cancellation checkpoint"
+    }
+  ],
+  "counts": {
+    "openConfirmed": 4,
+    "preservedClosedControls": 6,
+    "closedPriorFindings": 3,
+    "partiallyClosedWithNewBypass": 3,
+    "suspect": 0,
+    "contradictions": 0,
+    "info": 0
+  },
+  "correction": {
+    "child": "#186D",
+    "status": "planned-pending-acquire",
+    "forecastAuthoredChangedLines": "<=240",
+    "maxAuthoredChangedLines": 400,
+    "splitRequiredBeforeEdit": false,
+    "scope": ["R2-F1", "R2-F2", "R2-F3", "R2-F4"],
+    "issue187Boundary": "Exact-once/global work-budget accounting remains exclusively #187 scope; #186D must add the required cooperative in-loop checkpoint without accounting behavior.",
+    "rollback": "Revert only #186D runtime tests/code and its cumulative #186 evidence updates.",
+    "requiredNext": "Acquire issue186-d-rereview-correction within the 400-line hard bound, implement the four admitted fixes, run focused/full/package gates, freeze, settle, and obtain another fresh dual scoped re-review.",
+    "approval": false
   },
   "evidenceDisposition": {
     "originalRedGreenReceipts": "historical-only",
+    "correctionCEvidence": "closure-control-only; invalidated for approval by R2-F1 through R2-F4",
     "priorGateReceipts": "historical-only",
-    "requiredNext": "Resolve and apply #186C with new RED/GREEN/REFACTOR and candidate-bound gates, then obtain a fresh independent read-only review."
+    "requiredNext": "Execute bounded #186D with new candidate-bound evidence and fresh dual scoped re-review."
   }
 }
