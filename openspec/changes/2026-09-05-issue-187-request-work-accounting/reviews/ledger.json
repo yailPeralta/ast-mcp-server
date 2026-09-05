@@ -9,11 +9,11 @@
     "repository": "/home/yail/Documentos/proyects/ast-mcp-server",
     "baseCommit": "1dbbf441b32cd9f226115785725b82142600a749",
     "baseTree": "9623ad6c801828e3eacc1b9e72fea91059e0b5f1",
-    "headCommit": "4bce66b6adf87735e9ba640b561f383d8199dd81",
-    "headTree": "85ef5596e1a188d2405e96bf7d87b17aaab77b81",
-    "branch": "docs/issue-187-format-gate",
-    "pullRequest": 229,
-    "patchSha256": "f1d7a98eb663b65250f45c08951ffca00cc955da01f4a6949e2d733657279e76"
+    "headCommit": "152ffa4f87011e66103f0ded83fa0b6a9186c119",
+    "headTree": "4b5b1ef6a5255a8da5e00ccd654a226c51ea6f63",
+    "branch": "fix/issue-187-c-pair-sort-accounting",
+    "pullRequest": null,
+    "patchSha256": "995b505f123e80d956190621cc964e3d1e8505bddf846452636139f1028e5ea6"
   },
   "round": 1,
   "blindJudges": {
@@ -23,7 +23,8 @@
     "budgets": {
       "judgeA": 398,
       "judgeB": 395,
-      "format": 83
+      "format": 83,
+      "correctionC": 79
     }
   },
   "findings": {
@@ -32,13 +33,13 @@
         "id": "JD-R1-SEV-001",
         "severity": "SEVERE",
         "location": "src/services/relationships.ts:1354-1364",
-        "claim": "The deterministic sort of the two member-reference endpoint pairs performs work without a preceding request-wide charge, so the reported exact bound is short by one and true N-1 can still return authoritative reference edges.",
+        "claim": "The deterministic sort of the two member-reference endpoint pairs performed work without a preceding request-wide charge, making the prior exact bound short by one.",
         "evidenceClass": "deterministic",
         "causalDisposition": "candidate",
         "confirmedBy": ["judgeA", "judgeB"],
         "corroborated": true,
         "fixAuthorized": true,
-        "status": "correction-applied-pending-scoped-dual-rejudgment"
+        "status": "closed-by-correction-c-and-approved-by-both-scoped-rejudges"
       }
     ],
     "suspect": [
@@ -48,7 +49,7 @@
         "claim": "Generic string and `existing` stage vocabulary may be less explicit than the frozen accounting vocabulary.",
         "corroborated": false,
         "fixAuthorized": false,
-        "disposition": "suspect-only; no round-1 correction authority"
+        "disposition": "suspect-only; non-blocking and unresolved by scoped correction C"
       },
       {
         "id": "JD-R1-INFO-002",
@@ -56,7 +57,7 @@
         "claim": "Candidate or legacy edge materialization may occur before the associated retention charge.",
         "corroborated": false,
         "fixAuthorized": false,
-        "disposition": "suspect-only; no round-1 correction authority"
+        "disposition": "suspect-only; non-blocking and unresolved by scoped correction C"
       },
       {
         "id": "JD-R1-INFO-003",
@@ -64,7 +65,7 @@
         "claim": "Relationship-kind normalization and initial BFS root work may not be represented as explicit charged stages.",
         "corroborated": false,
         "fixAuthorized": false,
-        "disposition": "suspect-only; no round-1 correction authority"
+        "disposition": "suspect-only; non-blocking and unresolved by scoped correction C"
       },
       {
         "id": "JD-R1-INFO-004",
@@ -72,7 +73,7 @@
         "claim": "The evidence does not prove the same exact work limit across every public surface in one cross-surface assertion.",
         "corroborated": false,
         "fixAuthorized": false,
-        "disposition": "suspect-only proof gap; no round-1 correction authority"
+        "disposition": "suspect-only proof gap; non-blocking and unresolved by scoped correction C"
       }
     ],
     "contradictions": []
@@ -85,19 +86,35 @@
   ],
   "correction": {
     "round": 1,
-    "state": "applied-pending-scoped-dual-rejudgment",
+    "state": "approved",
     "authorizedFindingIds": ["JD-R1-SEV-001"],
     "workUnit": "issue187-c-member-reference-pair-sort-accounting",
-    "immediateBase": "PR #230 @ ff7d9efba5a854d0c3b5c92f347502dfbb2bb3b9",
+    "immediateBase": "ff7d9efba5a854d0c3b5c92f347502dfbb2bb3b9",
+    "headCommit": "152ffa4f87011e66103f0ded83fa0b6a9186c119",
+    "headTree": "4b5b1ef6a5255a8da5e00ccd654a226c51ea6f63",
+    "runtimePatchSha256": "b9d052c1465bf7f725f9b4db4ebbffae7d9aad23d0a0290f0aaded4b8e945af6",
     "forecastChangedLines": "<=120",
-    "allowedClasses": ["source", "focused-test", "issue-187-meta"],
-    "allowedSourcePaths": [
-      "src/services/relationships.ts",
-      "test/impact.test.ts",
-      "test/relationships.test.ts",
-      "openspec/changes/2026-09-05-issue-187-request-work-accounting"
-    ],
+    "actualRuntimeChangedLines": 79,
+    "eventVector": [2, 2],
+    "boundaryEvidence": {
+      "exactN": "235 succeeds",
+      "oneBelow": "234 fails closed with work_limit and zero authoritative edges",
+      "cancellation": "preserved with unchanged work count",
+      "ordering": "preserved"
+    },
+    "scopedRejudgment": {
+      "scope": "frozen ledger plus immutable correction-C delta only",
+      "judgeA": "APPROVED",
+      "judgeB": "APPROVED",
+      "completed": 2,
+      "required": 2,
+      "closedFindingIds": ["JD-R1-SEV-001"],
+      "correctionCausedConfirmed": 0,
+      "correctionCausedSuspect": 0,
+      "result": "approved"
+    },
     "excluded": [
+      "ledger INFO/SUSPECT cleanup",
       "issue #186",
       "issues #219/#220",
       "Harness",
@@ -105,19 +122,30 @@
       "unrelated refactors",
       "commit",
       "push",
-      "PR or issue mutation"
+      "PR or issue mutation",
+      "delivery receipt or authority"
     ],
     "budget": {
       "maximumRounds": 2,
-      "remainingBeforeRound1Start": 2,
-      "remainingAfterRound1Start": 1
-    },
-    "nextAuthorityAction": "Acquire correction C as a fresh bounded work unit from the exact PR #229 head; do not reset unless compact attempt authority says the unchanged objective cannot continue and a maintainer explicitly authorizes that reset.",
-    "scopedRejudgment": "required; both blind judges inspect only this frozen ledger and the immutable correction-C delta"
+      "roundsUsed": 1,
+      "roundsUnusedAtTerminal": 1
+    }
   },
-  "candidateVerdict": "ESCALATED",
-  "workflowState": "pending-scoped-dual-rejudgment",
-  "terminal": false,
-  "task3_1": "pending until both scoped re-judges approve the correction delta",
-  "updatedAt": "2026-09-05T19:46:41Z"
+  "counts": {
+    "scopedRejudgesApproved": 2,
+    "closedConfirmedSevere": 1,
+    "activeConfirmedSevere": 0,
+    "activeSuspectSevere": 0,
+    "contradictions": 0,
+    "preservedInfoSuspect": 4,
+    "correctionCausedConfirmed": 0,
+    "correctionCausedSuspect": 0
+  },
+  "candidateVerdict": "APPROVED",
+  "workflowState": "terminal-approved",
+  "terminal": true,
+  "task3_1": "complete; runtime candidate approved for strict verify",
+  "nextRecommended": "verify",
+  "deliveryDisposition": "Judgment Day issued no receipt and grants no commit, push, PR, merge, release, or delivery authority.",
+  "updatedAt": "2026-09-05T20:03:31Z"
 }

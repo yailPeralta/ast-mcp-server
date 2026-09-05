@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-05-issue-187-request-work-accounting",
   "authoritative": true,
-  "stage": "correction-c-applied-pending-scoped-dual-rejudgment",
+  "stage": "judgment-day-approved-ready-strict-verify",
   "rddModeAtPlanning": "disabled/unmanaged",
   "delivery": {
     "strategy": "feature-branch-chain",
@@ -30,12 +30,12 @@
     {
       "id": "3.1",
       "name": "Read-only adversarial review",
-      "status": "pending",
-      "detail": "Round 1 ESCALATED; correction C and scoped dual re-judgment required"
+      "status": "completed",
+      "detail": "Terminal APPROVED after both scoped blind re-judges closed JD-R1-SEV-001; no delivery authority or receipt"
     },
     { "id": "3.2", "name": "Strict verify 9/13", "status": "pending" }
   ],
-  "taskProgress": { "total": 16, "completed": 14, "pending": 2, "allComplete": false },
+  "taskProgress": { "total": 16, "completed": 15, "pending": 1, "allComplete": false },
   "tdd": {
     "red": ["A.1-A.3", "B.1-B.3 twice unchanged"],
     "green": ["A.1-A.4", "B.1-B.5"],
@@ -135,35 +135,46 @@
   },
   "judgmentDay": {
     "ledger": "reviews/ledger.json",
-    "target": "1dbbf441b32cd9f226115785725b82142600a749..4bce66b6adf87735e9ba640b561f383d8199dd81",
+    "target": "1dbbf441b32cd9f226115785725b82142600a749..152ffa4f87011e66103f0ded83fa0b6a9186c119",
+    "targetTree": "4b5b1ef6a5255a8da5e00ccd654a226c51ea6f63",
     "round": 1,
     "judgesCompleted": 2,
-    "confirmedSevere": ["JD-R1-SEV-001"],
+    "scopedRejudgesApproved": 2,
+    "closedConfirmedSevere": ["JD-R1-SEV-001"],
+    "activeConfirmedSevere": [],
+    "activeSuspectSevere": [],
     "suspectInfo": ["JD-R1-INFO-001", "JD-R1-INFO-002", "JD-R1-INFO-003", "JD-R1-INFO-004"],
     "preservedPassingEvidence": [
       "transactional discard",
-      "cancellation",
-      "fourteen-cell matrix",
+      "cancellation and count stability",
+      "ordering and fourteen-cell matrix",
       "public-consumer parity"
     ],
-    "verdict": "ESCALATED",
-    "terminal": false,
+    "verdict": "APPROVED",
+    "terminal": true,
+    "deliveryAuthority": false,
+    "receipt": null,
     "correction": {
       "id": "C",
-      "state": "applied-pending-scoped-dual-rejudgment",
-      "base": "PR #230@ff7d9efba5a854d0c3b5c92f347502dfbb2bb3b9",
+      "state": "approved",
+      "base": "ff7d9efba5a854d0c3b5c92f347502dfbb2bb3b9",
+      "head": "152ffa4f87011e66103f0ded83fa0b6a9186c119",
       "findingIds": ["JD-R1-SEV-001"],
-      "forecast": "<=120",
-      "roundsRemaining": 1,
-      "scopedRejudgmentRequired": true
+      "eventVector": [2, 2],
+      "exactN": 235,
+      "oneBelow": 234,
+      "correctionCausedConfirmed": 0,
+      "correctionCausedSuspect": 0,
+      "runtimeChangedLines": 79,
+      "forecast": "<=120"
     },
-    "budgets": { "A": 398, "B": 395, "format": 83 }
+    "budgets": { "A": 398, "B": 395, "format": 83, "correctionC": 79 }
   },
-  "review": "Correction C applied for JD-R1-SEV-001 only; not approved; scoped dual re-judgment pending; RDD disabled/unmanaged; no receipt authority",
+  "review": "Terminal Judgment Day APPROVED for strict verify; four INFO/SUSPECT rows remain non-blocking and unresolved; RDD disabled/unmanaged; no delivery authority or receipt",
   "verify": {
     "requirements": 9,
     "scenarios": 13,
-    "status": "blocked-pending-scoped-dual-rejudgment"
+    "status": "ready"
   },
-  "updatedAt": "2026-09-05T19:46:41Z"
+  "updatedAt": "2026-09-05T20:03:31Z"
 }

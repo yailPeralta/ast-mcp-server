@@ -14,7 +14,7 @@ PR #206 docs/issue-188-u7-docs @ 5d839bb
                  base = exact PR #225 head 8fe8553
                  └── #187B fix/issue-187-b-impact-accounting
                       base = exact accepted #187A head captured before branching
-                      └── frozen read-only review → strict verify 9/13
+                      └── correction C @ 152ffa4 → Judgment Day APPROVED → strict verify 9/13
 ```
 
 A child diff containing its parent or foreign paths has the wrong base and must be retargeted/rebased before review. Both children integrate together; rollback order is B then A.
@@ -164,4 +164,10 @@ The following unpaired observations remain INFO/SUSPECT, cannot authorize a fix,
 
 The frozen candidate verdict is `ESCALATED`, but the Judgment Day workflow is nonterminal at `pending-correction-round-1`. Task 3.1 remains pending. Correction C starts from exact PR #229 head `4bce66b6adf87735e9ba640b561f383d8199dd81`, forecasts ≤120 authored changed lines, and may change only `src/services/relationships.ts`, focused `test/impact.test.ts` and/or `test/relationships.test.ts` evidence, plus this change's metadata. Its sole behavior target is one pre-sort charge for the two-item member-reference pair sort with exact-N success and true-N−1 fail-closed proof. No INFO/SUSPECT cleanup, #186/#219/#220 work, Harness, schema, unrelated source, delivery, PR, or issue mutation is allowed.
 
-Starting round 1 consumes one of the two correction rounds, leaving one. No acquire or reset was performed while recording this ledger. The next runtime-bearing action is a fresh bounded acquire for `issue187-c-member-reference-pair-sort-accounting` from the exact PR #229 head. A reset is neither implied nor authorized: attempt unchanged-objective continuation first, and reset only if compact authority requires a changed objective and a maintainer explicitly authorizes that exact reset. Once C is frozen, both blind judges re-judge only `reviews/ledger.json` plus the immutable C delta; task 3.1 can complete only if both approve.
+Starting round 1 consumed one of the two correction rounds. No acquire or reset was performed while recording the correction ledger. Correction C was frozen at `152ffa4f87011e66103f0ded83fa0b6a9186c119` over exact immediate base `ff7d9efba5a854d0c3b5c92f347502dfbb2bb3b9`.
+
+## Terminal Judgment Day approval
+
+Both scoped blind re-judges independently APPROVED closure of `JD-R1-SEV-001` after inspecting only the frozen ledger and immutable correction-C delta. Exact N=235 succeeds, N−1=234 fails closed with no authoritative edges, the charged event vector is `[2,2]`, and cancellation precedence and output ordering remain preserved. Neither judge reported a correction-caused CONFIRMED or SUSPECT finding. The four existing INFO/SUSPECT rows remain non-blocking and unresolved because they are outside correction-C authority.
+
+Task 3.1 is complete and the exact runtime candidate at tree `4b5b1ef6a5255a8da5e00ccd654a226c51ea6f63` is APPROVED for strict verify 9/13. Correction C used 79 authored runtime lines against its ≤120 forecast; child budgets remain A=398, B=395, and format=83, all ≤400. This Judgment Day verdict is terminal but issues no receipt and grants no commit, push, PR, merge, release, or other delivery authority. Task 3.2 remains pending; `verify` is the next gate.

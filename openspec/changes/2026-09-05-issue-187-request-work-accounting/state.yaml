@@ -54,25 +54,25 @@ artifacts:
   tasks: done
   applyProgress: partial
   verifyReport: missing
-  reviewLedger: partial
+  reviewLedger: done
   reviewReceipt: missing
   reviewBundle: missing
   reviewContext: missing
   reviewState: missing
 taskProgress:
   total: 16
-  completed: 14
-  pending: 2
+  completed: 15
+  pending: 1
   allComplete: false
 dependencies:
   proposal: all_done
   specs: all_done
   design: all_done
   tasks: all_done
-  apply: ready
-  verify: blocked
+  apply: all_done
+  verify: ready
   archive: blocked
-applyState: ready
+applyState: all_done
 actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
@@ -97,55 +97,74 @@ remediationState:
   reason: ""
 phaseInstructions:
   apply:
-    - "Correction C is applied for JD-R1-SEV-001 only from ff7d9ef; exact member-reference work rose 233->235, with N=235 successful and N-1=234 authority-free work_limit. No acquire/reset/settle or delivery action was performed."
-    - "Correction C is not approved; both blind judges must re-judge only reviews/ledger.json plus the immutable C delta, and task 3.1 remains pending until both approve."
+    - "Task 3.1 is complete: both scoped blind re-judges approved closure of JD-R1-SEV-001 at frozen correction HEAD 152ffa4f87011e66103f0ded83fa0b6a9186c119."
+    - "Judgment Day is terminal APPROVED for strict verify only; it issued no delivery authority or receipt."
   verify:
-    - "Blocked until correction C passes scoped dual re-judgment; then strictly validate 9 requirements/13 scenarios."
+    - "Run strict verification against frozen runtime candidate 152ffa4f87011e66103f0ded83fa0b6a9186c119 for exactly 9 requirements and 13 scenarios."
+    - "Keep the four INFO/SUSPECT rows non-blocking and unresolved; they are outside correction-C scope."
   remediate: []
   archive:
     - "Issue #188 merge/archive is excluded."
-nextRecommended: apply
+nextRecommended: verify
 blockedReasons: []
-lastPhase: apply-correction-c-pending-scoped-dual-rejudgment
+lastPhase: judgment-day-approved-ready-strict-verify
+updatedAt: "2026-09-05T20:03:31Z"
 documentationCleanup:
   status: formatting-gate-cleared
-  runtimeCandidate: "PR #229 commit 4bce66b6adf87735e9ba640b561f383d8199dd81 plus applied correction C; scoped dual re-judgment pending"
+  runtimeCandidate: "Frozen correction HEAD 152ffa4f87011e66103f0ded83fa0b6a9186c119 (tree 4b5b1ef6a5255a8da5e00ccd654a226c51ea6f63); Judgment Day APPROVED for strict verify"
 judgmentDay:
   ledger: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/reviews/ledger.json
   target:
     projection: base-diff
     baseCommit: 1dbbf441b32cd9f226115785725b82142600a749
     baseTree: 9623ad6c801828e3eacc1b9e72fea91059e0b5f1
-    headCommit: 4bce66b6adf87735e9ba640b561f383d8199dd81
-    headTree: 85ef5596e1a188d2405e96bf7d87b17aaab77b81
-    pullRequest: 229
+    headCommit: 152ffa4f87011e66103f0ded83fa0b6a9186c119
+    headTree: 4b5b1ef6a5255a8da5e00ccd654a226c51ea6f63
+    patchSha256: 995b505f123e80d956190621cc964e3d1e8505bddf846452636139f1028e5ea6
   round: 1
   judgesCompleted: 2
-  confirmedSevere:
+  scopedRejudgesApproved: 2
+  closedConfirmedSevere:
     - JD-R1-SEV-001
+  activeConfirmedSevere: []
+  activeSuspectSevere: []
+  correctionCausedConfirmed: 0
+  correctionCausedSuspect: 0
   infoSuspect:
     - JD-R1-INFO-001
     - JD-R1-INFO-002
     - JD-R1-INFO-003
     - JD-R1-INFO-004
-  verdict: ESCALATED
-  terminal: false
-  workflowState: pending-scoped-dual-rejudgment
+  infoSuspectDisposition: "non-blocking and unresolved by correction-C scope"
+  verdict: APPROVED
+  terminal: true
+  workflowState: terminal-approved
+  deliveryAuthority: false
+  receipt: null
   correction:
     id: C
-    immediateBase: "PR #230 @ ff7d9efba5a854d0c3b5c92f347502dfbb2bb3b9"
-    forecast: "<=120"
+    immediateBase: ff7d9efba5a854d0c3b5c92f347502dfbb2bb3b9
+    headCommit: 152ffa4f87011e66103f0ded83fa0b6a9186c119
+    headTree: 4b5b1ef6a5255a8da5e00ccd654a226c51ea6f63
+    runtimePatchSha256: b9d052c1465bf7f725f9b4db4ebbffae7d9aad23d0a0290f0aaded4b8e945af6
+    actualRuntimeChangedLines: 79
+    eventVector: [2, 2]
+    exactN: 235
+    oneBelow: 234
+    cancellationPreserved: true
+    orderingPreserved: true
     authorizedFindingIds:
       - JD-R1-SEV-001
-    roundsRemaining: 1
-    acquireDisposition: "not performed; prohibited for correction C"
+    roundsUsed: 1
+    roundsUnusedAtTerminal: 1
+    acquireDisposition: "not performed; prohibited for approval recording"
     resetPerformed: false
-    resetAuthorized: false
-    scopedRejudgmentRequired: true
+    settlePerformed: false
   childBudgets:
     A: 398
     B: 395
     format: 83
+    correctionC: 79
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
