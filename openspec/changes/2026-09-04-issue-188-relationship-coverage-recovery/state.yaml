@@ -61,8 +61,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 30
-  completed: 17
-  pending: 13
+  completed: 18
+  pending: 12
   allComplete: false
 dependencies:
   proposal: all_done
@@ -117,8 +117,8 @@ phaseInstructions:
 nextRecommended: apply
 blockedReasons: []
 lastPhase: apply
-activeWorkUnit: "U5 tasks 5.1-5.3 settled and refactored; U6 task 6.1 next"
-evidenceCandidate: "sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a"
+activeWorkUnit: "U6 task 6.1 characterized test-only; task 6.2 settlement evidence next"
+evidenceCandidate: "pending exact U6 tracked-plus-untracked hash"
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
@@ -274,7 +274,7 @@ phaseZeroAuthority:
     - "Never resume, import, or extend #161 or PR #162-#185 R-01 authority."
     - "Keep tracker PR #189 draft and merge-unauthorized until #186, #187, and every final gate pass."
     - "Candidate drift, severe findings, failed verification/CI, or Harness mutation blocks integration."
-  nextApply: "U6 task 6.1 on branch test/issue-188-u6-matrix based on evidence child docs/issue-188-u5-evidence; acquire a fresh receipt and re-author the seven-kind/cancellation matrix while preserving the six-kind no-contains candidate boundary"
+  nextApply: "U6 task 6.2 settlement evidence child; preserve the test-only matrix, exact hashes, six-kind no-contains candidate boundary, and unresolved #186/#187 exclusions"
 reviewBudget:
   strategy: feature-branch-chain
   maxAuthoredChangedLinesPerChild: 400
