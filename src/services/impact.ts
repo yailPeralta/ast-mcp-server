@@ -1,18 +1,20 @@
 import path from "node:path";
 import { type Node, type Project } from "ts-morph";
 import {
-  createTruncationMetadata,
   createSourceLocation,
   type FreshnessMetadata,
-  type TruncationMetadata,
   type TruncationReason,
 } from "./read-contracts.js";
 import { getSourceFileOrThrow } from "./project.js";
 import { findLocatedDeclaration } from "./symbols.js";
 import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
 import {
+  aggregateRelationshipCoverage,
+  CompilerImpactWorkTracker,
   createCompilerRelationshipResolver,
   RELATIONSHIP_EDGE_KINDS,
+  type CompilerImpactWork,
+  type RelationshipCoverageEntry,
   type RelationshipEdge,
   type RelationshipEdgeKind,
   type RelationshipEndpoint,
@@ -20,6 +22,7 @@ import {
 
 export const IMPACT_DIRECTIONS = Object.freeze(["incoming", "outgoing", "both"] as const);
 export type ImpactDirection = (typeof IMPACT_DIRECTIONS)[number];
+type ImpactTruncationReason = TruncationReason | "work_limit";
 
 export const DEFAULT_IMPACT_MAX_DEPTH = 3;
 export const DEFAULT_IMPACT_MAX_NODES = 100;
@@ -60,8 +63,17 @@ export interface ImpactResult {
   readonly max_nodes: number;
   readonly max_edges: number;
   readonly incomplete: boolean;
-  readonly truncation: TruncationMetadata;
-  readonly truncation_reasons: readonly TruncationReason[];
+  readonly truncation: {
+    readonly truncated: boolean;
+    readonly reason: ImpactTruncationReason | null;
+  };
+  readonly truncation_reasons: readonly ImpactTruncationReason[];
+}
+
+export interface CompilerImpactResult extends ImpactResult {
+  readonly coverage: readonly RelationshipCoverageEntry[];
+  readonly work: CompilerImpactWork;
+  readonly proven_empty: boolean;
 }
 
 interface NormalizedImpactOptions {
@@ -323,7 +335,7 @@ function traverseWithNeighborProvider(
   ]);
   const selectedEdges = new Map<string, RelationshipEdge>();
   const queue: QueuedNode[] = [{ key: endpointKey(root), endpoint: root, depth: 0 }];
-  const truncationReasons = new Set<TruncationReason>();
+  const truncationReasons = new Set<ImpactTruncationReason>();
   let maxDepthReached = 0;
   const classifyObservedNeighbor = (
     current: QueuedNode,
@@ -359,11 +371,12 @@ function traverseWithNeighborProvider(
       for (const neighbor of probe.neighbors) {
         classifyObservedNeighbor(current, neighbor, true);
       }
+      if (probe.workLimitReached) truncationReasons.add("work_limit");
       if (probe.incomplete && !probe.workLimitReached) truncationReasons.add("edge_limit");
       continue;
     }
 
-    const restrictionReason: TruncationReason | undefined =
+    const restrictionReason: ImpactTruncationReason | undefined =
       current.depth >= normalized.max_depth
         ? "depth_limit"
         : nodes.size >= normalized.max_nodes
@@ -380,7 +393,7 @@ function traverseWithNeighborProvider(
       new Set(selectedEdges.keys()),
     );
     if (batch.excludedNeighbors && restrictionReason) truncationReasons.add(restrictionReason);
-    if (batch.workLimitReached) truncationReasons.add("record_limit");
+    if (batch.workLimitReached) truncationReasons.add("work_limit");
     let skippedNewNode = false;
     for (const neighbor of batch.neighbors) {
       requestContext.checkpoint();
@@ -425,6 +438,7 @@ function traverseWithNeighborProvider(
         new Set(selectedEdges.keys()),
         IMPACT_PROBE_WORK_ITEMS,
       );
+      if (probe.workLimitReached) truncationReasons.add("work_limit");
       for (const neighbor of probe.neighbors) {
         classifyObservedNeighbor(current, neighbor, selectedEdges.size >= normalized.max_edges);
       }
@@ -445,7 +459,7 @@ function traverseWithNeighborProvider(
         new Set(selectedEdges.keys()),
       );
       if (knownBatch.excludedNeighbors) truncationReasons.add("record_limit");
-      if (knownBatch.workLimitReached) truncationReasons.add("record_limit");
+      if (knownBatch.workLimitReached) truncationReasons.add("work_limit");
       for (const neighbor of knownBatch.neighbors) {
         requestContext.checkpoint();
         if (selectedEdges.size >= normalized.max_edges) {
@@ -469,15 +483,16 @@ function traverseWithNeighborProvider(
         new Set(selectedEdges.keys()),
         IMPACT_PROBE_WORK_ITEMS,
       );
+      if (overflowProbe.workLimitReached) truncationReasons.add("work_limit");
       for (const neighbor of overflowProbe.neighbors) {
         classifyObservedNeighbor(current, neighbor, true);
       }
     }
   }
 
-  const orderedReasons = ["depth_limit", "record_limit", "edge_limit"].filter((reason) =>
-    truncationReasons.has(reason as TruncationReason),
-  ) as TruncationReason[];
+  const orderedReasons = ["depth_limit", "record_limit", "work_limit", "edge_limit"].filter(
+    (reason) => truncationReasons.has(reason as ImpactTruncationReason),
+  ) as ImpactTruncationReason[];
   const truncated = orderedReasons.length > 0;
   requestContext.checkpoint();
   return {
@@ -499,7 +514,7 @@ function traverseWithNeighborProvider(
     max_nodes: normalized.max_nodes,
     max_edges: normalized.max_edges,
     incomplete: truncated,
-    truncation: createTruncationMetadata(truncated, truncated ? orderedReasons[0] : null),
+    truncation: { truncated, reason: truncated ? orderedReasons[0] : null },
     truncation_reasons: orderedReasons,
   };
 }
@@ -551,14 +566,20 @@ export function traverseCompilerImpact(
   freshness: FreshnessMetadata,
   options: ImpactTraversalOptions = {},
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
-): ImpactResult {
+  controls: { readonly max_work_items?: number } = {},
+): CompilerImpactResult {
+  const tracker = new CompilerImpactWorkTracker(
+    controls.max_work_items ?? IMPACT_RELATIONSHIP_WORK_ITEMS,
+  );
+  const observations: RelationshipCoverageEntry[] = [];
   const resolver = createCompilerRelationshipResolver(
     project,
     projectRoot,
     freshness,
     requestContext,
+    tracker,
   );
-  return traverseWithNeighborProvider(
+  const impact = traverseWithNeighborProvider(
     root,
     (
       current,
@@ -568,22 +589,22 @@ export function traverseCompilerImpact(
       stopAfterFirst,
       allowedNeighborKeys,
       excludedRelationshipIds,
-      maxWorkItems,
     ) => {
       const resolution = resolver.edgesFor(current, {
         direction: normalized.direction,
         relationship_kinds: normalized.relationship_kinds,
         max_edges: maxEdges,
-        max_work_items: maxWorkItems ?? IMPACT_RELATIONSHIP_WORK_ITEMS,
         allowed_neighbor_keys: allowedNeighborKeys ? [...allowedNeighborKeys] : undefined,
         excluded_relationship_ids: excludedRelationshipIds
           ? [...excludedRelationshipIds]
           : undefined,
         stop_after_first: stopAfterFirst,
+        allow_provisional_call: options.relationship_kinds?.includes("call") === true,
       });
+      observations.push(...resolution.coverage);
       return {
         neighbors: collectNeighbors(current, resolution.edges, normalized, requestContext),
-        incomplete: resolution.incomplete,
+        incomplete: resolution.edge_limit_reached,
         excludedNeighbors: resolution.excluded_neighbors,
         workLimitReached: resolution.work_limit_reached,
       };
@@ -591,4 +612,23 @@ export function traverseCompilerImpact(
     options,
     requestContext,
   );
+  const endpointClass = root.symbol_path === "<module>" ? "module" : "symbol";
+  const coverage = aggregateRelationshipCoverage(observations, endpointClass);
+  const coverageComplete = coverage.every(
+    ({ status }) => status === "completed" || status === "not_applicable",
+  );
+  const work = tracker.snapshot();
+  const authorityComplete =
+    freshness.state === "fresh" && freshness.causes.length === 0 && !work.exhausted;
+  const incomplete =
+    impact.incomplete ||
+    (options.relationship_kinds !== undefined && !coverageComplete) ||
+    !authorityComplete;
+  return {
+    ...impact,
+    coverage,
+    work,
+    incomplete,
+    proven_empty: !incomplete && impact.edges.length === 0,
+  };
 }
