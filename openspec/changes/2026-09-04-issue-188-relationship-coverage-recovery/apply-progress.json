@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-188-relationship-coverage-recovery",
   "authoritative": true,
-  "stage": "u3-settled-passed-ready-for-u4",
+  "stage": "u4-red-green-refactored-awaiting-4.3-settlement",
   "rddModeAtPlanning": "disabled/unmanaged",
   "rddModeAtApply": {
     "effective": "off",
@@ -55,8 +55,12 @@
     { "id": "3.1", "name": "Acquire and RED U3 scoped call scenarios", "status": "completed" },
     { "id": "3.2", "name": "GREEN/REFACTOR U3 without absorbing issue 186", "status": "completed" },
     { "id": "3.3", "name": "Verify, freeze, settle, and evidence U3", "status": "completed" },
-    { "id": "4.1", "name": "Acquire and RED U4 direct containment scenarios", "status": "pending" },
-    { "id": "4.2", "name": "GREEN/REFACTOR U4 without issue 187 accounting", "status": "pending" },
+    { "id": "4.1", "name": "RED U4 direct containment scenarios", "status": "completed" },
+    {
+      "id": "4.2",
+      "name": "GREEN/REFACTOR U4 without issue 187 accounting",
+      "status": "completed"
+    },
     { "id": "4.3", "name": "Verify, freeze, settle, and evidence U4", "status": "pending" },
     { "id": "5.1", "name": "Acquire and RED U5 affected-candidate scenarios", "status": "pending" },
     { "id": "5.2", "name": "GREEN/REFACTOR U5 fail-closed public contract", "status": "pending" },
@@ -322,6 +326,14 @@
       "base": "docs/issue-188-u3-evidence"
     }
   },
+  "u4CurrentEvidence": {
+    "safetyNet": "impact+MCP 78/78",
+    "red": "focused contains 2/2 failed before source edits",
+    "greenRefactor": "focused 2/2; impact+MCP 80/80; relationships+call-spines 18/18",
+    "runtimeHarness": "test:mcp status ok, tool_count 16",
+    "rollback": "relationships.ts contains producer plus paired impact tests",
+    "settlement": "deferred to task 4.3 by direct user scope"
+  },
   "tdd": {
     "red": [],
     "green": [],
@@ -343,6 +355,12 @@
         "name": "Recover exact directional scoped call relationships",
         "file": "test/impact.test.ts",
         "taskId": "3.1-3.3"
+      },
+      {
+        "id": "u4-direct-contains",
+        "name": "Recover exact direct containment relationships",
+        "file": "test/impact.test.ts",
+        "taskId": "4.1-4.2"
       }
     ]
   },
@@ -387,6 +405,6 @@
     "Issue 187 has no accepted line forecast until its own planning re-entry.",
     "Any stale R-01 authority, candidate drift, severe finding, failed gate, or Harness write blocks integration."
   ],
-  "nextRecommended": "apply:4.1",
-  "updatedAt": "2026-09-05T00:59:38Z"
+  "nextRecommended": "apply:4.3",
+  "updatedAt": "2026-09-05T01:08:57Z"
 }

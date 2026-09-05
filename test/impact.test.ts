@@ -391,6 +391,9 @@ describe("bounded impact traversal", () => {
         max_depth: 1,
         max_nodes: 20,
         max_edges: 30,
+        relationship_kinds: RELATIONSHIP_EDGE_KINDS.filter(
+          (kind) => kind !== "call" && kind !== "contains",
+        ),
       };
       const expected = traverseImpact(root, edges, options);
       const actual = traverseCompilerImpact(project, fixture.root, root, freshness, options);
@@ -1547,9 +1550,9 @@ describe("compiler impact coverage and request work", () => {
     expect(statuses).toMatchObject({
       "reference/incoming": "completed",
       "import/outgoing": "not_applicable",
-      "contains/outgoing": "unsupported",
+      "contains/outgoing": "completed",
     });
-    expect(result).toMatchObject({ incomplete: true, proven_empty: false });
+    expect(result).toMatchObject({ incomplete: false, proven_empty: false });
 
     const observations: RelationshipCoverageEntry[] = [
       { kind: "reference", direction: "incoming", endpoint_class: "symbol", status: "completed" },
@@ -1598,6 +1601,202 @@ describe("compiler impact coverage and request work", () => {
         createRequestContext(AbortSignal.abort()),
       ),
     ).toThrow(expect.objectContaining({ code: "REQUEST_CANCELLED" }));
+  });
+});
+
+describe("scoped direct contains relationships", () => {
+  it("emits direct module and symbol children with exact inverse edges", async () => {
+    const fixture = await createProjectFixture({
+      "src/tree.ts": [
+        'import type { External } from "./types.js";',
+        "export const top = 1;",
+        "export class Outer<T> {",
+        "  field = 1;",
+        "  constructor() {}",
+        "  method(param: T): void {",
+        "    const localArrow = () => param;",
+        "    function hiddenFunction(): void {}",
+        "    class HiddenClass {}",
+        "    void localArrow; void hiddenFunction; void HiddenClass;",
+        "  }",
+        "}",
+        "export namespace Space {",
+        "  export class Inner {",
+        "    constructor() {}",
+        "    method(): void {}",
+        "  }",
+        "}",
+        "export const anonymousClass = class { hidden(): void {} };",
+        "export default class {}",
+      ].join("\n"),
+      "src/types.ts": "export interface External {}\n",
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const contains = (symbolPath: string, direction: "incoming" | "outgoing", maxDepth = 1) =>
+      traverseCompilerImpact(
+        project,
+        fixture.root,
+        resolveImpactRoot(project, fixture.root, rootRequest(symbolPath, "src/tree.ts")),
+        freshness,
+        {
+          direction,
+          max_depth: maxDepth,
+          max_nodes: 30,
+          max_edges: 30,
+          relationship_kinds: ["contains"],
+        },
+        undefined,
+        { max_work_items: 100_000 },
+      );
+
+    const resolver = createCompilerRelationshipResolver(project, fixture.root, freshness);
+    const moduleOutgoing = resolver.edgesFor(
+      { file: "src/tree.ts", symbol_path: "<module>", selector: "<module>@1" },
+      {
+        direction: "outgoing",
+        relationship_kinds: ["contains"],
+        max_edges: 30,
+        max_work_items: 100_000,
+      },
+    );
+    expect(moduleOutgoing.edges.map(({ target }) => target.symbol_path)).toEqual([
+      "anonymousClass",
+      "Outer",
+      "Space",
+      "top",
+    ]);
+    expect(moduleOutgoing.coverage).toEqual([
+      { kind: "contains", direction: "outgoing", endpoint_class: "module", status: "completed" },
+    ]);
+    expect(moduleOutgoing.incomplete).toBe(false);
+
+    const outerOutgoing = contains("Outer", "outgoing");
+    expect(outerOutgoing.edges.map(({ target }) => target.symbol_path)).toEqual([
+      "Outer.constructor",
+      "Outer.field",
+      "Outer.method",
+    ]);
+    expect(
+      contains("Outer.method", "incoming").edges.map(({ source }) => source.symbol_path),
+    ).toEqual(["Outer"]);
+    expect(contains("Outer", "incoming").edges.map(({ source }) => source.symbol_path)).toEqual([
+      "<module>",
+    ]);
+
+    const namespaceTraversal = contains("Space", "outgoing", 2);
+    expect(
+      namespaceTraversal.edges.map(({ source, target }) => [
+        source.symbol_path,
+        target.symbol_path,
+      ]),
+    ).toEqual([
+      ["Space.Inner", "Space.Inner.constructor"],
+      ["Space.Inner", "Space.Inner.method"],
+      ["Space", "Space.Inner"],
+    ]);
+    expect(
+      namespaceTraversal.edges.some(
+        ({ source, target }) =>
+          source.symbol_path === "Space" && target.symbol_path === "Space.Inner.method",
+      ),
+    ).toBe(false);
+    expect(
+      namespaceTraversal.edges.every(
+        ({ provenance, confidence, resolution, compiler_authoritative }) =>
+          provenance === "compiler" &&
+          confidence === "exact" &&
+          resolution === "resolved" &&
+          compiler_authoritative,
+      ),
+    ).toBe(true);
+  });
+
+  it("excludes non-symbol children and preserves bounds, cancellation, filters, and empty results", async () => {
+    const fixture = await createProjectFixture({
+      "src/tree.ts": [
+        "export class Owner<T> {",
+        "  constructor(_value?: T) {}",
+        "  method(parameter: T): void {",
+        "    const callback = function namedRuntimeOwner(): void {};",
+        "    class RuntimeNested {}",
+        "    callback(); void RuntimeNested;",
+        "  }",
+        "}",
+        "export class Empty {}",
+      ].join("\n"),
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("Owner", "src/tree.ts"));
+    const resolver = createCompilerRelationshipResolver(project, fixture.root, freshness);
+    const query = {
+      direction: "outgoing" as const,
+      relationship_kinds: ["contains" as const],
+      max_work_items: 100_000,
+    };
+    const all = resolver.edgesFor(root, { ...query, max_edges: 10 });
+
+    expect(all.edges.map(({ target }) => target.symbol_path)).toEqual([
+      "Owner.constructor",
+      "Owner.method",
+    ]);
+    expect(JSON.stringify(all.edges)).not.toMatch(
+      /parameter|<T>|callback|namedRuntimeOwner|RuntimeNested/,
+    );
+    expect(all.edges.map(({ relationship_id }) => relationship_id)).toEqual(
+      [...all.edges].map(({ relationship_id }) => relationship_id).sort(),
+    );
+    const first = all.edges[0]!;
+    const firstKey = `${first.target.file}\u0000${first.target.symbol_path}\u0000${first.target.selector}`;
+    expect(
+      resolver.edgesFor(root, { ...query, max_edges: 10, allowed_neighbor_keys: [firstKey] }).edges,
+    ).toEqual([first]);
+    expect(
+      resolver.edgesFor(root, {
+        ...query,
+        max_edges: 10,
+        excluded_relationship_ids: [first.relationship_id],
+      }).edges,
+    ).toHaveLength(1);
+    expect(resolver.edgesFor(root, { ...query, max_edges: 1 })).toMatchObject({
+      edges: [first],
+      incomplete: true,
+      edge_limit_reached: true,
+    });
+    expect(
+      createCompilerRelationshipResolver(project, fixture.root, freshness).edgesFor(root, {
+        ...query,
+        max_edges: 10,
+        max_work_items: 3,
+      }),
+    ).toMatchObject({ edges: [], incomplete: true, work_limit_reached: true });
+    expect(() =>
+      createCompilerRelationshipResolver(
+        project,
+        fixture.root,
+        freshness,
+        createRequestContext(AbortSignal.abort()),
+      ).edgesFor(root, { ...query, max_edges: 10 }),
+    ).toThrow(expect.objectContaining({ code: "REQUEST_CANCELLED" }));
+
+    const empty = traverseCompilerImpact(
+      project,
+      fixture.root,
+      resolveImpactRoot(project, fixture.root, rootRequest("Empty", "src/tree.ts")),
+      freshness,
+      { direction: "outgoing", relationship_kinds: ["contains"] },
+      undefined,
+      { max_work_items: 100_000 },
+    );
+    expect(empty).toMatchObject({ edges: [], incomplete: false, proven_empty: true });
+
+    const moduleIncoming = resolver.edgesFor(
+      { file: "src/tree.ts", symbol_path: "<module>", selector: "<module>@1" },
+      { direction: "incoming", relationship_kinds: ["contains"], max_edges: 10 },
+    );
+    expect(moduleIncoming).toMatchObject({ edges: [], incomplete: false });
+    expect(moduleIncoming.coverage[0]?.status).toBe("not_applicable");
   });
 });
 
