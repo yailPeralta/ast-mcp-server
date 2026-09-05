@@ -2,19 +2,19 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-05-issue-187-request-work-accounting",
   "authoritative": true,
-  "stage": "tasks-planned-awaiting-phase-0-authority",
+  "stage": "phase-zero-admitted-awaiting-root-acquire-a",
   "rddModeAtPlanning": "disabled/unmanaged",
   "delivery": {
     "strategy": "feature-branch-chain",
     "requestedStrategy": "auto-chain",
-    "base": "PR #224@e4550df400aa5fda25f55e9d6bee6c23474a60b7",
+    "base": "PR #225@8fe8553097c169b7bba769c7e7f8fc8e90c97678",
     "lineBudget": 400,
     "forecast": "A=330-390; B=350-400",
     "splitBeforeApplyOnOverage": true
   },
   "tasks": [
-    { "id": "0.1", "name": "Authority/base/RDD", "status": "pending" },
-    { "id": "0.2", "name": "Boundaries/vectors", "status": "pending" },
+    { "id": "0.1", "name": "Authority/base/RDD", "status": "completed" },
+    { "id": "0.2", "name": "Boundaries/vectors", "status": "completed" },
     { "id": "A.1", "name": "Producer stage RED", "status": "pending" },
     { "id": "A.2", "name": "Finalization RED", "status": "pending" },
     { "id": "A.3", "name": "Legacy/spine RED", "status": "pending" },
@@ -30,7 +30,7 @@
     { "id": "3.1", "name": "Read-only adversarial review", "status": "pending" },
     { "id": "3.2", "name": "Strict verify 9/13", "status": "pending" }
   ],
-  "taskProgress": { "total": 16, "completed": 0, "pending": 16, "allComplete": false },
+  "taskProgress": { "total": 16, "completed": 2, "pending": 14, "allComplete": false },
   "tdd": { "red": [], "green": [], "refactored": [] },
   "plannedEvidence": {
     "stageVector": "planned; exact-once, pre-effect, no reset/double charge",
@@ -43,7 +43,84 @@
     "conditionalReset": "issue187-b-reset-01; explicit maintainer authority only",
     "B": ["issue187-b-acquire-01", "issue187-b-settle-01"]
   },
+  "phaseZeroEvidence": {
+    "observedAt": "2026-09-05T18:20:28Z",
+    "authority": {
+      "issue187": "OPEN; exactly status:approved and type:bug",
+      "pr225": "OPEN/unmerged; docs/issue-187-design <- docs/issue-187-tasks @ 8fe8553097c169b7bba769c7e7f8fc8e90c97678",
+      "recoveryU7": "PR #206 OPEN/unmerged @ 5d839bb1ee2550e5d0a6404784baa21121e188fa; sibling root of #221-#225",
+      "terminal": "Issue #186 CLOSED; PRs #207-#218 CLOSED/unmerged/excluded",
+      "separate": "#219/#220 OPEN/unapproved/excluded; #188 OPEN/unmerged with merge/archive excluded",
+      "conflictingIssue187ImplementationPr": false,
+      "rdd": "disabled/unmanaged; global, clone-local, and effective modes off"
+    },
+    "cleanBase": {
+      "branch": "docs/issue-187-tasks",
+      "commit": "8fe8553097c169b7bba769c7e7f8fc8e90c97678",
+      "tree": "ddd126df77f481add273aa841aa6fc60efd7c898",
+      "parentCommit": "e4550df400aa5fda25f55e9d6bee6c23474a60b7",
+      "baseToHeadNumstat": { "additions": 0, "deletions": 0, "total": 0 },
+      "porcelainStatusSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "ledgerStatus": {
+      "revision": "",
+      "bindingRevision": "",
+      "objectiveGeneration": 0,
+      "nextOrdinal": 1,
+      "cumulativeAttempts": 0,
+      "cumulativeChangedLines": 0,
+      "lifetimeAttempts": 0,
+      "lifetimeChangedLines": 0,
+      "complete": false,
+      "decisionRequired": false,
+      "nextAction": "begin",
+      "resetNeededBeforeA": false
+    },
+    "candidateA": {
+      "status": "planned",
+      "projection": "base-diff",
+      "issue": 187,
+      "change": "2026-09-05-issue-187-request-work-accounting",
+      "branch": "fix/issue-187-a-relationship-accounting",
+      "basePullRequest": 225,
+      "baseRef": "docs/issue-187-tasks",
+      "baseCommit": "8fe8553097c169b7bba769c7e7f8fc8e90c97678",
+      "baseTree": "ddd126df77f481add273aa841aa6fc60efd7c898",
+      "headCommit": "pending",
+      "headTree": "pending",
+      "authoredNumstat": "pending",
+      "pathManifest": "pending",
+      "patchSha256": "pending",
+      "focusedOutputSha256": "pending",
+      "cleanupSha256": "pending",
+      "allowlist": [
+        "src/services/relationships.ts",
+        "test/impact.test.ts",
+        "test/relationships.test.ts",
+        "test/context-builder.test.ts",
+        "openspec/changes/2026-09-05-issue-187-request-work-accounting/tasks.md",
+        "openspec/changes/2026-09-05-issue-187-request-work-accounting/chain.md",
+        "openspec/changes/2026-09-05-issue-187-request-work-accounting/apply-progress.json",
+        "openspec/changes/2026-09-05-issue-187-request-work-accounting/state.yaml"
+      ]
+    },
+    "nextRootAcquire": {
+      "cwd": "/home/yail/Documentos/proyects/ast-mcp-server",
+      "change": "2026-09-05-issue-187-request-work-accounting",
+      "requestId": "issue187-a-acquire-01",
+      "workUnit": "issue187-a-relationship-accounting",
+      "evidenceGoal": "Prove exact relationship and legacy stage accounting",
+      "maxAttempts": 2,
+      "maxChangedLines": 400
+    },
+    "workUnitEvidence": {
+      "focusedChecks": "Read-only Git/GitHub, RDD mode, lineage, clean-tree, budget, and diagnostic attempt-status checks all exited 0 after correcting unsupported gh JSON fields.",
+      "runtimeHarness": "N/A — Phase 0 is static authority/admission; no runtime-bearing source work, acquire/settle, or Harness action was performed.",
+      "rollbackBoundary": "Revert only tasks.md, chain.md, apply-progress.json, and state.yaml Phase-0 metadata; no source, test, runtime ledger, GitHub, branch, commit, push, PR, or issue state changed."
+    },
+    "strictTddDisposition": "N/A for static process tasks 0.1-0.2; no production behavior was implemented and TDD buckets remain empty."
+  },
   "review": "pending independent read-only; RDD disabled/unmanaged",
   "verify": { "requirements": 9, "scenarios": 13, "status": "pending" },
-  "updatedAt": "2026-09-05T17:57:16Z"
+  "updatedAt": "2026-09-05T18:20:28Z"
 }

@@ -59,8 +59,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 16
-  completed: 0
-  pending: 16
+  completed: 2
+  pending: 14
   allComplete: false
 dependencies:
   proposal: all_done
@@ -78,7 +78,7 @@ actionContext:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting
 relationships:
   dependsOn:
-    - "PR #224 (docs/issue-187-design) at e4550df400aa5fda25f55e9d6bee6c23474a60b7; exact immediate base for #187A"
+    - "PR #225 (docs/issue-187-tasks) at 8fe8553097c169b7bba769c7e7f8fc8e90c97678; exact immediate base for #187A"
   supersedes: []
   amends: []
   conflictsWith: []
@@ -95,8 +95,9 @@ remediationState:
   reason: ""
 phaseInstructions:
   apply:
-    - "Run Phase 0 issue-first authority before source edits; A starts at exact PR #224 head e4550df, B starts at exact accepted A head."
-    - "Acquire/settle A uniquely; require explicit maintainer-authorized reset before B only if its objective changes; split before apply above 400 lines."
+    - "Phase 0 authority is complete; A starts from exact PR #225 head 8fe8553097c169b7bba769c7e7f8fc8e90c97678, and B starts from the exact accepted A head."
+    - "Next root action: acquire A with request issue187-a-acquire-01, work unit issue187-a-relationship-accounting, evidence goal Prove exact relationship and legacy stage accounting, max attempts 2, and max changed lines 400."
+    - "Acquire/settle A uniquely; no reset is needed before A. Require explicit maintainer-authorized reset before B only if its objective changes; split before apply above 400 lines."
   verify:
     - "Freeze A+B, run independent read-only adversarial review, and strictly validate 9 requirements/13 scenarios."
   remediate: []
@@ -104,7 +105,7 @@ phaseInstructions:
     - "Issue #188 merge/archive is excluded."
 nextRecommended: apply
 blockedReasons: []
-lastPhase: tasks
+lastPhase: apply-phase-0
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
@@ -118,18 +119,91 @@ issueAuthority:
   approvedScope: "Exact-once request-wide sorting and finalization accounting with exact-bound and one-below tests."
 baseline:
   relationship: immediate-base
-  pullRequest: 224
-  branch: docs/issue-187-design
-  commit: e4550df400aa5fda25f55e9d6bee6c23474a60b7
+  pullRequest: 225
+  branch: docs/issue-187-tasks
+  baseBranch: docs/issue-187-design
+  commit: 8fe8553097c169b7bba769c7e7f8fc8e90c97678
+  tree: ddd126df77f481add273aa841aa6fc60efd7c898
+  parentCommit: e4550df400aa5fda25f55e9d6bee6c23474a60b7
   state: open
+  clean: true
+  baseToHeadNumstat: "0+0=0"
+  porcelainStatusSha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 recoveryBaseline:
-  relationship: sibling
+  relationship: sibling-root
   pullRequest: 206
   branch: docs/issue-188-u7-docs
   commit: 5d839bb1ee2550e5d0a6404784baa21121e188fa
+  tree: be251608766fd29680309afb0e2d9a97b36cd20b
   state: open
+  merged: false
+  issue188State: open
+  lineage: "#206 -> #221 -> #222 -> #223 -> #224 -> #225"
+phaseZeroAdmission:
+  observedAt: "2026-09-05T18:20:28Z"
+  issue187:
+    state: open
+    labels:
+      - status:approved
+      - type:bug
+    exactTypeLabelCount: 1
+  noConflictingImplementationPullRequest: true
+  rdd:
+    disposition: disabled/unmanaged
+    global: off
+    cloneLocal: off
+    effective: off
+    source: clone_local
+    revision: sha256:247f9e8823c9d5a6f67058d274ef1ab1df154f5a1682473c7dc778d6323e9ddd
+  attemptLedger:
+    revision: ""
+    bindingRevision: ""
+    objectiveGeneration: 0
+    nextOrdinal: 1
+    cumulativeAttempts: 0
+    cumulativeChangedLines: 0
+    lifetimeAttempts: 0
+    lifetimeChangedLines: 0
+    complete: false
+    decisionRequired: false
+    nextAction: begin
+    resetNeededBeforeA: false
+  candidateA:
+    status: planned
+    projection: base-diff
+    issue: 187
+    branch: fix/issue-187-a-relationship-accounting
+    basePullRequest: 225
+    baseRef: docs/issue-187-tasks
+    baseCommit: 8fe8553097c169b7bba769c7e7f8fc8e90c97678
+    baseTree: ddd126df77f481add273aa841aa6fc60efd7c898
+    headCommit: pending
+    headTree: pending
+    authoredNumstat: pending
+    pathManifest: pending
+    patchSha256: pending
+    focusedOutputSha256: pending
+    cleanupSha256: pending
+    allowlist:
+      - src/services/relationships.ts
+      - test/impact.test.ts
+      - test/relationships.test.ts
+      - test/context-builder.test.ts
+      - openspec/changes/2026-09-05-issue-187-request-work-accounting/tasks.md
+      - openspec/changes/2026-09-05-issue-187-request-work-accounting/chain.md
+      - openspec/changes/2026-09-05-issue-187-request-work-accounting/apply-progress.json
+      - openspec/changes/2026-09-05-issue-187-request-work-accounting/state.yaml
+  nextAcquire:
+    cwd: /home/yail/Documentos/proyects/ast-mcp-server
+    change: 2026-09-05-issue-187-request-work-accounting
+    requestId: issue187-a-acquire-01
+    workUnit: issue187-a-relationship-accounting
+    evidenceGoal: "Prove exact relationship and legacy stage accounting"
+    maxAttempts: 2
+    maxChangedLines: 400
 terminalExclusions:
-  - "Issue #186 and PRs #207-#218 are closed, unmerged, terminal historical evidence only; no code, receipts, correction rounds, ancestry, or review authority may enter #187."
+  - "Issue #186 is closed and PRs #207-#218 are closed/unmerged terminal historical evidence only; no code, receipts, correction rounds, ancestry, or review authority may enter #187."
+  - "Issue #188 remains open/unmerged; its merge and archive are excluded from #187."
 separateIssues:
   - number: 219
     status: open
@@ -151,14 +225,14 @@ reviewBudget:
   slices:
     - id: "#187A"
       scope: "Relationship-stage accounting and focused exact-bound tests."
-      base: "PR #224 at e4550df400aa5fda25f55e9d6bee6c23474a60b7"
+      base: "PR #225 at 8fe8553097c169b7bba769c7e7f8fc8e90c97678"
       targetAuthoredChangedLines: "330-390"
     - id: "#187B"
       scope: "Impact/BFS transactional accounting plus MCP and candidate parity."
       base: "Exact accepted #187A head"
       targetAuthoredChangedLines: "350-400"
-  integrationRule: "#187A starts from exact PR #224 head e4550df; #187B targets exact accepted #187A head; split either slice before apply if forecast or actual exceeds 400."
+  integrationRule: "#187A starts from exact PR #225 head 8fe8553097c169b7bba769c7e7f8fc8e90c97678; #187B targets exact accepted #187A head; split either slice before apply if forecast or actual exceeds 400."
 risks:
   - "The 680-790 authored-line forecast exceeds one 400-line review budget and requires the #187A -> #187B feature-branch chain."
-  - "Base drift from PR #224 commit e4550df requires refreshed probes, forecasts, and clean-diff ancestry checks before apply."
+  - "Base drift from PR #225 commit 8fe8553097c169b7bba769c7e7f8fc8e90c97678 requires refreshed probes, forecasts, and clean-diff ancestry checks before apply."
   - "Stage/item semantics must remain frozen to prevent omitted or duplicate accounting."

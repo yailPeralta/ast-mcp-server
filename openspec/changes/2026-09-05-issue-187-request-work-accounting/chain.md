@@ -2,27 +2,40 @@
 
 ## Authority and immutable boundaries
 
-Issue #187 is open with `status:approved` and `type:bug`. Planning PR #224 is open at exact head `e4550df400aa5fda25f55e9d6bee6c23474a60b7` (tree `fc4df292419279706400ce552b8ba5d55eaafd9b`) and is the immediate base for #187A. OpenSpec is authoritative in hybrid mode; runtime/control-plane mirroring is prohibited. RDD is planned as `disabled/unmanaged`: ordinary policy applies and no receipt, approval, or managed correction claim may be fabricated.
+Issue #187 is open with exactly `status:approved` and `type:bug`. Planning PR #225 is open at exact head `8fe8553097c169b7bba769c7e7f8fc8e90c97678` (tree `ddd126df77f481add273aa841aa6fc60efd7c898`), based on `docs/issue-187-design`, and is the immediate base for #187A. OpenSpec is authoritative in hybrid mode; runtime/control-plane mirroring is prohibited. RDD is `disabled/unmanaged`: ordinary policy applies and no receipt, approval, or managed correction claim may be fabricated.
 
-Terminal #186 and separate unapproved #219/#220 are evidence-only exclusions. No Harness work, apply/mutation feature, new public schema/tool/error/input, or #188 merge/archive may enter either child.
+Recovery U7 PR #206 remains open/unmerged at exact head `5d839bb1ee2550e5d0a6404784baa21121e188fa` (tree `be251608766fd29680309afb0e2d9a97b36cd20b`). The #187 planning lineage is its sibling feature line: #206 → #221 → #222 → #223 → #224 → #225. Terminal issue #186 and PRs #207–#218 are closed/unmerged historical evidence only. Separate #219/#220 are open, unapproved, and excluded; #188 is open/unmerged and its merge/archive stays excluded. No conflicting #187 implementation PR exists. No Harness work, apply/mutation feature, or new public schema/tool/error/input may enter either child.
 
 ```text
-PR #224 docs/issue-187-design @ e4550df
-  └── 📍 #187A fix/issue-187-a-relationship-accounting
-       base = exact PR #224 head e4550df
-       └── 📍 #187B fix/issue-187-b-impact-accounting
-            base = exact accepted #187A head captured before branching
-            └── frozen read-only review → strict verify 9/13
+PR #206 docs/issue-188-u7-docs @ 5d839bb
+  └── #187 planning PRs #221 → #222 → #223 → #224 → #225
+       └── PR #225 docs/issue-187-tasks @ 8fe8553
+            └── 📍 #187A fix/issue-187-a-relationship-accounting
+                 base = exact PR #225 head 8fe8553
+                 └── #187B fix/issue-187-b-impact-accounting
+                      base = exact accepted #187A head captured before branching
+                      └── frozen read-only review → strict verify 9/13
 ```
 
 A child diff containing its parent or foreign paths has the wrong base and must be retargeted/rebased before review. Both children integrate together; rollback order is B then A.
 
+## Phase 0 admission freeze
+
+Observed at `2026-09-05T18:20:28Z` without repository, runtime-ledger, GitHub, or Harness mutation:
+
+- Workspace branch/HEAD: `docs/issue-187-tasks` at exact PR #225 head `8fe8553097c169b7bba769c7e7f8fc8e90c97678`; parent `e4550df400aa5fda25f55e9d6bee6c23474a60b7`.
+- Clean base: tree `ddd126df77f481add273aa841aa6fc60efd7c898`; base-to-HEAD numstat `0+0=0`; empty porcelain-status SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- A branch plan: create `fix/issue-187-a-relationship-accounting` from exact base commit `8fe8553097c169b7bba769c7e7f8fc8e90c97678`; do not retarget to a moving ref.
+- A candidate identity fields: issue `187`; change `2026-09-05-issue-187-request-work-accounting`; projection `base-diff`; base PR/ref/commit/tree as above; planned head branch as above; head commit/tree, authored numstat, exact path manifest, patch SHA-256, focused-output SHA-256, and cleanup SHA-256 remain `pending` until A freeze and MUST be captured from the immutable candidate.
+- Attempt ledger: virgin (`revision=""`, `binding_revision=""`, `objective_generation=0`, `next_ordinal=1`, cumulative/lifetime attempts and changed lines all 0, `complete=false`, `decision_required=false`, `next_action=begin`). Reset before A is neither needed nor authorized.
+- Next root action is the exact A acquire documented below. Only `state: proceed` authorizes the runtime-bearing A work unit; `blocked` or `complete` stops.
+
 ## Budgets and allowlists
 
-| Child | Start → finish                                                      | Exact allowlist                                                                                                                                                                                                                                              | Forecast | Focused/runtime evidence                                                                                                                                         | Rollback                                     |
-| ----- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| A     | Existing undercount → complete relationship/legacy stage accounting | `src/services/relationships.ts`; `test/impact.test.ts`; `test/relationships.test.ts`; `test/context-builder.test.ts`; this change’s three trackers                                                                                                           |  330–390 | `yarn vitest run test/impact.test.ts test/relationships.test.ts test/context-builder.test.ts`; runtime N/A—internal service boundary, public parity belongs to B | Revert A source and paired tests; abandon B. |
-| B     | A accepted → transactional impact and public parity                 | `src/services/impact.ts`; optional proven-needed `src/tools/find_test_candidates.ts`, `src/services/context-builder.ts`; `test/impact.test.ts`; `test/test-candidates.test.ts`; `test/mcp.integration.test.ts`; `test/batch.test.ts`; this change’s trackers |  350–400 | focused suites plus registered MCP/batch tests; no Harness                                                                                                       | Revert B only, then A if full rollback.      |
+| Child | Start → finish                                                      | Exact allowlist                                                                                                                                                                                                                                                   | Forecast | Focused/runtime evidence                                                                                                                                         | Rollback                                     |
+| ----- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| A     | Existing undercount → complete relationship/legacy stage accounting | `src/services/relationships.ts`; `test/impact.test.ts`; `test/relationships.test.ts`; `test/context-builder.test.ts`; this change’s `tasks.md`, `chain.md`, `apply-progress.json`, and `state.yaml`                                                               |  330–390 | `yarn vitest run test/impact.test.ts test/relationships.test.ts test/context-builder.test.ts`; runtime N/A—internal service boundary, public parity belongs to B | Revert A source and paired tests; abandon B. |
+| B     | A accepted → transactional impact and public parity                 | `src/services/impact.ts`; optional proven-needed `src/tools/find_test_candidates.ts`, `src/services/context-builder.ts`; `test/impact.test.ts`; `test/test-candidates.test.ts`; `test/mcp.integration.test.ts`; `test/batch.test.ts`; this change’s four trackers |  350–400 | focused suites plus registered MCP/batch tests; no Harness                                                                                                       | Revert B only, then A if full rollback.      |
 
 Before edits and before freeze, compute authored additions+deletions from the immediate parent. If forecast or actual exceeds 400, stop and split before apply: A1=producer/source/contains, A2=merge/finalization/legacy; B1=neighbors/BFS/transaction, B2=candidate/MCP/batch parity. No `size:exception` is planned.
 

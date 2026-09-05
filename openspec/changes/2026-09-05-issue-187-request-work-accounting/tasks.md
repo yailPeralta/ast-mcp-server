@@ -4,7 +4,7 @@
 
 | Slice | Scope                                                         | Forecast | Immediate base                                       |
 | ----- | ------------------------------------------------------------- | -------: | ---------------------------------------------------- |
-| #187A | relationship producer/merge/finalization/legacy accounting    |  330–390 | PR #224 / `e4550df400aa5fda25f55e9d6bee6c23474a60b7` |
+| #187A | relationship producer/merge/finalization/legacy accounting    |  330–390 | PR #225 / `8fe8553097c169b7bba769c7e7f8fc8e90c97678` |
 | #187B | neighbors/BFS/transaction plus candidate/MCP/JSON-TOON parity |  350–400 | exact accepted #187A head                            |
 
 Decision needed before apply: No
@@ -17,8 +17,8 @@ Hard gate: reforecast each slice before edits; if forecast or actual authored ad
 
 ## Phase 0 — Issue-first authority
 
-- [ ] 0.1 Revalidate issue, base, exclusions, and RDD. **Trace:** process gate for RWA-001..008 + ATC-FAIL. **Files:** read-only Git/GitHub; update only this change’s trackers. **Command/RED:** `gh issue view 187 --json state,labels,url`; `gh pr view 224 --json state,headRefOid`; review-mode status; fail if issue is not open+approved, head ≠`e4550df…`, or RDD is not disabled/unmanaged. **GREEN:** exact authority passes and #186/#219/#220/Harness/apply/new schemas/#188 merge/archive stay excluded. **Rollback:** Phase-0 metadata only.
-- [ ] 0.2 Admit A/B boundaries and frozen vectors. **Trace:** RWA-001-S01, RWA-002-S01/S02. **Files:** `tasks.md`, `chain.md`, `apply-progress.json`. **Command/RED:** numstat immediate-parent allowlists; fail on ambiguous parent, duplicate/reset stage, or forecast >400. **GREEN:** exact parents, vectors, commands, rollback, and ≤400 forecasts; split before apply on overage. **Rollback:** invalid slice plan only.
+- [x] 0.1 Revalidate issue, base, exclusions, and RDD. **Trace:** process gate for RWA-001..008 + ATC-FAIL. **Files:** read-only Git/GitHub; update only this change’s trackers. **Evidence:** at `2026-09-05T18:20:28Z`, #187 was OPEN with exactly `status:approved` + `type:bug`; PR #225 was OPEN at `8fe8553097c169b7bba769c7e7f8fc8e90c97678`, based on `docs/issue-187-design`; U7 PR #206 was OPEN/unmerged at `5d839bb1ee2550e5d0a6404784baa21121e188fa`; #186 and PRs #207–#218 were closed/unmerged; #219/#220 were open and unapproved; #188 was open/unmerged; no #187 implementation PR existed; RDD effective mode was off (`disabled/unmanaged`). **GREEN:** exact authority passed and #186/#219/#220/Harness/apply/new schemas/#188 merge/archive remain excluded. **Rollback:** Phase-0 metadata only.
+- [x] 0.2 Admit A/B boundaries and frozen vectors. **Trace:** RWA-001-S01, RWA-002-S01/S02. **Files:** `tasks.md`, `chain.md`, `apply-progress.json`, `state.yaml`. **Evidence:** clean PR #225 base tree `ddd126df77f481add273aa841aa6fc60efd7c898`, empty-status SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, zero base diff, exact A branch/allowlist/candidate identity fields, and virgin attempt ledger (`revision=""`, ordinal 1, `next_action=begin`). **GREEN:** A=330–390 and B=350–400 remain ≤400; exact parents, vectors, acquire fields, and rollback are frozen; no reset is needed before A. **Rollback:** invalid Phase-0 slice metadata only.
 
 ## Phase A — Relationship accounting
 
