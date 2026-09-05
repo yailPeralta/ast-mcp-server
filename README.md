@@ -46,8 +46,18 @@ Reads can start with a bounded file slice, a compact outline, or exact source on
 - Use `ast_explore` when the question spans discovery and evidence. Its default summary is bounded; use `detail: "context"` for selected source and `detail: "full"` for source plus compiler references.
 - Use `ast_get_outline` for a compact body-free view of a known file without source lines.
 - Use `ast_get_symbol_source` when one declaration or implementation is the required evidence.
-- Use `ast_get_impact` when the exact symbol is known and bounded direct/transitive compiler relationships are needed; it is read-only evidence, not a mutation plan.
-- Use `ast_find_test_candidates` when an exact symbol should map to conservative test candidates. It forces incoming compiler traversal, returns complete relationship paths, and never executes tests.
+- Use `ast_get_impact` when the exact symbol is known and bounded direct/transitive compiler relationships are needed; it is read-only evidence, not a mutation plan. The unmerged #188 recovery candidate adds a request-scoped `coverage` ledger and shared `work` record.
+- Use `ast_find_test_candidates` when an exact symbol should map to conservative test candidates. In the recovery candidate it forces incoming traversal over exactly `reference`, `import`, `export`, `extends`, `implements`, and `call` (never `contains`), returns complete relationship paths, and never executes tests.
+
+> **Recovery status:** This documentation describes an unmerged #188 recovery candidate, not released behavior. Integration remains blocked until approved issues #186 (polymorphic callable authority) and #187 (exact-once request-wide accounting) pass independently. It does not inherit delivery, approval, verification, archive, release, or merge authority from closed #161.
+
+#### Relationship completeness in the recovery candidate
+
+`ast_get_impact` accepts `reference`, `import`, `export`, `extends`, `implements`, `call`, and `contains`. For the root endpoint class, it emits at most 14 requested kind/direction cells: kinds follow that order and each kind orders `incoming` before `outgoing`. A cell is `completed`, `not_applicable`, `unsupported`, or `unfinished`; aggregate precedence is `unfinished` over `unsupported` over `completed` over `not_applicable`.
+
+Only fresh, untruncated, uncancelled, unexhausted evidence whose cells are all `completed` or `not_applicable` is complete. A zero-edge result is `proven_empty` only under those conditions. Unsupported or unfinished work, cancellation, or shared-work exhaustion cannot authorize an empty result: exhaustion returns `work_limit`, while cancellation returns `REQUEST_CANCELLED` without a partial success payload.
+
+Calls remain conservative compiler relationships: exact scoped caller/callee edges are admitted, ambiguity stays unfinished, and #186 still owns final polymorphic callable authority. `contains` is direct named compiler containment only (module → top-level declaration or named owner → direct named child, with incoming as the inverse); statements, parameters, anonymous owners, runtime ownership, and producer-transitive edges are excluded.
 
 `snapshot_state: "fresh"` means that the returned file bytes match the synchronized compiler snapshot. The separate `freshness` object describes the project/session state and preserves causes such as source changes or watcher failure. Neither field means that the project has zero TypeScript diagnostics; use `ast_get_diagnostics` for compiler errors and warnings.
 
@@ -64,7 +74,9 @@ The server exposes evidence labels instead of collapsing every result into an un
 
 Freshness is orthogonal to TypeScript diagnostics. `fresh` means the evidence matches the synchronized snapshot; `pending`, `rebuilding`, `stale`, or `degraded` means the response must not be presented as current compiler evidence. Read tools expose the state, causes (`source_change`, `config_change`, `index_failure`, `watcher_failure`, or `compiler_rebuild`), and bounded `checked_at` timestamp. `ast_get_impact` refuses non-fresh compiler relationships. `ast_explore` returns the state together with `completeness`, `unresolved`, `budget`, and `truncation` metadata rather than silently dropping evidence.
 
-All reads are budgeted. Callers control pagination and, where applicable, `max_bytes`, `reference_limit`, `max_depth`, `max_nodes`, and `max_edges`; responses report the effective limits and whether a record, byte, depth, edge, invocation, or serialization limit truncated the result. A truncated or unresolved result is incomplete evidence, not an empty negative result. `ast_find_test_candidates` follows the same rule: it accepts only fresh, exact compiler-backed impact, emits direct/transitive evidence and bounded relationship IDs, and never executes tests or guesses from filenames alone. Only a complete authoritative traversal may return `candidates: []` with `proven_empty: true`.
+All reads are budgeted. Callers control pagination and, where applicable, `max_bytes`, `reference_limit`, `max_depth`, `max_nodes`, and `max_edges`; responses report effective limits and truncation. The recovery candidate also reports one shared internal work budget. `ast_find_test_candidates` accepts only fresh, exact compiler-backed impact with safe coverage for its six incoming kinds; unsafe coverage, cancellation, or exhausted work fails closed instead of returning candidates or false emptiness.
+
+The candidate is additive: permissive clients keep working, while exact-shape clients must accept `coverage` and `work`. The four JSON/TOON tools retain `output_format` and no universal MCP `outputSchema` is introduced. No persisted-state migration, index rebuild, feature flag, or dependency change is required.
 
 ## Why this helps
 

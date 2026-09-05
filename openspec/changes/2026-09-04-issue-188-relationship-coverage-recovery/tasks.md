@@ -51,8 +51,8 @@ Delivery strategy: auto-chain
 
 - [x] 6.1 Acquire U6; re-author `3af4fe6…`; prove seven-kind/cancellation matrix.
 - [x] 6.2 Run six-file matrix+U1; freeze ≤400 and settle U6.
-- [ ] 6.3 Acquire U7; rewrite `bac52a4…` docs without stale R-01 claims.
-- [ ] 6.4 Run full/package/diff gates; freeze ≤400 and settle U7.
+- [x] 6.3 Re-author `bac52a4…` docs without stale R-01 claims; acquire was explicitly prohibited for this direct unit.
+- [x] 6.4 Run full/package/diff/Harness gates and freeze ≤400; settlement was explicitly prohibited and no settlement authority is claimed.
 
 ## Phase 7 — Independent issues
 

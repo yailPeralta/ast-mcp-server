@@ -14,9 +14,9 @@ The public contract must distinguish a proven empty result from missing evidence
 
 Expose `ast_find_test_candidates` as a read-only MCP tool and admit it to `ast-tool run` as a read step.
 
-The tool resolves an exact symbol in the synchronized TypeScript project and forces bounded incoming traversal. Callers cannot provide an impact graph, direction, relationship filters, or MCP TOON output. A candidate is eligible only when every relationship is fresh, exact, resolved, and compiler-authoritative.
+The unmerged #188 recovery candidate resolves an exact symbol and forces bounded incoming traversal over exactly `reference`, `import`, `export`, `extends`, `implements`, and `call`, in that order. `contains` is excluded from coverage, traversal, classification, and candidate proof. Callers cannot provide an impact graph, direction, or relationship filters. A candidate is eligible only when all six cells are ordered, fresh, exact, resolved, compiler-authoritative, unexhausted, and `completed` or `not_applicable`.
 
-Stale, rebuilding, degraded, truncated, incomplete, unresolved, heuristic, or non-authoritative analysis fails closed with a bounded public error. Only a complete authoritative traversal with no eligible test may return an empty page marked `proven_empty: true`.
+Missing, duplicate, out-of-order, `unsupported`, or `unfinished` coverage and stale, rebuilding, degraded, truncated, unresolved, heuristic, or non-authoritative analysis fail closed with `INCOMPLETE_EVIDENCE`. Shared-work exhaustion returns `work_limit`; cancellation returns `REQUEST_CANCELLED`; neither returns a candidate page. Only complete authoritative six-kind traversal with no eligible test may return `proven_empty: true`.
 
 Pagination applies to deterministic candidate objects, not their evidence. Each returned candidate retains its complete relationship IDs and relationship path. Traversal budgets remain independent from `offset` and `limit`.
 
@@ -42,6 +42,8 @@ The batch runner injects its authoritative `project_root`, rejects conflicts, an
 Remove `ast_find_test_candidates` from MCP registration, the read-batch allowlist, compatibility inventories, and public guidance. The internal resolver and compiler impact service remain available for a later design. Re-run MCP, CLI, package, and inventory gates after rollback.
 
 ## Evidence and verification
+
+> Candidate status: #188 is not merged or released and cannot use closed #161 delivery, approval, verification, archive, release, or merge evidence. Integration remains blocked until approved #186 and #187 pass independently.
 
 - `test/test-candidates.test.ts` proves trust rejection, classification, and whole-candidate pagination.
 - `test/mcp.integration.test.ts` proves the public schema, annotations, errors, and deterministic candidates.
