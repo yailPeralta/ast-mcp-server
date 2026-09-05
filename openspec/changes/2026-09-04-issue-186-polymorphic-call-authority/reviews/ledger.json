@@ -62,13 +62,22 @@
   ],
   "correction": {
     "child": "#186C",
-    "status": "planned",
+    "status": "corrected-awaiting-root-settlement-and-independent-rereview",
+    "branch": "fix/issue-186-c-review-corrections",
     "maxAuthoredChangedLines": 400,
     "forecastAuthoredChangedLines": "260-380",
     "splitRequiredBeforeEdit": false,
     "scope": ["F1 through F5", "F6 cancellation and checkpoint portion only"],
+    "correctedFindings": ["F1", "F2", "F3", "F4", "F5", "F6-cancellation-checkpoints"],
+    "evidence": {
+      "red": "Two unchanged final runs: 3 failing files, 3 failing tests, 96 passing; F1-F6 reviewer assertions reproduced.",
+      "green": "99/99 correction-focused and 122/122 consumer tests passed; full 985/985 plus supervised 2/2 passed after removing ambient GIT_PAGER.",
+      "gates": "typecheck, build, lint, format, test:mcp, package, diff-check, and 6/14 trace passed."
+    },
+    "approval": false,
+    "requiredNext": "Root settlement, then fresh independent scoped re-review of the corrected frozen candidate.",
     "preservedForIssue187": "Exact-once/global work-budget accounting acceptance remains exclusively #187 scope.",
-    "prohibitedInIssue186": "No unbounded or uncheckpointed work is permitted; #186C may add bounded cancellation/checkpoint safety but must not implement #187 charging, sorting, retention, finalization, exact-bound, or one-below accounting.",
+    "prohibitedInIssue186": "No charging, sorting, retention, finalization, exact-bound, or one-below accounting was implemented.",
     "splitTrigger": "Stop before editing and split #186C if the refreshed forecast exceeds 400 authored additions plus deletions."
   },
   "evidenceDisposition": {

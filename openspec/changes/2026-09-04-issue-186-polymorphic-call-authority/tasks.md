@@ -56,7 +56,7 @@ Chain strategy: feature-branch-chain
 
 Correction forecast: **260–380 authored changed lines**, hard maximum **400**, so no pre-edit split is currently required. Stop and specify a split before editing if the refreshed forecast exceeds 400.
 
-- [ ] 5.1 RED all confirmed review findings: F1 cross-file selector convergence collision; F2 `new ctor()` false exact instance method; F3 anonymous IIFE false self-edge; F4 unproven disjointness causing false proven_empty/spine/candidates; F5 unrelated virtual endpoint over-poisoning; F6 uncharged/uncheckpointed global reclassification with cancellation failure and #187 overlap.
-- [ ] 5.2 GREEN/REFACTOR F1–F5 through compiler-proven identity, callable-kind authority, anonymous-owner exclusion, proven endpoint disjointness, and endpoint-local uncertainty.
-- [ ] 5.3 Correct only the cancellation/checkpoint portion of F6 with bounded checkpoints. Preserve exact-once/global work-budget accounting acceptance for #187 and prohibit all unbounded or uncheckpointed work in #186.
+- [x] 5.1 RED all confirmed review findings: F1 cross-file selector convergence collision; F2 `new ctor()` false exact instance method; F3 anonymous IIFE false self-edge; F4 unproven disjointness causing false proven_empty/spine/candidates; F5 unrelated virtual endpoint over-poisoning; F6 uncharged/uncheckpointed global reclassification with cancellation failure and #187 overlap.
+- [x] 5.2 GREEN/REFACTOR F1–F5 through compiler-proven identity, callable-kind authority, anonymous-owner exclusion, proven endpoint disjointness, and endpoint-local uncertainty.
+- [x] 5.3 Correct only the cancellation/checkpoint portion of F6 with bounded checkpoints. Preserve exact-once/global work-budget accounting acceptance for #187 and prohibit all unbounded or uncheckpointed work in #186.
 - [ ] 5.4 Run correction-focused/full/package gates, freeze a new candidate, and return to 4.1–4.3 for fresh settlement/review/acceptance evidence.

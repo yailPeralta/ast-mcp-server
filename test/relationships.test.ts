@@ -4,10 +4,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   collectCompilerCallRelationships,
   collectCompilerRelationships,
+  CompilerImpactWorkTracker,
   createRelationshipEdge,
   type RelationshipEdge,
   type RelationshipEdgeInput,
 } from "../src/services/relationships.js";
+import { createRequestContext } from "../src/services/request-context.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
 const fixtures: ProjectFixture[] = [];
@@ -239,5 +241,45 @@ describe("compiler-backed relationships", () => {
       "reference:target",
     );
     expect(generic.some((edge) => edge.kind === "call")).toBe(false);
+  });
+
+  it("propagates typed cancellation during global incoming reclassification", async () => {
+    const fixture = await createProjectFixture({
+      "src/authority.ts": "export function exact(): void {}\n",
+      "src/use.ts": "export function invoke(callback: () => void): void { callback(); }\n",
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    let firstPassCheckpoints = 0;
+    for (const sourceFile of project.getSourceFiles()) {
+      sourceFile.forEachDescendant(() => firstPassCheckpoints++);
+    }
+    const controller = new AbortController();
+    const requestContext = createRequestContext(controller.signal);
+    const workTracker = new CompilerImpactWorkTracker(100_000);
+    const charge = workTracker.charge.bind(workTracker);
+    workTracker.charge = (_context, count): void => {
+      charge({ signal: new AbortController().signal, checkpoint() {} }, count);
+      firstPassCheckpoints--;
+      if (firstPassCheckpoints === 0) controller.abort();
+    };
+
+    expect(() =>
+      collectCompilerCallRelationships(
+        project,
+        fixture.root,
+        freshness(),
+        {
+          work_tracker: workTracker,
+          authority_root: {
+            file: "src/authority.ts",
+            symbol_path: "exact",
+            selector: "exact@1",
+          },
+          authority_direction: "incoming",
+        },
+        requestContext,
+      ),
+    ).toThrow(expect.objectContaining({ code: "REQUEST_CANCELLED" }));
   });
 });

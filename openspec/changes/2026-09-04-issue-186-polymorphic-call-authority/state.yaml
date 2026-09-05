@@ -7,7 +7,7 @@ planningHome:
   path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority
 nextRecommended: apply
-lastPhase: review-evidence
+lastPhase: apply-correction
 artifactPaths:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/proposal.md
@@ -33,8 +33,8 @@ artifacts:
   reviewLedger: done
 taskProgress:
   total: 20
-  completed: 13
-  pending: 7
+  completed: 16
+  pending: 4
   allComplete: false
 dependencies:
   proposal: all_done
@@ -71,7 +71,7 @@ phase0Admission:
   chain: "#206 5d839bb runtime ancestor -> #211 1fa8a6b immediate base -> #186A working tree"
   workUnitA: "fix/issue-186-a-call-authority; active token authenticated; runtime allowlist in apply-progress.json"
   attemptStatus: "delegated active token supplied; acquire/settle intentionally not executed"
-  nextTask: "Resolve/apply bounded #186C correction, then refreeze, settle, and launch fresh independent review"
+  nextTask: "Root settlement of corrected #186C, then fresh independent scoped re-review"
 reviewBudget:
   forecastAuthoredChangedLines: "300-480"
   forecastChildren: 2
@@ -105,7 +105,9 @@ correction:
   scope: "F1-F5 plus only the cancellation/checkpoint portion of F6"
   issue187Boundary: "Preserve exact-once/global work-budget accounting acceptance for #187; prohibit unbounded or uncheckpointed work in #186."
   originalEvidence: historical-only
-  nextAction: resolve/apply-correction
+  status: corrected-not-approved
+  evidence: "RED twice unchanged; focused 99/99; consumers 122/122; full 985/985 plus supervised 2/2; all package gates passed"
+  nextAction: root-settlement-then-fresh-independent-scoped-rereview
 nextReset:
   required: false
   authorized: false

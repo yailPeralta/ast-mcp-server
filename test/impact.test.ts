@@ -2181,6 +2181,72 @@ describe("scoped exact call relationships", () => {
     expect(unsupported.edges).toEqual([]);
     expect(unsupported.coverage[0]?.status).toBe("unsupported");
   });
+
+  it("keeps file identity, constructed receivers, anonymous IIFEs, and disjoint classes fail closed", async () => {
+    const fixture = await createProjectFixture({
+      "src/left.ts": "export class Same { run(): void {} }\n",
+      "src/right.ts": "export class Same { run(): void {} }\n",
+      "src/reviewer.ts": [
+        'import { Same as Left } from "./left.js";',
+        'import { Same as Right } from "./right.js";',
+        "export class Base { private brand = 0; method(): void {} }",
+        "export class Child extends Base { override method(): void {} }",
+        "export class Unrelated { private brand = 0; method(): void {} }",
+        "export function crossFile(flag: boolean): void {",
+        "  (flag ? new Left() : new Right()).run();",
+        "}",
+        "export function constructed(ctor: typeof Base): void {",
+        "  (new ctor()).method();",
+        "}",
+        "export function anonymous(): void {",
+        "  (() => {})();",
+        "  (function () {})();",
+        "}",
+        "export function unrelated(base: Base): void { base.method(); }",
+      ].join("\n"),
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const resolver = createCompilerRelationshipResolver(project, fixture.root, freshness);
+    const call = (symbol: string, direction: "incoming" | "outgoing" = "outgoing") =>
+      resolver.edgesFor(
+        resolveImpactRoot(project, fixture.root, rootRequest(symbol, "src/reviewer.ts")),
+        {
+          direction,
+          relationship_kinds: ["call"],
+          max_edges: 30,
+          max_work_items: 100_000,
+          allow_provisional_call: true,
+        },
+      );
+
+    const crossFile = call("crossFile");
+    expect
+      .soft(
+        crossFile.edges.filter(({ target }) => target.symbol_path.endsWith(".run")),
+        "F1 file plus selector identity",
+      )
+      .toEqual([]);
+    expect.soft(crossFile.coverage[0]?.status, "F1 unfinished coverage").toBe("unfinished");
+
+    const constructed = call("constructed");
+    expect
+      .soft(
+        constructed.edges.filter(({ target }) => target.symbol_path === "Base.method"),
+        "F2 new ctor receiver",
+      )
+      .toEqual([]);
+    expect.soft(constructed.coverage[0]?.status, "F2 unfinished coverage").toBe("unfinished");
+
+    const anonymous = call("anonymous");
+    expect.soft(anonymous.edges, "F3 anonymous IIFE self edges").toEqual([]);
+    expect.soft(anonymous.coverage[0]?.status, "F3 unfinished coverage").toBe("unfinished");
+
+    const disjoint = call("Unrelated.method", "incoming");
+    expect.soft(disjoint.edges, "F5 unrelated virtual edge").toEqual([]);
+    expect.soft(disjoint.coverage[0]?.status, "F5 completed coverage").toBe("completed");
+    expect.soft(disjoint.incomplete, "F5 endpoint-local completeness").toBe(false);
+  });
 });
 
 function sameEndpoint(

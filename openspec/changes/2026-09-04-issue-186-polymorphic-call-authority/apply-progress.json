@@ -1,7 +1,7 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-186-polymorphic-call-authority",
-  "stage": "review-changes-requested-awaiting-bounded-correction",
+  "stage": "correction-candidate-ready-awaiting-root-settlement-and-rereview",
   "delivery": {
     "strategy": "feature-branch-chain",
     "deliveryStrategy": "auto-chain",
@@ -87,7 +87,7 @@
       "resetNeeded": false
     },
     "rootInstruction": "Resolve and apply bounded #186C correction, then refreeze, settle, and obtain fresh independent read-only review; this delegated actor did not acquire or settle.",
-    "activeTokenDigest": "sha256:fee71c846efa1dba017caaa2733d3d74e341cc8489d0af0056eb5b30623f586c",
+    "activeTokenDigest": "sha256:9e93b0ea6fa70792dc809c358d6f25e5566e80efb8f42c5edfb54f4a614770c6",
     "baseTree": "1b3268b531c59c52a4d1be205018d066517c4a08",
     "baselineStatusSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "baselineProcessSha256": "b170c0f357b5231146347bc1d446aae8ab212e4df770f3969764a35ed1edc72a"
@@ -110,6 +110,12 @@
       "focusedTest": "HISTORICAL ONLY after review invalidation: PASS 119/119 MCP+spine+candidate+impact+relationships; full 982/982 plus supervised 2/2",
       "runtimeHarness": "PASS: yarn test:mcp stdio smoke; lifecycle/CLI/errors/package smoke also passed; Harness N/A by prohibition",
       "rollbackBoundary": "Revert only B consumer-parity runtime/test changes and compact #186 metadata"
+    },
+    {
+      "tasks": ["5.1", "5.2", "5.3"],
+      "focusedTest": "PASS: correction 99/99; consumers 122/122; full 985/985 plus supervised 2/2",
+      "runtimeHarness": "PASS: yarn test:mcp stdio smoke; Harness N/A by explicit prohibition",
+      "rollbackBoundary": "Revert only C changes in relationships.ts, reviewer fixtures, and compact #186 metadata"
     }
   ],
   "workUnits": [
@@ -183,15 +189,22 @@
     {
       "id": "C",
       "name": "Bounded review correction",
-      "status": "planned",
-      "branch": null,
+      "status": "corrected-awaiting-root-settlement-and-independent-rereview",
+      "branch": "fix/issue-186-c-review-corrections",
       "budget": "260-380; hard maximum 400",
       "base": "invalidated B candidate 8fe0e84a241be7e293176afefe86c6e9941a86ed",
       "issueLinkage": ["Fixes #186", "Refs #188"],
       "scope": ["F1", "F2", "F3", "F4", "F5", "F6 cancellation/checkpoint portion only"],
       "accountingBoundary": "Preserve exact-once/global work-budget accounting acceptance for #187; prohibit unbounded or uncheckpointed work in #186.",
       "splitDecision": "No split currently required; stop and specify a split before editing if refreshed forecast exceeds 400 authored lines.",
-      "candidate": null,
+      "candidate": {
+        "approval": false,
+        "correctedFindings": ["F1", "F2", "F3", "F4", "F5", "F6-cancellation-checkpoints"],
+        "focused": "99/99",
+        "consumers": "122/122",
+        "full": "985/985 plus supervised 2/2",
+        "requiredNext": "root settlement then fresh independent scoped re-review"
+      },
       "rollback": "Revert only C correction code, tests, and #186 evidence updates."
     }
   ],
@@ -259,17 +272,17 @@
     {
       "id": "5.1",
       "name": "RED six confirmed review findings",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "id": "5.2",
       "name": "GREEN REFACTOR F1 through F5",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "id": "5.3",
       "name": "Correct bounded cancellation checkpoints without issue 187 accounting",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "id": "5.4",
@@ -279,20 +292,22 @@
   ],
   "taskProgress": {
     "total": 20,
-    "completed": 13,
-    "pending": 7,
+    "completed": 16,
+    "pending": 4,
     "allComplete": false
   },
   "tdd": {
     "receiptStatus": "historical-only; invalidated candidate evidence cannot approve #186C",
-    "correctionCycle": "pending new RED/GREEN/REFACTOR for tasks 5.1-5.4",
+    "correctionCycle": "tasks 5.1-5.3 complete; 5.4 awaits root settlement and fresh independent re-review",
     "red": [
       "A: two unchanged runs failed 3 defect tests with 62 controls passing",
-      "B: two unchanged runs failed private-spine authority with ambiguity correctly unfinished; sha256 a479a8ed047e09733a4e7b906b6bf68bca86468fa076f591bcb58d10643ac509 and eaf6c767444aa7c40919eac87609cb755bc0265cce85ef8c9389f94f182ee9c2"
+      "B: two unchanged runs failed private-spine authority with ambiguity correctly unfinished; sha256 a479a8ed047e09733a4e7b906b6bf68bca86468fa076f591bcb58d10643ac509 and eaf6c767444aa7c40919eac87609cb755bc0265cce85ef8c9389f94f182ee9c2",
+      "C: two unchanged final runs failed 3 reviewer fixture tests with 96 controls passing and all F1-F6 assertions reproduced"
     ],
-    "green": ["A focused 65/65", "B focused parity 1/1 and typecheck passed"],
+    "green": ["A focused 65/65", "B focused parity 1/1 and typecheck passed", "C focused 99/99"],
     "refactored": [
-      "B focused 119/119; full 982/982 plus supervised 2/2; full output sha256 43dd86dff69b1be2ca75c9841c491ab7a0b2c08b4cf141ff253c10da88203a65"
+      "B focused 119/119; full 982/982 plus supervised 2/2; full output sha256 43dd86dff69b1be2ca75c9841c491ab7a0b2c08b4cf141ff253c10da88203a65",
+      "C consumers 122/122; full 985/985 plus supervised 2/2; typecheck/build/lint/format/MCP/package passed"
     ]
   },
   "receiptPlan": {
@@ -340,7 +355,7 @@
       "Exact acceptance boundary": "3.2-3.3 -> 3.4-4.2"
     },
     "activeRed": [],
-    "status": "historical mapping only; correction evidence pending after CHANGES_REQUESTED"
+    "status": "6/6 requirements and 14/14 scenarios mapped; correction tests green; independent re-review pending"
   },
   "independentReview": {
     "artifact": "reviews/ledger.json",
@@ -370,7 +385,7 @@
     "Any child over 400 authored lines requires replanning rather than a size exception."
   ],
   "nextRecommended": "apply",
-  "nextAction": "resolve/apply #186C bounded correction",
+  "nextAction": "root settlement then fresh independent scoped re-review of corrected #186C",
   "nextReset": {
     "required": false,
     "authorized": false,
@@ -382,5 +397,5 @@
     "workUnit": "issue186-c-review-correction",
     "maxChangedLines": 400
   },
-  "updatedAt": "2026-09-05T14:24:46Z"
+  "updatedAt": "2026-09-05T14:50:51Z"
 }

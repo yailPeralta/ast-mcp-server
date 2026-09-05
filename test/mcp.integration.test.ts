@@ -1068,6 +1068,72 @@ export function formatValue(value: number): string { return String(value); }
     });
   });
 
+  it("denies proven emptiness for callable parameters and ambient call sites", async () => {
+    await fixture.write("src/authority.ts", "export function exact(): void {}\n");
+    await fixture.write(
+      "src/external.d.ts",
+      'declare module "external" { export function imported(): void; }\n',
+    );
+    await fixture.write(
+      "src/uncertain.ts",
+      [
+        'import { imported } from "external";',
+        "declare function ambient(): void;",
+        "export function parameter(callback: () => void): void { callback(); }",
+        "export function external(): void { ambient(); imported(); }",
+      ].join("\n"),
+    );
+    clearProjectSessions();
+
+    const impact = structured(
+      await client.callTool({
+        name: "ast_get_impact",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/authority.ts",
+          symbol_path: "exact",
+          direction: "incoming",
+          relationship_kinds: ["call"],
+          max_depth: 1,
+          max_nodes: 10,
+          max_edges: 10,
+        },
+      }),
+    );
+    expect(impact).toMatchObject({ edges: [], incomplete: true });
+    expect(impact.coverage).toEqual([
+      { kind: "call", direction: "incoming", endpoint_class: "symbol", status: "unfinished" },
+    ]);
+
+    const spine = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/authority.ts",
+          symbol_path: "exact",
+          call_spines: { direction: "incoming" },
+        },
+      }),
+    );
+    expect(spine).toMatchObject({
+      call_spines: {
+        paths: [],
+        incomplete: true,
+        authority_state: "incomplete",
+        empty_proven: false,
+      },
+    });
+    expect(
+      publicFailure(
+        await callCandidates(client, fixture, {
+          file_path: "src/authority.ts",
+          symbol_path: "exact",
+        }),
+      ),
+    ).toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
+  });
+
   it("publishes the seven-kind root-class matrix with JSON, TOON, and MCP schema parity", async () => {
     await fixture.write(
       "src/matrix-deps.ts",
