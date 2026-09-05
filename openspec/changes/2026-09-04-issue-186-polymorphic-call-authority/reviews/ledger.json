@@ -1,0 +1,79 @@
+{
+  "schema": "issue-186-independent-review-ledger/v1",
+  "change": "2026-09-04-issue-186-polymorphic-call-authority",
+  "reviewKind": "fresh-independent-read-only-adversarial",
+  "authority": {
+    "rddMode": "disabled/unmanaged",
+    "deliveryAuthority": false,
+    "receipt": null,
+    "approval": false,
+    "judgmentDay": false,
+    "excludedPriorAuthority": "Issue #161 Judgment, lineage, receipts, approval, and settlement"
+  },
+  "target": {
+    "repository": "/home/yail/Documentos/proyects/ast-mcp-server",
+    "branch": "fix/issue-186-b-consumer-parity",
+    "base": "1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11",
+    "baseTree": "1b3268b531c59c52a4d1be205018d066517c4a08",
+    "head": "8fe0e84a241be7e293176afefe86c6e9941a86ed",
+    "headTree": "3335d99fe6f5ef8fcffca71d30fcdf48894eae82",
+    "patchSha256": "sha256:e48b0c1216f84d181ec0e8695ead7a75a61afbe34a306eaf0e0296a3fbab7e8b",
+    "cleanupSha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "frozen": true
+  },
+  "verdict": "CHANGES_REQUESTED",
+  "candidate": {
+    "valid": false,
+    "invalidatedBy": ["F1", "F2", "F3", "F4", "F5", "F6"],
+    "approval": false,
+    "task4_2Complete": false
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "status": "confirmed",
+      "summary": "cross-file selector convergence collision"
+    },
+    {
+      "id": "F2",
+      "status": "confirmed",
+      "summary": "`new ctor()` false exact instance method"
+    },
+    {
+      "id": "F3",
+      "status": "confirmed",
+      "summary": "anonymous IIFE false self-edge"
+    },
+    {
+      "id": "F4",
+      "status": "confirmed",
+      "summary": "unproven disjointness causing false proven_empty/spine/candidates"
+    },
+    {
+      "id": "F5",
+      "status": "confirmed",
+      "summary": "unrelated virtual endpoint over-poisoning"
+    },
+    {
+      "id": "F6",
+      "status": "confirmed",
+      "summary": "uncharged/uncheckpointed global reclassification with cancellation failure and #187 overlap"
+    }
+  ],
+  "correction": {
+    "child": "#186C",
+    "status": "planned",
+    "maxAuthoredChangedLines": 400,
+    "forecastAuthoredChangedLines": "260-380",
+    "splitRequiredBeforeEdit": false,
+    "scope": ["F1 through F5", "F6 cancellation and checkpoint portion only"],
+    "preservedForIssue187": "Exact-once/global work-budget accounting acceptance remains exclusively #187 scope.",
+    "prohibitedInIssue186": "No unbounded or uncheckpointed work is permitted; #186C may add bounded cancellation/checkpoint safety but must not implement #187 charging, sorting, retention, finalization, exact-bound, or one-below accounting.",
+    "splitTrigger": "Stop before editing and split #186C if the refreshed forecast exceeds 400 authored additions plus deletions."
+  },
+  "evidenceDisposition": {
+    "originalRedGreenReceipts": "historical-only",
+    "priorGateReceipts": "historical-only",
+    "requiredNext": "Resolve and apply #186C with new RED/GREEN/REFACTOR and candidate-bound gates, then obtain a fresh independent read-only review."
+  }
+}

@@ -22,10 +22,11 @@ recovery U7 PR #206 @ 5d839bb
 
 Total forecast is 300–480 authored changed lines, high risk; Feature Branch Chain is mandatory, with each child ≤400 lines and approximately ≤60 review minutes. A starts from PR #211, retaining PR #206 as its runtime ancestor, and ends with compiler-level authority and scoped producer proof. B starts from A and ends with public/consumer parity, candidate-bound evidence, and final #186 review. No size exception.
 
-| Child | Planned branch                     | Immediate base                                             | Issue linkage             | Allowlist                                                                                   | Rollback                     |
-| ----- | ---------------------------------- | ---------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------- |
-| A     | `fix/issue-186-a-call-authority`   | PR #211 / `1fa8a6b` (runtime ancestor PR #206 / `5d839bb`) | `Refs #186`, `Refs #188`  | `src/services/relationships.ts`, `test/impact.test.ts`, `test/relationships.test.ts`        | revert only A files/behavior |
-| B     | `test/issue-186-b-consumer-parity` | #186A branch/candidate                                     | `Fixes #186`, `Refs #188` | `src/services/relationships.ts`, `test/mcp.integration.test.ts`, `test/call-spines.test.ts` | revert only B parity changes |
+| Child | Planned branch                    | Immediate base                                             | Issue linkage             | Allowlist                                                                                   | Rollback                     |
+| ----- | --------------------------------- | ---------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------- |
+| A     | `fix/issue-186-a-call-authority`  | PR #211 / `1fa8a6b` (runtime ancestor PR #206 / `5d839bb`) | `Refs #186`, `Refs #188`  | `src/services/relationships.ts`, `test/impact.test.ts`, `test/relationships.test.ts`        | revert only A files/behavior |
+| B     | `fix/issue-186-b-consumer-parity` | #186A branch/candidate                                     | `Fixes #186`, `Refs #188` | `src/services/relationships.ts`, `test/mcp.integration.test.ts`, `test/call-spines.test.ts` | revert only B parity changes |
+| C     | pending correction branch         | invalidated B at `8fe0e84`                                 | `Fixes #186`, `Refs #188` | F1–F5 plus only the cancellation/checkpoint portion of F6; exact paths freeze before edit   | revert only C correction     |
 
 The open chain is clean and immediate-parented: #207 targets #206, #208 targets #207, #209 targets #208, and #210 targets #209; their changed-line totals are respectively 295, 187, 179, and 288 before this Phase 0 metadata update. No other open PR claims the #186 callable-authority implementation. A must target #211, not #206 directly; an A diff showing planning or recovery ancestors, or B showing A changes, has the wrong base and must be retargeted/rebased before review. `main` and closed #161 Judgment authority are not reusable bases or evidence.
 
@@ -103,6 +104,12 @@ Harness is deliberately `N/A` because this change prohibits Harness inspection/e
 ## Independent #186 review
 
 Recheck RDD immediately before review. If disabled, record `disabled/unmanaged`, fabricate no receipt, and use ordinary policy plus a fresh independent read-only adversarial inspection of exactly `5d839bb..#186B` limited to the two allowlists, requirements 6/14, candidate hashes, causal severity, and #187 exclusion. If enabled, route only through native review v2 `next_transition` and require a receipt bound to the same #186 tree/paths/evidence. The reviewer may not edit. Any finding-induced edit creates a new candidate and invalidates prior review. Old #161 Judgment is never a reviewer, lineage, or authority source.
+
+## Frozen review result and correction boundary
+
+The fresh independent read-only review froze base `1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11`, HEAD `8fe0e84a241be7e293176afefe86c6e9941a86ed`, and patch `sha256:e48b0c1216f84d181ec0e8695ead7a75a61afbe34a306eaf0e0296a3fbab7e8b`. Its verdict is `CHANGES_REQUESTED`; task 4.2 remains incomplete, the candidate is invalidated, and no approval or receipt exists. This is fresh #186 ordinary-policy evidence under `disabled/unmanaged`, not old #161 Judgment authority.
+
+One new #186C correction child owns F1–F5 and only the cancellation/checkpoint portion of F6. Forecast: 260–380 authored changed lines, maximum 400; no split is currently required. If a refreshed pre-edit forecast exceeds 400, stop and specify a split before editing. Exact-once/global work-budget accounting acceptance remains exclusively #187 scope, while #186C must prohibit unbounded or uncheckpointed work. Original RED/GREEN and gate receipts remain historical only and cannot validate the corrected candidate.
 
 ## Requirement/scenario trace — 6/14
 

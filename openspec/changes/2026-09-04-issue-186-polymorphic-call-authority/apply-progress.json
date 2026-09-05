@@ -1,7 +1,7 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-186-polymorphic-call-authority",
-  "stage": "b-candidate-ready-awaiting-root-settlement",
+  "stage": "review-changes-requested-awaiting-bounded-correction",
   "delivery": {
     "strategy": "feature-branch-chain",
     "deliveryStrategy": "auto-chain",
@@ -61,7 +61,7 @@
     ]
   },
   "phase0Admission": {
-    "status": "active-token-authenticated-a-candidate-ready",
+    "status": "frozen-b-review-changes-requested-candidate-invalidated",
     "rddMode": "disabled/unmanaged",
     "conflictingCallableAuthorityPullRequest": null,
     "issueEvidence": {
@@ -86,7 +86,7 @@
       "nextAction": "begin",
       "resetNeeded": false
     },
-    "rootInstruction": "Settle frozen B, then launch independent read-only review; this delegated actor did not acquire or settle.",
+    "rootInstruction": "Resolve and apply bounded #186C correction, then refreeze, settle, and obtain fresh independent read-only review; this delegated actor did not acquire or settle.",
     "activeTokenDigest": "sha256:fee71c846efa1dba017caaa2733d3d74e341cc8489d0af0056eb5b30623f586c",
     "baseTree": "1b3268b531c59c52a4d1be205018d066517c4a08",
     "baselineStatusSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -101,13 +101,13 @@
     },
     {
       "tasks": ["0.3", "1.1", "1.2", "1.3", "2.1", "2.2", "2.3"],
-      "focusedTest": "PASS: 65/65 impact+relationships; 103/103 with call-spines+MCP",
+      "focusedTest": "HISTORICAL ONLY after review invalidation: PASS 65/65 impact+relationships; 103/103 with call-spines+MCP",
       "runtimeHarness": "PASS: yarn test:mcp stdio smoke; Harness N/A by prohibition",
       "rollbackBoundary": "Revert only A runtime allowlist and compact #186 metadata; B remains pending"
     },
     {
       "tasks": ["3.1", "3.2", "3.3", "3.4"],
-      "focusedTest": "PASS: 119/119 MCP+spine+candidate+impact+relationships; full 982/982 plus supervised 2/2",
+      "focusedTest": "HISTORICAL ONLY after review invalidation: PASS 119/119 MCP+spine+candidate+impact+relationships; full 982/982 plus supervised 2/2",
       "runtimeHarness": "PASS: yarn test:mcp stdio smoke; lifecycle/CLI/errors/package smoke also passed; Harness N/A by prohibition",
       "rollbackBoundary": "Revert only B consumer-parity runtime/test changes and compact #186 metadata"
     }
@@ -155,7 +155,7 @@
     {
       "id": "B",
       "name": "MCP, call-spine, and candidate parity",
-      "status": "candidate-ready-awaiting-root-settlement",
+      "status": "invalidated-by-independent-review",
       "branch": "fix/issue-186-b-consumer-parity",
       "budget": "80-160",
       "base": "PR #212 / a2d3fbca40cb2caa0bdc58d3238428180d65d5f7",
@@ -170,8 +170,29 @@
         "acquire": "issue186-b-acquire-a1",
         "settle": "issue186-b-settle-a1"
       },
-      "candidate": null,
+      "candidate": {
+        "valid": false,
+        "reviewBase": "1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11",
+        "head": "8fe0e84a241be7e293176afefe86c6e9941a86ed",
+        "headTree": "3335d99fe6f5ef8fcffca71d30fcdf48894eae82",
+        "patchSha256": "sha256:e48b0c1216f84d181ec0e8695ead7a75a61afbe34a306eaf0e0296a3fbab7e8b",
+        "verdict": "CHANGES_REQUESTED"
+      },
       "rollback": "Revert only B global-collector and public consumer parity changes."
+    },
+    {
+      "id": "C",
+      "name": "Bounded review correction",
+      "status": "planned",
+      "branch": null,
+      "budget": "260-380; hard maximum 400",
+      "base": "invalidated B candidate 8fe0e84a241be7e293176afefe86c6e9941a86ed",
+      "issueLinkage": ["Fixes #186", "Refs #188"],
+      "scope": ["F1", "F2", "F3", "F4", "F5", "F6 cancellation/checkpoint portion only"],
+      "accountingBoundary": "Preserve exact-once/global work-budget accounting acceptance for #187; prohibit unbounded or uncheckpointed work in #186.",
+      "splitDecision": "No split currently required; stop and specify a split before editing if refreshed forecast exceeds 400 authored lines.",
+      "candidate": null,
+      "rollback": "Revert only C correction code, tests, and #186 evidence updates."
     }
   ],
   "tasks": [
@@ -234,15 +255,37 @@
       "id": "4.3",
       "name": "Validate 6 of 6 requirements and 14 of 14 scenarios then hand off to issue 187",
       "status": "pending"
+    },
+    {
+      "id": "5.1",
+      "name": "RED six confirmed review findings",
+      "status": "pending"
+    },
+    {
+      "id": "5.2",
+      "name": "GREEN REFACTOR F1 through F5",
+      "status": "pending"
+    },
+    {
+      "id": "5.3",
+      "name": "Correct bounded cancellation checkpoints without issue 187 accounting",
+      "status": "pending"
+    },
+    {
+      "id": "5.4",
+      "name": "Run correction gates freeze and fresh review",
+      "status": "pending"
     }
   ],
   "taskProgress": {
-    "total": 16,
+    "total": 20,
     "completed": 13,
-    "pending": 3,
+    "pending": 7,
     "allComplete": false
   },
   "tdd": {
+    "receiptStatus": "historical-only; invalidated candidate evidence cannot approve #186C",
+    "correctionCycle": "pending new RED/GREEN/REFACTOR for tasks 5.1-5.4",
     "red": [
       "A: two unchanged runs failed 3 defect tests with 62 controls passing",
       "B: two unchanged runs failed private-spine authority with ambiguity correctly unfinished; sha256 a479a8ed047e09733a4e7b906b6bf68bca86468fa076f591bcb58d10643ac509 and eaf6c767444aa7c40919eac87609cb755bc0265cce85ef8c9389f94f182ee9c2"
@@ -296,7 +339,28 @@
       "Ambiguity reaches consumers": "3.2-3.3 -> 3.4",
       "Exact acceptance boundary": "3.2-3.3 -> 3.4-4.2"
     },
-    "activeRed": []
+    "activeRed": [],
+    "status": "historical mapping only; correction evidence pending after CHANGES_REQUESTED"
+  },
+  "independentReview": {
+    "artifact": "reviews/ledger.json",
+    "kind": "fresh-independent-read-only-adversarial",
+    "rddMode": "disabled/unmanaged",
+    "frozenBase": "1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11",
+    "frozenHead": "8fe0e84a241be7e293176afefe86c6e9941a86ed",
+    "verdict": "CHANGES_REQUESTED",
+    "approval": false,
+    "candidateValid": false,
+    "task4_2Complete": false,
+    "confirmedFindings": [
+      "F1 cross-file selector convergence collision",
+      "F2 `new ctor()` false exact instance method",
+      "F3 anonymous IIFE false self-edge",
+      "F4 unproven disjointness causing false proven_empty/spine/candidates",
+      "F5 unrelated virtual endpoint over-poisoning",
+      "F6 uncharged/uncheckpointed global reclassification with cancellation failure and #187 overlap"
+    ],
+    "priorAuthority": "No old #161 Judgment, lineage, receipt, approval, or settlement is reused."
   },
   "risks": [
     "False exact virtual dispatch violates compiler authority.",
@@ -306,5 +370,17 @@
     "Any child over 400 authored lines requires replanning rather than a size exception."
   ],
   "nextRecommended": "apply",
-  "updatedAt": "2026-09-05T03:47:59Z"
+  "nextAction": "resolve/apply #186C bounded correction",
+  "nextReset": {
+    "required": false,
+    "authorized": false,
+    "requestId": null
+  },
+  "nextAcquire": {
+    "requiredBeforeRuntimeCorrection": true,
+    "status": "parent-owned; not executed by review-evidence recorder",
+    "workUnit": "issue186-c-review-correction",
+    "maxChangedLines": 400
+  },
+  "updatedAt": "2026-09-05T14:24:46Z"
 }

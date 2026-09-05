@@ -7,7 +7,7 @@ planningHome:
   path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority
 nextRecommended: apply
-lastPhase: apply
+lastPhase: review-evidence
 artifactPaths:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/proposal.md
@@ -20,6 +20,8 @@ artifactPaths:
   applyProgress:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/apply-progress.json
   verifyReport: []
+  reviewLedger:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/reviews/ledger.json
 artifacts:
   exploration: done
   proposal: done
@@ -28,10 +30,11 @@ artifacts:
   tasks: done
   applyProgress: done
   verifyReport: missing
+  reviewLedger: done
 taskProgress:
-  total: 16
+  total: 20
   completed: 13
-  pending: 3
+  pending: 7
   allComplete: false
 dependencies:
   proposal: all_done
@@ -63,15 +66,52 @@ persistence:
   mirrorStatus: skipped
   mirrorReason: "Runtime/control-plane edits are prohibited; only the authorized OpenSpec #186 change directory was written."
 phase0Admission:
-  status: active-token-authenticated-b-candidate-ready
+  status: frozen-b-review-changes-requested-candidate-invalidated
   authority: "#186 type:bug and #188 type:chore approved; #187 separate; RDD disabled/unmanaged; no conflicting implementation PR"
   chain: "#206 5d839bb runtime ancestor -> #211 1fa8a6b immediate base -> #186A working tree"
   workUnitA: "fix/issue-186-a-call-authority; active token authenticated; runtime allowlist in apply-progress.json"
   attemptStatus: "delegated active token supplied; acquire/settle intentionally not executed"
-  nextTask: "Root settles frozen B, then launches independent review"
+  nextTask: "Resolve/apply bounded #186C correction, then refreeze, settle, and launch fresh independent review"
 reviewBudget:
   forecastAuthoredChangedLines: "300-480"
   forecastChildren: 2
   maxAuthoredChangedLinesPerChild: 400
   splitRule: "Auto-chain two children: A descriptor/classifier/scoped producers, then B MCP/relationship/spine/candidate parity."
   sizeException: false
+  correctionForecastAuthoredChangedLines: "260-380"
+  correctionMaxAuthoredChangedLines: 400
+  correctionSplitRequiredBeforeEdit: false
+  correctionSplitTrigger: "Stop and specify a split before editing if the refreshed forecast exceeds 400 authored additions plus deletions."
+independentReview:
+  artifact: reviews/ledger.json
+  kind: fresh-independent-read-only-adversarial
+  rddMode: disabled/unmanaged
+  frozenBase: 1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11
+  frozenHead: 8fe0e84a241be7e293176afefe86c6e9941a86ed
+  verdict: CHANGES_REQUESTED
+  candidateValid: false
+  approval: false
+  task4_2Complete: false
+  confirmedFindings:
+    - "F1 cross-file selector convergence collision"
+    - "F2 `new ctor()` false exact instance method"
+    - "F3 anonymous IIFE false self-edge"
+    - "F4 unproven disjointness causing false proven_empty/spine/candidates"
+    - "F5 unrelated virtual endpoint over-poisoning"
+    - "F6 uncharged/uncheckpointed global reclassification with cancellation failure and #187 overlap"
+  priorAuthority: "No old #161 Judgment, lineage, receipt, approval, or settlement is reused."
+correction:
+  child: "#186C"
+  scope: "F1-F5 plus only the cancellation/checkpoint portion of F6"
+  issue187Boundary: "Preserve exact-once/global work-budget accounting acceptance for #187; prohibit unbounded or uncheckpointed work in #186."
+  originalEvidence: historical-only
+  nextAction: resolve/apply-correction
+nextReset:
+  required: false
+  authorized: false
+  requestId: null
+nextAcquire:
+  requiredBeforeRuntimeCorrection: true
+  status: parent-owned-not-executed
+  workUnit: issue186-c-review-correction
+  maxChangedLines: 400
