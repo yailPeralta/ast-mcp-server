@@ -2101,13 +2101,16 @@ function isVirtualCallableMember(node: Node): boolean {
   );
 }
 
-function isAnonymousCallable(node: Node): boolean {
-  return Node.isArrowFunction(node) || (Node.isFunctionExpression(node) && !node.getName());
+function isUnaddressableCallable(node: Node): boolean {
+  return Node.isArrowFunction(node) || Node.isFunctionExpression(node);
 }
 
 function isCompilerLibraryDeclaration(node: Node): boolean {
-  const baseName = path.basename(node.getSourceFile().getFilePath());
-  return baseName.startsWith("lib.") && baseName.endsWith(".d.ts");
+  const sourceFile = node.getSourceFile();
+  return node
+    .getProject()
+    .getProgram()
+    .compilerObject.isSourceFileDefaultLibrary(sourceFile.compilerNode);
 }
 
 function locatedCallTarget(projectRoot: string, declaration: Node): LocatedSymbol | undefined {
@@ -2116,7 +2119,7 @@ function locatedCallTarget(projectRoot: string, declaration: Node): LocatedSymbo
   let targetNode = Node.isConstructorDeclaration(owner)
     ? owner.getFirstAncestorByKind(SyntaxKind.ClassDeclaration)
     : owner;
-  if (targetNode && isAnonymousCallable(targetNode)) {
+  if (targetNode && isUnaddressableCallable(targetNode)) {
     return undefined;
   }
   if (
@@ -2183,19 +2186,69 @@ function callableContainerType(node: Node): Type | undefined {
   return declared.getConstructSignatures()[0]?.getReturnType() ?? declared;
 }
 
+function nominalBrandDeclarations(node: Node): Node[] {
+  const brands: Node[] = [];
+  let current = Node.isClassDeclaration(node)
+    ? node
+    : node.getFirstAncestorByKind(SyntaxKind.ClassDeclaration);
+  while (current) {
+    for (const member of current.getMembers()) {
+      if (Node.isStaticable(member) && member.isStatic()) continue;
+      const name = (member.compilerNode as { name?: { kind: SyntaxKind } }).name;
+      if (
+        name?.kind === SyntaxKind.PrivateIdentifier ||
+        (Node.isModifierable(member) &&
+          (member.hasModifier(SyntaxKind.PrivateKeyword) ||
+            member.hasModifier(SyntaxKind.ProtectedKeyword)))
+      ) {
+        brands.push(member);
+      }
+      if (Node.isConstructorDeclaration(member)) {
+        brands.push(
+          ...member
+            .getParameters()
+            .filter(
+              (parameter) =>
+                parameter.hasModifier(SyntaxKind.PrivateKeyword) ||
+                parameter.hasModifier(SyntaxKind.ProtectedKeyword),
+            ),
+        );
+      }
+    }
+    current = current.getBaseClass();
+  }
+  return brands;
+}
+
+function hasDistinctNominalBrands(left: Node, right: Node): boolean {
+  const leftBrands = nominalBrandDeclarations(left);
+  const rightBrands = nominalBrandDeclarations(right);
+  return (
+    leftBrands.length > 0 &&
+    rightBrands.length > 0 &&
+    leftBrands.every(
+      (leftBrand) => !rightBrands.some((rightBrand) => sameCompilerNode(leftBrand, rightBrand)),
+    )
+  );
+}
+
 function hasCompilerDisjointMemberOwners(
   checker: TypeChecker,
   owners: readonly Node[],
   incomingTarget: LocatedSymbol,
 ): boolean {
   const incomingType = callableContainerType(incomingTarget.node);
+  const incomingName = incomingTarget.node.getSymbol()?.getName();
   if (!incomingType || owners.length === 0) return false;
   return owners.every((owner) => {
+    const ownerName = owner.getSymbol()?.getName();
+    if (ownerName && incomingName && ownerName !== incomingName) return true;
     const ownerType = callableContainerType(owner);
     return (
       !!ownerType &&
       !checker.isTypeAssignableTo(ownerType, incomingType) &&
-      !checker.isTypeAssignableTo(incomingType, ownerType)
+      !checker.isTypeAssignableTo(incomingType, ownerType) &&
+      hasDistinctNominalBrands(owner, incomingTarget.node)
     );
   });
 }
@@ -2246,7 +2299,7 @@ function classifyCompilerInvocation(
   if (targets.size === 0) {
     if (
       incomingTarget &&
-      ((owners.length > 0 && owners.every(isAnonymousCallable)) ||
+      ((owners.length > 0 && owners.every(isUnaddressableCallable)) ||
         (owners.length > 0 && owners.every(isCompilerLibraryDeclaration)) ||
         (Node.isNewExpression(node) && !Node.isClassDeclaration(incomingTarget.node)))
     ) {
@@ -2283,12 +2336,15 @@ function reachableCallEndpoints(
   root: RelationshipEndpoint,
   edges: readonly RelationshipEdge[],
   direction: "incoming" | "outgoing",
+  requestContext: RequestContext,
 ): Set<string> {
   const reachable = new Set([endpointKey(root)]);
   let changed = true;
   while (changed) {
+    requestContext.checkpoint();
     changed = false;
     for (const edge of edges) {
+      requestContext.checkpoint();
       const from = direction === "outgoing" ? edge.source : edge.target;
       const to = direction === "outgoing" ? edge.target : edge.source;
       if (!reachable.has(endpointKey(from)) || reachable.has(endpointKey(to))) continue;
@@ -2377,6 +2433,7 @@ export function collectCompilerCallRelationships(
       options.authority_root,
       ordered,
       options.authority_direction,
+      requestContext,
     );
     if (options.authority_direction === "outgoing") {
       dispatchUnfinished = unfinishedSites.some((node) => {

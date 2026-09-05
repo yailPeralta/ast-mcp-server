@@ -146,20 +146,24 @@
   },
   "correction": {
     "child": "#186D",
-    "status": "planned-pending-acquire",
-    "forecastAuthoredChangedLines": "<=240",
-    "maxAuthoredChangedLines": 400,
-    "splitRequiredBeforeEdit": false,
+    "status": "corrected-not-approved-final-review-pending",
+    "branch": "fix/issue-186-d-rereview-corrections",
+    "baseReviewPullRequest": 216,
+    "base": "203459cb0468a824b5c9fb25fa421af80714e8d9",
     "scope": ["R2-F1", "R2-F2", "R2-F3", "R2-F4"],
-    "issue187Boundary": "Exact-once/global work-budget accounting remains exclusively #187 scope; #186D must add the required cooperative in-loop checkpoint without accounting behavior.",
+    "runtimeAuthoredChangedLines": 240,
+    "maxAuthoredChangedLines": 400,
+    "runtimePatchSha256": "sha256:ed09b2be4aaa14ab575333d61ecc2d544b94db49d1e73248cd13c197a75031e5",
+    "tests": "RED twice: 4 failed/67 passed; GREEN 71/71; consumers 126/126; full 989/989 plus supervised 2/2",
+    "issue187Boundary": "No work charges or exact-once accounting were added or claimed; those remain exclusively #187.",
     "rollback": "Revert only #186D runtime tests/code and its cumulative #186 evidence updates.",
-    "requiredNext": "Acquire issue186-d-rereview-correction within the 400-line hard bound, implement the four admitted fixes, run focused/full/package gates, freeze, settle, and obtain another fresh dual scoped re-review.",
+    "requiredNext": "Root settlement, then fresh dual scoped final review of the corrected frozen candidate.",
     "approval": false
   },
   "evidenceDisposition": {
     "originalRedGreenReceipts": "historical-only",
     "correctionCEvidence": "closure-control-only; invalidated for approval by R2-F1 through R2-F4",
     "priorGateReceipts": "historical-only",
-    "requiredNext": "Execute bounded #186D with new candidate-bound evidence and fresh dual scoped re-review."
+    "requiredNext": "Settle the corrected #186D candidate, then obtain fresh dual scoped final review; no approval exists yet."
   }
 }

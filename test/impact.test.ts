@@ -2182,6 +2182,129 @@ describe("scoped exact call relationships", () => {
     expect(unsupported.coverage[0]?.status).toBe("unsupported");
   });
 
+  it("keeps every immediately invoked function expression unresolved", async () => {
+    const fixture = await createProjectFixture({
+      "src/iife.ts":
+        "export function named(): void { (function invoked(): void {})(); }\nexport function unnamed(): void { (function (): void {})(); }\nexport function arrow(): void { (() => {})(); }",
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const resolver = createCompilerRelationshipResolver(project, fixture.root, freshness);
+
+    for (const symbol of ["named", "unnamed", "arrow"]) {
+      const result = resolver.edgesFor(
+        resolveImpactRoot(project, fixture.root, rootRequest(symbol, "src/iife.ts")),
+        {
+          direction: "outgoing",
+          relationship_kinds: ["call"],
+          max_edges: 20,
+          max_work_items: 100_000,
+          allow_provisional_call: true,
+        },
+      );
+      expect.soft(result.edges, `${symbol} IIFE edge`).toEqual([]);
+      expect.soft(result.coverage[0]?.status, `${symbol} IIFE coverage`).toBe("unfinished");
+    }
+  });
+
+  it("distinguishes canonical compiler libraries from project and package ambient callables", async () => {
+    const cases = [
+      {
+        name: "project lib-like declaration",
+        files: {
+          "src/lib.custom.d.ts": "declare function ambientCallback(): void;\n",
+          "src/use.ts":
+            "export function caller(): void { ambientCallback(); }\nexport function unrelated(): void {}\n",
+        },
+        expected: "unfinished",
+      },
+      {
+        name: "package ambient declaration",
+        files: {
+          "node_modules/external-callback/package.json": JSON.stringify({
+            name: "external-callback",
+            version: "1.0.0",
+            types: "index.d.ts",
+          }),
+          "node_modules/external-callback/index.d.ts": "export function ambientCallback(): void;\n",
+          "src/use.ts":
+            'import { ambientCallback } from "external-callback";\nexport function caller(): void { ambientCallback(); }\nexport function unrelated(): void {}\n',
+        },
+        expected: "unfinished",
+      },
+      {
+        name: "canonical TypeScript library declaration",
+        files: {
+          "src/use.ts":
+            "export function caller(): void { Math.abs(1); }\nexport function unrelated(): void {}\n",
+        },
+        expected: "completed",
+      },
+    ] as const;
+
+    for (const fixtureCase of cases) {
+      const fixture = await createProjectFixture(fixtureCase.files);
+      fixtures.push(fixture);
+      const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+      const result = createCompilerRelationshipResolver(project, fixture.root, freshness).edgesFor(
+        resolveImpactRoot(project, fixture.root, rootRequest("unrelated", "src/use.ts")),
+        {
+          direction: "incoming",
+          relationship_kinds: ["call"],
+          max_edges: 20,
+          max_work_items: 100_000,
+          allow_provisional_call: true,
+        },
+      );
+      expect.soft(result.edges, fixtureCase.name).toEqual([]);
+      expect.soft(result.coverage[0]?.status, fixtureCase.name).toBe(fixtureCase.expected);
+      expect.soft(result.incomplete, fixtureCase.name).toBe(fixtureCase.expected === "unfinished");
+    }
+  });
+
+  it("requires positive nominal evidence before declaring open classes disjoint", async () => {
+    const incoming = async (source: string, symbol: string) => {
+      const fixture = await createProjectFixture({ "src/disjoint.ts": source });
+      fixtures.push(fixture);
+      const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+      return createCompilerRelationshipResolver(project, fixture.root, freshness).edgesFor(
+        resolveImpactRoot(project, fixture.root, rootRequest(symbol, "src/disjoint.ts")),
+        {
+          direction: "incoming",
+          relationship_kinds: ["call"],
+          max_edges: 20,
+          max_work_items: 100_000,
+          allow_provisional_call: true,
+        },
+      );
+    };
+
+    const open = await incoming(
+      [
+        "export class Left { leftOnly = 0; method(): void {} }",
+        "export class Right { rightOnly = 0; method(): void {} }",
+        "export class Both extends Right implements Left { leftOnly = 0; override method(): void {} }",
+        "export function invoke(right: Right): void { right.method(); }",
+      ].join("\n"),
+      "Left.method",
+    );
+    expect.soft(open.edges, "shared runtime subtype").toEqual([]);
+    expect.soft(open.coverage[0]?.status, "shared runtime subtype").toBe("unfinished");
+    expect.soft(open.incomplete, "shared runtime subtype").toBe(true);
+
+    const branded = await incoming(
+      [
+        "export class BrandedLeft { private leftBrand = 0; method(): void {} }",
+        "export class BrandedRight { private rightBrand = 0; method(): void {} }",
+        "export function invoke(right: BrandedRight): void { right.method(); }",
+      ].join("\n"),
+      "BrandedLeft.method",
+    );
+    expect.soft(branded.edges, "distinct nominal brands").toEqual([]);
+    expect.soft(branded.coverage[0]?.status, "distinct nominal brands").toBe("completed");
+    expect.soft(branded.incomplete, "distinct nominal brands").toBe(false);
+  });
+
   it("keeps file identity, constructed receivers, anonymous IIFEs, and disjoint classes fail closed", async () => {
     const fixture = await createProjectFixture({
       "src/left.ts": "export class Same { run(): void {} }\n",

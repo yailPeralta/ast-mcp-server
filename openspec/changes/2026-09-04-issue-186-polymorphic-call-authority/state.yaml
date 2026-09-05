@@ -6,8 +6,8 @@ planningHome:
   mode: repo-local
   path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority
-nextRecommended: apply
-lastPhase: apply-scoped-rereview
+nextRecommended: review
+lastPhase: apply-correction-d
 artifactPaths:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/proposal.md
@@ -33,8 +33,8 @@ artifacts:
   reviewLedger: done
 taskProgress:
   total: 24
-  completed: 16
-  pending: 8
+  completed: 20
+  pending: 4
   allComplete: false
 dependencies:
   proposal: all_done
@@ -71,7 +71,7 @@ phase0Admission:
   chain: "#206 5d839bb runtime ancestor -> #211 1fa8a6b immediate base -> #186A working tree"
   workUnitA: "fix/issue-186-a-call-authority; active token authenticated; runtime allowlist in apply-progress.json"
   attemptStatus: "delegated active token supplied; acquire/settle intentionally not executed"
-  nextTask: "Acquire bounded #186D and correct the four dual scoped re-review findings"
+  nextTask: "Root settlement of corrected #186D, then fresh dual scoped final review"
 reviewBudget:
   forecastAuthoredChangedLines: "300-480"
   forecastChildren: 2
@@ -113,19 +113,20 @@ independentReview:
 correction:
   child: "#186D"
   scope: "R2-F1 through R2-F4 only"
-  forecastAuthoredChangedLines: "<=240"
+  runtimeAuthoredChangedLines: 240
   maxAuthoredChangedLines: 400
-  issue187Boundary: "Exact-once/global work-budget accounting remains #187-only; #186D must add cooperative in-loop cancellation without accounting behavior."
+  runtimePatchSha256: ed09b2be4aaa14ab575333d61ecc2d544b94db49d1e73248cd13c197a75031e5
+  issue187Boundary: "No work charges or exact-once accounting were added or claimed; those remain #187-only."
   priorEvidence: historical-or-closure-control-only
-  status: planned-pending-acquire
-  nextAction: acquire-issue186-d-rereview-correction
+  status: corrected-not-approved-final-review-pending
+  nextAction: root-settle-then-fresh-dual-scoped-final-review
 nextReset:
   required: false
   authorized: false
   requestId: null
 nextAcquire:
-  requiredBeforeRuntimeCorrection: true
-  status: pending-not-executed
+  requiredBeforeRuntimeCorrection: false
+  status: delegated-actor-authenticated-no-acquire-executed
   requestId: issue186-d-acquire-a1
   workUnit: issue186-d-rereview-correction
   evidenceGoal: "RED GREEN REFACTOR four dual scoped re-review bypasses with cooperative checkpoint and no #187 accounting"

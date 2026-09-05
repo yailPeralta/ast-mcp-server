@@ -1,7 +1,7 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-186-polymorphic-call-authority",
-  "stage": "dual-scoped-rereview-changes-requested-correction-d-pending",
+  "stage": "correction-d-corrected-not-approved-final-review-pending",
   "delivery": {
     "strategy": "feature-branch-chain",
     "deliveryStrategy": "auto-chain",
@@ -87,7 +87,7 @@
       "resetNeeded": false
     },
     "rootInstruction": "Resolve and apply bounded #186C correction, then refreeze, settle, and obtain fresh independent read-only review; this delegated actor did not acquire or settle.",
-    "activeTokenDigest": "sha256:9e93b0ea6fa70792dc809c358d6f25e5566e80efb8f42c5edfb54f4a614770c6",
+    "activeTokenDigest": "sha256:68524c2e4b432f1d912c35838cc7682a211b3364b57bc6840348d906963a19d1",
     "baseTree": "1b3268b531c59c52a4d1be205018d066517c4a08",
     "baselineStatusSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "baselineProcessSha256": "b170c0f357b5231146347bc1d446aae8ab212e4df770f3969764a35ed1edc72a"
@@ -116,6 +116,12 @@
       "focusedTest": "PASS: correction 99/99; consumers 122/122; full 985/985 plus supervised 2/2",
       "runtimeHarness": "PASS: yarn test:mcp stdio smoke; Harness N/A by explicit prohibition",
       "rollbackBoundary": "Revert only C changes in relationships.ts, reviewer fixtures, and compact #186 metadata"
+    },
+    {
+      "tasks": ["6.1", "6.2", "6.3", "6.4"],
+      "focusedTest": "PASS: correction 71/71; cumulative impact/relationships/MCP/spine/candidates 126/126; full 989/989 plus supervised 2/2",
+      "runtimeHarness": "PASS: MCP, lifecycle, CLI, public-error, and package smoke; Harness N/A by explicit prohibition",
+      "rollbackBoundary": "Revert only D changes in relationships.ts, impact/relationship tests, and compact #186 metadata"
     }
   ],
   "workUnits": [
@@ -210,24 +216,21 @@
     {
       "id": "D",
       "name": "Bounded dual scoped re-review correction",
-      "status": "planned-pending-acquire",
-      "branch": "pending",
-      "budget": "<=240 forecast; hard maximum 400",
-      "base": "invalidated C candidate d882e013807acc5285837eff0136fe6f5324de61",
-      "issueLinkage": ["Fixes #186", "Refs #188"],
+      "status": "corrected-not-approved-final-review-pending",
+      "branch": "fix/issue-186-d-rereview-corrections",
+      "budget": "240 runtime authored changed lines; hard maximum 400",
+      "base": "review metadata PR #216 at 203459cb0468a824b5c9fb25fa421af80714e8d9 over invalidated C d882e013807acc5285837eff0136fe6f5324de61",
       "scope": ["R2-F1", "R2-F2", "R2-F3", "R2-F4"],
-      "preservedClosures": [
-        "cross-file identity and dynamic constructor calls",
-        "anonymous arrow and unnamed function IIFEs",
-        "callable parameter ordinary ambient declarations",
-        "private controls and basic endpoint isolation"
-      ],
-      "accountingBoundary": "Exact-once/global work-budget accounting remains exclusively #187; add only the cooperative in-loop checkpoint required by #186.",
-      "splitDecision": "Stop before runtime edits above the 240-line forecast; split before any edit above the 400-line hard maximum.",
-      "attemptIds": {
-        "acquire": "issue186-d-acquire-a1",
-        "settle": "issue186-d-settle-a1"
+      "candidate": {
+        "approval": false,
+        "runtimeNumstat": "64/7 relationships.ts; 123/0 impact.test.ts; 45/1 relationships.test.ts",
+        "runtimePatchSha256": "ed09b2be4aaa14ab575333d61ecc2d544b94db49d1e73248cd13c197a75031e5",
+        "focused": "71/71",
+        "consumers": "126/126",
+        "full": "989/989 plus supervised 2/2",
+        "requiredNext": "root settlement then fresh dual scoped final review"
       },
+      "accountingBoundary": "No work charges or exact-once accounting were added or claimed; those remain exclusively #187.",
       "rollback": "Revert only D correction runtime tests/code and cumulative #186 evidence updates."
     }
   ],
@@ -315,42 +318,44 @@
     {
       "id": "6.1",
       "name": "Correct named function-expression IIFE false self-edge with closure controls",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "id": "6.2",
       "name": "Correct compiler-library provenance for project-owned lib.custom.d.ts",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "id": "6.3",
       "name": "Correct open-class disjointness without regressing endpoint isolation",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "id": "6.4",
-      "name": "Add reachableCallEndpoints in-loop cooperative checkpoint without #187 accounting and gate/re-review D",
-      "status": "pending"
+      "name": "Add reachableCallEndpoints in-loop cooperative checkpoint without #187 accounting and gate D",
+      "status": "complete"
     }
   ],
   "taskProgress": {
     "total": 24,
-    "completed": 16,
-    "pending": 8,
+    "completed": 20,
+    "pending": 4,
     "allComplete": false
   },
   "tdd": {
-    "receiptStatus": "historical-or-closure-control-only; invalidated #186C evidence cannot approve #186D",
-    "correctionCycle": "tasks 5.1-5.3 remain complete as closure evidence; dual scoped re-review invalidated #186C; tasks 6.1-6.4 are pending",
+    "receiptStatus": "#186D corrected and candidate-bound but not approved; root settlement and fresh final review pending",
+    "correctionCycle": "tasks 6.1-6.4 completed with strict RED twice, GREEN, and refactor gates; prior evidence remains historical or closure-only",
     "red": [
       "A: two unchanged runs failed 3 defect tests with 62 controls passing",
       "B: two unchanged runs failed private-spine authority with ambiguity correctly unfinished; sha256 a479a8ed047e09733a4e7b906b6bf68bca86468fa076f591bcb58d10643ac509 and eaf6c767444aa7c40919eac87609cb755bc0265cce85ef8c9389f94f182ee9c2",
-      "C: two unchanged final runs failed 3 reviewer fixture tests with 96 controls passing and all F1-F6 assertions reproduced"
+      "C: two unchanged final runs failed 3 reviewer fixture tests with 96 controls passing and all F1-F6 assertions reproduced",
+      "D: two unchanged runs failed exactly R2-F1 through R2-F4 with 67 controls passing"
     ],
-    "green": ["A focused 65/65", "B focused parity 1/1 and typecheck passed", "C focused 99/99"],
+    "green": ["A focused 65/65", "B focused parity 1/1", "C focused 99/99", "D focused 71/71"],
     "refactored": [
-      "B focused 119/119; full 982/982 plus supervised 2/2; full output sha256 43dd86dff69b1be2ca75c9841c491ab7a0b2c08b4cf141ff253c10da88203a65",
-      "C consumers 122/122; full 985/985 plus supervised 2/2; typecheck/build/lint/format/MCP/package passed"
+      "B focused 119/119; full 982/982 plus supervised 2/2",
+      "C consumers 122/122; full 985/985 plus supervised 2/2",
+      "D consumers 126/126; full 989/989 plus supervised 2/2; all quality and package gates passed"
     ]
   },
   "receiptPlan": {
@@ -398,7 +403,7 @@
       "Exact acceptance boundary": "3.2-3.3 -> 3.4-4.2"
     },
     "activeRed": [],
-    "status": "6/6 requirements and 14/14 scenarios mapped; #186C controls remain green but dual scoped re-review invalidated the candidate; #186D pending"
+    "status": "6/6 requirements and 14/14 scenarios mapped; #186D corrections and controls are green; final fresh review remains pending"
   },
   "independentReview": {
     "artifact": "reviews/ledger.json",
@@ -448,21 +453,21 @@
     "Any issue 187 accounting edit or issue 161 authority reuse invalidates scope.",
     "Any child over 400 authored lines requires replanning rather than a size exception."
   ],
-  "nextRecommended": "apply",
-  "nextAction": "acquire bounded #186D, correct R2-F1 through R2-F4, gate/freeze/settle, then fresh dual scoped re-review",
+  "nextRecommended": "review",
+  "nextAction": "root settles the corrected #186D candidate, then obtains a fresh dual scoped final review",
   "nextReset": {
     "required": false,
     "authorized": false,
     "requestId": null
   },
   "nextAcquire": {
-    "requiredBeforeRuntimeCorrection": true,
-    "status": "pending; not executed by review-evidence recorder",
+    "requiredBeforeRuntimeCorrection": false,
+    "status": "delegated actor authenticated with supplied active token; no acquire executed",
     "requestId": "issue186-d-acquire-a1",
     "workUnit": "issue186-d-rereview-correction",
-    "evidenceGoal": "RED GREEN REFACTOR four dual scoped re-review bypasses with cooperative checkpoint and no #187 accounting",
     "forecastChangedLines": 240,
+    "actualRuntimeChangedLines": 240,
     "maxChangedLines": 400
   },
-  "updatedAt": "2026-09-05T15:11:17Z"
+  "updatedAt": "2026-09-05T15:39:14Z"
 }

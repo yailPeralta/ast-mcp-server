@@ -9,7 +9,7 @@ import {
   type RelationshipEdge,
   type RelationshipEdgeInput,
 } from "../src/services/relationships.js";
-import { createRequestContext } from "../src/services/request-context.js";
+import { createRequestContext, RequestContextError } from "../src/services/request-context.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
 const fixtures: ProjectFixture[] = [];
@@ -241,6 +241,50 @@ describe("compiler-backed relationships", () => {
       "reference:target",
     );
     expect(generic.some((edge) => edge.kind === "call")).toBe(false);
+  });
+
+  it("checks cancellation inside reachable call endpoint edge scans", async () => {
+    const fixture = await createProjectFixture({
+      "src/authority.ts": "export function exact(): void {}\n",
+      "src/use.ts":
+        'import { exact } from "./authority.js";\nexport function caller(): void { exact(); }\n',
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    let traversalCheckpoints = 0;
+    for (const sourceFile of project.getSourceFiles()) {
+      sourceFile.forEachDescendant(() => {
+        traversalCheckpoints++;
+      });
+    }
+    let checkpoints = 0;
+    const requestContext = {
+      signal: new AbortController().signal,
+      checkpoint(): void {
+        checkpoints++;
+        if (checkpoints > traversalCheckpoints) {
+          throw new RequestContextError("REQUEST_CANCELLED");
+        }
+      },
+    };
+
+    expect(() =>
+      collectCompilerCallRelationships(
+        project,
+        fixture.root,
+        freshness(),
+        {
+          authority_root: {
+            file: "src/use.ts",
+            symbol_path: "caller",
+            selector: "caller@2",
+          },
+          authority_direction: "outgoing",
+        },
+        requestContext,
+      ),
+    ).toThrow(expect.objectContaining({ code: "REQUEST_CANCELLED" }));
+    expect(checkpoints).toBe(traversalCheckpoints + 1);
   });
 
   it("propagates typed cancellation during global incoming reclassification", async () => {

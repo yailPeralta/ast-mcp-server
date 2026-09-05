@@ -65,7 +65,7 @@ Correction forecast: **260–380 authored changed lines**, hard maximum **400**,
 
 Correction forecast: **≤240 authored changed lines**, hard maximum **400**. Stop before runtime edits if the refreshed forecast exceeds 240; split before any edit if it exceeds 400. Exact-once/global work-budget accounting remains excluded as #187 authority, but cooperative in-loop cancellation is required here.
 
-- [ ] 6.1 RED/GREEN named function-expression IIFE identity so it cannot produce a false self-edge while anonymous arrow and unnamed-function controls remain closed.
-- [ ] 6.2 RED/GREEN compiler-library provenance so a project-owned `lib.custom.d.ts` is not classified as a compiler library by basename; preserve ordinary ambient callable-parameter controls.
-- [ ] 6.3 RED/GREEN structurally open class disjointness so mutual non-assignability alone cannot prove endpoint disjointness; preserve basic endpoint isolation and private controls.
-- [ ] 6.4 RED/GREEN an in-loop cooperative cancellation checkpoint in `reachableCallEndpoints` without #187 exact-once/accounting behavior; run focused/full/package gates, freeze/settle #186D, and obtain a fresh dual scoped re-review.
+- [x] 6.1 RED/GREEN named and unnamed function-expression IIFEs cannot produce containing-symbol self-edges; anonymous-arrow controls remain closed.
+- [x] 6.2 RED/GREEN compiler-library provenance uses compiler default-library metadata; project-owned `lib.custom.d.ts` and package ambient calls remain unfinished.
+- [x] 6.3 RED/GREEN open-class disjointness requires positive nominal evidence for same-slot endpoints; `Both extends Right implements Left` remains unfinished while branded controls remain disjoint.
+- [x] 6.4 RED/GREEN in-loop cancellation checkpoints in `reachableCallEndpoints` without #187 accounting; focused/full/package gates and freeze completed. Root settlement and fresh dual scoped re-review remain pending under 4.1–4.2.
