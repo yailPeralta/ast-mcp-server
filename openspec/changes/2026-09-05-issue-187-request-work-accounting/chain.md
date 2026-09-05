@@ -153,3 +153,15 @@ git diff --check
 ```
 
 Admission requires zero exits, exact output hashes, no active RED, each child ≤400, stable JSON/TOON logical parity, and the frozen reviewed tree. The next route after tasks is apply/authority. Archive, integration, issue closure, and all #188 merge/archive work remain out of scope.
+
+## Judgment Day round 1 and correction C
+
+The immutable round-1 target is authority base `1dbbf441b32cd9f226115785725b82142600a749` (tree `9623ad6c801828e3eacc1b9e72fea91059e0b5f1`) through format PR #229 commit `4bce66b6adf87735e9ba640b561f383d8199dd81` (tree `85ef5596e1a188d2405e96bf7d87b17aaab77b81`), patch SHA-256 `f1d7a98eb663b65250f45c08951ffca00cc955da01f4a6949e2d733657279e76`. The independently bounded inspection budgets were A=`398`, B=`395`, and format=`83`; all remain ≤400.
+
+Both blind judges independently confirmed `JD-R1-SEV-001`: `src/services/relationships.ts:1354-1364` sorts the two member-reference endpoint pairs without first charging the request-wide tracker. The count advertised as exact is therefore one unit short and true N−1 can retain authoritative reference edges. This is the only corroborated SEVERE finding and the only round-1 fix-authorized scope.
+
+The following unpaired observations remain INFO/SUSPECT, cannot authorize a fix, and must not enlarge correction C: generic string/`existing` stage vocabulary; candidate/legacy edge materialization before retention charge; relationship-kind normalization and initial BFS root work; and the cross-surface same-limit proof gap. Transactional late-exhaustion discard, cancellation precedence/count stability, fourteen-cell direction coverage, and public JSON/TOON/MCP/batch/candidate/spine behavior remain accepted evidence.
+
+The frozen candidate verdict is `ESCALATED`, but the Judgment Day workflow is nonterminal at `pending-correction-round-1`. Task 3.1 remains pending. Correction C starts from exact PR #229 head `4bce66b6adf87735e9ba640b561f383d8199dd81`, forecasts ≤120 authored changed lines, and may change only `src/services/relationships.ts`, focused `test/impact.test.ts` and/or `test/relationships.test.ts` evidence, plus this change's metadata. Its sole behavior target is one pre-sort charge for the two-item member-reference pair sort with exact-N success and true-N−1 fail-closed proof. No INFO/SUSPECT cleanup, #186/#219/#220 work, Harness, schema, unrelated source, delivery, PR, or issue mutation is allowed.
+
+Starting round 1 consumes one of the two correction rounds, leaving one. No acquire or reset was performed while recording this ledger. The next runtime-bearing action is a fresh bounded acquire for `issue187-c-member-reference-pair-sort-accounting` from the exact PR #229 head. A reset is neither implied nor authorized: attempt unchanged-objective continuation first, and reset only if compact authority requires a changed objective and a maintainer explicitly authorizes that exact reset. Once C is frozen, both blind judges re-judge only `reviews/ledger.json` plus the immutable C delta; task 3.1 can complete only if both approve.

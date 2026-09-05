@@ -20,7 +20,8 @@ artifactPaths:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/apply-progress.json
   verifyReport: []
   reviewPolicy: []
-  reviewLedger: []
+  reviewLedger:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/reviews/ledger.json
   reviewReceipt: []
   reviewBundle: []
   reviewContext: []
@@ -39,7 +40,8 @@ contextFiles:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/apply-progress.json
   verifyReport: []
   reviewPolicy: []
-  reviewLedger: []
+  reviewLedger:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/reviews/ledger.json
   reviewReceipt: []
   reviewBundle: []
   reviewContext: []
@@ -52,15 +54,15 @@ artifacts:
   tasks: done
   applyProgress: partial
   verifyReport: missing
-  reviewLedger: missing
+  reviewLedger: partial
   reviewReceipt: missing
   reviewBundle: missing
   reviewContext: missing
   reviewState: missing
 taskProgress:
   total: 16
-  completed: 13
-  pending: 3
+  completed: 14
+  pending: 2
   allComplete: false
 dependencies:
   proposal: all_done
@@ -95,20 +97,57 @@ remediationState:
   reason: ""
 phaseInstructions:
   apply:
-    - "Phase 0 authority is complete; A starts from exact PR #225 head 8fe8553097c169b7bba769c7e7f8fc8e90c97678, and B starts from the exact accepted A head."
-    - "Next root action: acquire A with request issue187-a-acquire-01, work unit issue187-a-relationship-accounting, evidence goal Prove exact relationship and legacy stage accounting, max attempts 2, and max changed lines 400."
-    - "Acquire/settle A uniquely; no reset is needed before A. Require explicit maintainer-authorized reset before B only if its objective changes; split before apply above 400 lines."
+    - "Judgment Day round 1 rejected frozen PR #229 candidate 4bce66b6adf87735e9ba640b561f383d8199dd81 for corroborated JD-R1-SEV-001 only."
+    - "Plan correction C from exact PR #229 head; forecast <=120; allow only relationship source, focused tests, and this change's metadata."
+    - "Next runtime-bearing action is a fresh bounded C acquire. No acquire/reset was performed here; do not reset unless compact authority requires a changed objective and a maintainer explicitly authorizes the exact reset."
+    - "After C freezes, both blind judges re-judge only reviews/ledger.json plus the immutable C delta; task 3.1 remains pending until both approve."
   verify:
-    - "Freeze A+B, run independent read-only adversarial review, and strictly validate 9 requirements/13 scenarios."
+    - "Blocked until correction C passes scoped dual re-judgment; then strictly validate 9 requirements/13 scenarios."
   remediate: []
   archive:
     - "Issue #188 merge/archive is excluded."
 nextRecommended: apply
 blockedReasons: []
-lastPhase: apply-b-candidate-ready-unreviewed
+lastPhase: apply-judgment-day-round1-escalated
 documentationCleanup:
   status: formatting-gate-cleared
-  runtimeCandidate: "Frozen A+B unchanged from PR #228 commit 68b7611006e45e1aec0c8cb8b22fd90e8954c73a"
+  runtimeCandidate: "Frozen A+B plus format PR #229 commit 4bce66b6adf87735e9ba640b561f383d8199dd81; Judgment Day correction C pending"
+judgmentDay:
+  ledger: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/reviews/ledger.json
+  target:
+    projection: base-diff
+    baseCommit: 1dbbf441b32cd9f226115785725b82142600a749
+    baseTree: 9623ad6c801828e3eacc1b9e72fea91059e0b5f1
+    headCommit: 4bce66b6adf87735e9ba640b561f383d8199dd81
+    headTree: 85ef5596e1a188d2405e96bf7d87b17aaab77b81
+    pullRequest: 229
+  round: 1
+  judgesCompleted: 2
+  confirmedSevere:
+    - JD-R1-SEV-001
+  infoSuspect:
+    - JD-R1-INFO-001
+    - JD-R1-INFO-002
+    - JD-R1-INFO-003
+    - JD-R1-INFO-004
+  verdict: ESCALATED
+  terminal: false
+  workflowState: pending-correction-round-1
+  correction:
+    id: C
+    immediateBase: "PR #229 @ 4bce66b6adf87735e9ba640b561f383d8199dd81"
+    forecast: "<=120"
+    authorizedFindingIds:
+      - JD-R1-SEV-001
+    roundsRemaining: 1
+    acquireNeeded: true
+    resetPerformed: false
+    resetAuthorized: false
+    scopedRejudgmentRequired: true
+  childBudgets:
+    A: 398
+    B: 395
+    format: 83
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec

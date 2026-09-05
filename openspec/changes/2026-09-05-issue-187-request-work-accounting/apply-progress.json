@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-05-issue-187-request-work-accounting",
   "authoritative": true,
-  "stage": "b-candidate-ready-unreviewed",
+  "stage": "judgment-day-round1-escalated-pending-correction-c",
   "rddModeAtPlanning": "disabled/unmanaged",
   "delivery": {
     "strategy": "feature-branch-chain",
@@ -26,11 +26,16 @@
     { "id": "B.3", "name": "Public parity RED", "status": "completed" },
     { "id": "B.4", "name": "Impact GREEN", "status": "completed" },
     { "id": "B.5", "name": "Public parity GREEN", "status": "completed" },
-    { "id": "B.6", "name": "Freeze/settle B", "status": "pending" },
-    { "id": "3.1", "name": "Read-only adversarial review", "status": "pending" },
+    { "id": "B.6", "name": "Freeze/settle B", "status": "completed" },
+    {
+      "id": "3.1",
+      "name": "Read-only adversarial review",
+      "status": "pending",
+      "detail": "Round 1 ESCALATED; correction C and scoped dual re-judgment required"
+    },
     { "id": "3.2", "name": "Strict verify 9/13", "status": "pending" }
   ],
-  "taskProgress": { "total": 16, "completed": 13, "pending": 3, "allComplete": false },
+  "taskProgress": { "total": 16, "completed": 14, "pending": 2, "allComplete": false },
   "tdd": {
     "red": ["A.1-A.3", "B.1-B.3 twice unchanged"],
     "green": ["A.1-A.4", "B.1-B.5"],
@@ -126,9 +131,39 @@
   },
   "documentationCleanup": {
     "status": "formatting-gate-cleared",
-    "runtimeCandidate": "Frozen A+B unchanged from PR #228 commit 68b7611006e45e1aec0c8cb8b22fd90e8954c73a"
+    "runtimeCandidate": "Frozen A+B plus format PR #229 commit 4bce66b6adf87735e9ba640b561f383d8199dd81"
   },
-  "review": "pending independent read-only; RDD disabled/unmanaged",
-  "verify": { "requirements": 9, "scenarios": 13, "status": "pending" },
-  "updatedAt": "2026-09-05T18:20:28Z"
+  "judgmentDay": {
+    "ledger": "reviews/ledger.json",
+    "target": "1dbbf441b32cd9f226115785725b82142600a749..4bce66b6adf87735e9ba640b561f383d8199dd81",
+    "round": 1,
+    "judgesCompleted": 2,
+    "confirmedSevere": ["JD-R1-SEV-001"],
+    "suspectInfo": ["JD-R1-INFO-001", "JD-R1-INFO-002", "JD-R1-INFO-003", "JD-R1-INFO-004"],
+    "preservedPassingEvidence": [
+      "transactional discard",
+      "cancellation",
+      "fourteen-cell matrix",
+      "public-consumer parity"
+    ],
+    "verdict": "ESCALATED",
+    "terminal": false,
+    "correction": {
+      "id": "C",
+      "state": "planned",
+      "base": "PR #229@4bce66b6adf87735e9ba640b561f383d8199dd81",
+      "findingIds": ["JD-R1-SEV-001"],
+      "forecast": "<=120",
+      "roundsRemaining": 1,
+      "scopedRejudgmentRequired": true
+    },
+    "budgets": { "A": 398, "B": 395, "format": 83 }
+  },
+  "review": "Judgment Day round 1 ESCALATED; correction C pending; RDD disabled/unmanaged; no receipt authority",
+  "verify": {
+    "requirements": 9,
+    "scenarios": 13,
+    "status": "blocked-pending-correction-and-scoped-rejudgment"
+  },
+  "updatedAt": "2026-09-05T19:30:09Z"
 }
