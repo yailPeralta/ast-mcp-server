@@ -1,0 +1,49 @@
+{
+  "schema": "dsh-sdd-apply-progress",
+  "change": "2026-09-05-issue-187-request-work-accounting",
+  "authoritative": true,
+  "stage": "tasks-planned-awaiting-phase-0-authority",
+  "rddModeAtPlanning": "disabled/unmanaged",
+  "delivery": {
+    "strategy": "feature-branch-chain",
+    "requestedStrategy": "auto-chain",
+    "base": "PR #224@e4550df400aa5fda25f55e9d6bee6c23474a60b7",
+    "lineBudget": 400,
+    "forecast": "A=330-390; B=350-400",
+    "splitBeforeApplyOnOverage": true
+  },
+  "tasks": [
+    { "id": "0.1", "name": "Authority/base/RDD", "status": "pending" },
+    { "id": "0.2", "name": "Boundaries/vectors", "status": "pending" },
+    { "id": "A.1", "name": "Producer stage RED", "status": "pending" },
+    { "id": "A.2", "name": "Finalization RED", "status": "pending" },
+    { "id": "A.3", "name": "Legacy/spine RED", "status": "pending" },
+    { "id": "A.4", "name": "Relationship GREEN", "status": "pending" },
+    { "id": "A.5", "name": "Freeze/settle A", "status": "pending" },
+    { "id": "B.0", "name": "Conditional authorized reset", "status": "pending" },
+    { "id": "B.1", "name": "Neighbor/BFS RED", "status": "pending" },
+    { "id": "B.2", "name": "Transaction/matrix RED", "status": "pending" },
+    { "id": "B.3", "name": "Public parity RED", "status": "pending" },
+    { "id": "B.4", "name": "Impact GREEN", "status": "pending" },
+    { "id": "B.5", "name": "Public parity GREEN", "status": "pending" },
+    { "id": "B.6", "name": "Freeze/settle B", "status": "pending" },
+    { "id": "3.1", "name": "Read-only adversarial review", "status": "pending" },
+    { "id": "3.2", "name": "Strict verify 9/13", "status": "pending" }
+  ],
+  "taskProgress": { "total": 16, "completed": 0, "pending": 16, "allComplete": false },
+  "tdd": { "red": [], "green": [], "refactored": [] },
+  "plannedEvidence": {
+    "stageVector": "planned; exact-once, pre-effect, no reset/double charge",
+    "limits": "generous=exact; one-below saturated and authority-free",
+    "coverage": "incoming/outgoing/both; fourteen canonical cells",
+    "parity": "stable JSON and equivalent TOON/MCP/batch/candidate/spine"
+  },
+  "attemptPlan": {
+    "A": ["issue187-a-acquire-01", "issue187-a-settle-01"],
+    "conditionalReset": "issue187-b-reset-01; explicit maintainer authority only",
+    "B": ["issue187-b-acquire-01", "issue187-b-settle-01"]
+  },
+  "review": "pending independent read-only; RDD disabled/unmanaged",
+  "verify": { "requirements": 9, "scenarios": 13, "status": "pending" },
+  "updatedAt": "2026-09-05T17:57:16Z"
+}

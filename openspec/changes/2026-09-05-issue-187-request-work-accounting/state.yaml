@@ -14,8 +14,10 @@ artifactPaths:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/specs/affected-test-candidates/spec.md
   design:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/design.md
-  tasks: []
-  applyProgress: []
+  tasks:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/tasks.md
+  applyProgress:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/apply-progress.json
   verifyReport: []
   reviewPolicy: []
   reviewLedger: []
@@ -31,8 +33,10 @@ contextFiles:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/specs/affected-test-candidates/spec.md
   design:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/design.md
-  tasks: []
-  applyProgress: []
+  tasks:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/tasks.md
+  applyProgress:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting/apply-progress.json
   verifyReport: []
   reviewPolicy: []
   reviewLedger: []
@@ -45,8 +49,8 @@ artifacts:
   proposal: done
   specs: done
   design: done
-  tasks: missing
-  applyProgress: missing
+  tasks: done
+  applyProgress: partial
   verifyReport: missing
   reviewLedger: missing
   reviewReceipt: missing
@@ -54,19 +58,19 @@ artifacts:
   reviewContext: missing
   reviewState: missing
 taskProgress:
-  total: 0
+  total: 16
   completed: 0
-  pending: 0
+  pending: 16
   allComplete: false
 dependencies:
   proposal: all_done
   specs: all_done
   design: all_done
-  tasks: ready
-  apply: blocked
+  tasks: all_done
+  apply: ready
   verify: blocked
   archive: blocked
-applyState: blocked
+applyState: ready
 actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
@@ -74,7 +78,7 @@ actionContext:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-issue-187-request-work-accounting
 relationships:
   dependsOn:
-    - "PR #206 (docs/issue-188-u7-docs) at 5d839bb1ee2550e5d0a6404784baa21121e188fa; sibling U7 candidate baseline"
+    - "PR #224 (docs/issue-187-design) at e4550df400aa5fda25f55e9d6bee6c23474a60b7; exact immediate base for #187A"
   supersedes: []
   amends: []
   conflictsWith: []
@@ -90,13 +94,17 @@ remediationState:
   fixBatch: 0
   reason: ""
 phaseInstructions:
-  apply: []
-  verify: []
+  apply:
+    - "Run Phase 0 issue-first authority before source edits; A starts at exact PR #224 head e4550df, B starts at exact accepted A head."
+    - "Acquire/settle A uniquely; require explicit maintainer-authorized reset before B only if its objective changes; split before apply above 400 lines."
+  verify:
+    - "Freeze A+B, run independent read-only adversarial review, and strictly validate 9 requirements/13 scenarios."
   remediate: []
-  archive: []
-nextRecommended: tasks
+  archive:
+    - "Issue #188 merge/archive is excluded."
+nextRecommended: apply
 blockedReasons: []
-lastPhase: design
+lastPhase: tasks
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
@@ -110,9 +118,9 @@ issueAuthority:
   approvedScope: "Exact-once request-wide sorting and finalization accounting with exact-bound and one-below tests."
 baseline:
   relationship: immediate-base
-  pullRequest: 223
-  branch: docs/issue-187-spec
-  commit: 02dc4470c4f4e9adb9d33cae3aa98d788c6e2062
+  pullRequest: 224
+  branch: docs/issue-187-design
+  commit: e4550df400aa5fda25f55e9d6bee6c23474a60b7
   state: open
 recoveryBaseline:
   relationship: sibling
@@ -133,24 +141,24 @@ separateIssues:
     disposition: "Separate external-alternative callable-dispatch defect; excluded from #187."
 reviewBudget:
   authoredChangedLinesForecast:
-    minimum: 500
-    maximum: 985
+    minimum: 680
+    maximum: 790
   budgetPerPullRequest: 400
   risk: high
-  decisionNeededBeforeApply: true
+  decisionNeededBeforeApply: false
   chainedPullRequestsRecommended: true
   requiredDelivery: feature-branch-chain
   slices:
     - id: "#187A"
       scope: "Relationship-stage accounting and focused exact-bound tests."
-      base: "PR #223 at 02dc4470c4f4e9adb9d33cae3aa98d788c6e2062"
-      targetAuthoredChangedLines: "<=400"
+      base: "PR #224 at e4550df400aa5fda25f55e9d6bee6c23474a60b7"
+      targetAuthoredChangedLines: "330-390"
     - id: "#187B"
       scope: "Impact/BFS transactional accounting plus MCP and candidate parity."
-      base: "#187A immediate predecessor"
-      targetAuthoredChangedLines: "<=400"
-  integrationRule: "#187A starts from the exact #223 head at 02dc447; #187B targets #187A, and both slices must integrate before #187 is accepted."
+      base: "Exact accepted #187A head"
+      targetAuthoredChangedLines: "350-400"
+  integrationRule: "#187A starts from exact PR #224 head e4550df; #187B targets exact accepted #187A head; split either slice before apply if forecast or actual exceeds 400."
 risks:
-  - "The 500-985 authored-line forecast exceeds one 400-line review budget and requires the two-slice #187A -> #187B chain."
-  - "Base drift from PR #223 commit 02dc447 requires refreshed probes, forecasts, and clean-diff ancestry checks before apply."
-  - "Stage/item semantics must be frozen before implementation to prevent omitted or duplicate accounting."
+  - "The 680-790 authored-line forecast exceeds one 400-line review budget and requires the #187A -> #187B feature-branch chain."
+  - "Base drift from PR #224 commit e4550df requires refreshed probes, forecasts, and clean-diff ancestry checks before apply."
+  - "Stage/item semantics must remain frozen to prevent omitted or duplicate accounting."
