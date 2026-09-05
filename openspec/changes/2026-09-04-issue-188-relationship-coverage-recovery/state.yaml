@@ -61,8 +61,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 30
-  completed: 5
-  pending: 25
+  completed: 8
+  pending: 22
   allComplete: false
 dependencies:
   proposal: all_done
@@ -117,8 +117,8 @@ phaseInstructions:
 nextRecommended: apply
 blockedReasons: []
 lastPhase: apply
-activeWorkUnit: "U1 RED settled as expected; next task 2.1 U2 coverage/tracker"
-evidenceCandidate: "sha256:c3de6e1ecfaf62e645e94e35d7d8fb473c363dd2e8ed1efc6d875580972ccab5"
+activeWorkUnit: "U2 coverage/tracker settled passed; next task 3.1 U3 calls"
+evidenceCandidate: "sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50"
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
@@ -182,13 +182,34 @@ phaseZeroAuthority:
     receiptAcquired: true
     activeAcquireRequest: issue188-u1-a1-acquire-20260904t2340z
     settlement: "settled failed-as-expected via issue188-u1-a1-settle-20260904t2347z"
+  u2:
+    branch: feat/issue-188-u2-coverage
+    pullRequest: 196
+    commit: d73c1ece777505043c5c4622db818b137671fde7
+    evidenceBranch: docs/issue-188-u2-evidence
+    acquireRequest: issue188-u2-a1-acquire-20260904t2353z
+    settleRequest: issue188-u2-a1-settle-20260905t0029z
+    outcome: passed
+    evidenceRevision: "sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50"
+    remediatesEvidenceRevision: "sha256:c3de6e1ecfaf62e645e94e35d7d8fb473c363dd2e8ed1efc6d875580972ccab5"
+    authoredChangedLines:
+      additions: 312
+      deletions: 82
+      total: 394
+      budget: 400
+    tdd: "RED focused 3 failures; GREEN impact+MCP 76/76; U1/U2 refactored; zero active RED"
+    gates: "typecheck, build, Prettier, ESLint, and diff pass; test:mcp status ok 16"
+    regressionCorrection: "work_limit is impact-only; unrelated full MCP inventories remain stable"
+    issue187Status: "unimplemented; remains an independent integration kill switch with issue #186"
+    nextBranch: feat/issue-188-u3-calls
+    nextBase: docs/issue-188-u2-evidence
   killSwitches:
     - "Stop and recalculate if origin/main leaves the planned 6173a39 commit."
     - "Reject ancestor/foreign scope, receipt/tree mismatch, or any child above 400 authored changed lines."
     - "Never resume, import, or extend #161 or PR #162-#185 R-01 authority."
     - "Keep tracker PR #189 draft and merge-unauthorized until #186, #187, and every final gate pass."
     - "Candidate drift, severe findings, failed verification/CI, or Harness mutation blocks integration."
-  nextApply: "U2 task 2.1 from the settled U1 child; acquire a fresh receipt and author coverage/tracker RED"
+  nextApply: "U3 task 3.1 on branch feat/issue-188-u3-calls based on evidence child docs/issue-188-u2-evidence; acquire a fresh receipt and author directional scoped-call RED"
 reviewBudget:
   strategy: feature-branch-chain
   maxAuthoredChangedLinesPerChild: 400
