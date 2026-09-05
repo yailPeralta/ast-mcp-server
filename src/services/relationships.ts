@@ -438,6 +438,70 @@ interface ScopedCompilerRelationshipState {
 }
 
 export type CompilerRelationshipDirection = "incoming" | "outgoing" | "both";
+export type EffectiveRelationshipDirection = Exclude<CompilerRelationshipDirection, "both">;
+export type RelationshipEndpointClass = "module" | "symbol";
+export const RELATIONSHIP_COVERAGE_STATUSES = Object.freeze([
+  "not_applicable",
+  "completed",
+  "unsupported",
+  "unfinished",
+] as const);
+export type RelationshipCoverageStatus = (typeof RELATIONSHIP_COVERAGE_STATUSES)[number];
+export interface RelationshipCoverageEntry {
+  readonly kind: RelationshipEdgeKind;
+  readonly direction: EffectiveRelationshipDirection;
+  readonly endpoint_class: RelationshipEndpointClass;
+  readonly status: RelationshipCoverageStatus;
+}
+export interface CompilerImpactWork {
+  readonly max_items: number;
+  readonly consumed_items: number;
+  readonly exhausted: boolean;
+}
+class CompilerImpactWorkExhausted extends Error {}
+export class CompilerImpactWorkTracker {
+  consumed = 0;
+  exhausted = false;
+  constructor(readonly max: number) {
+    if (!Number.isSafeInteger(max) || max < 1) {
+      throw new Error("Compiler impact max_work_items must be a positive safe integer.");
+    }
+  }
+  charge(requestContext: RequestContext, count = 1): void {
+    requestContext.checkpoint();
+    if (count > this.max - this.consumed) {
+      this.consumed = this.max;
+      this.exhausted = true;
+      throw new CompilerImpactWorkExhausted();
+    }
+    this.consumed += count;
+  }
+
+  snapshot(): CompilerImpactWork {
+    return { max_items: this.max, consumed_items: this.consumed, exhausted: this.exhausted };
+  }
+}
+
+export function aggregateRelationshipCoverage(
+  entries: readonly RelationshipCoverageEntry[],
+  endpointClass: RelationshipEndpointClass,
+): readonly RelationshipCoverageEntry[] {
+  const rank = (status: RelationshipCoverageStatus) =>
+    RELATIONSHIP_COVERAGE_STATUSES.indexOf(status);
+  const merged = new Map<string, RelationshipCoverageEntry>();
+  for (const observed of entries) {
+    if (observed.endpoint_class !== endpointClass) continue;
+    const entry = observed;
+    const key = `${entry.kind}/${entry.direction}`;
+    const prior = merged.get(key);
+    if (!prior || rank(entry.status) > rank(prior.status)) merged.set(key, entry);
+  }
+  return [...merged.values()].sort(
+    (left, right) =>
+      RELATIONSHIP_EDGE_KINDS.indexOf(left.kind) - RELATIONSHIP_EDGE_KINDS.indexOf(right.kind) ||
+      (left.direction === right.direction ? 0 : left.direction === "incoming" ? -1 : 1),
+  );
+}
 
 export interface CompilerRelationshipQuery {
   readonly direction: CompilerRelationshipDirection;
@@ -447,11 +511,14 @@ export interface CompilerRelationshipQuery {
   readonly allowed_neighbor_keys?: readonly string[];
   readonly excluded_relationship_ids?: readonly string[];
   readonly stop_after_first?: boolean;
+  readonly allow_provisional_call?: boolean;
 }
 
 export interface CompilerRelationshipResolution {
   readonly edges: readonly RelationshipEdge[];
+  readonly coverage: readonly RelationshipCoverageEntry[];
   readonly incomplete: boolean;
+  readonly edge_limit_reached: boolean;
   readonly work_items: number;
   readonly work_limit_reached: boolean;
   readonly excluded_neighbors: boolean;
@@ -478,11 +545,7 @@ interface ScopedEdgeCollector {
   excludedNeighbors: boolean;
 }
 
-interface ScopedRelationshipWorkBudget {
-  remaining: number;
-  consumed: number;
-  limitReached: boolean;
-}
+type ScopedRelationshipWorkBudget = CompilerImpactWorkTracker;
 
 const DEFAULT_COMPILER_RELATIONSHIP_WORK_ITEMS = 100_000;
 
@@ -493,24 +556,11 @@ class ScopedRelationshipLimitReached extends Error {
   }
 }
 
-class ScopedRelationshipWorkLimitReached extends Error {
-  constructor() {
-    super("Scoped compiler relationship discovery reached its work limit.");
-    this.name = "ScopedRelationshipWorkLimitReached";
-  }
-}
-
 function consumeRelationshipWork(
   state: ScopedCompilerRelationshipState,
   budget: ScopedRelationshipWorkBudget,
 ): void {
-  state.requestContext.checkpoint();
-  if (budget.remaining <= 0) {
-    budget.limitReached = true;
-    throw new ScopedRelationshipWorkLimitReached();
-  }
-  budget.remaining -= 1;
-  budget.consumed += 1;
+  budget.charge(state.requestContext);
 }
 
 function consumeScopedWork(
@@ -525,16 +575,7 @@ function reserveScopedWork(
   collector: ScopedEdgeCollector,
   count: number,
 ): void {
-  state.requestContext.checkpoint();
-  const budget = collector.workBudget;
-  if (count > budget.remaining) {
-    budget.consumed += budget.remaining;
-    budget.remaining = 0;
-    budget.limitReached = true;
-    throw new ScopedRelationshipWorkLimitReached();
-  }
-  budget.remaining -= count;
-  budget.consumed += count;
+  collector.workBudget.charge(state.requestContext, count);
 }
 
 function scopedDeclarationsForSymbol(
@@ -1461,11 +1502,29 @@ function addScopedIncomingModuleEdges(
   }
 }
 
+function registryCoverageStatus(
+  endpointClass: RelationshipEndpointClass,
+  direction: EffectiveRelationshipDirection,
+  kind: RelationshipEdgeKind,
+): RelationshipCoverageStatus {
+  if (endpointClass === "module") {
+    if (kind === "import" || kind === "export") return "unfinished";
+    if (kind === "contains" && direction === "outgoing") return "unsupported";
+    return "not_applicable";
+  }
+  if ((kind === "import" || kind === "export") && direction === "outgoing") {
+    return "not_applicable";
+  }
+  if (kind === "contains") return "unsupported";
+  return "unfinished";
+}
+
 export function createCompilerRelationshipResolver(
   project: Project,
   projectRoot: string,
   freshness: FreshnessMetadata,
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
+  workTracker?: CompilerImpactWorkTracker,
 ): CompilerRelationshipResolver {
   requestContext.checkpoint();
   const state: ScopedCompilerRelationshipState = {
@@ -1482,10 +1541,10 @@ export function createCompilerRelationshipResolver(
       if (!Number.isSafeInteger(query.max_edges) || query.max_edges < 1) {
         throw new Error("Compiler relationship max_edges must be a positive safe integer.");
       }
-      const maxWorkItems = query.max_work_items ?? DEFAULT_COMPILER_RELATIONSHIP_WORK_ITEMS;
-      if (!Number.isSafeInteger(maxWorkItems) || maxWorkItems < 1) {
-        throw new Error("Compiler relationship max_work_items must be a positive safe integer.");
-      }
+      const workBudget = (workTracker ??= new CompilerImpactWorkTracker(
+        query.max_work_items ?? DEFAULT_COMPILER_RELATIONSHIP_WORK_ITEMS,
+      ));
+      const workAtStart = workBudget.consumed;
       const direction = assertEnum(
         query.direction,
         ["incoming", "outgoing", "both"] as const,
@@ -1496,16 +1555,28 @@ export function createCompilerRelationshipResolver(
           assertEnum(kind, RELATIONSHIP_EDGE_KINDS, "edge kind"),
         ),
       );
-      const workBudget: ScopedRelationshipWorkBudget = {
-        remaining: maxWorkItems,
-        consumed: 0,
-        limitReached: false,
-      };
+      const endpointClass = endpoint.symbol_path === "<module>" ? "module" : "symbol";
+      const directions: readonly EffectiveRelationshipDirection[] =
+        direction === "both" ? ["incoming", "outgoing"] : [direction];
+      const coverage: RelationshipCoverageEntry[] = RELATIONSHIP_EDGE_KINDS.flatMap((kind) =>
+        relationshipKinds.has(kind)
+          ? directions.map((effectiveDirection) => ({
+              kind,
+              direction: effectiveDirection,
+              endpoint_class: endpointClass,
+              status:
+                kind === "call" && query.allow_provisional_call !== true
+                  ? "unsupported"
+                  : registryCoverageStatus(endpointClass, effectiveDirection, kind),
+            }))
+          : [],
+      );
       const allowedNeighborKeys = query.allowed_neighbor_keys
         ? new Set(query.allowed_neighbor_keys)
         : undefined;
       const allowedNeighborFilePaths = allowedNeighborKeys ? new Set<string>() : undefined;
       try {
+        consumeRelationshipWork(state, workBudget);
         for (const neighborKey of query.allowed_neighbor_keys ?? []) {
           consumeRelationshipWork(state, workBudget);
           allowedNeighborFilePaths!.add(
@@ -1513,11 +1584,13 @@ export function createCompilerRelationshipResolver(
           );
         }
       } catch (error) {
-        if (!(error instanceof ScopedRelationshipWorkLimitReached)) throw error;
+        if (!(error instanceof CompilerImpactWorkExhausted)) throw error;
         return {
           edges: [],
+          coverage,
           incomplete: true,
-          work_items: workBudget.consumed,
+          edge_limit_reached: false,
+          work_items: workBudget.consumed - workAtStart,
           work_limit_reached: true,
           excluded_neighbors: false,
         };
@@ -1542,11 +1615,13 @@ export function createCompilerRelationshipResolver(
       try {
         located = scopedLocatedEndpoint(state, endpointCollector, endpoint);
       } catch (error) {
-        if (!(error instanceof ScopedRelationshipWorkLimitReached)) throw error;
+        if (!(error instanceof CompilerImpactWorkExhausted)) throw error;
         return {
           edges: [],
+          coverage,
           incomplete: true,
-          work_items: workBudget.consumed,
+          edge_limit_reached: false,
+          work_items: workBudget.consumed - workAtStart,
           work_limit_reached: true,
           excluded_neighbors: false,
         };
@@ -1605,6 +1680,25 @@ export function createCompilerRelationshipResolver(
             collect: (collector) => addScopedIncomingExports(state, collector, located.symbol!),
           });
         }
+        if (relationshipKinds.has("call") && query.allow_provisional_call === true) {
+          producers.push({
+            kinds: ["call"],
+            collect: (collector) => {
+              const calls = collectCompilerCallRelationships(
+                project,
+                projectRoot,
+                freshness,
+                { work_tracker: workBudget },
+                requestContext,
+              );
+              for (const edge of calls.edges) addScopedResolvedEdge(collector, edge);
+              if (calls.incomplete) {
+                if (workBudget.exhausted) throw new CompilerImpactWorkExhausted();
+                throw new ScopedRelationshipLimitReached();
+              }
+            },
+          });
+        }
       } else {
         for (const kind of ["import", "export"] as const) {
           if (!relationshipKinds.has(kind)) continue;
@@ -1625,6 +1719,7 @@ export function createCompilerRelationshipResolver(
 
       const merged = new Map<string, RelationshipEdge>();
       let incomplete = false;
+      let edgeLimitReached = false;
       let excludedNeighbors = false;
       for (const producer of producers) {
         const collector: ScopedEdgeCollector = {
@@ -1645,28 +1740,42 @@ export function createCompilerRelationshipResolver(
         } catch (error) {
           if (
             !(error instanceof ScopedRelationshipLimitReached) &&
-            !(error instanceof ScopedRelationshipWorkLimitReached)
+            !(error instanceof CompilerImpactWorkExhausted)
           ) {
             throw error;
           }
           incomplete = true;
+          edgeLimitReached ||= error instanceof ScopedRelationshipLimitReached;
         }
         for (const edge of collector.edges.values()) merged.set(edge.relationship_id, edge);
         excludedNeighbors ||= collector.excludedNeighbors;
-        if (workBudget.limitReached) break;
+        if (workBudget.exhausted) break;
       }
       const ordered = [...merged.values()].sort((left, right) =>
         scopedNeighborOrder(key, left, right),
       );
-      if (ordered.length > query.max_edges) incomplete = true;
+      if (ordered.length > query.max_edges) {
+        incomplete = true;
+        edgeLimitReached = true;
+      }
+      const finalCoverage = coverage.map((entry) =>
+        entry.status === "unfinished" && !incomplete
+          ? { ...entry, status: "completed" as const }
+          : entry,
+      );
+      incomplete ||= finalCoverage.some(
+        ({ status }) => status === "unsupported" || status === "unfinished",
+      );
       const selected = ordered.slice(0, query.max_edges);
       return {
         edges: selected.sort((left, right) =>
           left.relationship_id.localeCompare(right.relationship_id),
         ),
+        coverage: finalCoverage,
         incomplete,
-        work_items: workBudget.consumed,
-        work_limit_reached: workBudget.limitReached,
+        edge_limit_reached: edgeLimitReached,
+        work_items: workBudget.consumed - workAtStart,
+        work_limit_reached: workBudget.exhausted,
         excluded_neighbors: excludedNeighbors,
       };
     },
@@ -1712,7 +1821,11 @@ export function collectCompilerCallRelationships(
   project: Project,
   projectRoot: string,
   freshness: FreshnessMetadata,
-  options: { readonly max_edges?: number; readonly max_work_items?: number } = {},
+  options: {
+    readonly max_edges?: number;
+    readonly max_work_items?: number;
+    readonly work_tracker?: CompilerImpactWorkTracker;
+  } = {},
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ) {
   const maxEdges = options.max_edges ?? 5_000;
@@ -1720,21 +1833,20 @@ export function collectCompilerCallRelationships(
   if (!Number.isSafeInteger(maxEdges) || maxEdges < 1) {
     throw new Error("Compiler call max_edges must be a positive safe integer.");
   }
-  if (!Number.isSafeInteger(maxWorkItems) || maxWorkItems < 1) {
-    throw new Error("Compiler call max_work_items must be a positive safe integer.");
-  }
+  const tracker = options.work_tracker ?? new CompilerImpactWorkTracker(maxWorkItems);
 
   const normalizedFreshness = normalizeFreshness(freshness);
   const checker = project.getTypeChecker();
   const edges = new Map<string, RelationshipEdge>();
-  let workItems = 0;
   let workLimitReached = false;
   for (const sourceFile of project
     .getSourceFiles()
     .sort((left, right) => left.getFilePath().localeCompare(right.getFilePath()))) {
     sourceFile.forEachDescendant((node, traversal) => {
-      requestContext.checkpoint();
-      if (++workItems > maxWorkItems) {
+      try {
+        tracker.charge(requestContext);
+      } catch (error) {
+        if (!(error instanceof CompilerImpactWorkExhausted)) throw error;
         workLimitReached = true;
         traversal.stop();
         return;

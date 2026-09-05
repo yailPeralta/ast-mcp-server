@@ -28,6 +28,7 @@ import {
 } from "./result.js";
 
 const TOOL_NAME = "ast_get_impact";
+const IMPACT_TRUNCATION_REASONS = [...TRUNCATION_REASONS, "work_limit"] as const;
 
 const AstGetImpactInputSchema = z.object({
   project_root: z
@@ -88,9 +89,9 @@ const ImpactOutputSchema = z.object({
   incomplete: z.boolean(),
   truncation: z.object({
     truncated: z.boolean(),
-    reason: z.enum(TRUNCATION_REASONS).nullable(),
+    reason: z.enum(IMPACT_TRUNCATION_REASONS).nullable(),
   }),
-  truncation_reasons: z.array(z.enum(TRUNCATION_REASONS)),
+  truncation_reasons: z.array(z.enum(IMPACT_TRUNCATION_REASONS)),
   freshness: FreshnessSchema,
 });
 
@@ -157,7 +158,7 @@ export function registerGetImpact(server: McpServer): void {
           },
           requestContext,
         );
-        return formattedResult(ImpactOutputSchema, structuredContent, output_format);
+        return formattedResult(ImpactOutputSchema.passthrough(), structuredContent, output_format);
       } catch (error) {
         return errorResult(error, createToolErrorContext(TOOL_NAME, project_root));
       }
