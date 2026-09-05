@@ -2,9 +2,9 @@
 
 ## Authority, scope, and stop conditions
 
-OpenSpec is authoritative in hybrid mode; mirroring remains skipped because runtime/control-plane edits are prohibited. [Issue #186](https://github.com/yailPeralta/ast-mcp-server/issues/186) is open, approved, and exactly `type:bug`. [Issue #188](https://github.com/yailPeralta/ast-mcp-server/issues/188) is open, approved, and exactly `type:chore`; it supplies only the recovery tracker/foundation. [Issue #187](https://github.com/yailPeralta/ast-mcp-server/issues/187) remains a separate open, approved, exactly `type:bug` authority for accounting. RDD is `disabled/unmanaged`, so no native receipt authority is claimed. A's actual immediate base is planning [PR #210](https://github.com/yailPeralta/ast-mcp-server/pull/210), branch `docs/issue-186-state`, commit `8ba1050609f74c26892a7f44d6207304af5ea15c`; its runtime ancestor is recovery U7 [PR #206](https://github.com/yailPeralta/ast-mcp-server/pull/206), branch `docs/issue-188-u7-docs`, commit `5d839bb1ee2550e5d0a6404784baa21121e188fa`.
+OpenSpec is authoritative in hybrid mode; mirroring remains skipped because runtime/control-plane edits are prohibited. [Issue #186](https://github.com/yailPeralta/ast-mcp-server/issues/186) is open, approved, and exactly `type:bug`. [Issue #188](https://github.com/yailPeralta/ast-mcp-server/issues/188) is open, approved, and exactly `type:chore`; it supplies only the recovery tracker/foundation. [Issue #187](https://github.com/yailPeralta/ast-mcp-server/issues/187) remains a separate open, approved, exactly `type:bug` authority for accounting. RDD is `disabled/unmanaged`, so no native receipt authority is claimed. A's actual immediate base is [PR #211](https://github.com/yailPeralta/ast-mcp-server/pull/211), branch `chore/issue-186-authority`, commit `1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11`; its runtime ancestor is recovery U7 [PR #206](https://github.com/yailPeralta/ast-mcp-server/pull/206), branch `docs/issue-188-u7-docs`, commit `5d839bb1ee2550e5d0a6404784baa21121e188fa`.
 
-Stop before edits if #186 loses `status:approved`, HEAD/base differs, PR #210 is not A's immediate clean parent or PR #206 its runtime ancestor, another authority line conflicts, RDD is unsafe/unrecognized, a child exceeds 400 authored additions+deletions, a diff contains foreign paths/ancestor pollution, evidence/tree/cleanup hashes disagree, a gate fails, or review finds an unresolved candidate-caused severe defect. Never import or reuse #161 Judgment, receipts, lineage, approval, or settlement. Never implement #187, archive/merge any change, close #188, or inspect/edit Harness.
+Stop before edits if #186 loses `status:approved`, HEAD/base differs, PR #211 is not A's immediate clean parent or PR #206 its runtime ancestor, another authority line conflicts, RDD is unsafe/unrecognized, a child exceeds 400 authored additions+deletions, a diff contains foreign paths/ancestor pollution, evidence/tree/cleanup hashes disagree, a gate fails, or review finds an unresolved candidate-caused severe defect. Never import or reuse #161 Judgment, receipts, lineage, approval, or settlement. Never implement #187, archive/merge any change, close #188, or inspect/edit Harness.
 
 ## Dependency diagram and budgets
 
@@ -13,21 +13,21 @@ recovery U7 PR #206 @ 5d839bb
   └── planning PR #207 @ fb4ee5f (295 lines)
        └── planning PR #208 @ a8b8dd6 (187 lines)
             └── planning PR #209 @ 40ecdd5 (179 lines)
-                 └── planning PR #210 @ 8ba1050 (≤400 metadata)
+                 └── authority PR #211 @ 1fa8a6b (A immediate base)
                       └── #186A classifier/producer (220–320 authored lines) 📍
                             └── #186B MCP/spine/candidate parity (80–160 authored lines)
                                  └── fresh #186-only review + 6/14 evidence
                                       └── handoff to independent #187 apply
 ```
 
-Total forecast is 300–480 authored changed lines, high risk; Feature Branch Chain is mandatory, with each child ≤400 lines and approximately ≤60 review minutes. A starts from PR #210, retaining PR #206 as its runtime ancestor, and ends with compiler-level authority and scoped producer proof. B starts from A and ends with public/consumer parity, candidate-bound evidence, and final #186 review. No size exception.
+Total forecast is 300–480 authored changed lines, high risk; Feature Branch Chain is mandatory, with each child ≤400 lines and approximately ≤60 review minutes. A starts from PR #211, retaining PR #206 as its runtime ancestor, and ends with compiler-level authority and scoped producer proof. B starts from A and ends with public/consumer parity, candidate-bound evidence, and final #186 review. No size exception.
 
 | Child | Planned branch                     | Immediate base                                             | Issue linkage             | Allowlist                                                                                   | Rollback                     |
 | ----- | ---------------------------------- | ---------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------- |
-| A     | `fix/issue-186-a-call-authority`   | PR #210 / `8ba1050` (runtime ancestor PR #206 / `5d839bb`) | `Refs #186`, `Refs #188`  | `src/services/relationships.ts`, `test/impact.test.ts`, `test/relationships.test.ts`        | revert only A files/behavior |
+| A     | `fix/issue-186-a-call-authority`   | PR #211 / `1fa8a6b` (runtime ancestor PR #206 / `5d839bb`) | `Refs #186`, `Refs #188`  | `src/services/relationships.ts`, `test/impact.test.ts`, `test/relationships.test.ts`        | revert only A files/behavior |
 | B     | `test/issue-186-b-consumer-parity` | #186A branch/candidate                                     | `Fixes #186`, `Refs #188` | `src/services/relationships.ts`, `test/mcp.integration.test.ts`, `test/call-spines.test.ts` | revert only B parity changes |
 
-The open chain is clean and immediate-parented: #207 targets #206, #208 targets #207, #209 targets #208, and #210 targets #209; their changed-line totals are respectively 295, 187, 179, and 288 before this Phase 0 metadata update. No other open PR claims the #186 callable-authority implementation. A must target #210, not #206 directly; an A diff showing planning or recovery ancestors, or B showing A changes, has the wrong base and must be retargeted/rebased before review. `main` and closed #161 Judgment authority are not reusable bases or evidence.
+The open chain is clean and immediate-parented: #207 targets #206, #208 targets #207, #209 targets #208, and #210 targets #209; their changed-line totals are respectively 295, 187, 179, and 288 before this Phase 0 metadata update. No other open PR claims the #186 callable-authority implementation. A must target #211, not #206 directly; an A diff showing planning or recovery ancestors, or B showing A changes, has the wrong base and must be retargeted/rebased before review. `main` and closed #161 Judgment authority are not reusable bases or evidence.
 
 ## Attempt lifecycle and receipts
 
@@ -41,7 +41,7 @@ CHANGE=2026-09-04-issue-186-polymorphic-call-authority
   --reason "maintainer-authorized reset for approved issue 186 child A" --actor "$GENTLE_AI_RUNTIME_AGENT_ID"
 ```
 
-Use each request ID only for its own idempotent replay. Root must create branch `fix/issue-186-a-call-authority` from PR #210 commit `8ba1050609f74c26892a7f44d6207304af5ea15c`, then acquire A with request ID `issue186-a-acquire-a1`, work unit `issue186-a-classifier-producer`, evidence goal `RED GREEN REFACTOR compiler-proven callable dispatch`, `max-attempts: 2`, and `max-changed-lines: 400`. Its ordered allowlist is `src/services/relationships.ts`, `test/impact.test.ts`, `test/relationships.test.ts`. Child A settles with `issue186-a-settle-a1`; child B uses `issue186-b-acquire-a1` and `issue186-b-settle-a1`. If B alone requires an authorized reset, use `issue186-b-reset-r1`. A child process authenticates the same active attempt with the returned token rather than acquiring blind.
+A ran on `fix/issue-186-a-call-authority` from PR #211 commit `1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11`, authenticated by the supplied active token without acquire or settle. Its ordered runtime allowlist is `src/services/relationships.ts`, `test/impact.test.ts`, `test/relationships.test.ts`. Root retains settlement authority; B later uses its own acquire/settle IDs from the accepted A candidate.
 
 ```bash
 /home/yail/.local/bin/gentle-ai sdd-attempt acquire --cwd "$PWD" --change "$CHANGE" \

@@ -2007,6 +2007,120 @@ describe("scoped exact call relationships", () => {
     ).toEqual([]);
   });
 
+  it("fails closed for override-capable callable members without poisoning disjoint endpoints", async () => {
+    const fixture = await createProjectFixture({
+      "src/dispatch.ts": [
+        "export function exact(): void {}",
+        "export class Base {",
+        "  get callback(): () => void { return exact; }",
+        "  property: () => void = exact;",
+        "  method(): void {}",
+        "}",
+        "export class Child extends Base {",
+        "  override get callback(): () => void { return exact; }",
+        "  override property = (): void => {};",
+        "  override method(): void {}",
+        "}",
+        "export class ConvergentChild extends Base {}",
+        "export interface Contract { method(): void; property: () => void; }",
+        "export function uncertain(base: Base, contract: Contract, union: Base | Contract): void {",
+        "  base.callback(); base.property(); base.method(); contract.property(); union.method();",
+        "}",
+        "export function converge(flag: boolean): void {",
+        "  (flag ? new Base() : new ConvergentChild()).method();",
+        "}",
+        "export function exactOnly(): void { exact(); new Base().method(); }",
+      ].join("\n"),
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const resolver = createCompilerRelationshipResolver(project, fixture.root, freshness);
+    const call = (symbol: string, direction: "incoming" | "outgoing") =>
+      resolver.edgesFor(
+        resolveImpactRoot(project, fixture.root, rootRequest(symbol, "src/dispatch.ts")),
+        {
+          direction,
+          relationship_kinds: ["call"],
+          max_edges: 30,
+          max_work_items: 100_000,
+          allow_provisional_call: true,
+        },
+      );
+
+    const uncertain = call("uncertain", "outgoing");
+    expect(uncertain.edges).toEqual([]);
+    expect(uncertain.coverage[0]?.status).toBe("unfinished");
+    for (const target of ["Base.callback", "Base.property", "Base.method"]) {
+      const incoming = call(target, "incoming");
+      expect(incoming.edges.map(({ source }) => source.symbol_path)).not.toContain("uncertain");
+      expect(incoming.coverage[0]?.status).toBe("unfinished");
+    }
+    const converged = call("converge", "outgoing");
+    expect(converged.coverage[0]?.status).toBe("completed");
+    expect(
+      converged.edges.filter(({ target }) => target.symbol_path === "Base.method"),
+    ).toHaveLength(1);
+    const disjoint = call("exact", "incoming");
+    expect(disjoint.coverage[0]?.status).toBe("completed");
+    expect(disjoint.edges.map(({ source }) => source.symbol_path)).toEqual(["exactOnly"]);
+    expect(call("exactOnly", "outgoing").edges.map(({ target }) => target.symbol_path)).toEqual([
+      "Base.method",
+      "Base",
+      "exact",
+    ]);
+  });
+
+  it("keeps statically bound calls exact and polymorphic static receivers unfinished", async () => {
+    const fixture = await createProjectFixture({
+      "src/controls.ts": [
+        "export function free(value: string): string;",
+        "export function free(value: number): number;",
+        "export function free(value: string | number): string | number { return value; }",
+        "export class Owner {",
+        "  private hidden(): void {}",
+        "  #secret(): void {}",
+        "  static fixed(): void {}",
+        "  static throughThis(): void { this.fixed(); }",
+        "  exact(other: Owner): void { other.hidden(); other.#secret(); Owner.fixed(); free(1); }",
+        "}",
+        "export class Child extends Owner { exactSuper(): void { super.exact(this); } }",
+        "export function construct(ctor: typeof Owner): void { new Owner(); new ctor(); }",
+      ].join("\n"),
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const resolver = createCompilerRelationshipResolver(project, fixture.root, freshness);
+    const call = (symbol: string, direction: "incoming" | "outgoing" = "outgoing") =>
+      resolver.edgesFor(
+        resolveImpactRoot(project, fixture.root, rootRequest(symbol, "src/controls.ts")),
+        {
+          direction,
+          relationship_kinds: ["call"],
+          max_edges: 30,
+          max_work_items: 100_000,
+          allow_provisional_call: true,
+        },
+      );
+    expect(call("Owner.exact").edges.map(({ target }) => target.symbol_path)).toEqual([
+      "free",
+      "Owner.#secret",
+      "Owner.fixed",
+      "Owner.hidden",
+    ]);
+    expect(call("Child.exactSuper").edges.map(({ target }) => target.symbol_path)).toEqual([
+      "Owner.exact",
+    ]);
+    for (const target of ["Owner.hidden", "Owner.#secret"]) {
+      const incoming = call(target, "incoming");
+      expect(incoming.coverage[0]?.status).toBe("completed");
+      expect(incoming.edges.map(({ source }) => source.symbol_path)).toEqual(["Owner.exact"]);
+    }
+    for (const symbol of ["Owner.throughThis", "construct"]) {
+      expect(call(symbol).coverage[0]?.status).toBe("unfinished");
+    }
+    expect(call("construct").edges.map(({ target }) => target.symbol_path)).toEqual(["Owner"]);
+  });
+
   it("isolates unfinished compiler ambiguity to the applicable call direction", async () => {
     const fixture = await createProjectFixture({
       "src/targets.ts": "export function target(): void {}\nexport function other(): void {}\n",

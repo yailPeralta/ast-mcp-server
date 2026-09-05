@@ -1,13 +1,13 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-186-polymorphic-call-authority",
-  "stage": "phase-0-admitted-awaiting-root-acquire",
+  "stage": "a-candidate-ready-awaiting-root-settlement",
   "delivery": {
     "strategy": "feature-branch-chain",
     "deliveryStrategy": "auto-chain",
-    "immediateBasePullRequest": 210,
-    "immediateBaseBranch": "docs/issue-186-state",
-    "immediateBaseCommit": "8ba1050609f74c26892a7f44d6207304af5ea15c",
+    "immediateBasePullRequest": 211,
+    "immediateBaseBranch": "chore/issue-186-authority",
+    "immediateBaseCommit": "1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11",
     "runtimeAncestorPullRequest": 206,
     "runtimeAncestorBranch": "docs/issue-188-u7-docs",
     "runtimeAncestorCommit": "5d839bb1ee2550e5d0a6404784baa21121e188fa",
@@ -42,10 +42,10 @@
       "relationship": "separate successor; grants no issue 186 scope"
     },
     "immediateBase": {
-      "pullRequest": 210,
-      "url": "https://github.com/yailPeralta/ast-mcp-server/pull/210",
-      "branch": "docs/issue-186-state",
-      "commit": "8ba1050609f74c26892a7f44d6207304af5ea15c"
+      "pullRequest": 211,
+      "url": "https://github.com/yailPeralta/ast-mcp-server/pull/211",
+      "branch": "chore/issue-186-authority",
+      "commit": "1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11"
     },
     "runtimeAncestor": {
       "pullRequest": 206,
@@ -61,7 +61,7 @@
     ]
   },
   "phase0Admission": {
-    "status": "admitted-awaiting-root-acquire",
+    "status": "active-token-authenticated-a-candidate-ready",
     "rddMode": "disabled/unmanaged",
     "conflictingCallableAuthorityPullRequest": null,
     "issueEvidence": {
@@ -86,7 +86,11 @@
       "nextAction": "begin",
       "resetNeeded": false
     },
-    "rootInstruction": "Acquire work unit A only; do not reset."
+    "rootInstruction": "Settle frozen A; this delegated actor did not acquire or settle.",
+    "activeTokenDigest": "sha256:df28e3651c9a827cd1ab3408105fdee498426784dfacab8f5a1394198646aa3d",
+    "baseTree": "1b3268b531c59c52a4d1be205018d066517c4a08",
+    "baselineStatusSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "baselineProcessSha256": "b170c0f357b5231146347bc1d446aae8ab212e4df770f3969764a35ed1edc72a"
   },
   "workUnitEvidence": [
     {
@@ -94,16 +98,22 @@
       "focusedTest": "PASS: JSON/YAML parse, Prettier, exact 2/16 task assertion, git diff --check, and PR #210 metadata budget at 400 changed lines",
       "runtimeHarness": "N/A: Phase 0 admission changes metadata only and runtime/Harness execution is explicitly prohibited",
       "rollbackBoundary": "Revert only Phase 0 edits in tasks.md, state.yaml, apply-progress.json, and chain.md"
+    },
+    {
+      "tasks": ["0.3", "1.1", "1.2", "1.3", "2.1", "2.2", "2.3"],
+      "focusedTest": "PASS: 65/65 impact+relationships; 103/103 with call-spines+MCP",
+      "runtimeHarness": "PASS: yarn test:mcp stdio smoke; Harness N/A by prohibition",
+      "rollbackBoundary": "Revert only A runtime allowlist and compact #186 metadata; B remains pending"
     }
   ],
   "workUnits": [
     {
       "id": "A",
       "name": "Classifier and scoped producer authority",
-      "status": "pending-root-acquire",
+      "status": "candidate-ready-awaiting-root-settlement",
       "branch": "fix/issue-186-a-call-authority",
       "budget": "220-320",
-      "base": "PR #210 at 8ba1050609f74c26892a7f44d6207304af5ea15c; runtime ancestor PR #206 at 5d839bb1ee2550e5d0a6404784baa21121e188fa",
+      "base": "PR #211 at 1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11; runtime ancestor PR #206 at 5d839bb1ee2550e5d0a6404784baa21121e188fa",
       "issueLinkage": ["Refs #186", "Refs #188"],
       "allowlist": [
         "src/services/relationships.ts",
@@ -124,7 +134,16 @@
         "maxAttempts": 2,
         "maxChangedLines": 400
       },
-      "candidate": null,
+      "candidate": {
+        "base": "1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11",
+        "runtimeNumstat": "135/16 relationships.ts; 114/0 impact.test.ts; 17/1 relationships.test.ts",
+        "runtimePatchSha256": "afd1c67f54ce7b0153d1bcf4804d6d45d4f4e841c715c850256a33213a23e8d6",
+        "fileSha256": [
+          "454d997e5ccb254b002ba2254a64b5275c54d1c12e19ebce4493a0e284f68201",
+          "7a078f892d1cf3705d9ea8ff6bf047e52590847c39253f90f991ea109ba827dd",
+          "350e00f5068e20f875cdedc772b0241bc35c631391ff73796aed6f6fafed4452"
+        ]
+      },
       "rollback": "Revert only A allowlisted classifier/producer behavior and paired tests."
     },
     {
@@ -161,35 +180,35 @@
     },
     {
       "id": "0.3",
-      "name": "Acquire A and freeze base cleanup and process baselines",
-      "status": "pending"
+      "name": "Authenticate A and freeze base cleanup and process baselines",
+      "status": "complete"
     },
     {
       "id": "1.1",
       "name": "RED virtual callable convergence and uncertainty",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "id": "1.2",
       "name": "RED private exact controls and polymorphic static negatives",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "id": "1.3",
       "name": "RED disjoint direction stability work and cancellation",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "id": "2.1",
       "name": "GREEN normalize callable owners and implementations",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "id": "2.2",
       "name": "GREEN static binding and scoped receiver convergence",
-      "status": "pending"
+      "status": "complete"
     },
-    { "id": "2.3", "name": "REFACTOR verify freeze and settle A", "status": "pending" },
+    { "id": "2.3", "name": "REFACTOR verify and freeze A", "status": "complete" },
     { "id": "3.1", "name": "Acquire B from accepted A baselines", "status": "pending" },
     { "id": "3.2", "name": "RED registered MCP directional parity", "status": "pending" },
     { "id": "3.3", "name": "RED spine and candidate fail-closed parity", "status": "pending" },
@@ -212,14 +231,16 @@
   ],
   "taskProgress": {
     "total": 16,
-    "completed": 2,
-    "pending": 14,
+    "completed": 9,
+    "pending": 7,
     "allComplete": false
   },
   "tdd": {
-    "red": [],
-    "green": [],
-    "refactored": []
+    "red": [
+      "Two unchanged runs: 3 defect tests failed, 62 controls passed; exits 1; sha256 f2cee3dc... and c8c0cdfc..."
+    ],
+    "green": ["Focused A: 65/65 passed; sha256 64ac3371..."],
+    "refactored": ["Frozen: focused 103/103; full 983/983; sha256 8466c5e8..."]
   },
   "receiptPlan": {
     "attempts": [

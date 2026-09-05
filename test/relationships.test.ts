@@ -216,7 +216,23 @@ describe("compiler-backed relationships", () => {
     expect(callerCalls.every((edge) => edge.kind === "call" && edge.compiler_authoritative)).toBe(
       true,
     );
-    expect(calls.incomplete).toBe(false);
+    expect(calls.incomplete).toBe(true);
+
+    const ambiguousFixture = await createProjectFixture({
+      "src/dispatch.ts": [
+        "class Base { get callback(): () => void { return () => {}; } method(): void {} }",
+        "class Child extends Base { override get callback(): () => void { return () => {}; } override method(): void {} }",
+        "export function caller(base: Base): void { base.callback(); base.method(); }",
+      ].join("\n"),
+    });
+    fixtures.push(ambiguousFixture);
+    const ambiguous = collectCompilerCallRelationships(
+      new Project({ tsConfigFilePath: path.join(ambiguousFixture.root, "tsconfig.json") }),
+      ambiguousFixture.root,
+      freshness(),
+    );
+    expect(ambiguous.edges).toEqual([]);
+    expect(ambiguous.incomplete).toBe(true);
 
     const generic = collectCompilerRelationships(project, fixture.root, freshness());
     expect(generic.map((edge) => `${edge.kind}:${edge.target.symbol_path}`)).toContain(

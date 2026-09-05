@@ -30,8 +30,8 @@ artifacts:
   verifyReport: missing
 taskProgress:
   total: 16
-  completed: 2
-  pending: 14
+  completed: 9
+  pending: 7
   allComplete: false
 dependencies:
   proposal: all_done
@@ -63,12 +63,12 @@ persistence:
   mirrorStatus: skipped
   mirrorReason: "Runtime/control-plane edits are prohibited; only the authorized OpenSpec #186 change directory was written."
 phase0Admission:
-  status: admitted-awaiting-root-acquire
+  status: active-token-authenticated-a-candidate-ready
   authority: "#186 type:bug and #188 type:chore approved; #187 separate; RDD disabled/unmanaged; no conflicting implementation PR"
-  chain: "#206 5d839bb -> #207 -> #208 -> #209 -> #210 8ba1050; clean immediate parents; each <=400"
-  workUnitA: "fix/issue-186-a-call-authority from PR #210; runtime ancestor PR #206; allowlist in apply-progress.json"
-  attemptStatus: 'revision ""; binding ""; generation 0; attempts []; next ordinal 1; next action begin; no reset'
-  nextTask: "0.3 pending: root acquires A; this actor did not acquire or reset"
+  chain: "#206 5d839bb runtime ancestor -> #211 1fa8a6b immediate base -> #186A working tree"
+  workUnitA: "fix/issue-186-a-call-authority; active token authenticated; runtime allowlist in apply-progress.json"
+  attemptStatus: "delegated active token supplied; acquire/settle intentionally not executed"
+  nextTask: "Root settles A, then B acquires from the frozen A candidate"
 reviewBudget:
   forecastAuthoredChangedLines: "300-480"
   forecastChildren: 2

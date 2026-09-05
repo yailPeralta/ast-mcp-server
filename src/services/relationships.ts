@@ -1577,7 +1577,7 @@ function addScopedIncomingCalls(
     consumeScopedWork(state, collector);
     sourceFile.forEachDescendant((node) => {
       consumeScopedWork(state, collector);
-      const invocation = classifyCompilerInvocation(checker, state.projectRoot, node);
+      const invocation = classifyCompilerInvocation(checker, state.projectRoot, node, target);
       if (invocation.state === "unfinished") {
         unfinished = true;
         return;
@@ -2045,12 +2045,68 @@ function unwrapInvocationExpression(node: Node): Node {
   return current;
 }
 
+function callableOwner(declaration: Node): Node {
+  if (
+    Node.isFunctionDeclaration(declaration) ||
+    Node.isMethodDeclaration(declaration) ||
+    Node.isMethodSignature(declaration) ||
+    Node.isPropertyDeclaration(declaration) ||
+    Node.isPropertySignature(declaration) ||
+    Node.isGetAccessorDeclaration(declaration) ||
+    Node.isSetAccessorDeclaration(declaration) ||
+    Node.isConstructorDeclaration(declaration) ||
+    Node.isVariableDeclaration(declaration) ||
+    Node.isParameterDeclaration(declaration)
+  ) {
+    return declaration;
+  }
+  return (
+    declaration.getFirstAncestor(
+      (ancestor) =>
+        Node.isMethodDeclaration(ancestor) ||
+        Node.isMethodSignature(ancestor) ||
+        Node.isPropertyDeclaration(ancestor) ||
+        Node.isPropertySignature(ancestor) ||
+        Node.isGetAccessorDeclaration(ancestor) ||
+        Node.isSetAccessorDeclaration(ancestor),
+    ) ?? declaration
+  );
+}
+
+function isCallableMember(node: Node): boolean {
+  return (
+    Node.isMethodDeclaration(node) ||
+    Node.isMethodSignature(node) ||
+    Node.isPropertyDeclaration(node) ||
+    Node.isPropertySignature(node) ||
+    Node.isGetAccessorDeclaration(node) ||
+    Node.isSetAccessorDeclaration(node)
+  );
+}
+
+function isPrivateCallableMember(node: Node): boolean {
+  if (!isCallableMember(node)) return false;
+  const name = (node.compilerNode as { name?: { kind: SyntaxKind } }).name;
+  return (
+    name?.kind === SyntaxKind.PrivateIdentifier ||
+    (Node.isModifierable(node) && node.hasModifier(SyntaxKind.PrivateKeyword))
+  );
+}
+
+function isVirtualCallableMember(node: Node): boolean {
+  return (
+    isCallableMember(node) &&
+    !isPrivateCallableMember(node) &&
+    !(Node.isStaticable(node) && node.isStatic())
+  );
+}
+
 function locatedCallTarget(projectRoot: string, declaration: Node): LocatedSymbol | undefined {
-  if (Node.isParameterDeclaration(declaration) || Node.isMethodSignature(declaration))
-    return undefined;
-  let targetNode = Node.isConstructorDeclaration(declaration)
-    ? declaration.getFirstAncestorByKind(SyntaxKind.ClassDeclaration)
-    : declaration;
+  const owner = callableOwner(declaration);
+  if (Node.isParameterDeclaration(owner) || Node.isMethodSignature(owner)) return undefined;
+  let targetNode = Node.isConstructorDeclaration(owner)
+    ? owner.getFirstAncestorByKind(SyntaxKind.ClassDeclaration)
+    : owner;
   if (
     targetNode &&
     (Node.isFunctionDeclaration(targetNode) || Node.isMethodDeclaration(targetNode)) &&
@@ -2073,6 +2129,31 @@ function locatedCallTarget(projectRoot: string, declaration: Node): LocatedSymbo
   );
 }
 
+function invocationReceiver(invoked: Node): Node | undefined {
+  if (Node.isPropertyAccessExpression(invoked) || Node.isElementAccessExpression(invoked)) {
+    return unwrapInvocationExpression(invoked.getExpression());
+  }
+  return undefined;
+}
+
+function isClosedReceiver(node: Node | undefined): boolean {
+  if (!node) return false;
+  const receiver = unwrapInvocationExpression(node);
+  if (Node.isNewExpression(receiver)) return true;
+  if (Node.isConditionalExpression(receiver)) {
+    return isClosedReceiver(receiver.getWhenTrue()) && isClosedReceiver(receiver.getWhenFalse());
+  }
+  return false;
+}
+
+function isLexicalClassReceiver(node: Node | undefined): boolean {
+  return (
+    !!node &&
+    Node.isIdentifier(node) &&
+    declarationsForSymbol(node.getSymbol()).some(Node.isClassDeclaration)
+  );
+}
+
 type CompilerInvocation =
   | { readonly state: "exact"; readonly target: LocatedSymbol }
   | { readonly state: "not_call" | "disjoint" | "unfinished" };
@@ -2081,30 +2162,66 @@ function classifyCompilerInvocation(
   checker: TypeChecker,
   projectRoot: string,
   node: Node,
+  incomingTarget?: LocatedSymbol,
 ): CompilerInvocation {
   const expression = callLikeExpression(node);
   if (!expression) return { state: "not_call" };
   const invoked = unwrapInvocationExpression(expression);
-  const invokedDeclarations = declarationsForSymbol(invoked.getSymbol());
-  if (invokedDeclarations.some(Node.isParameterDeclaration)) return { state: "unfinished" };
   const signature = checker.getResolvedSignature(node as never);
+  const invokedDeclarations = declarationsForSymbol(invoked.getSymbol());
   const implicit = Node.isNewExpression(node) ? invoked.getType().getConstructSignatures() : [];
-  if (!signature && implicit.length !== 1) return { state: "unfinished" };
   const declarations =
     invokedDeclarations.length > 0
       ? invokedDeclarations
       : signature
         ? [signature.getDeclaration()]
         : [];
+  if ((!signature && implicit.length !== 1) || declarations.length === 0) {
+    return { state: "unfinished" };
+  }
+  const receiver = invocationReceiver(invoked);
+  if (receiver && Node.isPropertyAccessExpression(invoked)) {
+    const receiverType = receiver.getType();
+    const alternatives = receiverType.isUnion() ? receiverType.getUnionTypes() : [receiverType];
+    for (const alternative of alternatives) {
+      declarations.push(...declarationsForSymbol(alternative.getProperty(invoked.getName())));
+    }
+  }
+  const owners = [...new Set(declarations.map(callableOwner))];
   const targets = new Map<string, LocatedSymbol>();
-  for (const candidate of declarations) {
-    const target = locatedCallTarget(projectRoot, candidate);
+  for (const owner of owners) {
+    const target = locatedCallTarget(projectRoot, owner);
     if (target) targets.set(symbolEndpoint(target, projectRoot).selector, target);
   }
-  if (targets.size === 1) return { state: "exact", target: [...targets.values()][0] };
-  return declarations.length > 0 && targets.size === 0
-    ? { state: "disjoint" }
-    : { state: "unfinished" };
+
+  if (
+    targets.size === 0 &&
+    owners.every((owner) => !Node.isParameterDeclaration(owner) && !isVirtualCallableMember(owner))
+  ) {
+    return { state: "disjoint" };
+  }
+
+  const memberOwners = owners.filter(isCallableMember);
+  const staticallyBound = Node.isNewExpression(node)
+    ? declarationsForSymbol(invoked.getSymbol()).some(Node.isClassDeclaration)
+    : memberOwners.length === 0 ||
+      memberOwners.every(isPrivateCallableMember) ||
+      receiver?.getKind() === SyntaxKind.SuperKeyword ||
+      isClosedReceiver(receiver) ||
+      (memberOwners.every((owner) => Node.isStaticable(owner) && owner.isStatic()) &&
+        isLexicalClassReceiver(receiver));
+
+  if (staticallyBound && targets.size === 1) {
+    return { state: "exact", target: [...targets.values()][0] };
+  }
+  if (
+    incomingTarget &&
+    !isVirtualCallableMember(incomingTarget.node) &&
+    ![...targets.values()].some((target) => sameCompilerNode(target.node, incomingTarget.node))
+  ) {
+    return { state: "disjoint" };
+  }
+  return { state: "unfinished" };
 }
 
 export function collectCompilerCallRelationships(
@@ -2129,6 +2246,7 @@ export function collectCompilerCallRelationships(
   const checker = project.getTypeChecker();
   const edges = new Map<string, RelationshipEdge>();
   let workLimitReached = false;
+  let dispatchUnfinished = false;
   for (const sourceFile of project
     .getSourceFiles()
     .sort((left, right) => left.getFilePath().localeCompare(right.getFilePath()))) {
@@ -2142,6 +2260,7 @@ export function collectCompilerCallRelationships(
         return;
       }
       const invocation = classifyCompilerInvocation(checker, projectRoot, node);
+      if (invocation.state === "unfinished") dispatchUnfinished = true;
       if (invocation.state !== "exact") return;
       const caller = containingSymbol(sourceFile, node);
       if (!caller) return;
@@ -2164,7 +2283,7 @@ export function collectCompilerCallRelationships(
   );
   return Object.freeze({
     edges: Object.freeze(ordered.slice(0, maxEdges)),
-    incomplete: workLimitReached || ordered.length > maxEdges,
+    incomplete: dispatchUnfinished || workLimitReached || ordered.length > maxEdges,
   });
 }
 
