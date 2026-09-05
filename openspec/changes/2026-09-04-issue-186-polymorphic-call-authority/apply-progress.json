@@ -1,0 +1,212 @@
+{
+  "schema": "dsh-sdd-apply-progress",
+  "change": "2026-09-04-issue-186-polymorphic-call-authority",
+  "authoritative": true,
+  "stage": "planned",
+  "delivery": {
+    "strategy": "feature-branch-chain",
+    "deliveryStrategy": "auto-chain",
+    "immediateBasePullRequest": 206,
+    "immediateBaseBranch": "docs/issue-188-u7-docs",
+    "immediateBaseCommit": "5d839bb1ee2550e5d0a6404784baa21121e188fa",
+    "maxAuthoredChangedLinesPerChild": 400,
+    "forecastAuthoredChangedLines": "300-480",
+    "forecastChildren": 2,
+    "sizeException": false,
+    "mergeable": false
+  },
+  "authority": {
+    "approvedIssue": {
+      "number": 186,
+      "url": "https://github.com/yailPeralta/ast-mcp-server/issues/186",
+      "requiredState": "OPEN",
+      "requiredLabel": "status:approved"
+    },
+    "recoveryIssue": {
+      "number": 188,
+      "url": "https://github.com/yailPeralta/ast-mcp-server/issues/188",
+      "relationship": "U7 foundation and integration tracker only"
+    },
+    "immediateBase": {
+      "pullRequest": 206,
+      "url": "https://github.com/yailPeralta/ast-mcp-server/pull/206",
+      "commit": "5d839bb1ee2550e5d0a6404784baa21121e188fa"
+    },
+    "forbiddenAuthority": [
+      "Issue 161 Judgment, lineage, receipts, approvals, settlements, CI, archive, or delivery claims",
+      "Issue 187 accounting, sorting, retention, finalization, exact-bound, or one-below behavior",
+      "Archive, merge, or closure of issue 188",
+      "Harness inspection, execution, or modification"
+    ]
+  },
+  "workUnits": [
+    {
+      "id": "A",
+      "name": "Classifier and scoped producer authority",
+      "status": "pending",
+      "budget": "220-320",
+      "base": "PR #206 at 5d839bb1ee2550e5d0a6404784baa21121e188fa",
+      "issueLinkage": ["Refs #186", "Refs #188"],
+      "allowlist": [
+        "src/services/relationships.ts",
+        "test/impact.test.ts",
+        "test/relationships.test.ts"
+      ],
+      "attemptIds": {
+        "conditionalReset": "issue186-a-reset-r1",
+        "acquire": "issue186-a-acquire-a1",
+        "settle": "issue186-a-settle-a1"
+      },
+      "candidate": null,
+      "rollback": "Revert only A allowlisted classifier/producer behavior and paired tests."
+    },
+    {
+      "id": "B",
+      "name": "MCP, call-spine, and candidate parity",
+      "status": "pending",
+      "budget": "80-160",
+      "base": "accepted #186A candidate",
+      "issueLinkage": ["Fixes #186", "Refs #188"],
+      "allowlist": [
+        "src/services/relationships.ts",
+        "test/mcp.integration.test.ts",
+        "test/call-spines.test.ts"
+      ],
+      "attemptIds": {
+        "conditionalReset": "issue186-b-reset-r1",
+        "acquire": "issue186-b-acquire-a1",
+        "settle": "issue186-b-settle-a1"
+      },
+      "candidate": null,
+      "rollback": "Revert only B global-collector and public consumer parity changes."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "0.1",
+      "name": "Recheck approved authority, conflicts, RDD, and PR 206 base",
+      "status": "pending"
+    },
+    {
+      "id": "0.2",
+      "name": "Inspect attempt status and conditionally reset only with authority",
+      "status": "pending"
+    },
+    {
+      "id": "0.3",
+      "name": "Acquire A and freeze base cleanup and process baselines",
+      "status": "pending"
+    },
+    {
+      "id": "1.1",
+      "name": "RED virtual callable convergence and uncertainty",
+      "status": "pending"
+    },
+    {
+      "id": "1.2",
+      "name": "RED private exact controls and polymorphic static negatives",
+      "status": "pending"
+    },
+    {
+      "id": "1.3",
+      "name": "RED disjoint direction stability work and cancellation",
+      "status": "pending"
+    },
+    {
+      "id": "2.1",
+      "name": "GREEN normalize callable owners and implementations",
+      "status": "pending"
+    },
+    {
+      "id": "2.2",
+      "name": "GREEN static binding and scoped receiver convergence",
+      "status": "pending"
+    },
+    { "id": "2.3", "name": "REFACTOR verify freeze and settle A", "status": "pending" },
+    { "id": "3.1", "name": "Acquire B from accepted A baselines", "status": "pending" },
+    { "id": "3.2", "name": "RED registered MCP directional parity", "status": "pending" },
+    { "id": "3.3", "name": "RED spine and candidate fail-closed parity", "status": "pending" },
+    { "id": "3.4", "name": "GREEN REFACTOR global and consumer parity", "status": "pending" },
+    {
+      "id": "4.1",
+      "name": "Run full package gates freeze cleanup and settle B",
+      "status": "pending"
+    },
+    {
+      "id": "4.2",
+      "name": "Obtain fresh independent read-only issue 186 review",
+      "status": "pending"
+    },
+    {
+      "id": "4.3",
+      "name": "Validate 6 of 6 requirements and 14 of 14 scenarios then hand off to issue 187",
+      "status": "pending"
+    }
+  ],
+  "taskProgress": {
+    "total": 16,
+    "completed": 0,
+    "pending": 16,
+    "allComplete": false
+  },
+  "tdd": {
+    "red": [],
+    "green": [],
+    "refactored": []
+  },
+  "receiptPlan": {
+    "attempts": [
+      "A conditional reset issue186-a-reset-r1 only after explicit authorization",
+      "A acquire issue186-a-acquire-a1 and settle issue186-a-settle-a1",
+      "B conditional reset issue186-b-reset-r1 only after explicit authorization",
+      "B acquire issue186-b-acquire-a1 and settle issue186-b-settle-a1"
+    ],
+    "candidateIdentity": [
+      "base and head commit/tree",
+      "ordered allowlist and authored numstat",
+      "binary patch and allowlisted file SHA-256",
+      "commands, exits, output hashes, and RED failure signatures",
+      "worktree cleanup and process snapshot SHA-256"
+    ],
+    "gates": [
+      "focused Vitest",
+      "format check, lint, typecheck, full test, and build",
+      "MCP, lifecycle, CLI, public-error, and package smoke",
+      "git diff check and clean expected status"
+    ],
+    "review": "Fresh independent read-only adversarial review limited to the frozen issue 186 candidate; native receipt only if RDD is enabled.",
+    "harness": "N/A by explicit prohibition; no substitute evidence or authority claim."
+  },
+  "trace": {
+    "requirementsExpected": 6,
+    "requirementsMapped": 6,
+    "scenariosExpected": 14,
+    "scenariosMapped": 14,
+    "scenarioTasks": {
+      "Alternatives converge": "1.1 -> 2.1-2.2",
+      "Alternatives are uncertain": "1.1 -> 2.1-2.2",
+      "Endpoint is disjoint": "1.3 -> 2.2",
+      "Callable getter override": "1.1 -> 2.1-2.2",
+      "Callable property override": "1.1 -> 2.1-2.2",
+      "Method and union dispatch": "1.1 -> 2.2",
+      "Private owner parameter": "1.2 -> 2.2",
+      "Non-virtual exact controls": "1.2 -> 2.1-2.2",
+      "Polymorphic static receiver": "1.2 -> 2.2",
+      "Directional isolation": "1.3 -> 2.2",
+      "Stable edge set": "1.3 -> 2.2",
+      "Runtime controls remain unchanged": "1.3 -> 2.3",
+      "Ambiguity reaches consumers": "3.2-3.3 -> 3.4",
+      "Exact acceptance boundary": "3.2-3.3 -> 3.4-4.2"
+    },
+    "activeRed": []
+  },
+  "risks": [
+    "False exact virtual dispatch violates compiler authority.",
+    "Incoming ambiguity can over-poison compiler-proven disjoint targets.",
+    "Unsafe static exemptions or owner normalization can regress exact controls.",
+    "Any issue 187 accounting edit or issue 161 authority reuse invalidates scope.",
+    "Any child over 400 authored lines requires replanning rather than a size exception."
+  ],
+  "nextRecommended": "apply",
+  "updatedAt": "2026-09-05T02:51:28Z"
+}

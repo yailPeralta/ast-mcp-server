@@ -1,0 +1,76 @@
+schemaName: gentle-ai.sdd-status
+schemaVersion: 1
+changeName: 2026-09-04-issue-186-polymorphic-call-authority
+artifactStore: hybrid
+planningHome:
+  mode: repo-local
+  path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority
+nextRecommended: apply
+lastPhase: tasks
+artifactPaths:
+  proposal:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/proposal.md
+  specs:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/specs/polymorphic-call-authority/spec.md
+  design:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/design.md
+  tasks:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/tasks.md
+  applyProgress:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/apply-progress.json
+  verifyReport: []
+artifacts:
+  exploration: done
+  proposal: done
+  specs: done
+  design: done
+  tasks: done
+  applyProgress: done
+  verifyReport: missing
+taskProgress:
+  total: 16
+  completed: 0
+  pending: 16
+  allComplete: false
+dependencies:
+  proposal: all_done
+  specs: all_done
+  design: all_done
+  tasks: all_done
+  apply: ready
+  verify: blocked
+  archive: blocked
+applyState: ready
+actionContext:
+  mode: repo-local
+  workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
+  allowedEditRoots:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority
+relationships:
+  dependsOn:
+    - "2026-09-04-issue-188-relationship-coverage-recovery (U7 candidate PR #206 at 5d839bb; unmerged and non-authoritative until #186, #187, and final gates pass)"
+  supersedes: []
+  amends: []
+  conflictsWith:
+    - "2026-09-02-r01-honest-relationship-coverage (closed escalated evidence only; never resume or extend #161 Judgment)"
+  sameDomainActiveChanges:
+    - "Issue #187 request-wide work accounting (independent successor child and final integration gate; no #186 accounting scope)"
+blockedReasons: []
+persistence:
+  requestedMode: hybrid
+  authoritativeStore: openspec
+  mirrorStatus: skipped
+  mirrorReason: "Runtime/control-plane edits are prohibited; only the authorized OpenSpec #186 change directory was written."
+reviewBudget:
+  forecastAuthoredChangedLines: "300-480"
+  forecastChildren: 2
+  maxAuthoredChangedLinesPerChild: 400
+  splitRule: "Auto-chain two children: A descriptor/classifier/scoped producers, then B MCP/relationship/spine/candidate parity."
+  sizeException: false
+risks:
+  - "Callable accessor, property, or method override dispatch can be falsely compiler-authoritative without convergent receiver alternatives."
+  - "Private and #private owner-slot calls through typed parameter receivers can be falsely unfinished if parameter uncertainty precedes nominal dispatch proof."
+  - "Incoming ambiguity can over-poison unrelated targets unless compiler-proven disjointness is preserved."
+  - "Issue #187 accounting and the unmerged #188 recovery remain independent integration gates."
+  - "A final plan above 400 authored lines requires the defined two-child split and fresh review."
