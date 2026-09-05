@@ -106,6 +106,9 @@ phaseInstructions:
 nextRecommended: apply
 blockedReasons: []
 lastPhase: apply-b-candidate-ready-unreviewed
+documentationCleanup:
+  status: formatting-gate-cleared
+  runtimeCandidate: "Frozen A+B unchanged from PR #228 commit 68b7611006e45e1aec0c8cb8b22fd90e8954c73a"
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec

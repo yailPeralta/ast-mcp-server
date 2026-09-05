@@ -31,7 +31,11 @@
     { "id": "3.2", "name": "Strict verify 9/13", "status": "pending" }
   ],
   "taskProgress": { "total": 16, "completed": 13, "pending": 3, "allComplete": false },
-  "tdd": { "red": ["A.1-A.3", "B.1-B.3 twice unchanged"], "green": ["A.1-A.4", "B.1-B.5"], "refactored": ["A.4", "B.4-B.5"] },
+  "tdd": {
+    "red": ["A.1-A.3", "B.1-B.3 twice unchanged"],
+    "green": ["A.1-A.4", "B.1-B.5"],
+    "refactored": ["A.4", "B.4-B.5"]
+  },
   "plannedEvidence": {
     "stageVector": "planned; exact-once, pre-effect, no reset/double charge",
     "limits": "generous=exact; one-below saturated and authority-free",
@@ -119,6 +123,10 @@
       "rollbackBoundary": "Revert only tasks.md, chain.md, apply-progress.json, and state.yaml Phase-0 metadata; no source, test, runtime ledger, GitHub, branch, commit, push, PR, or issue state changed."
     },
     "strictTddDisposition": "N/A for static process tasks 0.1-0.2; no production behavior was implemented and TDD buckets remain empty."
+  },
+  "documentationCleanup": {
+    "status": "formatting-gate-cleared",
+    "runtimeCandidate": "Frozen A+B unchanged from PR #228 commit 68b7611006e45e1aec0c8cb8b22fd90e8954c73a"
   },
   "review": "pending independent read-only; RDD disabled/unmanaged",
   "verify": { "requirements": 9, "scenarios": 13, "status": "pending" },
