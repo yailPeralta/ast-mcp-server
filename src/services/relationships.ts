@@ -460,22 +460,35 @@ export interface CompilerImpactWork {
   readonly exhausted: boolean;
 }
 class CompilerImpactWorkExhausted extends Error {}
+export interface CompilerImpactWorkEvent {
+  readonly stage: string;
+  readonly count: number;
+  readonly before: number;
+  readonly after: number;
+}
 export class CompilerImpactWorkTracker {
   consumed = 0;
   exhausted = false;
-  constructor(readonly max: number) {
+  constructor(
+    readonly max: number,
+    private readonly observe?: (event: CompilerImpactWorkEvent) => void,
+  ) {
     if (!Number.isSafeInteger(max) || max < 1) {
       throw new Error("Compiler impact max_work_items must be a positive safe integer.");
     }
   }
-  charge(requestContext: RequestContext, count = 1): void {
+  charge(requestContext: RequestContext, count = 1, stage = "existing"): void {
     requestContext.checkpoint();
-    if (count > this.max - this.consumed) {
+    if (!Number.isSafeInteger(count) || count < 0)
+      throw new Error("Work charge must be non-negative.");
+    const before = this.consumed;
+    if (count > this.max - before) {
       this.consumed = this.max;
       this.exhausted = true;
       throw new CompilerImpactWorkExhausted();
     }
     this.consumed += count;
+    this.observe?.({ stage, count, before, after: this.consumed });
   }
 
   snapshot(): CompilerImpactWork {
@@ -561,23 +574,26 @@ class ScopedCallCoverageUnfinished extends Error {}
 function consumeRelationshipWork(
   state: ScopedCompilerRelationshipState,
   budget: ScopedRelationshipWorkBudget,
+  stage = "existing",
 ): void {
-  budget.charge(state.requestContext);
+  budget.charge(state.requestContext, 1, stage);
 }
 
 function consumeScopedWork(
   state: ScopedCompilerRelationshipState,
   collector: ScopedEdgeCollector,
+  stage = "existing",
 ): void {
-  consumeRelationshipWork(state, collector.workBudget);
+  consumeRelationshipWork(state, collector.workBudget, stage);
 }
 
 function reserveScopedWork(
   state: ScopedCompilerRelationshipState,
   collector: ScopedEdgeCollector,
   count: number,
+  stage = "existing",
 ): void {
-  collector.workBudget.charge(state.requestContext, count);
+  collector.workBudget.charge(state.requestContext, count, stage);
 }
 
 function scopedDeclarationsForSymbol(
@@ -662,7 +678,7 @@ function scopedSourceFiles(
   const sourceFiles: SourceFile[] = [];
   if (collector.allowedNeighborFilePaths) {
     for (const filePath of collector.allowedNeighborFilePaths) {
-      consumeScopedWork(state, collector);
+      consumeScopedWork(state, collector, "source.lookup_emit");
       const sourceFile = state.project.getSourceFile(filePath);
       if (sourceFile) sourceFiles.push(sourceFile);
     }
@@ -672,13 +688,15 @@ function scopedSourceFiles(
   const program = state.project.getProgram().compilerObject;
   const filePaths: string[] = [];
   for (const compilerSourceFile of program.getSourceFiles()) {
-    consumeScopedWork(state, collector);
+    consumeScopedWork(state, collector, "source.enumerate");
     const filePath = compilerSourceFile.fileName;
     if (!isProjectScopedFile(state.projectRoot, filePath)) continue;
     filePaths.push(filePath);
   }
+  reserveScopedWork(state, collector, filePaths.length, "source.path_sort");
   filePaths.sort((left, right) => left.localeCompare(right));
   for (const filePath of filePaths) {
+    consumeScopedWork(state, collector, "source.lookup_emit");
     const sourceFile = state.project.getSourceFile(filePath);
     if (sourceFile) sourceFiles.push(sourceFile);
   }
@@ -842,6 +860,7 @@ function scopedNeighborOrder(
 }
 
 interface ScopedCandidateSet {
+  readonly state: ScopedCompilerRelationshipState;
   readonly collector: ScopedEdgeCollector;
   readonly indexes: Map<string, number>;
   readonly values: RelationshipEdge[];
@@ -849,8 +868,12 @@ interface ScopedCandidateSet {
   push(candidate: RelationshipEdge): void;
 }
 
-function createScopedCandidateSet(collector: ScopedEdgeCollector): ScopedCandidateSet {
+function createScopedCandidateSet(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+): ScopedCandidateSet {
   const candidates: ScopedCandidateSet = {
+    state,
     collector,
     indexes: new Map(),
     values: [],
@@ -872,6 +895,7 @@ function swapScopedCandidates(candidates: ScopedCandidateSet, left: number, righ
 }
 
 function retainScopedCandidate(candidates: ScopedCandidateSet, candidate: RelationshipEdge): void {
+  consumeScopedWork(candidates.state, candidates.collector, "candidate.retain_attempt");
   if (!candidates.collector.relationshipKinds.has(candidate.kind)) return;
   if (candidates.collector.excludedRelationshipIds.has(candidate.relationship_id)) return;
   const neighborKey = scopedIncidentNeighborKey(candidates.collector, candidate);
@@ -921,10 +945,17 @@ function retainScopedCandidate(candidates: ScopedCandidateSet, candidate: Relati
 }
 
 function flushScopedCandidates(candidates: ScopedCandidateSet): void {
+  reserveScopedWork(
+    candidates.state,
+    candidates.collector,
+    candidates.values.length,
+    "candidate.sort",
+  );
   candidates.values.sort((left, right) =>
     scopedNeighborOrder(candidates.collector.endpointKey, left, right),
   );
   for (const candidate of candidates.values) {
+    consumeScopedWork(candidates.state, candidates.collector, "candidate.emit");
     addScopedResolvedEdge(candidates.collector, candidate);
   }
 }
@@ -1007,7 +1038,7 @@ function addScopedHeritageEdges(
   edges: ScopedEdgeCollector,
   source: LocatedSymbol,
 ): void {
-  const candidates = createScopedCandidateSet(edges);
+  const candidates = createScopedCandidateSet(state, edges);
   collectScopedHeritageEdges(state, edges, source, candidates);
   addScopedCandidates(edges, candidates);
 }
@@ -1040,7 +1071,7 @@ function addScopedModuleEdges(
   edges: ScopedEdgeCollector,
   sourceFile: SourceFile,
 ): void {
-  const candidates = createScopedCandidateSet(edges);
+  const candidates = createScopedCandidateSet(state, edges);
   sourceFile.forEachChild((declaration) => {
     consumeScopedWork(state, edges);
     if (Node.isImportDeclaration(declaration) && edges.relationshipKinds.has("import")) {
@@ -1123,7 +1154,7 @@ function addScopedOutgoingReferences(
   edges: ScopedEdgeCollector,
   source: LocatedSymbol,
 ): void {
-  const candidates = createScopedCandidateSet(edges);
+  const candidates = createScopedCandidateSet(state, edges);
   const sourceFile = source.node.getSourceFile();
   source.node.forEachDescendant((reference) => {
     consumeScopedWork(state, edges);
@@ -1304,7 +1335,7 @@ function addScopedMemberRelationships(
   const targetContainer = scopedMemberContainer(target.node);
   if (!targetName || !targetContainer) return;
   const targetBases = scopedBaseContainers(state, edges, targetContainer);
-  const candidates = createScopedCandidateSet(edges);
+  const candidates = createScopedCandidateSet(state, edges);
 
   for (const sourceFile of scopedSourceFiles(state, edges)) {
     consumeScopedWork(state, edges);
@@ -1343,7 +1374,7 @@ function addScopedIncomingHeritageRelationships(
   state: ScopedCompilerRelationshipState,
   edges: ScopedEdgeCollector,
 ): void {
-  const candidates = createScopedCandidateSet(edges);
+  const candidates = createScopedCandidateSet(state, edges);
   for (const sourceFile of scopedSourceFiles(state, edges)) {
     consumeScopedWork(state, edges);
     forEachScopedSymbol(state, edges, sourceFile, (candidate) => {
@@ -1360,7 +1391,7 @@ function addScopedIncomingReferences(
 ): void {
   for (const sourceFile of scopedSourceFiles(state, edges)) {
     consumeScopedWork(state, edges);
-    const candidates = createScopedCandidateSet(edges);
+    const candidates = createScopedCandidateSet(state, edges);
     sourceFile.forEachDescendant((reference) => {
       consumeScopedWork(state, edges);
       if (!isCompilerReferenceNode(reference)) return;
@@ -1547,7 +1578,7 @@ function addScopedOutgoingCalls(
   caller: LocatedSymbol,
 ): void {
   const checker = state.project.getTypeChecker();
-  const candidates = createScopedCandidateSet(collector);
+  const candidates = createScopedCandidateSet(state, collector);
   let unfinished = false;
   caller.node.forEachDescendant((node) => {
     consumeScopedWork(state, collector);
@@ -1571,7 +1602,7 @@ function addScopedIncomingCalls(
   target: LocatedSymbol,
 ): void {
   const checker = state.project.getTypeChecker();
-  const candidates = createScopedCandidateSet(collector);
+  const candidates = createScopedCandidateSet(state, collector);
   let unfinished = false;
   for (const sourceFile of scopedSourceFiles(state, collector)) {
     consumeScopedWork(state, collector);
@@ -1654,6 +1685,7 @@ function flushScopedContainsEdges(
   collector: ScopedEdgeCollector,
   candidates: ScopedContainsCandidate[],
 ): void {
+  reserveScopedWork(state, collector, candidates.length, "contains.candidate_sort");
   candidates.sort(
     (left, right) =>
       left.target.node.getStart() - right.target.node.getStart() ||
@@ -1793,6 +1825,13 @@ export function createCompilerRelationshipResolver(
           consumeRelationshipWork(state, workBudget);
           allowedNeighborFilePaths!.add(
             path.resolve(projectRoot, neighborKey.split("\u0000", 1)[0]),
+          );
+        }
+        if (allowedNeighborFilePaths) {
+          workBudget.charge(
+            state.requestContext,
+            allowedNeighborFilePaths.size,
+            "source.path_sort",
           );
         }
       } catch (error) {
@@ -1971,6 +2010,7 @@ export function createCompilerRelationshipResolver(
           excludedNeighbors: false,
         };
         try {
+          consumeScopedWork(state, collector, "producer.dispatch");
           producer.collect(collector);
         } catch (error) {
           if (
@@ -1988,16 +2028,44 @@ export function createCompilerRelationshipResolver(
           }
           edgeLimitReached ||= error instanceof ScopedRelationshipLimitReached;
         }
-        for (const edge of collector.edges.values()) merged.set(edge.relationship_id, edge);
+        try {
+          for (const edge of collector.edges.values()) {
+            consumeScopedWork(state, collector, "merge.scan_retain");
+            merged.set(edge.relationship_id, edge);
+          }
+        } catch (error) {
+          if (!(error instanceof CompilerImpactWorkExhausted)) throw error;
+          incomplete = true;
+        }
         excludedNeighbors ||= collector.excludedNeighbors;
         if (workBudget.exhausted) break;
       }
-      const ordered = [...merged.values()].sort((left, right) =>
-        scopedNeighborOrder(key, left, right),
-      );
-      if (ordered.length > query.max_edges) {
+      let emitted: RelationshipEdge[] = [];
+      try {
+        workBudget.charge(state.requestContext, merged.size, "merge.sort");
+        const ordered = [...merged.values()].sort((left, right) =>
+          scopedNeighborOrder(key, left, right),
+        );
+        workBudget.charge(
+          state.requestContext,
+          Math.min(ordered.length, query.max_edges) + (ordered.length > query.max_edges ? 1 : 0),
+          "selection.scan",
+        );
+        if (ordered.length > query.max_edges) {
+          incomplete = true;
+          edgeLimitReached = true;
+        }
+        const selected = ordered.slice(0, query.max_edges);
+        workBudget.charge(state.requestContext, selected.length, "selected_id.sort");
+        selected.sort((left, right) => left.relationship_id.localeCompare(right.relationship_id));
+        for (const edge of selected) {
+          workBudget.charge(state.requestContext, 1, "edge.emit");
+          emitted.push(edge);
+        }
+      } catch (error) {
+        if (!(error instanceof CompilerImpactWorkExhausted)) throw error;
         incomplete = true;
-        edgeLimitReached = true;
+        emitted = [];
       }
       const finalCoverage = coverage.map((entry) =>
         entry.status === "unfinished" &&
@@ -2009,11 +2077,8 @@ export function createCompilerRelationshipResolver(
       incomplete ||= finalCoverage.some(
         ({ status }) => status === "unsupported" || status === "unfinished",
       );
-      const selected = ordered.slice(0, query.max_edges);
       return {
-        edges: selected.sort((left, right) =>
-          left.relationship_id.localeCompare(right.relationship_id),
-        ),
+        edges: emitted,
         coverage: finalCoverage,
         incomplete,
         edge_limit_reached: edgeLimitReached,
@@ -2129,43 +2194,66 @@ export function collectCompilerCallRelationships(
   const checker = project.getTypeChecker();
   const edges = new Map<string, RelationshipEdge>();
   let workLimitReached = false;
-  for (const sourceFile of project
-    .getSourceFiles()
-    .sort((left, right) => left.getFilePath().localeCompare(right.getFilePath()))) {
+  const sourceFiles = project.getSourceFiles();
+  try {
+    tracker.charge(requestContext, sourceFiles.length, "legacy.source_sort");
+    sourceFiles.sort((left, right) => left.getFilePath().localeCompare(right.getFilePath()));
+  } catch (error) {
+    if (!(error instanceof CompilerImpactWorkExhausted)) throw error;
+    return Object.freeze({ edges: Object.freeze([]), incomplete: true });
+  }
+  for (const sourceFile of sourceFiles) {
     sourceFile.forEachDescendant((node, traversal) => {
       try {
-        tracker.charge(requestContext);
+        tracker.charge(requestContext, 1, "legacy.node_scan");
+        const invocation = classifyCompilerInvocation(checker, projectRoot, node);
+        if (invocation.state !== "exact") return;
+        const caller = containingSymbol(sourceFile, node);
+        if (!caller) return;
+        const target = invocation.target;
+        const edge = createRelationshipEdge({
+          source: symbolEndpoint(caller, projectRoot),
+          target: symbolEndpoint(target, projectRoot),
+          kind: "call",
+          provenance: "compiler",
+          confidence: "exact",
+          resolution: "resolved",
+          freshness: normalizedFreshness,
+        });
+        tracker.charge(requestContext, 1, "legacy.edge_retain");
+        edges.set(edge.relationship_id, edge);
       } catch (error) {
         if (!(error instanceof CompilerImpactWorkExhausted)) throw error;
         workLimitReached = true;
         traversal.stop();
-        return;
       }
-      const invocation = classifyCompilerInvocation(checker, projectRoot, node);
-      if (invocation.state !== "exact") return;
-      const caller = containingSymbol(sourceFile, node);
-      if (!caller) return;
-      const target = invocation.target;
-      const edge = createRelationshipEdge({
-        source: symbolEndpoint(caller, projectRoot),
-        target: symbolEndpoint(target, projectRoot),
-        kind: "call",
-        provenance: "compiler",
-        confidence: "exact",
-        resolution: "resolved",
-        freshness: normalizedFreshness,
-      });
-      edges.set(edge.relationship_id, edge);
     });
     if (workLimitReached) break;
   }
-  const ordered = [...edges.values()].sort((left, right) =>
-    left.relationship_id.localeCompare(right.relationship_id),
-  );
-  return Object.freeze({
-    edges: Object.freeze(ordered.slice(0, maxEdges)),
-    incomplete: workLimitReached || ordered.length > maxEdges,
-  });
+  if (workLimitReached) return Object.freeze({ edges: Object.freeze([]), incomplete: true });
+  try {
+    tracker.charge(requestContext, edges.size, "legacy.edge_sort");
+    const ordered = [...edges.values()].sort((left, right) =>
+      left.relationship_id.localeCompare(right.relationship_id),
+    );
+    tracker.charge(
+      requestContext,
+      Math.min(ordered.length, maxEdges) + (ordered.length > maxEdges ? 1 : 0),
+      "legacy.selection_scan",
+    );
+    const emitted: RelationshipEdge[] = [];
+    for (const edge of ordered.slice(0, maxEdges)) {
+      tracker.charge(requestContext, 1, "legacy.edge_emit");
+      emitted.push(edge);
+    }
+    return Object.freeze({
+      edges: Object.freeze(emitted),
+      incomplete: ordered.length > maxEdges,
+    });
+  } catch (error) {
+    if (!(error instanceof CompilerImpactWorkExhausted)) throw error;
+    return Object.freeze({ edges: Object.freeze([]), incomplete: true });
+  }
 }
 
 export function collectCompilerRelationships(

@@ -4,10 +4,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   collectCompilerCallRelationships,
   collectCompilerRelationships,
+  CompilerImpactWorkTracker,
+  createCompilerRelationshipResolver,
   createRelationshipEdge,
   type RelationshipEdge,
   type RelationshipEdgeInput,
 } from "../src/services/relationships.js";
+import { resolveImpactRoot } from "../src/services/impact.js";
+import { createRequestContext } from "../src/services/request-context.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
 const fixtures: ProjectFixture[] = [];
@@ -223,5 +227,161 @@ describe("compiler-backed relationships", () => {
       "reference:target",
     );
     expect(generic.some((edge) => edge.kind === "call")).toBe(false);
+  });
+});
+
+type WorkEvent = {
+  readonly stage: string;
+  readonly count: number;
+  readonly before: number;
+  readonly after: number;
+};
+
+function stageCounts(events: readonly WorkEvent[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const event of events) counts[event.stage] = (counts[event.stage] ?? 0) + event.count;
+  return counts;
+}
+
+describe("request-wide relationship work accounting", () => {
+  it("uses a fixed exact relationship finalization bound and saturates one below", async () => {
+    const fixture = await createProjectFixture({
+      "src/target.ts": "export function target(): void {}\n",
+      "src/a.ts": 'import { target } from "./target.js"; export function a(): void { target(); }\n',
+      "src/b.ts": 'import { target } from "./target.js"; export function b(): void { target(); }\n',
+      "src/tree.ts": "export class Owner { first(): void {} second(): void {} third(): void {} }\n",
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const target = resolveImpactRoot(project, fixture.root, {
+      file_path: "src/target.ts",
+      symbol_path: "target",
+    });
+    const run = (max: number) => {
+      const events: WorkEvent[] = [];
+      const tracker = new CompilerImpactWorkTracker(max, (event: WorkEvent) => events.push(event));
+      const resolver = createCompilerRelationshipResolver(
+        project,
+        fixture.root,
+        freshness(),
+        undefined,
+        tracker,
+      );
+      const result = resolver.edgesFor(target, {
+        direction: "both",
+        relationship_kinds: ["call"],
+        max_edges: 10,
+        allow_provisional_call: true,
+      });
+      return { events, resolver, result, tracker };
+    };
+
+    const generous = run(100_000);
+    expect(generous.tracker.consumed).toBe(160);
+    const exact = run(generous.tracker.consumed);
+    const below = run(generous.tracker.consumed - 1);
+    expect(stageCounts(generous.events)).toMatchObject({
+      "source.enumerate": 67,
+      "source.path_sort": 4,
+      "source.lookup_emit": 4,
+      "producer.dispatch": 2,
+      "candidate.retain_attempt": 2,
+      "candidate.sort": 2,
+      "candidate.emit": 2,
+      "merge.scan_retain": 2,
+      "merge.sort": 2,
+      "selection.scan": 2,
+      "selected_id.sort": 2,
+      "edge.emit": 2,
+    });
+    expect(exact.result).toEqual(generous.result);
+    expect(exact.events).toEqual(generous.events);
+    expect(exact.tracker.snapshot()).toEqual({
+      max_items: generous.tracker.consumed,
+      consumed_items: generous.tracker.consumed,
+      exhausted: false,
+    });
+    expect(below.result).toMatchObject({
+      edges: [],
+      incomplete: true,
+      work_limit_reached: true,
+      work_items: generous.tracker.consumed - 1,
+    });
+
+    const priorEvents = generous.events.length;
+    const owner = resolveImpactRoot(project, fixture.root, {
+      file_path: "src/tree.ts",
+      symbol_path: "Owner",
+    });
+    const contains = generous.resolver.edgesFor(owner, {
+      direction: "outgoing",
+      relationship_kinds: ["contains"],
+      max_edges: 10,
+    });
+    expect(contains.edges).toHaveLength(3);
+    expect(stageCounts(generous.events.slice(priorEvents))).toMatchObject({
+      "producer.dispatch": 1,
+      "contains.candidate_sort": 3,
+      "merge.scan_retain": 3,
+      "merge.sort": 3,
+      "selection.scan": 3,
+      "selected_id.sort": 3,
+      "edge.emit": 3,
+    });
+    expect(
+      generous.events.every(
+        (event, index) =>
+          event.before + event.count === event.after &&
+          (index === 0 || event.before === generous.events[index - 1]!.after),
+      ),
+    ).toBe(true);
+  });
+
+  it("accounts the legacy compiler-call collector and lets cancellation win before mutation", async () => {
+    const fixture = await createProjectFixture({
+      "src/target.ts": "export function target(): void {}\n",
+      "src/use.ts":
+        'import { target } from "./target.js"; export function use(): void { target(); }\n',
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const run = (max: number) => {
+      const events: WorkEvent[] = [];
+      const tracker = new CompilerImpactWorkTracker(max, (event: WorkEvent) => events.push(event));
+      return {
+        events,
+        tracker,
+        result: collectCompilerCallRelationships(project, fixture.root, freshness(), {
+          max_edges: 10,
+          work_tracker: tracker,
+        }),
+      };
+    };
+
+    const generous = run(100_000);
+    expect(generous.tracker.consumed).toBe(27);
+    const exact = run(generous.tracker.consumed);
+    const below = run(generous.tracker.consumed - 1);
+    expect(stageCounts(generous.events)).toMatchObject({
+      "legacy.source_sort": 2,
+      "legacy.node_scan": 21,
+      "legacy.edge_retain": 1,
+      "legacy.edge_sort": 1,
+      "legacy.selection_scan": 1,
+      "legacy.edge_emit": 1,
+    });
+    expect(exact.result).toEqual(generous.result);
+    expect(exact.events).toEqual(generous.events);
+    expect(below.result).toEqual({ edges: [], incomplete: true });
+
+    const cancelledEvents: WorkEvent[] = [];
+    const cancelled = new CompilerImpactWorkTracker(1, (event: WorkEvent) =>
+      cancelledEvents.push(event),
+    );
+    expect(() =>
+      cancelled.charge(createRequestContext(AbortSignal.abort()), 1, "producer.dispatch"),
+    ).toThrow(expect.objectContaining({ code: "REQUEST_CANCELLED" }));
+    expect(cancelled.snapshot()).toEqual({ max_items: 1, consumed_items: 0, exhausted: false });
+    expect(cancelledEvents).toEqual([]);
   });
 });

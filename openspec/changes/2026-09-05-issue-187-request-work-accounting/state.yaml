@@ -59,8 +59,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 16
-  completed: 2
-  pending: 14
+  completed: 6
+  pending: 10
   allComplete: false
 dependencies:
   proposal: all_done
@@ -105,7 +105,7 @@ phaseInstructions:
     - "Issue #188 merge/archive is excluded."
 nextRecommended: apply
 blockedReasons: []
-lastPhase: apply-phase-0
+lastPhase: apply-a-candidate-ready-unsettled
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
@@ -119,12 +119,12 @@ issueAuthority:
   approvedScope: "Exact-once request-wide sorting and finalization accounting with exact-bound and one-below tests."
 baseline:
   relationship: immediate-base
-  pullRequest: 225
-  branch: docs/issue-187-tasks
-  baseBranch: docs/issue-187-design
-  commit: 8fe8553097c169b7bba769c7e7f8fc8e90c97678
-  tree: ddd126df77f481add273aa841aa6fc60efd7c898
-  parentCommit: e4550df400aa5fda25f55e9d6bee6c23474a60b7
+  pullRequest: 226
+  branch: chore/issue-187-authority
+  baseBranch: docs/issue-187-tasks
+  commit: 1dbbf441b32cd9f226115785725b82142600a749
+  tree: 9623ad6c801828e3eacc1b9e72fea91059e0b5f1
+  parentCommit: 8fe8553097c169b7bba769c7e7f8fc8e90c97678
   state: open
   clean: true
   baseToHeadNumstat: "0+0=0"

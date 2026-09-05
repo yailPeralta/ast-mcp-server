@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-05-issue-187-request-work-accounting",
   "authoritative": true,
-  "stage": "phase-zero-admitted-awaiting-root-acquire-a",
+  "stage": "a-candidate-ready-unsettled",
   "rddModeAtPlanning": "disabled/unmanaged",
   "delivery": {
     "strategy": "feature-branch-chain",
@@ -15,10 +15,10 @@
   "tasks": [
     { "id": "0.1", "name": "Authority/base/RDD", "status": "completed" },
     { "id": "0.2", "name": "Boundaries/vectors", "status": "completed" },
-    { "id": "A.1", "name": "Producer stage RED", "status": "pending" },
-    { "id": "A.2", "name": "Finalization RED", "status": "pending" },
-    { "id": "A.3", "name": "Legacy/spine RED", "status": "pending" },
-    { "id": "A.4", "name": "Relationship GREEN", "status": "pending" },
+    { "id": "A.1", "name": "Producer stage RED", "status": "completed" },
+    { "id": "A.2", "name": "Finalization RED", "status": "completed" },
+    { "id": "A.3", "name": "Legacy/spine RED", "status": "completed" },
+    { "id": "A.4", "name": "Relationship GREEN", "status": "completed" },
     { "id": "A.5", "name": "Freeze/settle A", "status": "pending" },
     { "id": "B.0", "name": "Conditional authorized reset", "status": "pending" },
     { "id": "B.1", "name": "Neighbor/BFS RED", "status": "pending" },
@@ -30,8 +30,8 @@
     { "id": "3.1", "name": "Read-only adversarial review", "status": "pending" },
     { "id": "3.2", "name": "Strict verify 9/13", "status": "pending" }
   ],
-  "taskProgress": { "total": 16, "completed": 2, "pending": 14, "allComplete": false },
-  "tdd": { "red": [], "green": [], "refactored": [] },
+  "taskProgress": { "total": 16, "completed": 6, "pending": 10, "allComplete": false },
+  "tdd": { "red": ["A.1-A.3"], "green": ["A.1-A.4"], "refactored": ["A.4"] },
   "plannedEvidence": {
     "stageVector": "planned; exact-once, pre-effect, no reset/double charge",
     "limits": "generous=exact; one-below saturated and authority-free",
@@ -77,7 +77,7 @@
       "resetNeededBeforeA": false
     },
     "candidateA": {
-      "status": "planned",
+      "status": "candidate-ready-unsettled",
       "projection": "base-diff",
       "issue": 187,
       "change": "2026-09-05-issue-187-request-work-accounting",
