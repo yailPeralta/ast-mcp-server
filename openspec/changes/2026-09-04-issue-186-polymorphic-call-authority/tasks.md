@@ -48,9 +48,9 @@ Chain strategy: feature-branch-chain
 
 ## Phase 4 — Evidence, review, handoff
 
-- [ ] 4.1 Run focused/full/package gates; freeze correction hashes/cleanup and settle uniquely with `Fixes #186`/`Refs #188`. The original B receipts are historical only after review invalidation.
-- [ ] 4.2 Obtain fresh independent read-only adversarial review limited to the corrected frozen #186 diff; the dual scoped re-review of `8fe0e84..d882e01` returned `CHANGES_REQUESTED`, confirmed four bypasses, invalidated the candidate again, granted no approval, and did not complete this task.
-- [ ] 4.3 Validate 6 requirements/14 scenarios, zero active RED, and hand an accepted corrected candidate to #187 without implementing, archiving, merging, or closing #188.
+- [ ] 4.1 Run focused/full/package gates; freeze correction hashes/cleanup and settle uniquely with `Fixes #186`/`Refs #188`. Prohibited after terminal Judgment escalation unless a maintainer explicitly changes the plan; no settlement authority remains in this review.
+- [ ] 4.2 Obtain fresh independent read-only adversarial review limited to the corrected frozen #186 diff. The final dual review of `203459c..8839978` is terminal `ESCALATED`: two semantic blockers remain after two correction cycles, no approval exists, and further correction/re-review is prohibited under the exhausted Judgment budget.
+- [ ] 4.3 Validate 6 requirements/14 scenarios, zero active RED, and hand an accepted corrected candidate to #187. Prohibited while #186 is unapproved; #187 cannot descend from this candidate, and a fresh base requires an explicit maintainer-approved plan change.
 
 ## Phase 5 — #186C bounded review correction
 
@@ -59,7 +59,7 @@ Correction forecast: **260–380 authored changed lines**, hard maximum **400**,
 - [x] 5.1 RED all confirmed review findings: F1 cross-file selector convergence collision; F2 `new ctor()` false exact instance method; F3 anonymous IIFE false self-edge; F4 unproven disjointness causing false proven_empty/spine/candidates; F5 unrelated virtual endpoint over-poisoning; F6 uncharged/uncheckpointed global reclassification with cancellation failure and #187 overlap.
 - [x] 5.2 GREEN/REFACTOR F1–F5 through compiler-proven identity, callable-kind authority, anonymous-owner exclusion, proven endpoint disjointness, and endpoint-local uncertainty.
 - [x] 5.3 Correct only the cancellation/checkpoint portion of F6 with bounded checkpoints. Preserve exact-once/global work-budget accounting acceptance for #187 and prohibit all unbounded or uncheckpointed work in #186.
-- [ ] 5.4 Run correction-focused/full/package gates, freeze a new candidate, and return to 4.1–4.3 for fresh settlement/review/acceptance evidence. The frozen #186C re-review ran, returned `CHANGES_REQUESTED`, and left this acceptance task pending.
+- [ ] 5.4 Run correction-focused/full/package gates, freeze a new candidate, and return to 4.1–4.3 for fresh settlement/review/acceptance evidence. Both bounded correction cycles are exhausted; the final #186D dual review is terminal `ESCALATED`, so this acceptance task remains pending and prohibited absent a maintainer plan decision.
 
 ## Phase 6 — #186D bounded scoped re-review correction
 
@@ -68,4 +68,4 @@ Correction forecast: **≤240 authored changed lines**, hard maximum **400**. St
 - [x] 6.1 RED/GREEN named and unnamed function-expression IIFEs cannot produce containing-symbol self-edges; anonymous-arrow controls remain closed.
 - [x] 6.2 RED/GREEN compiler-library provenance uses compiler default-library metadata; project-owned `lib.custom.d.ts` and package ambient calls remain unfinished.
 - [x] 6.3 RED/GREEN open-class disjointness requires positive nominal evidence for same-slot endpoints; `Both extends Right implements Left` remains unfinished while branded controls remain disjoint.
-- [x] 6.4 RED/GREEN in-loop cancellation checkpoints in `reachableCallEndpoints` without #187 accounting; focused/full/package gates and freeze completed. Root settlement and fresh dual scoped re-review remain pending under 4.1–4.2.
+- [x] 6.4 RED/GREEN in-loop cancellation checkpoints in `reachableCallEndpoints` without #187 accounting; focused/full/package gates and freeze completed. The final dual review preserved this closure but terminally escalated two different semantic blockers.

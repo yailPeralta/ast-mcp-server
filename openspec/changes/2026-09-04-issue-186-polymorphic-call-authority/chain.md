@@ -2,7 +2,7 @@
 
 ## Authority, scope, and stop conditions
 
-OpenSpec is authoritative in hybrid mode; mirroring remains skipped because runtime/control-plane edits are prohibited. [Issue #186](https://github.com/yailPeralta/ast-mcp-server/issues/186) is open, approved, and exactly `type:bug`. [Issue #188](https://github.com/yailPeralta/ast-mcp-server/issues/188) is open, approved, and exactly `type:chore`; it supplies only the recovery tracker/foundation. [Issue #187](https://github.com/yailPeralta/ast-mcp-server/issues/187) remains a separate open, approved, exactly `type:bug` authority for accounting. RDD is `disabled/unmanaged`, so no native receipt authority is claimed. A's actual immediate base is [PR #211](https://github.com/yailPeralta/ast-mcp-server/pull/211), branch `chore/issue-186-authority`, commit `1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11`; its runtime ancestor is recovery U7 [PR #206](https://github.com/yailPeralta/ast-mcp-server/pull/206), branch `docs/issue-188-u7-docs`, commit `5d839bb1ee2550e5d0a6404784baa21121e188fa`.
+OpenSpec is authoritative in hybrid mode; mirroring remains skipped because runtime/control-plane edits are prohibited. [Issue #186](https://github.com/yailPeralta/ast-mcp-server/issues/186) remains open, approved, and exactly `type:bug`, but its candidate is unapproved and terminally escalated. [Issue #188](https://github.com/yailPeralta/ast-mcp-server/issues/188) remains draft/unmerged and supplies only the recovery tracker/foundation. [Issue #187](https://github.com/yailPeralta/ast-mcp-server/issues/187) remains a separate open, approved, exactly `type:bug` authority for accounting, but cannot start as a descendant of unapproved #186 under the current chain. RDD is `disabled/unmanaged`, so no native receipt authority is claimed. A's actual immediate base is [PR #211](https://github.com/yailPeralta/ast-mcp-server/pull/211), branch `chore/issue-186-authority`, commit `1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11`; its runtime ancestor is recovery U7 [PR #206](https://github.com/yailPeralta/ast-mcp-server/pull/206), branch `docs/issue-188-u7-docs`, commit `5d839bb1ee2550e5d0a6404784baa21121e188fa`.
 
 Stop before edits if #186 loses `status:approved`, HEAD/base differs, PR #211 is not A's immediate clean parent or PR #206 its runtime ancestor, another authority line conflicts, RDD is unsafe/unrecognized, a child exceeds 400 authored additions+deletions, a diff contains foreign paths/ancestor pollution, evidence/tree/cleanup hashes disagree, a gate fails, or review finds an unresolved candidate-caused severe defect. Never import or reuse #161 Judgment, receipts, lineage, approval, or settlement. Never implement #187, archive/merge any change, close #188, or inspect/edit Harness.
 
@@ -16,8 +16,9 @@ recovery U7 PR #206 @ 5d839bb
                  └── authority PR #211 @ 1fa8a6b (A immediate base)
                       └── #186A classifier/producer (220–320 authored lines) 📍
                             └── #186B MCP/spine/candidate parity (80–160 authored lines)
-                                 └── fresh #186-only review + 6/14 evidence
-                                      └── handoff to independent #187 apply
+                                 └── #186C then #186D bounded corrections
+                                      └── final dual Judgment: ESCALATED ⚠
+                                            └── maintainer decision; #187 descendant blocked
 ```
 
 Total forecast is 300–480 authored changed lines, high risk; Feature Branch Chain is mandatory, with each child ≤400 lines and approximately ≤60 review minutes. A starts from PR #211, retaining PR #206 as its runtime ancestor, and ends with compiler-level authority and scoped producer proof. B starts from A and ends with public/consumer parity, candidate-bound evidence, and final #186 review. No size exception.
@@ -102,19 +103,17 @@ git diff --check && git status --porcelain=v1 --untracked-files=all
 
 Harness is deliberately `N/A` because this change prohibits Harness inspection/execution; no substitute claim is allowed.
 
-## Independent #186 review
+## Independent #186 review and terminal Judgment
 
-Recheck RDD immediately before review. If disabled, record `disabled/unmanaged`, fabricate no receipt, and use ordinary policy plus a fresh independent read-only adversarial inspection of exactly `5d839bb..#186B` limited to the two allowlists, requirements 6/14, candidate hashes, causal severity, and #187 exclusion. If enabled, route only through native review v2 `next_transition` and require a receipt bound to the same #186 tree/paths/evidence. The reviewer may not edit. Any finding-induced edit creates a new candidate and invalidates prior review. Old #161 Judgment is never a reviewer, lineage, or authority source.
+RDD remains `disabled/unmanaged`; no review receipt or delivery authority is fabricated. Historical review evidence remains in `reviews/ledger.json`: the initial review invalidated B, and the dual scoped re-review invalidated C. #186C and #186D consumed the two bounded correction cycles. Old #161 Judgment, lineage, receipts, approval, and settlement remain excluded.
 
-## Frozen review result and correction boundary
+The final dual read-only Judgment froze PR #217 as `203459cb0468a824b5c9fb25fa421af80714e8d9..8839978d6454e1f01140e982c51e6c36c5ac6ee5`, tree `a37c1d15cb242d56eae41581b925166f3fecb2bb`, patch `sha256:63f0d1f7f98e94b2810108877de419d8225f260173180d57407508777f111c9b`: 8 files, 309 additions, 75 deletions, and 384 changed lines against immediate base PR #216. Both reviewers completed. The terminal verdict is `ESCALATED`; the candidate is invalidated, tasks 4.2 and 4.3 remain prohibited/pending, and no correction authority remains.
 
-The fresh independent read-only review froze base `1fa8a6b26754be70bc6376f16c0ad4a4b4ce3e11`, HEAD `8fe0e84a241be7e293176afefe86c6e9941a86ed`, and patch `sha256:e48b0c1216f84d181ec0e8695ead7a75a61afbe34a306eaf0e0296a3fbab7e8b`. Its verdict is `CHANGES_REQUESTED`; task 4.2 remains incomplete, the candidate is invalidated, and no approval or receipt exists. This is fresh #186 ordinary-policy evidence under `disabled/unmanaged`, not old #161 Judgment authority.
+Two semantic blockers remain. First, computed element access `base[key]()` with a key union containing the target method and another member can classify a possible endpoint as disjoint and falsely prove incoming empty. Second, a local/external receiver alternative can lose the external target before convergence, producing a false exact edge and propagating false call-spine and affected-test-candidate authority.
 
-One #186C correction child owned F1–F5 and only the cancellation/checkpoint portion of F6. Its frozen candidate was `8fe0e84a241be7e293176afefe86c6e9941a86ed..d882e013807acc5285837eff0136fe6f5324de61` (`HEAD^{tree}` `3ab244c0c750b31c8696595a81a1c5378661b1fa`, patch `sha256:95949ff8fbfadeb5bd0316e20549e820f4a9c3174ecad5b6ce03346eb599ab1e`): 9 files, 515 additions, 44 deletions, 559 total changed lines, including 264 runtime authored lines. Two of two scoped read-only reviewers completed inspection and agreed on four severe bypasses, so the verdict is `CHANGES_REQUESTED`, the candidate is invalidated again, task 4.2 remains pending, and no approval or receipt exists.
+The final review independently preserved closure of named IIFE handling, compiler default-library identity, structural-overlap controls, cooperative cancellation checkpoints, and the earlier cross-file, constructor, ambient, private, and endpoint-isolation controls. #187 accounting remains excluded.
 
-The re-review preserves closure of cross-file identity, dynamic constructor calls, anonymous arrow/unnamed-function IIFEs, callable-parameter ordinary ambient declarations, private controls, and basic endpoint isolation. It confirms: a named function-expression IIFE false self-edge; project-owned `lib.custom.d.ts` falsely classified as a compiler library by basename; structurally open mutually non-assignable classes falsely classified as disjoint; and no in-loop cooperative cancellation checkpoint in `reachableCallEndpoints`.
-
-#186D corrected exactly those four items in 240 runtime authored lines. Two unchanged RED runs failed 4 tests with 67 controls passing; GREEN/refactor passed 71/71 focused, 126/126 cumulative consumers, 989/989 full, supervised 2/2, and all package gates. No work charge or exact-once accounting was added or claimed; those remain #187-only. The candidate is corrected but not approved: root settlement and a fresh dual scoped final review remain pending, and prior receipts stay historical or closure-control-only.
+Raw reviewer evidence is retained in the ledger and adjudicated separately. The second reviewer's 1,550-line observation compared against a cumulative runtime base; PR #217 itself is 384 changed lines against immediate base #216, so there is no PR-budget defect. The first review's supervised PSS information is contradicted by the second canonical `env -u GIT_PAGER yarn test` result of 989/989 plus supervised 2/2; it is non-semantic information, not a terminal blocker.
 
 ## Requirement/scenario trace — 6/14
 
@@ -137,6 +136,6 @@ The re-review preserves closure of cross-file identity, dynamic constructor call
 
 Threat matrix is N/A per design; no executable boundary row is silently omitted.
 
-## Integration handoff
+## Maintainer decision and integration options
 
-After both children are ≤400, settled, green, hash-bound, independently reviewed, and traced 6/14, hand the exact B candidate/base/tree/evidence receipt to the separately approved #187 change. #187 must start its own forecast, attempt, RED/GREEN, review, and candidate lineage; #186 grants no accounting authority. Do not verify/archive/merge here and do not close #188.
+Issue #186 remains open until a maintainer decides whether to authorize a new plan for the two semantic blockers or end this authority line without approval. Judgment Day cannot run a third correction or re-review round. Under the current chain, #187 cannot start as a descendant of the unapproved #186 candidate. A fresh #187 base is possible only through an explicit maintainer-approved plan change that redefines the base, lineage, and admissible evidence; it is not an implicit continuation. Do not verify, archive, settle, merge, or close here. Issue #188 remains draft and unmerged.

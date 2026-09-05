@@ -1,36 +1,37 @@
 {
   "schema": "issue-186-independent-review-ledger/v1",
   "change": "2026-09-04-issue-186-polymorphic-call-authority",
-  "reviewKind": "fresh-dual-scoped-read-only-adversarial-rereview",
+  "reviewKind": "judgment-day-final-dual-scoped-read-only-adversarial-review",
   "authority": {
     "rddMode": "disabled/unmanaged",
     "deliveryAuthority": false,
     "receipt": null,
     "approval": false,
-    "judgmentDay": false,
+    "judgmentDay": true,
+    "correctionCyclesUsed": 2,
+    "correctionCyclesRemaining": 0,
     "excludedPriorAuthority": "Issue #161 Judgment, lineage, receipts, approval, and settlement"
   },
   "target": {
     "repository": "/home/yail/Documentos/proyects/ast-mcp-server",
-    "branch": "fix/issue-186-c-review-corrections",
-    "base": "8fe0e84a241be7e293176afefe86c6e9941a86ed",
-    "head": "d882e013807acc5285837eff0136fe6f5324de61",
-    "headTree": "3ab244c0c750b31c8696595a81a1c5378661b1fa",
-    "patchSha256": "sha256:95949ff8fbfadeb5bd0316e20549e820f4a9c3174ecad5b6ce03346eb599ab1e",
-    "cleanupSha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "changedFiles": 9,
-    "additions": 515,
-    "deletions": 44,
-    "changedLines": 559,
-    "runtimeAuthoredChangedLines": 264,
+    "branch": "fix/issue-186-d-rereview-corrections",
+    "base": "203459cb0468a824b5c9fb25fa421af80714e8d9",
+    "head": "8839978d6454e1f01140e982c51e6c36c5ac6ee5",
+    "headTree": "a37c1d15cb242d56eae41581b925166f3fecb2bb",
+    "patchSha256": "sha256:63f0d1f7f98e94b2810108877de419d8225f260173180d57407508777f111c9b",
+    "changedFiles": 8,
+    "additions": 309,
+    "deletions": 75,
+    "changedLines": 384,
+    "runtimeAuthoredChangedLines": 240,
     "frozen": true
   },
   "reviewers": {
     "requested": 2,
     "completed": 2,
     "partialAccepted": false,
-    "scope": "Frozen #186C delta 8fe0e84..d882e01, prior finding closure, correction-caused bypasses, cancellation, and #187 exclusion",
-    "agreement": "Both reviewers confirmed R2-F1 through R2-F4."
+    "scope": "Frozen #186D delta 203459c..8839978 after two bounded correction cycles; semantic correctness, preserved controls, correction-caused defects, and #187 exclusion",
+    "agreement": "The completed final dual review independently confirmed two remaining candidate-caused semantic blockers."
   },
   "reviewHistory": [
     {
@@ -52,6 +53,7 @@
       "kind": "fresh-dual-scoped-read-only-adversarial-rereview",
       "base": "8fe0e84a241be7e293176afefe86c6e9941a86ed",
       "head": "d882e013807acc5285837eff0136fe6f5324de61",
+      "patchSha256": "sha256:95949ff8fbfadeb5bd0316e20549e820f4a9c3174ecad5b6ce03346eb599ab1e",
       "changedFiles": 9,
       "additions": 515,
       "deletions": 44,
@@ -60,14 +62,32 @@
       "confirmed": 4,
       "verdict": "CHANGES_REQUESTED",
       "approval": false
+    },
+    {
+      "round": 3,
+      "correctionCycle": 2,
+      "kind": "judgment-day-final-dual-scoped-read-only-adversarial-review",
+      "base": "203459cb0468a824b5c9fb25fa421af80714e8d9",
+      "head": "8839978d6454e1f01140e982c51e6c36c5ac6ee5",
+      "patchSha256": "sha256:63f0d1f7f98e94b2810108877de419d8225f260173180d57407508777f111c9b",
+      "changedFiles": 8,
+      "additions": 309,
+      "deletions": 75,
+      "changedLines": 384,
+      "reviewersCompleted": 2,
+      "confirmed": 2,
+      "verdict": "ESCALATED",
+      "approval": false,
+      "correctionAuthorityRemaining": false
     }
   ],
-  "verdict": "CHANGES_REQUESTED",
+  "verdict": "ESCALATED",
   "candidate": {
     "valid": false,
-    "invalidatedBy": ["R2-F1", "R2-F2", "R2-F3", "R2-F4"],
+    "invalidatedBy": ["R3-F1", "R3-F2"],
     "approval": false,
-    "task4_2Complete": false
+    "task4_2Complete": false,
+    "task4_3Complete": false
   },
   "priorFindings": [
     {
@@ -82,13 +102,13 @@
     },
     {
       "id": "F3",
-      "status": "partially-closed-with-new-bypass",
-      "summary": "anonymous arrow and unnamed function IIFEs remain corrected; named function-expression IIFEs expose R2-F1"
+      "status": "closed",
+      "summary": "named and unnamed function-expression IIFEs no longer produce containing-symbol self-edges"
     },
     {
       "id": "F4",
-      "status": "partially-closed-with-new-bypass",
-      "summary": "previous disjointness fixtures remain corrected; structurally open mutually non-assignable classes expose R2-F3"
+      "status": "closed",
+      "summary": "the reviewed structural-overlap bypass is corrected without reopening branded disjoint controls"
     },
     {
       "id": "F5",
@@ -97,56 +117,81 @@
     },
     {
       "id": "F6",
-      "status": "partially-closed-with-new-bypass",
-      "summary": "existing bounded cancellation controls remain corrected; reachableCallEndpoints exposes R2-F4"
+      "status": "closed",
+      "summary": "reachableCallEndpoints retains cooperative in-loop cancellation checkpoints"
+    },
+    {
+      "id": "R2-F2",
+      "status": "closed",
+      "summary": "default-library identity now uses compiler provenance rather than basename"
     }
   ],
   "preservedControls": [
     "cross-file identity",
     "dynamic constructor calls",
-    "anonymous arrow and unnamed function IIFEs",
+    "named and unnamed function-expression IIFEs",
+    "compiler default-library identity and project-owned lib.custom.d.ts distinction",
+    "structural-overlap controls",
+    "cooperative cancellation checkpoints",
     "callable parameter ordinary ambient declarations",
     "private and #private exact controls",
     "basic endpoint isolation"
   ],
   "findings": [
     {
-      "id": "R2-F1",
-      "status": "confirmed-by-both",
+      "id": "R3-F1",
+      "status": "confirmed-final-dual-review",
       "severity": "severe",
-      "summary": "named function-expression IIFE produces a false self-edge"
+      "summary": "computed element access with a union key can falsely prove incoming empty",
+      "detail": "For base[key]() where key may name the method or another member, the classifier can mark a possible endpoint disjoint, falsely producing exact incoming emptiness."
     },
     {
-      "id": "R2-F2",
-      "status": "confirmed-by-both",
+      "id": "R3-F2",
+      "status": "confirmed-final-dual-review",
       "severity": "severe",
-      "summary": "project-owned lib.custom.d.ts is falsely treated as a compiler library by basename"
+      "summary": "local/external receiver alternatives can lose the external target before convergence",
+      "detail": "Dropping the external alternative yields a false exact edge and can propagate false call-spine and affected-test-candidate authority."
+    }
+  ],
+  "rawReviewerEvidence": [
+    {
+      "reviewer": "first",
+      "preserved": true,
+      "semanticFinding": "Computed element access with a method-or-other union key may classify a possible endpoint as disjoint and prove incoming empty.",
+      "nonSemanticObservation": "Reported supervised PSS information; retained as raw evidence and adjudicated separately because it conflicts with the later canonical test command."
     },
     {
-      "id": "R2-F3",
-      "status": "confirmed-by-both",
-      "severity": "severe",
-      "summary": "structurally open mutually non-assignable classes are falsely treated as disjoint"
+      "reviewer": "second",
+      "preserved": true,
+      "semanticFinding": "A local/external receiver alternative loses the external target before convergence, producing false exact edge, spine, and candidate authority.",
+      "nonSemanticObservation": "Reported a 1,550-line PR-size defect by comparing against the cumulative runtime base; retained as raw evidence and adjudicated separately.",
+      "canonicalTestEvidence": "env -u GIT_PAGER yarn test: 989/989 plus supervised 2/2"
+    }
+  ],
+  "adjudication": [
+    {
+      "id": "A1-PR-SIZE",
+      "disposition": "info-not-a-defect",
+      "reason": "PR #217 is 384 changed lines against its immediate base PR #216 (203459c..8839978), within the 400-line budget. The reported 1,550 lines used a cumulative runtime base and does not measure this PR's review budget."
     },
     {
-      "id": "R2-F4",
-      "status": "confirmed-by-both",
-      "severity": "severe",
-      "summary": "reachableCallEndpoints loop lacks an in-loop cooperative cancellation checkpoint"
+      "id": "A2-SUPERVISED-PSS",
+      "disposition": "info-not-a-terminal-blocker",
+      "reason": "The first review's supervised PSS information is contradicted by the second canonical env -u GIT_PAGER yarn test result of 989/989 plus supervised 2/2. It is non-semantic and does not displace either confirmed semantic blocker."
     }
   ],
   "counts": {
-    "openConfirmed": 4,
-    "preservedClosedControls": 6,
-    "closedPriorFindings": 3,
-    "partiallyClosedWithNewBypass": 3,
+    "openConfirmed": 2,
+    "preservedClosedControls": 9,
+    "closedPriorFindings": 7,
+    "partiallyClosedWithNewBypass": 0,
     "suspect": 0,
     "contradictions": 0,
-    "info": 0
+    "info": 2
   },
   "correction": {
     "child": "#186D",
-    "status": "corrected-not-approved-final-review-pending",
+    "status": "exhausted-terminal-escalation",
     "branch": "fix/issue-186-d-rereview-corrections",
     "baseReviewPullRequest": 216,
     "base": "203459cb0468a824b5c9fb25fa421af80714e8d9",
@@ -157,13 +202,23 @@
     "tests": "RED twice: 4 failed/67 passed; GREEN 71/71; consumers 126/126; full 989/989 plus supervised 2/2",
     "issue187Boundary": "No work charges or exact-once accounting were added or claimed; those remain exclusively #187.",
     "rollback": "Revert only #186D runtime tests/code and its cumulative #186 evidence updates.",
-    "requiredNext": "Root settlement, then fresh dual scoped final review of the corrected frozen candidate.",
-    "approval": false
+    "requiredNext": "Resolve blockers or obtain an explicit maintainer plan decision.",
+    "approval": false,
+    "correctionCyclesUsed": 2,
+    "correctionCyclesRemaining": 0,
+    "furtherCorrectionProhibited": true
+  },
+  "chainDisposition": {
+    "issue186": "open-pending-maintainer-decision",
+    "issue187": "cannot start as a descendant of the unapproved #186 candidate",
+    "issue187Alternative": "A fresh base is possible only after an explicit maintainer-approved plan change that redefines lineage and evidence.",
+    "issue188": "draft-unmerged"
   },
   "evidenceDisposition": {
     "originalRedGreenReceipts": "historical-only",
     "correctionCEvidence": "closure-control-only; invalidated for approval by R2-F1 through R2-F4",
+    "correctionDEvidence": "closure-control-only; invalidated for approval by R3-F1 and R3-F2",
     "priorGateReceipts": "historical-only",
-    "requiredNext": "Settle the corrected #186D candidate, then obtain fresh dual scoped final review; no approval exists yet."
+    "requiredNext": "Resolve blockers or obtain an explicit maintainer decision; Judgment Day is terminal ESCALATED and has no correction authority remaining."
   }
 }

@@ -1,13 +1,13 @@
 schemaName: gentle-ai.sdd-status
 schemaVersion: 1
 changeName: 2026-09-04-issue-186-polymorphic-call-authority
-artifactStore: hybrid
+artifactStore: openspec
 planningHome:
   mode: repo-local
   path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority
-nextRecommended: review
-lastPhase: apply-correction-d
+nextRecommended: resolve-blockers
+lastPhase: review-terminal-escalated
 artifactPaths:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority/proposal.md
@@ -41,10 +41,10 @@ dependencies:
   specs: all_done
   design: all_done
   tasks: all_done
-  apply: ready
+  apply: blocked
   verify: blocked
   archive: blocked
-applyState: ready
+applyState: blocked
 actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
@@ -52,83 +52,87 @@ actionContext:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-04-issue-186-polymorphic-call-authority
 relationships:
   dependsOn:
-    - "Planning PR #210 at 8ba1050 is A's actual immediate base; its runtime ancestor is 2026-09-04-issue-188-relationship-coverage-recovery U7 PR #206 at 5d839bb, unmerged and non-authoritative until #186, #187, and final gates pass."
+    - "Planning PR #210 at 8ba1050 is A's actual immediate base; its runtime ancestor is U7 PR #206 at 5d839bb, unmerged and non-authoritative."
   supersedes: []
   amends: []
   conflictsWith:
     - "2026-09-02-r01-honest-relationship-coverage (closed escalated evidence only; never resume or extend #161 Judgment)"
   sameDomainActiveChanges:
-    - "Issue #187 request-wide work accounting (independent successor child and final integration gate; no #186 accounting scope)"
-blockedReasons: []
+    - "Issue #187 is a separate successor but cannot descend from unapproved #186; a fresh base requires an explicit plan change."
+    - "Issue #188 remains draft and unmerged."
+blockedReasons:
+  - "R3-F1: computed base[key]() with a method-or-other union key can falsely classify a possible endpoint disjoint and prove incoming empty."
+  - "R3-F2: a local/external receiver alternative can lose the external target before convergence, yielding false exact edge, spine, and candidate authority."
+  - "Judgment is terminal ESCALATED after two bounded correction cycles; tasks 4.2/4.3 remain prohibited/pending and no correction authority remains."
+  - "Issue #187 cannot descend from unapproved #186; a fresh base requires an explicit maintainer-approved plan change."
 persistence:
   requestedMode: hybrid
   authoritativeStore: openspec
   mirrorStatus: skipped
   mirrorReason: "Runtime/control-plane edits are prohibited; only the authorized OpenSpec #186 change directory was written."
 phase0Admission:
-  status: frozen-b-review-changes-requested-candidate-invalidated
-  authority: "#186 type:bug and #188 type:chore approved; #187 separate; RDD disabled/unmanaged; no conflicting implementation PR"
-  chain: "#206 5d839bb runtime ancestor -> #211 1fa8a6b immediate base -> #186A working tree"
-  workUnitA: "fix/issue-186-a-call-authority; active token authenticated; runtime allowlist in apply-progress.json"
-  attemptStatus: "delegated active token supplied; acquire/settle intentionally not executed"
-  nextTask: "Root settlement of corrected #186D, then fresh dual scoped final review"
+  status: terminal-judgment-escalated-candidate-invalidated
+  authority: "#186 type:bug and #188 type:chore approved; #187 separate; RDD disabled/unmanaged"
+  chain: "#206 5d839bb runtime ancestor -> #211 1fa8a6b immediate base -> #186 correction chain"
+  workUnitA: "historical closure evidence; runtime allowlist in apply-progress.json"
+  attemptStatus: "no acquire, settle, reset, or runtime action executed in terminal recording"
+  nextTask: "maintainer decision: resolve blockers under a new explicit plan or end this authority line without approval"
 reviewBudget:
-  forecastAuthoredChangedLines: "300-480"
-  forecastChildren: 2
   maxAuthoredChangedLinesPerChild: 400
-  splitRule: "Auto-chain two children: A descriptor/classifier/scoped producers, then B MCP/relationship/spine/candidate parity."
+  finalPullRequest: 217
+  immediateBasePullRequest: 216
+  finalChangedLines: 384
   sizeException: false
-  correctionForecastAuthoredChangedLines: "260-380"
-  correctionMaxAuthoredChangedLines: 400
-  correctionSplitRequiredBeforeEdit: false
-  correctionSplitTrigger: "Stop and specify a split before editing if the refreshed forecast exceeds 400 authored additions plus deletions."
-  correctionDForecastAuthoredChangedLines: "<=240"
-  correctionDMaxAuthoredChangedLines: 400
-  correctionDSplitTrigger: "Stop before runtime edits if forecast exceeds 240; split before editing if it exceeds 400."
+  adjudication: "The reported 1,550 lines used a cumulative runtime base and are not a PR #217 budget defect."
 independentReview:
   artifact: reviews/ledger.json
-  kind: fresh-dual-scoped-read-only-adversarial-rereview
+  kind: judgment-day-final-dual-scoped-read-only-adversarial-review
   rddMode: disabled/unmanaged
-  frozenBase: 8fe0e84a241be7e293176afefe86c6e9941a86ed
-  frozenHead: d882e013807acc5285837eff0136fe6f5324de61
-  frozenTree: 3ab244c0c750b31c8696595a81a1c5378661b1fa
-  patchSha256: 95949ff8fbfadeb5bd0316e20549e820f4a9c3174ecad5b6ce03346eb599ab1e
-  targetCounts: "9 files; 515 additions; 44 deletions; 559 changed lines; 264 runtime authored lines"
-  reviewers: "2 requested; 2 completed; both confirmed all four open findings"
-  verdict: CHANGES_REQUESTED
+  frozenBase: 203459cb0468a824b5c9fb25fa421af80714e8d9
+  frozenHead: 8839978d6454e1f01140e982c51e6c36c5ac6ee5
+  frozenTree: a37c1d15cb242d56eae41581b925166f3fecb2bb
+  patchSha256: 63f0d1f7f98e94b2810108877de419d8225f260173180d57407508777f111c9b
+  targetCounts: "8 files; 309 additions; 75 deletions; 384 changed lines; 240 runtime authored lines"
+  reviewers: "2 requested; 2 completed; 2 semantic blockers confirmed"
+  verdict: ESCALATED
   candidateValid: false
   approval: false
+  correctionCyclesUsed: 2
+  correctionCyclesRemaining: 0
   task4_2Complete: false
+  task4_3Complete: false
   openConfirmedFindings:
-    - "R2-F1 named function-expression IIFE false self-edge"
-    - "R2-F2 project-owned lib.custom.d.ts falsely treated as compiler library by basename"
-    - "R2-F3 structurally open mutually non-assignable classes falsely treated as disjoint"
-    - "R2-F4 reachableCallEndpoints lacks an in-loop cooperative cancellation checkpoint"
+    - "R3-F1 computed union-key element access can falsely prove incoming empty"
+    - "R3-F2 local/external receiver convergence can yield false exact edge/spine/candidate"
   preservedClosures:
-    - "cross-file identity and dynamic constructor calls"
-    - "anonymous arrow and unnamed function IIFEs"
-    - "callable parameter ordinary ambient declarations"
-    - "private controls and basic endpoint isolation"
+    - "named IIFE, compiler default-lib identity, structural overlap, cancellation checkpoints, and earlier controls"
+  adjudication:
+    - "PR #217 is 384 lines against #216; the 1,550 cumulative comparison is not a PR-budget defect."
+    - "The first supervised PSS observation is non-semantic and contradicted by env -u GIT_PAGER yarn test: 989/989 plus supervised 2/2."
   priorAuthority: "No old #161 Judgment, lineage, receipt, approval, or settlement is reused."
+reviewGate:
+  result: escalated
+  reason: "Final dual Judgment invalidated 8839978 with R3-F1 and R3-F2 after both correction cycles."
 correction:
-  child: "#186D"
-  scope: "R2-F1 through R2-F4 only"
-  runtimeAuthoredChangedLines: 240
-  maxAuthoredChangedLines: 400
-  runtimePatchSha256: ed09b2be4aaa14ab575333d61ecc2d544b94db49d1e73248cd13c197a75031e5
-  issue187Boundary: "No work charges or exact-once accounting were added or claimed; those remain #187-only."
+  children: "#186C and #186D"
+  status: exhausted-terminal-escalation
+  correctionAuthorityRemaining: false
   priorEvidence: historical-or-closure-control-only
-  status: corrected-not-approved-final-review-pending
-  nextAction: root-settle-then-fresh-dual-scoped-final-review
+  nextAction: maintainer-decision
+chainDisposition:
+  issue186: open-pending-maintainer-decision
+  issue187: blocked-as-descendant-of-unapproved-186
+  issue187Alternative: explicit-plan-change-required-for-fresh-base
+  issue188: draft-unmerged
 nextReset:
   required: false
   authorized: false
   requestId: null
 nextAcquire:
   requiredBeforeRuntimeCorrection: false
-  status: delegated-actor-authenticated-no-acquire-executed
-  requestId: issue186-d-acquire-a1
-  workUnit: issue186-d-rereview-correction
-  evidenceGoal: "RED GREEN REFACTOR four dual scoped re-review bypasses with cooperative checkpoint and no #187 accounting"
-  forecastChangedLines: 240
+  status: prohibited-terminal-judgment-no-correction-authority
+  requestId: null
+  workUnit: null
+  evidenceGoal: ""
+  forecastChangedLines: 0
   maxChangedLines: 400

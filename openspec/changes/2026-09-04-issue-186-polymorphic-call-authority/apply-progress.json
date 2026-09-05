@@ -1,7 +1,7 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-186-polymorphic-call-authority",
-  "stage": "correction-d-corrected-not-approved-final-review-pending",
+  "stage": "terminal-judgment-escalated-candidate-invalidated",
   "delivery": {
     "strategy": "feature-branch-chain",
     "deliveryStrategy": "auto-chain",
@@ -216,19 +216,21 @@
     {
       "id": "D",
       "name": "Bounded dual scoped re-review correction",
-      "status": "corrected-not-approved-final-review-pending",
+      "status": "invalidated-by-terminal-final-dual-review",
       "branch": "fix/issue-186-d-rereview-corrections",
       "budget": "240 runtime authored changed lines; hard maximum 400",
       "base": "review metadata PR #216 at 203459cb0468a824b5c9fb25fa421af80714e8d9 over invalidated C d882e013807acc5285837eff0136fe6f5324de61",
       "scope": ["R2-F1", "R2-F2", "R2-F3", "R2-F4"],
       "candidate": {
         "approval": false,
+        "valid": false,
+        "invalidatedBy": ["R3-F1", "R3-F2"],
         "runtimeNumstat": "64/7 relationships.ts; 123/0 impact.test.ts; 45/1 relationships.test.ts",
         "runtimePatchSha256": "ed09b2be4aaa14ab575333d61ecc2d544b94db49d1e73248cd13c197a75031e5",
         "focused": "71/71",
         "consumers": "126/126",
         "full": "989/989 plus supervised 2/2",
-        "requiredNext": "root settlement then fresh dual scoped final review"
+        "requiredNext": "resolve blockers or obtain an explicit maintainer plan decision"
       },
       "accountingBoundary": "No work charges or exact-once accounting were added or claimed; those remain exclusively #187.",
       "rollback": "Revert only D correction runtime tests/code and cumulative #186 evidence updates."
@@ -282,17 +284,17 @@
     { "id": "3.4", "name": "GREEN REFACTOR global and consumer parity", "status": "complete" },
     {
       "id": "4.1",
-      "name": "Run full package gates freeze cleanup and settle B",
+      "name": "Run full package gates freeze cleanup and settle B; prohibited after terminal escalation without maintainer plan change",
       "status": "pending"
     },
     {
       "id": "4.2",
-      "name": "Obtain fresh independent read-only issue 186 review",
+      "name": "Obtain accepted independent issue 186 review; prohibited because Judgment is terminal ESCALATED",
       "status": "pending"
     },
     {
       "id": "4.3",
-      "name": "Validate 6 of 6 requirements and 14 of 14 scenarios then hand off to issue 187",
+      "name": "Validate and hand off to issue 187; prohibited while issue 186 remains unapproved",
       "status": "pending"
     },
     {
@@ -312,7 +314,7 @@
     },
     {
       "id": "5.4",
-      "name": "Run correction gates freeze and fresh review; #186C review returned changes requested",
+      "name": "Obtain correction acceptance; pending and prohibited after two exhausted correction cycles",
       "status": "pending"
     },
     {
@@ -343,8 +345,8 @@
     "allComplete": false
   },
   "tdd": {
-    "receiptStatus": "#186D corrected and candidate-bound but not approved; root settlement and fresh final review pending",
-    "correctionCycle": "tasks 6.1-6.4 completed with strict RED twice, GREEN, and refactor gates; prior evidence remains historical or closure-only",
+    "receiptStatus": "Terminal Judgment ESCALATED; #186D is invalidated, no approval or receipt exists, and correction authority is exhausted",
+    "correctionCycle": "Two bounded correction cycles were used; tasks 6.1-6.4 remain closure evidence, but R3-F1 and R3-F2 invalidate exact authority",
     "red": [
       "A: two unchanged runs failed 3 defect tests with 62 controls passing",
       "B: two unchanged runs failed private-spine authority with ambiguity correctly unfinished; sha256 a479a8ed047e09733a4e7b906b6bf68bca86468fa076f591bcb58d10643ac509 and eaf6c767444aa7c40919eac87609cb755bc0265cce85ef8c9389f94f182ee9c2",
@@ -403,58 +405,78 @@
       "Exact acceptance boundary": "3.2-3.3 -> 3.4-4.2"
     },
     "activeRed": [],
-    "status": "6/6 requirements and 14/14 scenarios mapped; #186D corrections and controls are green; final fresh review remains pending"
+    "status": "6/6 requirements and 14/14 scenarios remain mapped, but R3-F1 and R3-F2 invalidate acceptance; tasks 4.2 and 4.3 are prohibited/pending"
   },
   "independentReview": {
     "artifact": "reviews/ledger.json",
-    "kind": "fresh-dual-scoped-read-only-adversarial-rereview",
+    "kind": "judgment-day-final-dual-scoped-read-only-adversarial-review",
     "rddMode": "disabled/unmanaged",
     "target": {
-      "base": "8fe0e84a241be7e293176afefe86c6e9941a86ed",
-      "head": "d882e013807acc5285837eff0136fe6f5324de61",
-      "headTree": "3ab244c0c750b31c8696595a81a1c5378661b1fa",
-      "patchSha256": "sha256:95949ff8fbfadeb5bd0316e20549e820f4a9c3174ecad5b6ce03346eb599ab1e",
-      "changedFiles": 9,
-      "additions": 515,
-      "deletions": 44,
-      "changedLines": 559,
-      "runtimeAuthoredChangedLines": 264
+      "base": "203459cb0468a824b5c9fb25fa421af80714e8d9",
+      "head": "8839978d6454e1f01140e982c51e6c36c5ac6ee5",
+      "headTree": "a37c1d15cb242d56eae41581b925166f3fecb2bb",
+      "patchSha256": "sha256:63f0d1f7f98e94b2810108877de419d8225f260173180d57407508777f111c9b",
+      "changedFiles": 8,
+      "additions": 309,
+      "deletions": 75,
+      "changedLines": 384,
+      "runtimeAuthoredChangedLines": 240
     },
     "reviewers": {
       "requested": 2,
       "completed": 2,
-      "confirmedByBoth": 4,
+      "openConfirmed": 2,
       "suspect": 0,
       "contradictions": 0,
-      "info": 0
+      "info": 2
     },
-    "verdict": "CHANGES_REQUESTED",
+    "verdict": "ESCALATED",
     "approval": false,
     "candidateValid": false,
     "task4_2Complete": false,
+    "task4_3Complete": false,
+    "correctionCyclesUsed": 2,
+    "correctionCyclesRemaining": 0,
     "openConfirmedFindings": [
-      "R2-F1 named function-expression IIFE false self-edge",
-      "R2-F2 project-owned lib.custom.d.ts falsely treated as compiler library by basename",
-      "R2-F3 structurally open mutually non-assignable classes falsely treated as disjoint",
-      "R2-F4 reachableCallEndpoints lacks an in-loop cooperative cancellation checkpoint"
+      "R3-F1 computed element access with a method-or-other union key can falsely prove incoming empty",
+      "R3-F2 local/external receiver alternatives can lose the external target and yield false exact edge, spine, and candidate authority"
     ],
     "preservedClosures": [
-      "cross-file identity and dynamic constructor calls",
-      "anonymous arrow and unnamed function IIFEs",
-      "callable parameter ordinary ambient declarations",
-      "private controls and basic endpoint isolation"
+      "named IIFE handling",
+      "compiler default-library identity",
+      "structural-overlap controls",
+      "cooperative cancellation checkpoints",
+      "earlier cross-file, constructor, private, ambient, and endpoint-isolation controls"
+    ],
+    "adjudication": [
+      "PR #217 is 384 changed lines against immediate base #216; the 1,550-line cumulative-base comparison is review noise, not a PR-budget defect",
+      "The first supervised PSS observation is contradicted by env -u GIT_PAGER yarn test at 989/989 plus supervised 2/2 and is non-semantic"
     ],
     "priorAuthority": "No old #161 Judgment, lineage, receipt, approval, or settlement is reused."
   },
+  "terminalJudgment": {
+    "status": "ESCALATED",
+    "correctionAuthorityRemaining": false,
+    "issue186": "open-until-maintainer-decision",
+    "issue187": "cannot start as a descendant of unapproved issue 186",
+    "issue187Alternative": "requires an explicit maintainer-approved plan change to use a fresh base",
+    "issue188": "draft-unmerged"
+  },
   "risks": [
-    "False exact virtual dispatch violates compiler authority.",
-    "Incoming ambiguity can over-poison compiler-proven disjoint targets.",
-    "Unsafe static exemptions or owner normalization can regress exact controls.",
-    "Any issue 187 accounting edit or issue 161 authority reuse invalidates scope.",
-    "Any child over 400 authored lines requires replanning rather than a size exception."
+    "Computed method-or-other union keys can falsely classify a possible endpoint as disjoint and prove incoming empty.",
+    "Local/external receiver alternatives can lose the external target before convergence and yield false exact edge, spine, and candidate authority.",
+    "No Judgment correction authority remains after two bounded cycles.",
+    "Issue 187 cannot descend from this unapproved candidate without an explicit maintainer plan change.",
+    "Issue 188 remains draft and unmerged."
   ],
-  "nextRecommended": "review",
-  "nextAction": "root settles the corrected #186D candidate, then obtains a fresh dual scoped final review",
+  "nextRecommended": "resolve-blockers",
+  "nextAction": "maintainer chooses whether to resolve the two semantic blockers under a new explicit plan or close/rebase the chain without approving this candidate",
+  "blockedReasons": [
+    "R3-F1 computed method-or-other union-key element access can falsely prove incoming empty",
+    "R3-F2 local/external receiver convergence can yield false exact edge, spine, and candidate authority",
+    "Judgment correction authority is exhausted after two bounded cycles",
+    "Issue 187 cannot descend from unapproved issue 186 without an explicit maintainer plan change"
+  ],
   "nextReset": {
     "required": false,
     "authorized": false,
@@ -462,12 +484,12 @@
   },
   "nextAcquire": {
     "requiredBeforeRuntimeCorrection": false,
-    "status": "delegated actor authenticated with supplied active token; no acquire executed",
+    "status": "prohibited-terminal-judgment-no-correction-authority",
     "requestId": "issue186-d-acquire-a1",
     "workUnit": "issue186-d-rereview-correction",
     "forecastChangedLines": 240,
     "actualRuntimeChangedLines": 240,
     "maxChangedLines": 400
   },
-  "updatedAt": "2026-09-05T15:39:14Z"
+  "updatedAt": "2026-09-05T16:05:01Z"
 }
