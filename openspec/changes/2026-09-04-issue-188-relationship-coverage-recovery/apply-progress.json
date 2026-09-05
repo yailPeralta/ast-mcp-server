@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-04-issue-188-relationship-coverage-recovery",
   "authoritative": true,
-  "stage": "u5-red-green-refactored-awaiting-5.3",
+  "stage": "u5-settled-refactored-ready-u6",
   "rddModeAtPlanning": "disabled/unmanaged",
   "rddModeAtApply": {
     "effective": "off",
@@ -68,7 +68,11 @@
       "status": "completed"
     },
     { "id": "5.2", "name": "GREEN/REFACTOR U5 fail-closed public contract", "status": "completed" },
-    { "id": "5.3", "name": "Verify, freeze, settle, and evidence U5", "status": "pending" },
+    {
+      "id": "5.3",
+      "name": "Verify, freeze, settle, and evidence U5",
+      "status": "completed"
+    },
     { "id": "6.1", "name": "Acquire and re-author U6 seven-kind matrix", "status": "pending" },
     { "id": "6.2", "name": "Verify, freeze, and settle U6", "status": "pending" },
     { "id": "6.3", "name": "Acquire and re-author truthful U7 documentation", "status": "pending" },
@@ -373,24 +377,59 @@
       "base": "docs/issue-188-u4-evidence"
     }
   },
-  "u5ApplyEvidence": {
+  "u5Evidence": {
+    "observedAt": "2026-09-05T01:50:00Z",
     "branch": "fix/issue-188-u5-candidates",
+    "evidenceBranch": "docs/issue-188-u5-evidence",
+    "pullRequest": 202,
+    "commit": "cdc6e44",
     "baseCommit": "a9acab625e6f1db20b5757c2a04cb3cd775679ee",
     "provenanceCommit": "15e252e957139f113cec8735afdc10adb77a0a92",
-    "scope": "Tasks 5.1-5.2 only; task 5.3 settlement remains pending.",
+    "acquireRequest": "issue188-u5-a1-acquire-20260905t0121z",
+    "settleRequest": "issue188-u5-a1-settle-20260905t0150z",
+    "outcome": "passed",
+    "evidenceRevision": "sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a",
+    "authoredChangedLines": { "additions": 331, "deletions": 34, "total": 365, "budget": 400 },
+    "scope": "Tasks 5.1-5.3 complete; U5 is settled and refactored.",
     "tddCycle": {
       "safetyNet": "Candidate, impact, and registered MCP baseline passed 93/93 before edits.",
-      "red": "Focused U5 selection failed as expected: 3 suites, 3 tests failed, 28 passed; candidate constant and schemas were absent and MCP coverage/work projection was missing.",
+      "red": "Focused U5 selection failed as expected with 3 failures.",
       "green": "Candidate/schema/MCP/impact suites passed 97/97 after minimal implementation.",
       "triangulate": "Missing, reversed, unsupported, unfinished, exhausted, stale, unresolved, heuristic, non-authoritative, and contains evidence are rejected; complete empty evidence remains admitted.",
-      "refactor": "Formatting, typecheck, build, MCP smoke, lint, and focused suites pass with no active U5 RED."
+      "refactor": "Full suite passed 976/976 plus supervised tests 2/2; U5 is refactored with zero active RED."
+    },
+    "qualityGates": {
+      "focused": "Candidate/schema/MCP/impact suites passed 97/97.",
+      "full": "Full suite passed 976/976; supervised tests passed 2/2.",
+      "runtimeHarness": "MCP smoke passed with status ok and tool_count 16.",
+      "format": "yarn format:check => exit 0",
+      "lint": "yarn lint => exit 0",
+      "typecheck": "yarn typecheck => exit 0",
+      "build": "yarn build => exit 0",
+      "diff": "git diff --check => exit 0",
+      "ambient": "GIT_PAGER was unset.",
+      "inventoryHashes": {
+        "scope": "Synchronized only affected inventory expectations.",
+        "scripts/canary-local-mcp.mjs": "c7146092cd2664cf4eccaefcb786a737339bc34b292c91a3129bd7f12030e0db",
+        "scripts/registry-consumer-smoke.mjs": "4c3275f09a7abbb4fadf7254c26d566209506a4009fa7ad08aac8e674c4700fa",
+        "test/fixtures/tool-inventory.json": "4c3275f09a7abbb4fadf7254c26d566209506a4009fa7ad08aac8e674c4700fa"
+      }
     },
     "workUnitEvidence": {
-      "focusedChecks": "yarn vitest run test/test-candidates.test.ts test/relationship-schema.test.ts test/mcp.integration.test.ts test/impact.test.ts => exit 0; 97/97 passed.",
-      "runtimeHarness": "yarn test:mcp => exit 0; status ok, tool_count 16.",
-      "rollbackBoundary": "Revert only U5 candidate authority, bounded coverage/work projections and schemas, paired tests, inventory hashes, and current-change task/progress metadata."
+      "focusedChecks": "Candidate/schema/MCP/impact suites passed 97/97; full suite passed 976/976 plus supervised tests 2/2.",
+      "runtimeHarness": "MCP smoke passed with status ok and tool_count 16.",
+      "rollbackBoundary": "Revert PR #202 commit cdc6e44 to remove only U5 candidate authority, bounded coverage/work projections and schemas, paired tests, and affected inventory hashes; revert this evidence child to remove only current-change metadata."
     },
-    "limitations": "Issue #186 callable authority and issue #187 request-wide exact-once accounting remain independent integration gates."
+    "delegatedLimitations": {
+      "issue186": "Callable authority remains explicitly unresolved and is a required independent integration gate.",
+      "issue187": "Request-wide exact-once accounting remains explicitly unresolved and is a required independent integration gate.",
+      "candidateTraversal": "Affected candidates preserve exactly six ordered incoming kinds: reference, import, export, extends, implements, call; contains remains explicitly excluded."
+    },
+    "next": {
+      "task": "6.1",
+      "branch": "test/issue-188-u6-matrix",
+      "base": "docs/issue-188-u5-evidence"
+    }
   },
   "tdd": {
     "red": [],
@@ -434,24 +473,28 @@
       "issue188-u1-a1-acquire-20260904t2340z:settled-failed-as-expected@issue188-u1-a1-settle-20260904t2347z",
       "issue188-u2-a1-acquire-20260904t2353z:settled-passed@issue188-u2-a1-settle-20260905t0029z",
       "issue188-u3-a1-acquire-20260905t0033z:settled-passed@issue188-u3-a1-settle-20260905t0045z",
-      "issue188-u4-a1-acquire-20260905t0051z:settled-passed@issue188-u4-a1-settle-20260905t0102z"
+      "issue188-u4-a1-acquire-20260905t0051z:settled-passed@issue188-u4-a1-settle-20260905t0102z",
+      "issue188-u5-a1-acquire-20260905t0121z:settled-passed@issue188-u5-a1-settle-20260905t0150z"
     ],
     "tdd": [
       "u1-red-remediated@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
       "u2-red-green-refactor@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
       "u3-red-green-refactor@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90",
-      "u4-red-green-refactor@sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977"
+      "u4-red-green-refactor@sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977",
+      "u5-red-green-refactor@sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a"
     ],
     "identity": [
       "u1-runtime-patch@sha256:c3de6e1ecfaf62e645e94e35d7d8fb473c363dd2e8ed1efc6d875580972ccab5",
       "u2-runtime-pr196-d73c1ec@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
       "u3-runtime-pr198-37a2084@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90",
-      "u4-runtime-pr200-3a0d5f7@sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977"
+      "u4-runtime-pr200-3a0d5f7@sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977",
+      "u5-runtime-pr202-cdc6e44@sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a"
     ],
     "gates": [
       "u2-focused-runtime-quality-pass@sha256:7046189dd91a030745db242eaf8baa86a697db2463576fb745fd6464606eab50",
       "u3-focused-call-runtime-quality-pass@sha256:ce118867759f2654e243dbbdc519ad0ce1ac8d1fa1bc4f2f3f1c9d62e68aab90",
-      "u4-focused-contains-runtime-quality-pass@sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977"
+      "u4-focused-contains-runtime-quality-pass@sha256:5040b787736feb3826efe15a47d63f808674ba8f9ee48366092994646d0b0977",
+      "u5-focused-full-supervised-mcp-quality-pass@sha256:d5d920f2fc13a2dca4865cda6724b25c762fef6128557595de333c21e894a89a"
     ],
     "review": [],
     "judgment": [],
@@ -473,6 +516,6 @@
     "Issue 187 has no accepted line forecast until its own planning re-entry.",
     "Any stale R-01 authority, candidate drift, severe finding, failed gate, or Harness write blocks integration."
   ],
-  "nextRecommended": "apply:5.3",
+  "nextRecommended": "apply:6.1",
   "updatedAt": "2026-09-05T02:36:00Z"
 }
