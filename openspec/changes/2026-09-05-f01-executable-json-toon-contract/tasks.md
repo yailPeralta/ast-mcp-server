@@ -56,12 +56,9 @@ U1 IDs: `f01-oracle-acquire-20260905-01` / `f01-oracle-settle-20260905-02`. Goal
 ## Phase 4: Review, Verify, Archive
 
 - [x] 4.1 Run format/lint/typecheck/test/build, MCP/errors/lifecycle/CLI/package, and `git diff --check`; record results/rollback.
-- [ ] 4.2 Freeze candidate; run two blind read-only adversarial judgments. Round-1 scoped re-judgment at correction HEAD `7d34c50` is contradictory, so F01-JD-C01 closure is disputed and candidate status is `maintainer-decision-required`.
-  - Judge A: `ESCALATED`; seven executable dead-branch/short-circuit control-flow bypasses were accepted by lexical AST admission; one judge-local SEVERE plus one stale-provenance INFO.
-  - Judge B: `APPROVED`; 16/16 direct mutations rejected twice; zero correction-caused findings.
-  - Preserve both results without refuting either. No terminal approval and no fix authority exist because the round-1 SEVERE is not confirmed by both judges.
-  - One correction round remains, but it cannot be used unless a maintainer explicitly adjudicates and authorizes a scoped second-round objective consistent with Judgment Day rules.
-  - If chosen: behavioral mutation execution rather than lexical presence; forecast likely ≤240 changed lines, hard limit 400; no production or Harness changes.
-  - Permitted maintainer decisions: authorize that scoped second round; adjudicate F01-JD-C01 closed from Judge B's evidence while preserving Judge A's contrary result; or leave closure disputed and stop without approval.
+- [ ] 4.2 Freeze candidate; run two blind read-only adversarial judgments.
+  - Maintainer adjudicated Judge A's seven bypasses within F01-JD-C01 and authorized final correction round 2.
+  - Correction 2 adds seven executable deterministic-fault probes and rejects the complete 23-case direct/probe matrix twice while preserving exact case mapping, stable two-run evidence, and `test:mcp` reachability.
+  - Status: applied, not approved. Final blind dual re-judgment is pending; zero correction rounds remain, so any remaining defect escalates.
 - [ ] 4.3 Verify IDs: acquire `f01-verify-acquire-20260905-03`, settle `f01-verify-settle-20260905-04`; strict report then `gentle-ai sdd-verify-validate --input .../verify-report.md --requirements 6 --scenarios 12`.
 - [ ] 4.4 After PASS, archive/merge spec and deliver U1. Harness is N/A: roadmap requires registered MCP, not Harness; if authority changes, inspect pinned `cd5ef814…` read-only and prove apply absent.

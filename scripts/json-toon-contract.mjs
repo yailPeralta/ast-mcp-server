@@ -49,6 +49,15 @@ export const CONTRACT_MANIFEST = Object.freeze({
     { name: "ast_get_diagnostics", cases: [{ id: "diagnostics-aggregate-page" }, { id: "diagnostics-clean-empty" }] },
   ]), checks: Object.freeze(EXPECTED_CHECKS), normalizedKeys: Object.freeze(["duration_ms", "checked_at"]),
 });
+export const BEHAVIORAL_PROBE_IDS = Object.freeze([
+  "json-canonical-rejection",
+  "json-content-rejection",
+  "toon-envelope-rejection",
+  "toon-decode-rejection",
+  "semantic-equality-rejection",
+  "bounded-cleanup-rejection",
+  "two-run-evidence-rejection",
+]);
 
 // prettier-ignore
 function fail(kind, message) { throw new Error(`F01 ${kind}: ${message}`); }
@@ -118,10 +127,31 @@ function assertCanonical(tool, id, value) {
   if (id === "diagnostics-clean-empty" && Object.hasOwn(value, "aggregates")) fail("json-shape", "optional aggregates must be omitted");
 }
 // prettier-ignore
-function withTimeout(promise, label) {
+function assertJsonContent(result) { if (!exact(result.content ?? [], [])) fail("json-shape", "JSON content must be empty"); }
+// prettier-ignore
+function assertToonEnvelope(envelope) {
+  if (!envelope || !exact(Object.keys(envelope).sort(), ["data", "format"]) || envelope.format !== "toon" || typeof envelope.data !== "string") fail("toon-envelope/decode", "TOON envelope drifted");
+  return envelope;
+}
+// prettier-ignore
+function decodeToon(envelope) { try { return decode(envelope.data); } catch { fail("toon-envelope/decode", "TOON data did not decode"); } }
+// prettier-ignore
+function assertSemanticEquality(jsonBytes, toonBytes) { if (!jsonBytes.equals(toonBytes)) fail("semantic-mismatch", "canonical values differ"); }
+// prettier-ignore
+function withTimeout(promise, label, timeoutMs = 20_000) {
   let timer;
-  const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`F01 transport/process: timed out during ${label}`)), 20_000); });
+  const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`F01 transport/process: timed out during ${label}`)), timeoutMs); });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+// prettier-ignore
+function processAlive(pid) { try { process.kill(pid, 0); return true; } catch { return false; } }
+// prettier-ignore
+async function cleanupOwned(client, roots, ownedPids, alive = processAlive, timeoutMs = 20_000) {
+  let closeError;
+  try { await withTimeout(client.close(), "cleanup:client-close", timeoutMs); } catch (error) { closeError = error; }
+  await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
+  if (closeError) throw closeError;
+  if (ownedPids.some(alive)) fail("cleanup", "owned process remained alive after close");
 }
 
 // prettier-ignore
@@ -161,28 +191,49 @@ export async function runContract() {
       const base = { project_root: projectRoot, ...INPUTS[id] };
       const json = await withTimeout(client.callTool({ name: tool.name, arguments: { ...base, output_format: "json" } }), `${id}:json`);
       const toon = await withTimeout(client.callTool({ name: tool.name, arguments: { ...base, output_format: "toon" } }), `${id}:toon`);
-      if (json.isError || toon.isError || !exact(json.content ?? [], []) || !exact(toon.content ?? [], [])) fail("json-shape", `${id} did not return empty-content success`);
+      if (json.isError || toon.isError || !exact(toon.content ?? [], [])) fail("json-shape", `${id} did not return empty-content success`);
+      assertJsonContent(json);
       assertCanonical(tool.name, id, json.structuredContent);
-      const envelope = toon.structuredContent;
-      if (!envelope || !exact(Object.keys(envelope).sort(), ["data", "format"]) || envelope.format !== "toon" || typeof envelope.data !== "string") fail("toon-envelope/decode", `${id} envelope drifted`);
-      const decoded = decode(envelope.data);
+      const envelope = assertToonEnvelope(toon.structuredContent);
+      const decoded = decodeToon(envelope);
       assertCanonical(tool.name, id, decoded);
       const jsonBytes = canonicalBytes(json.structuredContent);
       const toonBytes = canonicalBytes(decoded);
-      if (!jsonBytes.equals(toonBytes)) fail("semantic-mismatch", id);
+      assertSemanticEquality(jsonBytes, toonBytes);
       evidence.push({ id, tool: tool.name, bytes: jsonBytes.length, sha256: createHash("sha256").update(jsonBytes).digest("hex") });
     }
     const reportBytes = canonicalBytes({ cases: evidence, calls: evidence.length * 2, normalized_keys: CONTRACT_MANIFEST.normalizedKeys });
     return { status: "ok", transport: "stdio", tools: 4, cases: 8, calls: 16, normalized_keys: CONTRACT_MANIFEST.normalizedKeys, cases_evidence: evidence, canonical_bytes: reportBytes.length, sha256: createHash("sha256").update(reportBytes).digest("hex"), cleanup: "close-before-remove" };
   } finally {
-    await client.close().catch(() => undefined);
-    await Promise.all([rm(projectRoot, { recursive: true, force: true }), rm(runtimeRoot, { recursive: true, force: true })]);
+    const ownedPids = transport.pid === null ? [] : [transport.pid];
+    await cleanupOwned(client, [projectRoot, runtimeRoot], ownedPids);
   }
 }
 
 // prettier-ignore
 function sameEvidence(first, second) {
   if (first.canonical_bytes !== second.canonical_bytes || first.sha256 !== second.sha256) fail("determinism", "two-run canonical bytes or SHA-256 differ");
+}
+// prettier-ignore
+async function expectRejected(id, kind, action) {
+  try { await action(); } catch (error) {
+    if (error instanceof Error && error.message.startsWith(`F01 ${kind}:`)) return id;
+    throw error;
+  }
+  fail("admission", `${id} probe did not reject its deterministic fault`);
+}
+// prettier-ignore
+export async function runBehavioralProbes() {
+  const results = [];
+  results.push(await expectRejected(BEHAVIORAL_PROBE_IDS[0], "json-shape", () => assertCanonical("ast_search_symbols", "symbols-empty", null)));
+  results.push(await expectRejected(BEHAVIORAL_PROBE_IDS[1], "json-shape", () => assertJsonContent({ content: [{ type: "text", text: "unexpected" }] })));
+  results.push(await expectRejected(BEHAVIORAL_PROBE_IDS[2], "toon-envelope/decode", () => assertToonEnvelope({ format: "toon", data: "ok", extra: true })));
+  results.push(await expectRejected(BEHAVIORAL_PROBE_IDS[3], "toon-envelope/decode", () => decodeToon({ data: null })));
+  results.push(await expectRejected(BEHAVIORAL_PROBE_IDS[4], "semantic-mismatch", () => assertSemanticEquality(Buffer.from("json"), Buffer.from("toon"))));
+  await expectRejected("cleanup-timeout", "transport/process", () => cleanupOwned({ close: () => new Promise(() => {}) }, [], [], processAlive, 5));
+  results.push(await expectRejected(BEHAVIORAL_PROBE_IDS[5], "cleanup", () => cleanupOwned({ close: async () => {} }, [], [4242], () => true, 5)));
+  results.push(await expectRejected(BEHAVIORAL_PROBE_IDS[6], "determinism", () => sameEvidence({ canonical_bytes: 1, sha256: "a" }, { canonical_bytes: 2, sha256: "b" })));
+  return results;
 }
 // prettier-ignore
 export async function runContractTwice() {

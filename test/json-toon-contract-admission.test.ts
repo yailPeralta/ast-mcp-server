@@ -10,6 +10,8 @@ type ContractModule = {
     checks: string[];
     normalizedKeys: string[];
   };
+  BEHAVIORAL_PROBE_IDS: readonly string[];
+  runBehavioralProbes: () => Promise<string[]>;
   validateManifest: (manifest: unknown) => void;
 };
 
@@ -39,6 +41,15 @@ const EXPECTED_CASES = {
   ast_get_impact: ["impact-truncated", "impact-depth-zero"],
   ast_get_diagnostics: ["diagnostics-aggregate-page", "diagnostics-clean-empty"],
 };
+const EXPECTED_BEHAVIORAL_PROBES = [
+  "json-canonical-rejection",
+  "json-content-rejection",
+  "toon-envelope-rejection",
+  "toon-decode-rejection",
+  "semantic-equality-rejection",
+  "bounded-cleanup-rejection",
+  "two-run-evidence-rejection",
+];
 const SCRIPT_URL = new URL("../scripts/json-toon-contract.mjs", import.meta.url);
 
 function oracleFunction(functionName: string) {
@@ -163,6 +174,12 @@ describe("F-01 JSON/TOON contract admission", () => {
     }
   });
 
+  it("executes every behavioral fault probe rather than trusting labels", async () => {
+    const { BEHAVIORAL_PROBE_IDS, runBehavioralProbes } = await loadContract();
+    expect(BEHAVIORAL_PROBE_IDS).toEqual(EXPECTED_BEHAVIORAL_PROBES);
+    await expect(runBehavioralProbes()).resolves.toEqual(EXPECTED_BEHAVIORAL_PROBES);
+  });
+
   it("binds labels to executable pair, determinism, and cleanup semantics", () => {
     const run = oracleCalls("runContract");
     const jsonCall = 'client.callTool({name:tool.name,arguments:{...base,output_format:"json"}})';
@@ -171,24 +188,21 @@ describe("F-01 JSON/TOON contract admission", () => {
       expect.arrayContaining([
         jsonCall,
         toonCall,
-        "assertCanonical(tool.name,id,json.structuredContent)",
-        "exact(json.content??[],[])",
+        "assertJsonContent(json)",
         "exact(toon.content??[],[])",
-        'exact(Object.keys(envelope).sort(),["data","format"])',
-        "decode(envelope.data)",
+        "assertCanonical(tool.name,id,json.structuredContent)",
+        "assertToonEnvelope(toon.structuredContent)",
+        "decodeToon(envelope)",
         "assertCanonical(tool.name,id,decoded)",
-        "jsonBytes.equals(toonBytes)",
+        "assertSemanticEquality(jsonBytes,toonBytes)",
       ]),
     );
     expect(run.indexOf(jsonCall)).toBeLessThan(run.indexOf(toonCall));
     const cleanup = oracleCalls("runContract", true);
-    const close = cleanup.indexOf("client.close()");
-    expect(close).toBeGreaterThanOrEqual(0);
-    for (const removal of [
-      "rm(projectRoot,{recursive:true,force:true})",
-      "rm(runtimeRoot,{recursive:true,force:true})",
-    ])
-      expect(cleanup.indexOf(removal)).toBeGreaterThan(close);
+    expect(cleanup).toContain("cleanupOwned(client,[projectRoot,runtimeRoot],ownedPids)");
+    const cleanupBody = oracleBody("cleanupOwned");
+    expect(cleanupBody).toContain('withTimeout(client.close(),"cleanup:client-close",timeoutMs)');
+    expect(cleanupBody).toContain("ownedPids.some(alive)");
     const twice = oracleCalls("runContractTwice");
     expect(twice.filter((call) => call === "runContract()")).toHaveLength(2);
     expect(twice).toEqual(expect.arrayContaining(["sameEvidence(first,second)"]));

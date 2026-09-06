@@ -34,9 +34,9 @@ correctionCandidate:
   productionDiff: empty
   harnessDiff: empty
 rddMode: disabled/unmanaged
-lastPhase: judgment-day
-nextRecommended: resolve-review
-status: maintainer-decision-required
+lastPhase: judgment-day-correction-2
+nextRecommended: final-dual-rejudgment
+status: correction2-applied-not-approved
 artifacts:
   exploration: done
   proposal: done
@@ -118,13 +118,13 @@ reviewPlan:
   round1Info: 1
   ledger: reviews/ledger.json
   correctionRoundsMaximum: 2
-  correctionRoundsUsed: 1
-  correctionRoundsRemaining: 1
+  correctionRoundsUsed: 2
+  correctionRoundsRemaining: 0
   remainingRoundAvailableNow: false
   fixThreshold: severe finding confirmed by both judges
-  fixAuthority: false
+  fixAuthority: consumed-by-correction-2
   terminalApproval: false
-  correctionStatus: completed-closure-disputed
+  correctionStatus: correction2-applied-not-approved
   correctionParent: PR 242 base da1eeb3
   correctionHead: 7d34c5003e6aaeb626823ecfec9ff44f897885c4
   correctionMeasuredChangedLines: 191
@@ -136,8 +136,10 @@ reviewPlan:
     judgeA: ESCALATED; seven executable dead-branch/short-circuit bypasses accepted by lexical AST admission; one judge-local SEVERE and one stale-provenance INFO
     judgeB: APPROVED; 16/16 direct mutations rejected twice; zero correction-caused findings
     disposition: preserve both without refutation; explicit maintainer adjudication required
-  secondRoundAuthorization: maintainer must explicitly adjudicate and authorize a scoped objective consistent with Judgment Day rules
-  secondRoundForecast: behavioral mutation execution rather than lexical presence; likely <=240 changed lines, hard limit 400; no production or Harness changes
+  secondRoundAuthorization: maintainer adjudicated and authorized behavioral mutation/probe execution within F01-JD-C01
+  secondRoundStatus: applied not approved; final blind dual re-judgment pending
+  secondRoundEvidence: seven bypasses reproduced twice RED; 23/23 direct/probe mutants rejected twice GREEN; admission 5/5 twice; oracle stable twice
+  secondRoundCodeChangedLines: 107
   rddReceipts: disabled
 verifyPlan:
   strictTdd: true
@@ -150,13 +152,10 @@ sourceMapping:
   compilerEvidenceVisible: false
   fallback: bounded textual reads; not compiler-backed
 blockers:
-  - Round-1 scoped re-judgment contradicts on F01-JD-C01 closure; task 4.2 remains pending and candidate status is maintainer-decision-required.
-  - No terminal approval or further fix authority exists because the round-1 SEVERE is not confirmed by both judges.
-  - The one remaining correction round cannot be used without explicit maintainer adjudication and authorization of a Judgment-compliant scoped objective.
+  - Correction round 2 is applied but cannot be approved without final blind dual re-judgment.
+  - No correction rounds remain; any final re-judgment defect requires escalation.
 maintainerOptions:
-  - Authorize a scoped second round using behavioral mutation execution rather than lexical presence.
-  - Adjudicate F01-JD-C01 closed from Judge B evidence while preserving Judge A contrary result.
-  - Leave F01-JD-C01 disputed and stop without terminal approval or further correction.
+  - Run final blind dual re-judgment over the frozen F01-JD-C01 ledger plus correction-2 delta.
 routingConditions:
   - Treat apply as characterization/contract enforcement because current runtime behavior passes.
   - Run the admission test twice unchanged and retain both honest failures before GREEN.
