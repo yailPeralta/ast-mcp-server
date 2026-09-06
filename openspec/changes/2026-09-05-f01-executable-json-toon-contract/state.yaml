@@ -1,0 +1,72 @@
+schemaName: gentle-ai.sdd-status
+schemaVersion: 1
+changeName: 2026-09-05-f01-executable-json-toon-contract
+artifactStore: hybrid
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-05-f01-executable-json-toon-contract
+issue:
+  tracker: github
+  number: 235
+  state: open
+  authority: status:approved
+  type: type:chore
+  openPullRequests: 0
+baseline:
+  branch: main
+  commit: 6173a39a73f1540c17335a330ea7f14f982387cb
+  cleanBeforeExploration: true
+rddMode: disabled/unmanaged
+lastPhase: explore
+nextRecommended: proposal
+status: ready
+artifacts:
+  exploration: done
+  proposal: pending
+  specs: pending
+  design: pending
+  tasks: pending
+  applyProgress: pending
+  verifyReport: pending
+finding:
+  runtimeDefect: false
+  missingInvariant: retained executable four-tool JSON/TOON MCP equivalence oracle
+  redKind: characterization/contract-enforcement
+  behaviorFirstRedFeasible: false
+reproduction:
+  focusedCommand: yarn vitest run test/result-format.test.ts test/tool-catalog.test.ts test/mcp.integration.test.ts --no-file-parallelism
+  focusedExitCode: 0
+  focusedTests: 43
+  focusedFiles: 3
+  transport: stdio MCP Client/Server
+  serverVersion: 0.13.1
+  guardedToolCount: 15
+  pairedScenarioCount: 8
+  allJsonSucceeded: true
+  allToonSucceeded: true
+  allSuccessEnvelopesValid: true
+  allCanonicalValuesEqualAfterDeclaredVolatileNormalization: true
+  normalizedFields:
+    - duration_ms
+    - checked_at
+  normalizedReportSha256: 093110d4770aa5642433074ed85f715bccbd43b7cdb30a032586b67f5224940f
+forecast:
+  workUnits: 1
+  authoredChangedLines: 220-320
+  productionChangeExpected: false
+  budgetRisk: Low
+  chainedPullRequestsRecommended: false
+  rollback: remove the dedicated oracle, its focused test, and package command without changing runtime behavior
+blockers: []
+routingConditions:
+  - Treat apply as characterization/contract enforcement because current runtime behavior passes.
+  - Stop for maintainer clarification if a production behavior-first RED is required despite passing evidence.
+nonGoals:
+  - universal MCP outputSchema
+  - issue #103 output-vocabulary projection
+  - R-01 or recovery behavior
+  - apply or Harness mutation
+  - public schema changes
+risks:
+  - Raw sequential calls differ in volatile duration_ms or checked_at telemetry.
+  - Over-broad normalization could conceal semantic drift.
+  - Unsupported tools omit output_format but currently strip an unknown supplied field.
+  - Oversized transport fixtures could make the oracle slow without improving the existing 10 MiB unit boundary.
