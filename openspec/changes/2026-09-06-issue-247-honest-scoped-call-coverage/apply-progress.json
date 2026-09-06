@@ -1,0 +1,77 @@
+{
+  "schema": "dsh-sdd-apply-progress",
+  "change": "2026-09-06-issue-247-honest-scoped-call-coverage",
+  "phase": "apply",
+  "planningBase": {
+    "pullRequest": 253,
+    "commit": "2675a02",
+    "role": "planning-only"
+  },
+  "deliveryStrategy": "auto-chain",
+  "chainStrategy": "feature-branch-chain",
+  "candidateAuthority": false,
+  "deliveryAuthority": false,
+  "tasks": [
+    {
+      "id": "U1",
+      "name": "Coverage contract",
+      "status": "pending",
+      "branch": "feat/247-u1-coverage-contract",
+      "base": "feat/247-honest-scoped-call-coverage@2675a02",
+      "forecast": "300-380",
+      "hardMax": 400,
+      "acquireId": "issue247-u1-apply-v1",
+      "settleId": "issue247-u1-settle-v1"
+    },
+    {
+      "id": "U2",
+      "name": "Impact projection",
+      "status": "pending",
+      "branch": "feat/247-u2-impact-authority",
+      "base": "feat/247-u1-coverage-contract",
+      "forecast": "320-395",
+      "hardMax": 400,
+      "acquireId": "issue247-u2-apply-v1",
+      "settleId": "issue247-u2-settle-v1"
+    },
+    {
+      "id": "U3",
+      "name": "Scoped direct calls",
+      "status": "pending",
+      "branch": "feat/247-u3-scoped-direct-calls",
+      "base": "feat/247-u2-impact-authority",
+      "forecast": "330-395",
+      "hardMax": 400,
+      "acquireId": "issue247-u3-apply-v1",
+      "settleId": "issue247-u3-settle-v1"
+    },
+    {
+      "id": "U4",
+      "name": "Candidate gate",
+      "status": "pending",
+      "branch": "feat/247-u4-candidate-completeness",
+      "base": "feat/247-u3-scoped-direct-calls",
+      "forecast": "320-395",
+      "hardMax": 400,
+      "acquireId": "issue247-u4-apply-v1",
+      "settleId": "issue247-u4-settle-v1"
+    },
+    {
+      "id": "U5",
+      "name": "Documentation and audit convergence",
+      "status": "pending",
+      "branch": "docs/247-u5-contract-and-audit",
+      "base": "feat/247-u4-candidate-completeness",
+      "forecast": "180-300",
+      "hardMax": 400,
+      "acquireId": "issue247-u5-apply-v1",
+      "settleId": "issue247-u5-settle-v1"
+    }
+  ],
+  "tdd": {
+    "red": [],
+    "green": [],
+    "refactored": []
+  },
+  "updatedAt": "2026-09-06T19:23:54Z"
+}
