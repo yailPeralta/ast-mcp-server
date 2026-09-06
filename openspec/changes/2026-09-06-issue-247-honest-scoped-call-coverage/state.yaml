@@ -7,7 +7,8 @@ planningHome:
   path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage
 artifactPaths:
-  proposal: []
+  proposal:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/proposal.md
   specs: []
   design: []
   tasks: []
@@ -20,7 +21,8 @@ artifactPaths:
   reviewContext: []
   reviewState: []
 contextFiles:
-  proposal: []
+  proposal:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/proposal.md
   specs: []
   design: []
   tasks: []
@@ -34,7 +36,7 @@ contextFiles:
   reviewState: []
 artifacts:
   exploration: done
-  proposal: missing
+  proposal: done
   specs: missing
   design: missing
   tasks: missing
@@ -51,8 +53,8 @@ taskProgress:
   pending: 0
   allComplete: false
 dependencies:
-  proposal: ready
-  specs: blocked
+  proposal: all_done
+  specs: ready
   design: blocked
   tasks: blocked
   apply: blocked
@@ -93,8 +95,12 @@ phaseInstructions:
     - Preserve exact baseline CI and dependency-audit failures as non-change evidence.
   remediate: []
   archive: []
-nextRecommended: propose
+nextRecommended: spec
 blockedReasons: []
+planningBase:
+  pullRequest: 250
+  commit: d0a0fa2a37e78d350cd31d093263e63f27d45a3d
+  role: planning-only
 baseline:
   branch: main
   head: 6173a39a73f1540c17335a330ea7f14f982387cb
@@ -143,6 +149,20 @@ exploration:
   chainedPRsRecommended: true
   forecastUnits: 5
   decisionNeededBeforeApply: true
+proposal:
+  status: success
+  detailLevel: high
+  wordCount: 449
+  capabilities:
+    new:
+      - scoped-compiler-impact
+    modified:
+      - affected-test-candidates
+  implementationUnits: 5
+  atomicMergePromised: false
+  immediatePredecessorRequired: true
+  maxAuthoredChangedLinesPerUnit: 400
+  readyForSpecs: true
 baselineEvidence:
   focusedTests:
     command: yarn vitest run test/relationships.test.ts test/impact.test.ts test/test-candidates.test.ts --reporter=dot
@@ -165,4 +185,4 @@ baselineEvidence:
     packages:
       - fast-uri@3.1.5
       - qs@6.15.3
-lastPhase: explore
+lastPhase: propose
