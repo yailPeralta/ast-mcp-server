@@ -12,7 +12,8 @@ artifactPaths:
   specs:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/scoped-compiler-impact/spec.md
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/affected-test-candidates/spec.md
-  design: []
+  design:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/design.md
   tasks: []
   applyProgress: []
   verifyReport: []
@@ -28,7 +29,8 @@ contextFiles:
   specs:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/scoped-compiler-impact/spec.md
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/affected-test-candidates/spec.md
-  design: []
+  design:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/design.md
   tasks: []
   applyProgress: []
   verifyReport: []
@@ -42,7 +44,7 @@ artifacts:
   exploration: done
   proposal: done
   specs: done
-  design: missing
+  design: done
   tasks: missing
   applyProgress: missing
   verifyReport: missing
@@ -59,8 +61,8 @@ taskProgress:
 dependencies:
   proposal: all_done
   specs: all_done
-  design: ready
-  tasks: blocked
+  design: all_done
+  tasks: ready
   apply: blocked
   verify: blocked
   archive: blocked
@@ -99,11 +101,11 @@ phaseInstructions:
     - Preserve exact baseline CI and dependency-audit failures as non-change evidence.
   remediate: []
   archive: []
-nextRecommended: design
+nextRecommended: tasks
 blockedReasons: []
 planningBase:
-  pullRequest: 251
-  commit: a0c8bc2e37954e58b870f1bc54eeca978912334a
+  pullRequest: 252
+  commit: 75b1479d9843960fb9690fc0ea4d65bbf0bd1e63
   role: planning-only
   supersedesArtifactReference: PR-250/d0a0fa2
 baseline:
@@ -210,6 +212,23 @@ spec:
     exclusionWholeProjectCallSpine: design-boundary-no-authority-change
     exclusionUniversalOutputSchema: compatibility-boundary-additive-fields-only
     exclusionUIHarnessRuntimeMutation: action-context-and-design-boundary
+design:
+  status: success
+  detailLevel: high
+  wordCount: 798
+  planningBase:
+    pullRequest: 252
+    commit: 75b1479d9843960fb9690fc0ea4d65bbf0bd1e63
+  architectureDecisions: 3
+  requirementsTraced: 14
+  scenariosTraced: 25
+  implementationUnits: 5
+  immediatePredecessorRequired: true
+  maxAuthoredChangedLinesPerUnit: 400
+  strictRedSeams: 5
+  openQuestions: 0
+  threatMatrix: not-applicable
+  readyForTasks: true
 baselineEvidence:
   focusedTests:
     command: yarn vitest run test/relationships.test.ts test/impact.test.ts test/test-candidates.test.ts --reporter=dot
@@ -232,4 +251,4 @@ baselineEvidence:
     packages:
       - fast-uri@3.1.5
       - qs@6.15.3
-lastPhase: spec
+lastPhase: design
