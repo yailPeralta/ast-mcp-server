@@ -1,11 +1,11 @@
 # F-01 Delivery Route
 
-Authority: issue #235 (`status:approved`, `type:chore`), branch `docs/f01-design`, base PR #239 at `eb85ee9`.
+Authority: issue #235 (`status:approved`, `type:chore`), branch `test/f01-json-toon-oracle`, base PR #240 at `04db5d7`.
 
 ## Current route
 
 ```text
-base PR #239 / eb85ee9 ← 📍 F-01 oracle work unit
+base PR #240 / 04db5d7 ← 📍 F-01 oracle work unit
 ```
 
 - Strategy: `single-pr`; forecast 267–354 authored additions plus deletions.

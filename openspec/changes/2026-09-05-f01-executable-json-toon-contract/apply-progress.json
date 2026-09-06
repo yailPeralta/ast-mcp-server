@@ -2,8 +2,8 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-05-f01-executable-json-toon-contract",
   "workUnit": "F01-U1-oracle",
-  "delivery": "single-pr at base PR #239 commit eb85ee9; auto-chain only if pre-apply forecast exceeds 400",
-  "stage": "tasks-planned",
+  "delivery": "single-pr at base PR #240 commit 04db5d7; measured authored diff remains below 400",
+  "stage": "candidate-ready-not-reviewed",
   "attemptPlan": {
     "applyAcquireRequestId": "f01-oracle-acquire-20260905-01",
     "applySettleRequestId": "f01-oracle-settle-20260905-02",
@@ -17,37 +17,42 @@
     { "id": "0.1", "name": "Pin authority and baseline", "status": "completed" },
     { "id": "0.2", "name": "Inspect artifacts and seams read-only", "status": "completed" },
     { "id": "0.3", "name": "Freeze exclusions", "status": "completed" },
-    { "id": "1.1", "name": "Acquire U1 and run safety net", "status": "pending" },
-    { "id": "1.2", "name": "Create fail-closed admission test", "status": "pending" },
-    { "id": "1.3", "name": "Capture unchanged RED twice", "status": "pending" },
-    { "id": "2.1", "name": "Create isolated registered-stdio oracle", "status": "pending" },
-    { "id": "2.2", "name": "Implement eight-case paired matrix", "status": "pending" },
-    { "id": "2.3", "name": "Enforce envelopes schemas and eligibility", "status": "pending" },
+    { "id": "1.1", "name": "Use parent token and run safety net", "status": "completed" },
+    { "id": "1.2", "name": "Create fail-closed admission test", "status": "completed" },
+    { "id": "1.3", "name": "Capture unchanged RED twice", "status": "completed" },
+    { "id": "2.1", "name": "Create isolated registered-stdio oracle", "status": "completed" },
+    { "id": "2.2", "name": "Implement eight-case paired matrix", "status": "completed" },
+    { "id": "2.3", "name": "Enforce envelopes schemas and eligibility", "status": "completed" },
     {
       "id": "2.4",
       "name": "Enforce normalization bytes hashes command and CI",
-      "status": "pending"
+      "status": "completed"
     },
-    { "id": "3.1", "name": "Prove repeated GREEN and cleanup", "status": "pending" },
-    { "id": "3.2", "name": "Refactor after GREEN and run focused gates", "status": "pending" },
-    { "id": "3.3", "name": "Enforce no-production-diff boundary", "status": "pending" },
-    { "id": "4.1", "name": "Run canonical gates and record rollback", "status": "pending" },
+    { "id": "3.1", "name": "Prove repeated GREEN and cleanup", "status": "completed" },
+    { "id": "3.2", "name": "Refactor after GREEN and run focused gates", "status": "completed" },
+    { "id": "3.3", "name": "Enforce no-production-diff boundary", "status": "completed" },
+    { "id": "4.1", "name": "Run canonical gates and record rollback", "status": "completed" },
     { "id": "4.2", "name": "Run independent dual adversarial judgment", "status": "pending" },
     { "id": "4.3", "name": "Run receipt-bound strict verification", "status": "pending" },
     { "id": "4.4", "name": "Archive and deliver", "status": "pending" }
   ],
   "tdd": {
-    "red": [],
-    "green": [],
-    "refactored": []
+    "red": [
+      "Twice unchanged: 3/3 failed, exit 1, F01 admission: package command is absent or incomplete"
+    ],
+    "green": [
+      "Admission 3/3 and stdio oracle 8 cases/16 calls passed twice; report SHA-256 fa3a137c44fe7dbcd6d3a3b9b701ed3e1a280fc03988d39b34b6ccff5ee0d353"
+    ],
+    "refactored": ["Prettier-normalized compact oracle; focused 43/43 and all gates passed"]
   },
   "evidence": {
-    "baseline": "Base PR #239 commit eb85ee9; no runtime execution or source edit occurred during tasks planning.",
-    "redPlan": "Run the new admission test twice without intervening edits; both runs must exit 1 for absent/incomplete command, oracle, or manifest.",
-    "greenPlan": "Eight cases make sixteen sequential registered stdio calls and pass twice with stable normalized bytes and SHA-256 hashes.",
-    "productionBoundary": "No production edits unless the oracle witnesses a concrete mismatch; any correction needs its own captured RED and reforecast.",
-    "harness": "N/A unless roadmap authority changes; any required pinned check is read-only and proves apply absent.",
-    "rollback": "Remove the oracle, admission test, package command, and CI invocation only."
+    "baseline": "Base PR #240 commit 04db5d7; safety net 43/43 passed.",
+    "redPlan": "Completed twice unchanged with stable missing-command signature and exit 1.",
+    "greenPlan": "Completed twice with stable 1231 canonical bytes and report SHA-256.",
+    "productionBoundary": "git diff -- src is empty; no runtime defect was witnessed.",
+    "gates": "Clean env 968/968 plus supervised 2/2; format, lint, typecheck, build, MCP, package, lifecycle, CLI, errors passed.",
+    "auditAdvisory": "Baseline-only: yarn audit exits 1 for fast-uri 3.1.5 (4 high) and qs 6.15.3 (2 moderate); dependency remediation is out of F-01 scope.",
+    "rollback": "Remove oracle/admission files and package scripts; CI reaches the oracle through test:mcp."
   },
-  "updatedAt": "2026-09-05T00:00:00Z"
+  "updatedAt": "2026-09-05T22:32:00Z"
 }
