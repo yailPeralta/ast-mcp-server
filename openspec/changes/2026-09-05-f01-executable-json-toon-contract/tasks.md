@@ -56,6 +56,10 @@ U1 IDs: `f01-oracle-acquire-20260905-01` / `f01-oracle-settle-20260905-02`. Goal
 ## Phase 4: Review, Verify, Archive
 
 - [x] 4.1 Run format/lint/typecheck/test/build, MCP/errors/lifecycle/CLI/package, and `git diff --check`; record results/rollback.
-- [ ] 4.2 Freeze candidate; run two blind read-only adversarial judgments. With consent, fix only severe dual-confirmed findings; maximum two RED-first rounds.
+- [ ] 4.2 Freeze candidate; run two blind read-only adversarial judgments. Round 1 ledger is ESCALATED with one dual-confirmed SEVERE root; task remains pending maintainer consent and scoped correction/re-judgment.
+  - Proposed correction child: branch from PR #241, forecast ≤220 changed lines, hard limit 400.
+  - Exact required scope: independent hardcoded case/check expectations in admission plus mutation tests rejecting required-case substitution and executable canonical/equality/cleanup check removal.
+  - Conditional scope only if needed to make the shared completeness invariant executable: two-run hash comparison and CI reachability assertions.
+  - Forbidden: production or Harness edits; judge-specific severe observations remain SUSPECT/INFO unless the maintainer includes the conditional assertions.
 - [ ] 4.3 Verify IDs: acquire `f01-verify-acquire-20260905-03`, settle `f01-verify-settle-20260905-04`; strict report then `gentle-ai sdd-verify-validate --input .../verify-report.md --requirements 6 --scenarios 12`.
 - [ ] 4.4 After PASS, archive/merge spec and deliver U1. Harness is N/A: roadmap requires registered MCP, not Harness; if authority changes, inspect pinned `cd5ef814…` read-only and prove apply absent.

@@ -2,8 +2,8 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-05-f01-executable-json-toon-contract",
   "workUnit": "F01-U1-oracle",
-  "delivery": "single-pr at base PR #240 commit 04db5d7; measured authored diff remains below 400",
-  "stage": "candidate-ready-not-reviewed",
+  "delivery": "PR #241 from frozen base 04db5d7 at HEAD f3c80e2; measured candidate budget is 379/400",
+  "stage": "judgment-escalated-consent-required",
   "attemptPlan": {
     "applyAcquireRequestId": "f01-oracle-acquire-20260905-01",
     "applySettleRequestId": "f01-oracle-settle-20260905-02",
@@ -52,7 +52,19 @@
     "productionBoundary": "git diff -- src is empty; no runtime defect was witnessed.",
     "gates": "Clean env 968/968 plus supervised 2/2; format, lint, typecheck, build, MCP, package, lifecycle, CLI, errors passed.",
     "auditAdvisory": "Baseline-only: yarn audit exits 1 for fast-uri 3.1.5 (4 high) and qs 6.15.3 (2 moderate); dependency remediation is out of F-01 scope.",
-    "rollback": "Remove oracle/admission files and package scripts; CI reaches the oracle through test:mcp."
+    "rollback": "Remove oracle/admission files and package scripts; CI reaches the oracle through test:mcp.",
+    "judgmentDay": "Round 1 merged: 1 dual-confirmed SEVERE, 2 SUSPECT, 0 contradictions, 2 INFO; verdict ESCALATED pending maintainer consent.",
+    "preserved": "Runtime parity, exact four-tool inventory, envelopes/schema, empty src production diff, and frozen candidate budget 379/400 remain unchanged."
   },
-  "updatedAt": "2026-09-05T22:32:00Z"
+  "correctionProposal": {
+    "status": "consent-required",
+    "parent": "PR #241 at f3c80e2",
+    "workUnit": "one correction child; independent hardcoded admission expectations and substitution/check-removal mutation tests",
+    "conditional": "Two-run hash comparison and CI reachability assertions only if required to make the shared completeness invariant executable.",
+    "forecastChangedLines": "<=220",
+    "hardLimitChangedLines": 400,
+    "forbidden": ["production edits", "Harness edits"]
+  },
+  "reviewLedger": "reviews/ledger.json",
+  "updatedAt": "2026-09-06T02:04:57Z"
 }

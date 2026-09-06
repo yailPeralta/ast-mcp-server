@@ -9,7 +9,7 @@ issue:
   state: open
   authority: status:approved
   type: type:chore
-  openPullRequests: 0
+  openPullRequests: 1
 baseline:
   branch: main
   commit: 6173a39a73f1540c17335a330ea7f14f982387cb
@@ -18,10 +18,17 @@ planningBase:
   branch: test/f01-json-toon-oracle
   pullRequest: 240
   commit: 04db5d749ecd6ef70b6ecd6f202d9d3cbefaa331
+candidate:
+  pullRequest: 241
+  head: f3c80e21b591cda4dd35adf4a5c6826b5019a002
+  tree: 15dc4f064dcc9e34314e75de11bd141518e6b719
+  diffSha256: 7669c5345ffef66dbfa257fe8c876e0019620315c647564ca010c549e893f551
+  authoredChangedLines: 379
+  productionDiff: empty
 rddMode: disabled/unmanaged
-lastPhase: apply
-nextRecommended: review
-status: candidate-ready-not-reviewed
+lastPhase: judgment-day
+nextRecommended: resolve-review
+status: judgment-escalated-consent-required
 artifacts:
   exploration: done
   proposal: done
@@ -29,7 +36,8 @@ artifacts:
   design: done
   tasks: done
   chain: done
-  applyProgress: initialized
+  applyProgress: partial
+  reviewLedger: done
   verifyReport: pending
 taskSummary:
   total: 17
@@ -73,7 +81,7 @@ designSummary:
     - checked_at
 forecast:
   workUnits: 1
-  authoredChangedLines: 267-354
+  authoredChangedLines: 379
   productionChangeExpected: false
   budgetRisk: Low
   changedLineLimit: 400
@@ -81,7 +89,7 @@ forecast:
   chainStrategy: pending
   chainedPullRequestsRecommended: false
   autoChainCondition: stop and split before apply if reforecast or measured authored changes exceed 400, including CI
-  rollback: remove the dedicated oracle, its focused test, package command, and CI invocation without changing runtime behavior
+  rollback: remove the dedicated oracle, its focused test, and package commands without changing runtime behavior
 attemptPlan:
   applyAcquireRequestId: f01-oracle-acquire-20260905-01
   applySettleRequestId: f01-oracle-settle-20260905-02
@@ -91,9 +99,23 @@ attemptPlan:
   maxChangedLines: 400
 reviewPlan:
   method: independent blind dual adversarial judgment
-  target: immutable complete candidate
+  target: PR 241; frozen base 04db5d7; HEAD f3c80e2
+  round: 1
+  verdict: ESCALATED
+  confirmedSevere: 1
+  suspect: 2
+  contradictions: 0
+  info: 2
+  ledger: reviews/ledger.json
   correctionRoundsMaximum: 2
   fixThreshold: severe finding confirmed by both judges
+  correctionStatus: maintainer-consent-required
+  correctionParent: PR 241
+  correctionForecastChangedLines: <=220
+  correctionHardLimitChangedLines: 400
+  correctionScope: independent hardcoded case/check expectations and mutation tests for required-case substitution and executable canonical/equality/cleanup check removal
+  conditionalScope: two-run hash comparison and CI reachability assertions only if necessary to make the shared completeness invariant executable
+  forbiddenEdits: production and Harness
   rddReceipts: disabled
 verifyPlan:
   strictTdd: true
@@ -105,7 +127,8 @@ sourceMapping:
   astToolsAvailable: true
   compilerEvidenceVisible: false
   fallback: bounded textual reads; not compiler-backed
-blockers: []
+blockers:
+  - Maintainer consent is required before Judgment Day correction round 1; task 4.2 remains pending.
 routingConditions:
   - Treat apply as characterization/contract enforcement because current runtime behavior passes.
   - Run the admission test twice unchanged and retain both honest failures before GREEN.

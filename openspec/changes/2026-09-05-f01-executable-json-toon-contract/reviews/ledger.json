@@ -1,0 +1,120 @@
+{
+  "schema": "gentle-ai.judgment-day/v1",
+  "change": "2026-09-05-f01-executable-json-toon-contract",
+  "target": {
+    "pullRequest": 241,
+    "base": "04db5d749ecd6ef70b6ecd6f202d9d3cbefaa331",
+    "head": "f3c80e21b591cda4dd35adf4a5c6826b5019a002",
+    "tree": "15dc4f064dcc9e34314e75de11bd141518e6b719",
+    "diffSha256": "7669c5345ffef66dbfa257fe8c876e0019620315c647564ca010c549e893f551",
+    "changedPaths": 7,
+    "authoredChangedLines": 379,
+    "productionDiff": "empty"
+  },
+  "round": 1,
+  "judges": {
+    "A": {
+      "severe": ["F01-JD-C01", "F01-JD-S01"],
+      "info": ["F01-JD-I01"]
+    },
+    "B": {
+      "severe": ["F01-JD-C01", "F01-JD-S02"],
+      "info": ["F01-JD-I02"]
+    }
+  },
+  "ledger": {
+    "confirmed": [
+      {
+        "id": "F01-JD-C01",
+        "severity": "SEVERE",
+        "status": "open",
+        "confirmedBy": ["A", "B"],
+        "location": "scripts/json-toon-contract.mjs:16-59; test/json-toon-contract-admission.test.ts:14-100",
+        "root": "The admission authority is self-certifying and permits an incomplete oracle while declarative labels and cardinality remain present.",
+        "violates": "F01-SCN-004",
+        "manifestations": [
+          "A required case can be substituted while preserving two unique case IDs per tool, because admission has no independent hardcoded case expectation.",
+          "Executable canonical, equality, or cleanup checks can be removed while their declarative EXPECTED_CHECKS labels remain, because admission proves labels rather than behavior."
+        ],
+        "corroboration": "Both blind judges independently identified the same completeness-authority failure; their case-substitution and removed-check observations are manifestations of one causal root, not separate fixes.",
+        "fixAuthorized": false,
+        "next": "Await maintainer consent for correction round 1."
+      }
+    ],
+    "suspect": [
+      {
+        "id": "F01-JD-S01",
+        "source": "A",
+        "reportedSeverity": "SEVERE",
+        "location": "scripts/json-toon-contract.mjs:164-170",
+        "claim": "The executable oracle does not compare canonical bytes or report hashes across two independent runs.",
+        "disposition": "SUSPECT/INFO pending a scoped maintainer decision; one-judge severe is not independently fix-authorized."
+      },
+      {
+        "id": "F01-JD-S02",
+        "source": "B",
+        "reportedSeverity": "SEVERE",
+        "location": "package.json:71-72; .github/workflows/ci.yml:42",
+        "claim": "CI can disconnect test:mcp-formats while admission remains green because CI reaches the oracle indirectly through test:mcp.",
+        "disposition": "SUSPECT/INFO pending a scoped maintainer decision; one-judge severe is not independently fix-authorized."
+      }
+    ],
+    "contradictions": [],
+    "info": [
+      {
+        "id": "F01-JD-I01",
+        "source": "A",
+        "location": "design.md:33; scripts/json-toon-contract.mjs:107",
+        "claim": "The multiline-context documentation promise is not asserted independently from the Unicode context check."
+      },
+      {
+        "id": "F01-JD-I02",
+        "source": "B",
+        "location": "scripts/json-toon-contract.mjs:171-174",
+        "claim": "Cleanup ordering is present, but close and removal are not themselves bounded by a cleanup deadline."
+      }
+    ]
+  },
+  "counts": {
+    "confirmedSevere": 1,
+    "suspect": 2,
+    "contradictions": 0,
+    "info": 2
+  },
+  "preservedEvidence": {
+    "runtimeParity": "passing: 8 cases, 16 registered stdio calls, JSON/decoded-TOON normalized equality",
+    "toolInventory": "exactly ast_search_symbols, ast_find_references, ast_get_impact, ast_get_diagnostics",
+    "envelopesAndSchema": "passing",
+    "productionDiff": "empty under src/",
+    "candidateBudget": "379 additions plus deletions against frozen base 04db5d7; hard limit 400"
+  },
+  "correctionProposal": {
+    "round": 1,
+    "status": "consent-required",
+    "branching": "one new correction child from PR #241",
+    "forecastChangedLines": "<=220",
+    "hardLimitChangedLines": 400,
+    "scope": [
+      "Add independent hardcoded case and executable-check expectations to admission.",
+      "Add mutation tests proving required-case substitution and executable canonical/equality/cleanup check removal are rejected.",
+      "Only if the maintainer treats them as necessary to make the shared completeness invariant executable, add two-run hash comparison and CI reachability assertions."
+    ],
+    "exclusions": ["production edits", "Harness edits", "unrelated refactors"]
+  },
+  "fixWorkUnits": [],
+  "scopedRejudgment": "not_run",
+  "terminal": false,
+  "terminalState": "pending-maintainer-consent",
+  "verdict": "ESCALATED",
+  "rationale": "One shared severe completeness defect is dual-confirmed. Judgment Day requires maintainer consent before correction round 1; judge-specific severe observations remain non-authorizing suspects.",
+  "skillResolution": {
+    "status": "paths-injected",
+    "paths": [
+      "/home/yail/.agents/skills/sdd-apply/SKILL.md",
+      "/home/yail/.agents/skills/_shared/review-ledger-contract.md",
+      "/home/yail/.agents/skills/_shared/sdd-status-contract.md",
+      "/home/yail/.agents/skills/judgment-day/SKILL.md",
+      "/home/yail/.agents/skills/rdd-defect-workflow/SKILL.md"
+    ]
+  }
+}
