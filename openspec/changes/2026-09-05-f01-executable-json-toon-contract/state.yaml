@@ -25,10 +25,18 @@ candidate:
   diffSha256: 7669c5345ffef66dbfa257fe8c876e0019620315c647564ca010c549e893f551
   authoredChangedLines: 379
   productionDiff: empty
+correctionCandidate:
+  round: 1
+  branch: fix/f01-oracle-admission
+  parent: da1eeb3
+  head: 7d34c5003e6aaeb626823ecfec9ff44f897885c4
+  authoredChangedLines: 191
+  productionDiff: empty
+  harnessDiff: empty
 rddMode: disabled/unmanaged
 lastPhase: judgment-day
 nextRecommended: resolve-review
-status: correction-applied-dual-rejudgment-pending
+status: maintainer-decision-required
 artifacts:
   exploration: done
   proposal: done
@@ -102,22 +110,34 @@ reviewPlan:
   target: PR 241; frozen base 04db5d7; HEAD f3c80e2
   round: 1
   verdict: ESCALATED
-  confirmedSevere: 1
-  suspect: 2
-  contradictions: 0
-  info: 2
+  closure: F01-JD-C01 disputed
+  initialConfirmedSevere: 1
+  round1DualConfirmedSevere: 0
+  round1JudgeLocalSevere: 1
+  round1Contradictions: 1
+  round1Info: 1
   ledger: reviews/ledger.json
   correctionRoundsMaximum: 2
+  correctionRoundsUsed: 1
+  correctionRoundsRemaining: 1
+  remainingRoundAvailableNow: false
   fixThreshold: severe finding confirmed by both judges
-  correctionStatus: applied-not-approved
+  fixAuthority: false
+  terminalApproval: false
+  correctionStatus: completed-closure-disputed
   correctionParent: PR 242 base da1eeb3
-  correctionForecastChangedLines: <=220
+  correctionHead: 7d34c5003e6aaeb626823ecfec9ff44f897885c4
+  correctionMeasuredChangedLines: 191
   correctionHardLimitChangedLines: 400
   correctionScope: independent exact case/tool expectations plus AST binding and mutation tests for paired JSON/TOON calls, canonical/content/envelope/decode/equality checks, cleanup order, two-run byte/hash comparison, and test:mcp reachability
-  conditionalScope: two-run hash comparison and CI reachability assertions only if necessary to make the shared completeness invariant executable
   forbiddenEdits: production and Harness
   correctionEvidence: sixteen controlled mutations rejected twice each; admission 4/4 twice; oracle stable twice at 8 cases/16 calls/1231 bytes/fa3a137c with two internal runs; production diff empty
-  scopedRejudgment: pending-dual
+  scopedRejudgment:
+    judgeA: ESCALATED; seven executable dead-branch/short-circuit bypasses accepted by lexical AST admission; one judge-local SEVERE and one stale-provenance INFO
+    judgeB: APPROVED; 16/16 direct mutations rejected twice; zero correction-caused findings
+    disposition: preserve both without refutation; explicit maintainer adjudication required
+  secondRoundAuthorization: maintainer must explicitly adjudicate and authorize a scoped objective consistent with Judgment Day rules
+  secondRoundForecast: behavioral mutation execution rather than lexical presence; likely <=240 changed lines, hard limit 400; no production or Harness changes
   rddReceipts: disabled
 verifyPlan:
   strictTdd: true
@@ -130,7 +150,13 @@ sourceMapping:
   compilerEvidenceVisible: false
   fallback: bounded textual reads; not compiler-backed
 blockers:
-  - Correction round 1 is applied but not approved; both dual scoped re-judges remain pending for task 4.2.
+  - Round-1 scoped re-judgment contradicts on F01-JD-C01 closure; task 4.2 remains pending and candidate status is maintainer-decision-required.
+  - No terminal approval or further fix authority exists because the round-1 SEVERE is not confirmed by both judges.
+  - The one remaining correction round cannot be used without explicit maintainer adjudication and authorization of a Judgment-compliant scoped objective.
+maintainerOptions:
+  - Authorize a scoped second round using behavioral mutation execution rather than lexical presence.
+  - Adjudicate F01-JD-C01 closed from Judge B evidence while preserving Judge A contrary result.
+  - Leave F01-JD-C01 disputed and stop without terminal approval or further correction.
 routingConditions:
   - Treat apply as characterization/contract enforcement because current runtime behavior passes.
   - Run the admission test twice unchanged and retain both honest failures before GREEN.

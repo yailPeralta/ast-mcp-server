@@ -12,14 +12,22 @@
     "productionDiff": "empty"
   },
   "round": 1,
-  "judges": {
-    "A": {
-      "severe": ["F01-JD-C01", "F01-JD-S01"],
-      "info": ["F01-JD-I01"]
+  "initialJudgment": {
+    "judges": {
+      "A": {
+        "severe": ["F01-JD-C01", "F01-JD-S01"],
+        "info": ["F01-JD-I01"]
+      },
+      "B": {
+        "severe": ["F01-JD-C01", "F01-JD-S02"],
+        "info": ["F01-JD-I02"]
+      }
     },
-    "B": {
-      "severe": ["F01-JD-C01", "F01-JD-S02"],
-      "info": ["F01-JD-I02"]
+    "counts": {
+      "confirmedSevere": 1,
+      "suspect": 2,
+      "contradictions": 0,
+      "info": 2
     }
   },
   "ledger": {
@@ -27,59 +35,126 @@
       {
         "id": "F01-JD-C01",
         "severity": "SEVERE",
-        "status": "corrected-rejudgment-pending",
+        "status": "closure-disputed",
         "confirmedBy": ["A", "B"],
         "location": "scripts/json-toon-contract.mjs:16-59; test/json-toon-contract-admission.test.ts:14-100",
-        "root": "The admission authority is self-certifying and permits an incomplete oracle while declarative labels and cardinality remain present.",
+        "root": "The admission authority was judged self-certifying and able to permit an incomplete oracle while declarative labels and cardinality remained present.",
         "violates": "F01-SCN-004",
         "manifestations": [
-          "A required case can be substituted while preserving two unique case IDs per tool, because admission has no independent hardcoded case expectation.",
-          "Executable canonical, equality, or cleanup checks can be removed while their declarative EXPECTED_CHECKS labels remain, because admission proves labels rather than behavior."
+          "A required case could be substituted while preserving two unique case IDs per tool because admission lacked an independent hardcoded case expectation.",
+          "Executable canonical, equality, or cleanup checks could be removed while declarative EXPECTED_CHECKS labels remained because admission proved labels rather than behavior."
         ],
-        "corroboration": "Both blind judges independently identified the same completeness-authority failure; their case-substitution and removed-check observations are manifestations of one causal root, not separate fixes.",
-        "fixAuthorized": true,
-        "next": "Run dual scoped re-judgment over this frozen finding and the correction delta."
+        "corroboration": "Both initial blind judges independently identified the same completeness-authority failure; correction round 1 then produced contradictory scoped re-judgment results.",
+        "fixAuthorized": false,
+        "next": "Maintainer must adjudicate whether the seven control-flow bypasses defeat closure or authorize a scoped second-round behavioral-mutation objective."
       }
     ],
     "suspect": [
       {
         "id": "F01-JD-S01",
-        "source": "A",
+        "source": "initial Judge A",
         "reportedSeverity": "SEVERE",
         "location": "scripts/json-toon-contract.mjs:164-170",
         "claim": "The executable oracle does not compare canonical bytes or report hashes across two independent runs.",
-        "disposition": "SUSPECT/INFO pending a scoped maintainer decision; one-judge severe is not independently fix-authorized."
+        "disposition": "SUSPECT/INFO; one-judge severe is not independently fix-authorized."
       },
       {
         "id": "F01-JD-S02",
-        "source": "B",
+        "source": "initial Judge B",
         "reportedSeverity": "SEVERE",
         "location": "package.json:71-72; .github/workflows/ci.yml:42",
         "claim": "CI can disconnect test:mcp-formats while admission remains green because CI reaches the oracle indirectly through test:mcp.",
-        "disposition": "SUSPECT/INFO pending a scoped maintainer decision; one-judge severe is not independently fix-authorized."
+        "disposition": "SUSPECT/INFO; one-judge severe is not independently fix-authorized."
+      },
+      {
+        "id": "F01-JD-R1-S01",
+        "source": "round-1 Judge A",
+        "reportedSeverity": "SEVERE",
+        "claim": "Lexical AST admission accepts seven executable control-flow bypasses using dead branches or short-circuit expressions.",
+        "disposition": "Judge-local SEVERE only; Judge B approved the same correction target, so this is not confirmed by both and grants no fix authority."
       }
     ],
-    "contradictions": [],
+    "contradictions": [
+      {
+        "id": "F01-JD-R1-X01",
+        "finding": "F01-JD-C01 closure",
+        "status": "disputed",
+        "judgeA": "ESCALATED after seven executable dead-branch/short-circuit control-flow bypasses were accepted by lexical AST admission.",
+        "judgeB": "APPROVED after 16/16 direct mutations were rejected twice, with zero correction-caused findings.",
+        "disposition": "Preserve both results without refuting either. Judgment Day requires explicit maintainer adjudication; there is no terminal approval and no further fix authority."
+      }
+    ],
     "info": [
       {
         "id": "F01-JD-I01",
-        "source": "A",
+        "source": "initial Judge A",
         "location": "design.md:33; scripts/json-toon-contract.mjs:107",
         "claim": "The multiline-context documentation promise is not asserted independently from the Unicode context check."
       },
       {
         "id": "F01-JD-I02",
-        "source": "B",
+        "source": "initial Judge B",
         "location": "scripts/json-toon-contract.mjs:171-174",
         "claim": "Cleanup ordering is present, but close and removal are not themselves bounded by a cleanup deadline."
+      },
+      {
+        "id": "F01-JD-R1-I01",
+        "source": "round-1 Judge A",
+        "claim": "Correction provenance presented to Judge A was stale.",
+        "disposition": "INFO only; it does not refute either scoped judgment result."
       }
     ]
   },
+  "correctionTarget": {
+    "round": 1,
+    "branch": "fix/f01-oracle-admission",
+    "parent": "da1eeb3",
+    "head": "7d34c5003e6aaeb626823ecfec9ff44f897885c4",
+    "productionDiff": "empty",
+    "harnessDiff": "empty"
+  },
+  "fixWorkUnits": [
+    {
+      "id": "F01-CORR-R1",
+      "scope": "Independent exact case/tool mapping plus AST-based JSON-before-TOON pair, canonical/content/envelope/decode/equality, cleanup order, two-run byte/hash, and exact test:mcp reachability admission",
+      "red": "The inherited call-list candidate did not independently bind the paired call shape or full stable-hash condition; the completed 16-mutation matrix rejected every controlled removal/substitution twice with exit 1.",
+      "green": "Admission passed twice at 4/4; oracle twice reported 8 cases, 16 calls, 1231 bytes, SHA-256 fa3a137c44fe7dbcd6d3a3b9b701ed3e1a280fc03988d39b34b6ccff5ee0d353 and runs=2.",
+      "productionDiff": "empty"
+    }
+  ],
+  "scopedRejudgment": {
+    "round": 1,
+    "scope": "Frozen F01-JD-C01 ledger plus correction delta at 7d34c50",
+    "judgeA": {
+      "verdict": "ESCALATED",
+      "executableControlFlowBypasses": 7,
+      "bypassClass": ["dead branches", "short-circuit expressions"],
+      "admissionFailure": "Lexical AST presence admitted each bypass.",
+      "judgeLocalSevere": 1,
+      "info": 1,
+      "infoKind": "stale provenance"
+    },
+    "judgeB": {
+      "verdict": "APPROVED",
+      "directMutationsRejected": 16,
+      "directMutationsTotal": 16,
+      "repetitions": 2,
+      "correctionCausedFindings": 0
+    },
+    "contradiction": "Judge A ESCALATED on seven executable control-flow bypasses accepted by lexical admission; Judge B APPROVED after 16/16 direct mutations were rejected twice and found zero correction-caused defects.",
+    "closure": "F01-JD-C01 disputed",
+    "terminalApproval": false,
+    "fixAuthority": false
+  },
   "counts": {
-    "confirmedSevere": 1,
-    "suspect": 2,
-    "contradictions": 0,
-    "info": 2
+    "initialConfirmedSevere": 1,
+    "round1DualConfirmedSevere": 0,
+    "round1JudgeLocalSevere": 1,
+    "round1Contradictions": 1,
+    "round1Info": 1,
+    "round1ExecutableBypasses": 7,
+    "round1DirectMutationsRejected": "16/16 twice",
+    "round1CorrectionCausedFindings": 0
   },
   "preservedEvidence": {
     "runtimeParity": "passing: 8 cases, 16 registered stdio calls, JSON/decoded-TOON normalized equality",
@@ -88,39 +163,42 @@
     "productionDiff": "empty under src/",
     "candidateBudget": "379 additions plus deletions against frozen base 04db5d7; hard limit 400"
   },
-  "correctionProposal": {
-    "round": 1,
-    "status": "applied-not-approved",
-    "branching": "PR #242 correction branch fix/f01-oracle-admission at base da1eeb3; working correction remains uncommitted",
-    "forecastChangedLines": "<=220",
-    "hardLimitChangedLines": 400,
-    "scope": [
-      "Add independent hardcoded case and executable-check expectations to admission.",
-      "Add mutation tests proving required-case substitution and executable canonical/equality/cleanup check removal are rejected.",
-      "Only if the maintainer treats them as necessary to make the shared completeness invariant executable, add two-run hash comparison and CI reachability assertions."
-    ],
-    "exclusions": ["production edits", "Harness edits", "unrelated refactors"]
-  },
-  "fixWorkUnits": [
-    {
-      "id": "F01-CORR-R1",
-      "scope": "Independent exact case/tool mapping plus AST-based JSON-before-TOON pair, canonical/content/envelope/decode/equality, cleanup order, two-run byte/hash, and exact test:mcp reachability admission",
-      "red": "The inherited call-list candidate did not independently bind the paired call shape or full stable-hash condition; the completed 16-mutation matrix rejected every controlled removal/substitution twice with exit 1",
-      "green": "Admission passed twice at 4/4; oracle twice reported 8 cases, 16 calls, 1231 bytes, SHA-256 fa3a137c44fe7dbcd6d3a3b9b701ed3e1a280fc03988d39b34b6ccff5ee0d353 and runs=2",
-      "productionDiff": "empty"
+  "correctionBudget": {
+    "maximumRounds": 2,
+    "usedRounds": 1,
+    "remainingRounds": 1,
+    "availableNow": false,
+    "authorizationCondition": "A maintainer must explicitly adjudicate the contradiction and authorize a scoped second-round objective consistent with Judgment Day rules.",
+    "forecastIfChosen": {
+      "objective": "Behavioral mutation execution rather than lexical presence",
+      "likelyChangedLines": "<=240",
+      "hardLimitChangedLines": 400,
+      "productionChanges": false,
+      "harnessChanges": false
     }
+  },
+  "maintainerOptions": [
+    "Accept Judge A's escalation and explicitly authorize the scoped second-round behavioral-mutation objective within the remaining round budget.",
+    "Accept Judge B's approval evidence and adjudicate F01-JD-C01 closed without another correction, while preserving Judge A's contrary result.",
+    "Keep F01-JD-C01 disputed and stop F-01 without terminal approval or further correction."
   ],
-  "scopedRejudgment": "pending-dual-scoped-rejudgment",
+  "scopedRejudgmentResult": "contradictory-maintainer-decision-required",
   "terminal": false,
-  "terminalState": "correction-applied-not-approved",
+  "terminalState": "maintainer-decision-required",
   "verdict": "ESCALATED",
-  "rationale": "The dual-confirmed root has a bounded correction with passing gates. It is not approved; both scoped re-judges remain required.",
+  "rationale": "The scoped re-judges contradict on F01-JD-C01 closure. A severe finding is not confirmed by both re-judges, so no further fix is authorized and terminal approval is unavailable without explicit maintainer adjudication.",
+  "rdd": {
+    "mode": "disabled/unmanaged",
+    "receipts": false,
+    "deliveryAuthority": false
+  },
   "skillResolution": {
     "status": "paths-injected",
     "paths": [
       "/home/yail/.agents/skills/sdd-apply/SKILL.md",
       "/home/yail/.agents/skills/_shared/review-ledger-contract.md",
       "/home/yail/.agents/skills/_shared/sdd-status-contract.md",
+      "/home/yail/.agents/skills/_shared/sdd-phase-common.md",
       "/home/yail/.agents/skills/judgment-day/SKILL.md",
       "/home/yail/.agents/skills/rdd-defect-workflow/SKILL.md"
     ]
