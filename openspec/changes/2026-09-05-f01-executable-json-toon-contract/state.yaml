@@ -15,17 +15,23 @@ baseline:
   commit: 6173a39a73f1540c17335a330ea7f14f982387cb
   cleanBeforeExploration: true
 rddMode: disabled/unmanaged
-lastPhase: proposal
-nextRecommended: spec
+lastPhase: spec
+nextRecommended: design
 status: ready
 artifacts:
   exploration: done
   proposal: done
-  specs: pending
+  specs: done
   design: pending
   tasks: pending
   applyProgress: pending
   verifyReport: pending
+specSummary:
+  type: new-capability
+  domain: executable-json-toon-contract
+  requirements: 6
+  scenarios: 12
+  traceComplete: true
 finding:
   runtimeDefect: false
   missingInvariant: retained executable four-tool JSON/TOON MCP equivalence oracle
