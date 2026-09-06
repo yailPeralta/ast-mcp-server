@@ -33,6 +33,12 @@ const EXPECTED_CHECKS = [
   "timeout",
   "process-cleanup",
 ];
+const EXPECTED_CASES = {
+  ast_search_symbols: ["symbols-unicode-page", "symbols-empty"],
+  ast_find_references: ["references-context-page", "references-empty-page"],
+  ast_get_impact: ["impact-truncated", "impact-depth-zero"],
+  ast_get_diagnostics: ["diagnostics-aggregate-page", "diagnostics-clean-empty"],
+};
 
 // prettier-ignore
 export const CONTRACT_MANIFEST = Object.freeze({
@@ -54,7 +60,7 @@ export function validateManifest(manifest) {
   const names = manifest.tools.map(({ name }) => name);
   if (!exact(names, EXPECTED_TOOLS)) fail("admission", "tool inventory is not exact");
   const ids = manifest.tools.flatMap(({ cases }) => Array.isArray(cases) ? cases.map(({ id }) => id) : []);
-  if (ids.length !== 8 || new Set(ids).size !== 8 || manifest.tools.some(({ cases }) => cases?.length !== 2)) fail("admission", "case inventory is not exactly two unique cases per tool");
+  if (ids.length !== 8 || new Set(ids).size !== 8 || manifest.tools.some(({ name, cases }) => !Array.isArray(cases) || !exact(cases.map(({ id }) => id), EXPECTED_CASES[name] ?? []))) fail("admission", "case inventory or tool mapping is not exact");
   if (!Array.isArray(manifest.checks) || !exact(manifest.checks, EXPECTED_CHECKS)) fail("admission", "check inventory is not exact");
   if (!Array.isArray(manifest.normalizedKeys) || !exact(manifest.normalizedKeys, ["duration_ms", "checked_at"])) fail("admission", "normalization key inventory is not exact");
 }
@@ -175,6 +181,18 @@ export async function runContract() {
 }
 
 // prettier-ignore
+function sameEvidence(first, second) {
+  if (first.canonical_bytes !== second.canonical_bytes || first.sha256 !== second.sha256) fail("determinism", "two-run canonical bytes or SHA-256 differ");
+}
+// prettier-ignore
+export async function runContractTwice() {
+  const first = await runContract();
+  const second = await runContract();
+  sameEvidence(first, second);
+  return { ...second, runs: 2 };
+}
+
+// prettier-ignore
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  runContract().then((report) => process.stdout.write(`${JSON.stringify(report)}\n`)).catch((error) => { process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`); process.exitCode = 1; });
+  runContractTwice().then((report) => process.stdout.write(`${JSON.stringify(report)}\n`)).catch((error) => { process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`); process.exitCode = 1; });
 }

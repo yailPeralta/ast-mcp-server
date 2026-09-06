@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
 
@@ -31,6 +33,56 @@ const EXPECTED_CHECKS = [
   "timeout",
   "process-cleanup",
 ];
+const EXPECTED_CASES = {
+  ast_search_symbols: ["symbols-unicode-page", "symbols-empty"],
+  ast_find_references: ["references-context-page", "references-empty-page"],
+  ast_get_impact: ["impact-truncated", "impact-depth-zero"],
+  ast_get_diagnostics: ["diagnostics-aggregate-page", "diagnostics-clean-empty"],
+};
+const SCRIPT_URL = new URL("../scripts/json-toon-contract.mjs", import.meta.url);
+
+function oracleFunction(functionName: string) {
+  const source = readFileSync(SCRIPT_URL, "utf8");
+  const file = ts.createSourceFile(
+    "oracle.mjs",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  const declaration = file.statements.find(
+    (node): node is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(node) && node.name?.text === functionName,
+  );
+  return { declaration, file };
+}
+
+function oracleCalls(functionName: string, finallyOnly = false): string[] {
+  const { declaration, file } = oracleFunction(functionName);
+  if (!declaration?.body) return [];
+  const root = finallyOnly
+    ? declaration.body.statements.find(ts.isTryStatement)?.finallyBlock
+    : declaration.body;
+  if (!root) return [];
+  const printer = ts.createPrinter({ removeComments: true });
+  const calls: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node))
+      calls.push(printer.printNode(ts.EmitHint.Expression, node, file).replaceAll(/\s+/g, ""));
+    ts.forEachChild(node, visit);
+  };
+  visit(root);
+  return calls;
+}
+
+function oracleBody(functionName: string): string {
+  const { declaration, file } = oracleFunction(functionName);
+  if (!declaration?.body) return "";
+  return ts
+    .createPrinter({ removeComments: true })
+    .printNode(ts.EmitHint.Unspecified, declaration.body, file)
+    .replaceAll(/\s+/g, "");
+}
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -51,7 +103,11 @@ describe("F-01 JSON/TOON contract admission", () => {
     const { CONTRACT_MANIFEST: manifest, validateManifest } = await loadContract();
     expect(() => validateManifest(manifest)).not.toThrow();
     expect(manifest.tools.map(({ name }) => name)).toEqual(EXPECTED_TOOLS);
-    expect(manifest.tools.flatMap(({ cases }) => cases)).toHaveLength(8);
+    expect(
+      Object.fromEntries(
+        manifest.tools.map(({ name, cases }) => [name, cases.map(({ id }) => id)]),
+      ),
+    ).toEqual(EXPECTED_CASES);
     expect(manifest.checks).toEqual(EXPECTED_CHECKS);
     expect(manifest.normalizedKeys).toEqual(["duration_ms", "checked_at"]);
   });
@@ -83,6 +139,12 @@ describe("F-01 JSON/TOON contract admission", () => {
           index ? tool : { ...tool, cases: [...tool.cases, { id: "extra-case" }] },
         ),
       },
+      {
+        ...clone(manifest),
+        tools: clone(manifest.tools).map((tool, index) =>
+          index ? tool : { ...tool, cases: [tool.cases[0]!, { id: "equal-cardinality-extra" }] },
+        ),
+      },
     ];
     for (const variant of variants)
       expect(() => validateManifest(variant)).toThrow(/^F01 admission:/);
@@ -99,5 +161,42 @@ describe("F-01 JSON/TOON contract admission", () => {
     ]) {
       expect(() => validateManifest(variant)).toThrow(/^F01 admission:/);
     }
+  });
+
+  it("binds labels to executable pair, determinism, and cleanup semantics", () => {
+    const run = oracleCalls("runContract");
+    const jsonCall = 'client.callTool({name:tool.name,arguments:{...base,output_format:"json"}})';
+    const toonCall = 'client.callTool({name:tool.name,arguments:{...base,output_format:"toon"}})';
+    expect(run).toEqual(
+      expect.arrayContaining([
+        jsonCall,
+        toonCall,
+        "assertCanonical(tool.name,id,json.structuredContent)",
+        "exact(json.content??[],[])",
+        "exact(toon.content??[],[])",
+        'exact(Object.keys(envelope).sort(),["data","format"])',
+        "decode(envelope.data)",
+        "assertCanonical(tool.name,id,decoded)",
+        "jsonBytes.equals(toonBytes)",
+      ]),
+    );
+    expect(run.indexOf(jsonCall)).toBeLessThan(run.indexOf(toonCall));
+    const cleanup = oracleCalls("runContract", true);
+    const close = cleanup.indexOf("client.close()");
+    expect(close).toBeGreaterThanOrEqual(0);
+    for (const removal of [
+      "rm(projectRoot,{recursive:true,force:true})",
+      "rm(runtimeRoot,{recursive:true,force:true})",
+    ])
+      expect(cleanup.indexOf(removal)).toBeGreaterThan(close);
+    const twice = oracleCalls("runContractTwice");
+    expect(twice.filter((call) => call === "runContract()")).toHaveLength(2);
+    expect(twice).toEqual(expect.arrayContaining(["sameEvidence(first,second)"]));
+    expect(oracleBody("sameEvidence")).toContain(
+      "first.canonical_bytes!==second.canonical_bytes||first.sha256!==second.sha256",
+    );
+    expect((packageJson.scripts as Record<string, string>)["test:mcp"]).toBe(
+      "yarn build && node scripts/mcp-smoke.mjs && yarn test:mcp-formats",
+    );
   });
 });

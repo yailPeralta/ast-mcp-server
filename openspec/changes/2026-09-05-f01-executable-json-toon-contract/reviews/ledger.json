@@ -27,7 +27,7 @@
       {
         "id": "F01-JD-C01",
         "severity": "SEVERE",
-        "status": "open",
+        "status": "corrected-rejudgment-pending",
         "confirmedBy": ["A", "B"],
         "location": "scripts/json-toon-contract.mjs:16-59; test/json-toon-contract-admission.test.ts:14-100",
         "root": "The admission authority is self-certifying and permits an incomplete oracle while declarative labels and cardinality remain present.",
@@ -37,8 +37,8 @@
           "Executable canonical, equality, or cleanup checks can be removed while their declarative EXPECTED_CHECKS labels remain, because admission proves labels rather than behavior."
         ],
         "corroboration": "Both blind judges independently identified the same completeness-authority failure; their case-substitution and removed-check observations are manifestations of one causal root, not separate fixes.",
-        "fixAuthorized": false,
-        "next": "Await maintainer consent for correction round 1."
+        "fixAuthorized": true,
+        "next": "Run dual scoped re-judgment over this frozen finding and the correction delta."
       }
     ],
     "suspect": [
@@ -90,8 +90,8 @@
   },
   "correctionProposal": {
     "round": 1,
-    "status": "consent-required",
-    "branching": "one new correction child from PR #241",
+    "status": "applied-not-approved",
+    "branching": "PR #242 correction branch fix/f01-oracle-admission at base da1eeb3; working correction remains uncommitted",
     "forecastChangedLines": "<=220",
     "hardLimitChangedLines": 400,
     "scope": [
@@ -101,12 +101,20 @@
     ],
     "exclusions": ["production edits", "Harness edits", "unrelated refactors"]
   },
-  "fixWorkUnits": [],
-  "scopedRejudgment": "not_run",
+  "fixWorkUnits": [
+    {
+      "id": "F01-CORR-R1",
+      "scope": "Independent exact case/tool mapping plus AST-based JSON-before-TOON pair, canonical/content/envelope/decode/equality, cleanup order, two-run byte/hash, and exact test:mcp reachability admission",
+      "red": "The inherited call-list candidate did not independently bind the paired call shape or full stable-hash condition; the completed 16-mutation matrix rejected every controlled removal/substitution twice with exit 1",
+      "green": "Admission passed twice at 4/4; oracle twice reported 8 cases, 16 calls, 1231 bytes, SHA-256 fa3a137c44fe7dbcd6d3a3b9b701ed3e1a280fc03988d39b34b6ccff5ee0d353 and runs=2",
+      "productionDiff": "empty"
+    }
+  ],
+  "scopedRejudgment": "pending-dual-scoped-rejudgment",
   "terminal": false,
-  "terminalState": "pending-maintainer-consent",
+  "terminalState": "correction-applied-not-approved",
   "verdict": "ESCALATED",
-  "rationale": "One shared severe completeness defect is dual-confirmed. Judgment Day requires maintainer consent before correction round 1; judge-specific severe observations remain non-authorizing suspects.",
+  "rationale": "The dual-confirmed root has a bounded correction with passing gates. It is not approved; both scoped re-judges remain required.",
   "skillResolution": {
     "status": "paths-injected",
     "paths": [
