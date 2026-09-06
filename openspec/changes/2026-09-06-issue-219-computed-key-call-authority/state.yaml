@@ -1,0 +1,122 @@
+schemaName: gentle-ai.sdd-status
+schemaVersion: 1
+changeName: 2026-09-06-issue-219-computed-key-call-authority
+artifactStore: openspec
+planningHome:
+  mode: repo-local
+  path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority
+artifactPaths:
+  proposal: []
+  specs: []
+  design: []
+  tasks: []
+  applyProgress: []
+  verifyReport: []
+  reviewPolicy: []
+  reviewLedger: []
+  reviewReceipt: []
+  reviewBundle: []
+  reviewContext: []
+  reviewState: []
+contextFiles:
+  proposal: []
+  specs: []
+  design: []
+  tasks: []
+  applyProgress: []
+  verifyReport: []
+  reviewPolicy: []
+  reviewLedger: []
+  reviewReceipt: []
+  reviewBundle: []
+  reviewContext: []
+  reviewState: []
+artifacts:
+  exploration: done
+  proposal: missing
+  specs: missing
+  design: missing
+  tasks: missing
+  applyProgress: missing
+  verifyReport: missing
+  reviewLedger: missing
+  reviewReceipt: missing
+  reviewBundle: missing
+  reviewContext: missing
+  reviewState: missing
+taskProgress:
+  total: 0
+  completed: 0
+  pending: 0
+  allComplete: false
+dependencies:
+  proposal: blocked
+  specs: blocked
+  design: blocked
+  tasks: blocked
+  apply: blocked
+  verify: blocked
+  archive: blocked
+applyState: blocked
+actionContext:
+  mode: repo-local
+  workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
+  allowedEditRoots:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority
+relationships:
+  dependsOn:
+    - separately-authorized-minimal-relationship-coverage-and-scoped-call-dispatch-redesign
+  supersedes: []
+  amends: []
+  conflictsWith:
+    - inherited-or-reopened-issue-186-judgment-authority
+    - inherited-or-reopened-issue-188-recovery-authority
+  sameDomainActiveChanges: []
+remediationState:
+  required: false
+  complete: false
+  failedEvidenceRevision: ""
+  lineageId: ""
+  generation: 0
+  fixBatch: 0
+  reason: ""
+phaseInstructions:
+  apply:
+    - Do not apply; prerequisite authority and substrate are absent.
+    - Keep DeepSeek Harness apply absent.
+  verify:
+    - Re-enter only after a separately authorized prerequisite or explicit issue-scope decision.
+  remediate: []
+  archive: []
+nextRecommended: resolve-blockers
+blockedReasons:
+  - Main at 6173a39 lacks scoped call producers and per-kind/per-direction coverage needed to express issue 219 unfinished authority.
+  - Delivering the full issue standalone would require an unauthorized prerequisite redesign and exceed the 400-line review budget.
+  - Closed issue 186 and issue 188 lineage is historical evidence only and grants no Judgment, review, correction, or delivery authority.
+baseline:
+  branch: main
+  head: 6173a39a73f1540c17335a330ea7f14f982387cb
+  originMain: 6173a39a73f1540c17335a330ea7f14f982387cb
+  cleanAtStart: true
+authority:
+  issue: 219
+  issueState: OPEN
+  labels:
+    - status:approved
+    - type:bug
+  independence: issue-186-judgment-authority-excluded
+  rddMode: disabled/unmanaged
+  reviewAuthority: false
+  deliveryAuthority: false
+exploration:
+  status: success
+  reproduction: confirmed-on-main-public-mcp
+  runtimeDefect: true
+  missingCapability: true
+  absentPrerequisite: true
+  readyForProposal: false
+  changedLineBudgetRisk: High
+  chainedPRsRecommended: true
+  decisionNeededBeforeApply: true
+lastPhase: explore
