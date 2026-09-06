@@ -15,12 +15,12 @@ baseline:
   commit: 6173a39a73f1540c17335a330ea7f14f982387cb
   cleanBeforeExploration: true
 rddMode: disabled/unmanaged
-lastPhase: explore
-nextRecommended: proposal
+lastPhase: proposal
+nextRecommended: spec
 status: ready
 artifacts:
   exploration: done
-  proposal: pending
+  proposal: done
   specs: pending
   design: pending
   tasks: pending
