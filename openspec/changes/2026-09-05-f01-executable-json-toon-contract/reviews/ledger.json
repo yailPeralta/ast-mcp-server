@@ -11,7 +11,7 @@
     "authoredChangedLines": 379,
     "productionDiff": "empty"
   },
-  "round": 1,
+  "round": 2,
   "initialJudgment": {
     "judges": {
       "A": {
@@ -35,7 +35,7 @@
       {
         "id": "F01-JD-C01",
         "severity": "SEVERE",
-        "status": "correction2-applied-rejudgment-pending",
+        "status": "terminal-escalated",
         "confirmedBy": ["A", "B"],
         "location": "scripts/json-toon-contract.mjs:16-59; test/json-toon-contract-admission.test.ts:14-100",
         "root": "The admission authority was judged self-certifying and able to permit an incomplete oracle while declarative labels and cardinality remained present.",
@@ -46,7 +46,7 @@
         ],
         "corroboration": "Both initial blind judges independently identified the same completeness-authority failure; correction round 1 then produced contradictory scoped re-judgment results.",
         "fixAuthorized": true,
-        "next": "Run final blind dual re-judgment over this frozen finding and the correction-2 delta; no correction rounds remain."
+        "next": "Resolve blockers by explicit maintainer disposition; both final judges confirmed severe defects and no correction rounds remain."
       }
     ],
     "suspect": [
@@ -113,6 +113,18 @@
     "productionDiff": "empty",
     "harnessDiff": "empty"
   },
+  "finalCorrectionTarget": {
+    "round": 2,
+    "pullRequest": 245,
+    "branch": "fix/f01-behavioral-admission",
+    "parent": "09376d1a228254352762c1a3d13475c97c7b8637",
+    "head": "d1447a15d6b996303d47417f03327ce890f8559d",
+    "tree": "8a96eaa7f276c95b7315447e22523413f4cae212",
+    "codeChangedLines": 107,
+    "validatedBudget": "395/400 authored changed lines from 09376d1 through the current terminal F-01 artifacts",
+    "productionDiff": "empty",
+    "harnessDiff": "empty"
+  },
   "fixWorkUnits": [
     {
       "id": "F01-CORR-R1",
@@ -126,7 +138,7 @@
       "scope": "Seven shared executable invariant checks with isolated deterministic-fault probes, bounded close, and captured owned-process zero verification",
       "red": "All seven adjudicated dead-branch/short-circuit bypasses were admitted twice unchanged; the new probe contract then failed twice unchanged at 1/5.",
       "green": "Admission passed twice at 5/5; 23/23 direct/probe mutations rejected twice; oracle remained stable at 8 cases, 16 calls, 1231 bytes and SHA-256 fa3a137c44fe7dbcd6d3a3b9b701ed3e1a280fc03988d39b34b6ccff5ee0d353.",
-      "status": "applied-not-approved",
+      "status": "terminal-escalated",
       "productionDiff": "empty"
     }
   ],
@@ -154,6 +166,31 @@
     "terminalApproval": false,
     "fixAuthority": false
   },
+  "finalJudgment": {
+    "scope": "Frozen F01-JD-C01 ledger plus correction-2 delta at PR #245 / d1447a1",
+    "correctionRoundsUsed": 2,
+    "correctionRoundsMaximum": 2,
+    "correctionRoundsRemaining": 0,
+    "judges": {
+      "A": { "verdict": "ESCALATED", "confirmedSevere": ["F01-FINAL-C01", "F01-FINAL-C02"] },
+      "B": { "verdict": "ESCALATED", "confirmedSevere": ["F01-FINAL-C01", "F01-FINAL-C02"] }
+    },
+    "findings": [
+      { "id": "F01-FINAL-C01", "severity": "SEVERE", "status": "terminal-confirmed", "confirmedBy": ["A", "B"], "claim": "All seven ordinary-flow dead-branch and short-circuit bypasses remain admitted by correction 2.", "impact": "Required executable checks do not govern ordinary flow." },
+      { "id": "F01-FINAL-C02", "severity": "SEVERE", "status": "terminal-confirmed", "confirmedBy": ["A", "B"], "claim": "runBehavioralProbes can trivially return expected IDs without executing faults.", "impact": "Behavioral probes can self-certify without proving fault execution or rejection." }
+    ],
+    "counts": {
+      "confirmedSevere": 2,
+      "suspect": 0,
+      "contradictions": 0,
+      "info": 0
+    },
+    "terminal": true,
+    "verdict": "ESCALATED",
+    "approval": false,
+    "deliveryAuthority": false,
+    "forecast": "No further correction is permitted or forecast under the exhausted 2/2 Judgment Day budget."
+  },
   "counts": {
     "initialConfirmedSevere": 1,
     "round1DualConfirmedSevere": 0,
@@ -162,10 +199,16 @@
     "round1Info": 1,
     "round1ExecutableBypasses": 7,
     "round1DirectMutationsRejected": "16/16 twice",
-    "round1CorrectionCausedFindings": 0
+    "round1CorrectionCausedFindings": 0,
+    "finalDualConfirmedSevere": 2,
+    "finalSuspect": 0,
+    "finalContradictions": 0,
+    "finalInfo": 0,
+    "finalJudgesEscalated": 2
   },
   "preservedEvidence": {
-    "runtimeParity": "passing: 8 cases, 16 registered stdio calls, JSON/decoded-TOON normalized equality",
+    "authority": "non-authoritative characterization only; it does not override either terminal severe finding",
+    "runtimeParity": "passing characterization: 8 cases, 16 registered stdio calls, JSON/decoded-TOON normalized equality",
     "toolInventory": "exactly ast_search_symbols, ast_find_references, ast_get_impact, ast_get_diagnostics",
     "envelopesAndSchema": "passing",
     "productionDiff": "empty under src/",
@@ -179,13 +222,17 @@
     "authorizationCondition": "Maintainer authorization was consumed by correction round 2; no correction rounds remain."
   },
   "maintainerOptions": [
-    "Run final blind dual re-judgment over the frozen F01-JD-C01 ledger plus correction-2 delta."
+    "Reject and close the F-01 PR chain while leaving the terminal record intact.",
+    "Supersede F-01 with a separately authorized redesign and a new bounded review target.",
+    "Explicitly accept the residual severe risk and separately decide whether ordinary repository policy permits continuation; this Judgment Day grants no approval or delivery authority."
   ],
-  "scopedRejudgmentResult": "correction2-applied-final-dual-rejudgment-pending",
-  "terminal": false,
-  "terminalState": "final-dual-rejudgment-pending",
+  "issueAndPullRequests": "Issue #235 and all related pull requests remain open until the user chooses a maintainer disposition.",
+  "nextRecommended": "resolve-blockers",
+  "scopedRejudgmentResult": "terminal-dual-escalation-after-correction-2",
+  "terminal": true,
+  "terminalState": "terminal-escalated-maintainer-disposition-required",
   "verdict": "ESCALATED",
-  "rationale": "Correction round 2 is applied but not approved. Final dual re-judgment is pending, and any remaining defect escalates because no rounds remain.",
+  "rationale": "Both final judges independently confirmed F01-FINAL-C01 and F01-FINAL-C02 after 2/2 corrections. No correction rounds remain, so approval, verification, archive, and delivery are prohibited pending explicit maintainer disposition.",
   "rdd": {
     "mode": "disabled/unmanaged",
     "receipts": false,

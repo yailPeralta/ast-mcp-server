@@ -59,6 +59,8 @@ U1 IDs: `f01-oracle-acquire-20260905-01` / `f01-oracle-settle-20260905-02`. Goal
 - [ ] 4.2 Freeze candidate; run two blind read-only adversarial judgments.
   - Maintainer adjudicated Judge A's seven bypasses within F01-JD-C01 and authorized final correction round 2.
   - Correction 2 adds seven executable deterministic-fault probes and rejects the complete 23-case direct/probe matrix twice while preserving exact case mapping, stable two-run evidence, and `test:mcp` reachability.
-  - Status: applied, not approved. Final blind dual re-judgment is pending; zero correction rounds remain, so any remaining defect escalates.
-- [ ] 4.3 Verify IDs: acquire `f01-verify-acquire-20260905-03`, settle `f01-verify-settle-20260905-04`; strict report then `gentle-ai sdd-verify-validate --input .../verify-report.md --requirements 6 --scenarios 12`.
-- [ ] 4.4 After PASS, archive/merge spec and deliver U1. Harness is N/A: roadmap requires registered MCP, not Harness; if authority changes, inspect pinned `cd5ef814…` read-only and prove apply absent.
+  - Terminal status: prohibited/pending after both final judges independently ESCALATED on F01-FINAL-C01 and F01-FINAL-C02 following 2/2 corrections.
+  - Seven ordinary-flow dead-branch/short-circuit bypasses remain admitted, and `runBehavioralProbes` can return expected IDs without executing faults.
+  - No correction rounds remain. Task 4.2 cannot complete without explicit maintainer disposition; no approval is recorded.
+- [ ] 4.3 BLOCKED — do not acquire, settle, verify, or write a verify report while terminal severe findings remain unresolved.
+- [ ] 4.4 BLOCKED — do not archive, merge specs, deliver, commit, push, or alter issue/PR state before explicit maintainer disposition.

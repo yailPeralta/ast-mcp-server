@@ -33,10 +33,21 @@ correctionCandidate:
   authoredChangedLines: 191
   productionDiff: empty
   harnessDiff: empty
+finalCorrectionCandidate:
+  round: 2
+  pullRequest: 245
+  branch: fix/f01-behavioral-admission
+  parent: 09376d1a228254352762c1a3d13475c97c7b8637
+  head: d1447a15d6b996303d47417f03327ce890f8559d
+  tree: 8a96eaa7f276c95b7315447e22523413f4cae212
+  codeChangedLines: 107
+  validatedAuthoredLineage: 395/400 changed lines from 09376d1 through current terminal F-01 artifacts
+  productionDiff: empty
+  harnessDiff: empty
 rddMode: disabled/unmanaged
-lastPhase: judgment-day-correction-2
-nextRecommended: final-dual-rejudgment
-status: correction2-applied-not-approved
+lastPhase: judgment-day-final-dual-rejudgment
+nextRecommended: resolve-blockers
+status: terminal-escalated-maintainer-disposition-required
 artifacts:
   exploration: done
   proposal: done
@@ -45,8 +56,8 @@ artifacts:
   tasks: done
   chain: done
   applyProgress: partial
-  reviewLedger: done
-  verifyReport: pending
+  reviewLedger: terminal-escalated
+  verifyReport: prohibited
 taskSummary:
   total: 17
   completed: 14
@@ -64,6 +75,7 @@ finding:
   redKind: characterization/contract-enforcement
   behaviorFirstRedFeasible: false
 reproduction:
+  authority: non-authoritative characterization only; healthy runtime parity does not override terminal severe findings
   focusedCommand: yarn vitest run test/result-format.test.ts test/tool-catalog.test.ts test/mcp.integration.test.ts --no-file-parallelism
   focusedExitCode: 0
   focusedTests: 43
@@ -108,9 +120,9 @@ attemptPlan:
 reviewPlan:
   method: independent blind dual adversarial judgment
   target: PR 241; frozen base 04db5d7; HEAD f3c80e2
-  round: 1
+  round: 2
   verdict: ESCALATED
-  closure: F01-JD-C01 disputed
+  closure: F01-FINAL-C01 and F01-FINAL-C02 confirmed severe by both final judges
   initialConfirmedSevere: 1
   round1DualConfirmedSevere: 0
   round1JudgeLocalSevere: 1
@@ -124,10 +136,11 @@ reviewPlan:
   fixThreshold: severe finding confirmed by both judges
   fixAuthority: consumed-by-correction-2
   terminalApproval: false
-  correctionStatus: correction2-applied-not-approved
-  correctionParent: PR 242 base da1eeb3
-  correctionHead: 7d34c5003e6aaeb626823ecfec9ff44f897885c4
-  correctionMeasuredChangedLines: 191
+  correctionStatus: terminal-escalated
+  correctionParent: PR 244 commit 09376d1
+  correctionPullRequest: 245
+  correctionHead: d1447a15d6b996303d47417f03327ce890f8559d
+  correctionMeasuredChangedLines: 107
   correctionHardLimitChangedLines: 400
   correctionScope: independent exact case/tool expectations plus AST binding and mutation tests for paired JSON/TOON calls, canonical/content/envelope/decode/equality checks, cleanup order, two-run byte/hash comparison, and test:mcp reachability
   forbiddenEdits: production and Harness
@@ -137,9 +150,22 @@ reviewPlan:
     judgeB: APPROVED; 16/16 direct mutations rejected twice; zero correction-caused findings
     disposition: preserve both without refutation; explicit maintainer adjudication required
   secondRoundAuthorization: maintainer adjudicated and authorized behavioral mutation/probe execution within F01-JD-C01
-  secondRoundStatus: applied not approved; final blind dual re-judgment pending
+  secondRoundStatus: terminal ESCALATED after final blind dual re-judgment
   secondRoundEvidence: seven bypasses reproduced twice RED; 23/23 direct/probe mutants rejected twice GREEN; admission 5/5 twice; oracle stable twice
   secondRoundCodeChangedLines: 107
+  finalDualRejudgment:
+    target: PR 245; HEAD d1447a1
+    judgeA: ESCALATED; confirmed F01-FINAL-C01 and F01-FINAL-C02 severe
+    judgeB: ESCALATED; confirmed F01-FINAL-C01 and F01-FINAL-C02 severe
+    confirmedSevere: 2
+    suspect: 0
+    contradictions: 0
+    info: 0
+    F01-FINAL-C01: all seven ordinary-flow dead-branch/short-circuit bypasses remain admitted
+    F01-FINAL-C02: runBehavioralProbes can return expected IDs without executing faults
+    terminalApproval: false
+    correctionRoundsRemaining: 0
+    forecast: no further correction
   rddReceipts: disabled
 verifyPlan:
   strictTdd: true
@@ -152,10 +178,15 @@ sourceMapping:
   compilerEvidenceVisible: false
   fallback: bounded textual reads; not compiler-backed
 blockers:
-  - Correction round 2 is applied but cannot be approved without final blind dual re-judgment.
-  - No correction rounds remain; any final re-judgment defect requires escalation.
+  - F01-FINAL-C01 is terminal severe: all seven ordinary-flow dead-branch/short-circuit bypasses remain admitted.
+  - F01-FINAL-C02 is terminal severe: runBehavioralProbes can return expected IDs without executing faults.
+  - The 2/2 correction budget is exhausted; task 4.2 remains prohibited/pending, and tasks 4.3 and 4.4 are blocked.
+  - No approval, verification, archive, delivery, receipt, commit, push, or issue/PR state change is authorized.
 maintainerOptions:
-  - Run final blind dual re-judgment over the frozen F01-JD-C01 ledger plus correction-2 delta.
+  - Reject and close the F-01 PR chain while retaining the terminal record.
+  - Supersede F-01 with a separately authorized redesign and new bounded review target.
+  - Explicitly accept the residual severe risk and separately decide continuation under ordinary repository policy; this Judgment Day grants no approval or delivery authority.
+issueAndPullRequests: Issue #235 and all related pull requests remain open until the user chooses a disposition.
 routingConditions:
   - Treat apply as characterization/contract enforcement because current runtime behavior passes.
   - Run the admission test twice unchanged and retain both honest failures before GREEN.
