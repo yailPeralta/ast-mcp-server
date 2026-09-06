@@ -15,14 +15,14 @@ baseline:
   commit: 6173a39a73f1540c17335a330ea7f14f982387cb
   cleanBeforeExploration: true
 rddMode: disabled/unmanaged
-lastPhase: spec
-nextRecommended: design
+lastPhase: design
+nextRecommended: tasks
 status: ready
 artifacts:
   exploration: done
   proposal: done
   specs: done
-  design: pending
+  design: done
   tasks: pending
   applyProgress: pending
   verifyReport: pending
@@ -54,13 +54,24 @@ reproduction:
     - duration_ms
     - checked_at
   normalizedReportSha256: 093110d4770aa5642433074ed85f715bccbd43b7cdb30a032586b67f5224940f
+designSummary:
+  architecture: dedicated registered-stdio oracle with a closed in-file manifest and package admission gate
+  oracleCases: 8
+  pairedCalls: 16
+  normalizedKeys:
+    - duration_ms
+    - checked_at
+  nextTasks:
+    - add truthful failing admission test for the absent command, oracle, and complete manifest
+    - implement the deterministic stdio oracle and exact eight-case matrix
+    - add the package command and CI invocation, then run focused and quality gates
 forecast:
   workUnits: 1
-  authoredChangedLines: 220-320
+  authoredChangedLines: 267-354
   productionChangeExpected: false
   budgetRisk: Low
   chainedPullRequestsRecommended: false
-  rollback: remove the dedicated oracle, its focused test, and package command without changing runtime behavior
+  rollback: remove the dedicated oracle, its focused test, package command, and CI invocation without changing runtime behavior
 blockers: []
 routingConditions:
   - Treat apply as characterization/contract enforcement because current runtime behavior passes.
