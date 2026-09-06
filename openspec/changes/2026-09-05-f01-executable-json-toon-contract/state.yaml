@@ -14,18 +14,28 @@ baseline:
   branch: main
   commit: 6173a39a73f1540c17335a330ea7f14f982387cb
   cleanBeforeExploration: true
+planningBase:
+  branch: docs/f01-design
+  pullRequest: 239
+  commit: eb85ee9eb730749b8f09e72aec7e33faa5865d8a
 rddMode: disabled/unmanaged
-lastPhase: design
-nextRecommended: tasks
+lastPhase: tasks
+nextRecommended: apply
 status: ready
 artifacts:
   exploration: done
   proposal: done
   specs: done
   design: done
-  tasks: pending
-  applyProgress: pending
+  tasks: done
+  chain: done
+  applyProgress: initialized
   verifyReport: pending
+taskSummary:
+  total: 17
+  completed: 3
+  pending: 14
+  phases: 5
 specSummary:
   type: new-capability
   domain: executable-json-toon-contract
@@ -61,26 +71,54 @@ designSummary:
   normalizedKeys:
     - duration_ms
     - checked_at
-  nextTasks:
-    - add truthful failing admission test for the absent command, oracle, and complete manifest
-    - implement the deterministic stdio oracle and exact eight-case matrix
-    - add the package command and CI invocation, then run focused and quality gates
 forecast:
   workUnits: 1
   authoredChangedLines: 267-354
   productionChangeExpected: false
   budgetRisk: Low
+  changedLineLimit: 400
+  deliveryStrategy: single-pr
+  chainStrategy: pending
   chainedPullRequestsRecommended: false
+  autoChainCondition: stop and split before apply if reforecast or measured authored changes exceed 400, including CI
   rollback: remove the dedicated oracle, its focused test, package command, and CI invocation without changing runtime behavior
+attemptPlan:
+  applyAcquireRequestId: f01-oracle-acquire-20260905-01
+  applySettleRequestId: f01-oracle-settle-20260905-02
+  verifyAcquireRequestId: f01-verify-acquire-20260905-03
+  verifySettleRequestId: f01-verify-settle-20260905-04
+  maxAttempts: 2
+  maxChangedLines: 400
+reviewPlan:
+  method: independent blind dual adversarial judgment
+  target: immutable complete candidate
+  correctionRoundsMaximum: 2
+  fixThreshold: severe finding confirmed by both judges
+  rddReceipts: disabled
+verifyPlan:
+  strictTdd: true
+  requirements: 6
+  scenarios: 12
+  validator: gentle-ai sdd-verify-validate
+  harnessCheck: N/A unless roadmap authority changes; if required, pinned checkout is read-only and apply must remain absent
+sourceMapping:
+  astToolsAvailable: true
+  compilerEvidenceVisible: false
+  fallback: bounded textual reads; not compiler-backed
 blockers: []
 routingConditions:
   - Treat apply as characterization/contract enforcement because current runtime behavior passes.
-  - Stop for maintainer clarification if a production behavior-first RED is required despite passing evidence.
+  - Run the admission test twice unchanged and retain both honest failures before GREEN.
+  - Production changes are forbidden without a witnessed oracle contradiction and a separate RED-first reforecast.
+  - Stop before apply and auto-chain if the CI-inclusive authored forecast exceeds 400.
+  - RDD remains disabled/unmanaged; do not claim review receipts or approval authority.
 nonGoals:
   - universal MCP outputSchema
   - issue #103 output-vocabulary projection
   - R-01 or recovery behavior
-  - apply or Harness mutation
+  - apply or mutation flows
+  - UI or Code Mode
+  - Harness edits
   - public schema changes
 risks:
   - Raw sequential calls differ in volatile duration_ms or checked_at telemetry.
