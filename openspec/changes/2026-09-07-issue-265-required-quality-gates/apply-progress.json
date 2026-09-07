@@ -2,10 +2,10 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-07-issue-265-required-quality-gates",
   "phase": "apply",
-  "stage": "planned-ready-apply",
+  "stage": "candidate-ready-not-reviewed",
   "planningBase": {
-    "pullRequest": 270,
-    "commit": "5e9d303",
+    "pullRequest": 271,
+    "commit": "d2dc5aa",
     "role": "planning-only"
   },
   "issue": 265,
@@ -19,10 +19,10 @@
     {
       "id": "U1",
       "name": "Deterministic adapter pnpm authority",
-      "status": "pending",
-      "branch": "fix/265-u1-private-pnpm",
-      "base": "PR-270@5e9d303",
-      "immediatePredecessor": "PR-270@5e9d303",
+      "status": "candidate-ready-not-reviewed",
+      "branch": "fix/265-u1-pnpm-authority",
+      "base": "PR-271@d2dc5aa",
+      "immediatePredecessor": "PR-271@d2dc5aa",
       "forecast": "260-390",
       "hardMax": 400,
       "acquireId": "issue265-u1-apply-v1",
@@ -61,7 +61,14 @@
   "tdd": {
     "red": [],
     "green": [],
-    "refactored": []
+    "refactored": [
+      {
+        "id": "U1-private-pnpm-authority",
+        "name": "exact private pnpm provisioning remains green",
+        "file": "test/private-pnpm.test.ts",
+        "taskId": "U1"
+      }
+    ]
   },
   "tddPlan": [
     {
@@ -87,5 +94,5 @@
   },
   "runs": [],
   "activeRed": [],
-  "updatedAt": "2026-09-07T02:08:45Z"
+  "updatedAt": "2026-09-07T02:49:17Z"
 }
