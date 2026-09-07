@@ -218,6 +218,16 @@ describe("pinned Harness smoke contract", () => {
     expect(source).toContain("supervisedNames.length === 15");
     expect(source).toContain("await rm(temporaryRoot, { recursive: true, force: true })");
     expect(source).toContain("materializePinnedHarness");
+    expect(source).toContain("createPrivatePnpmEnvironment");
+    expect(source).toContain("provisionPrivatePnpm");
+    expect(source).toContain("summary.packageManager");
+    expect(source.indexOf("const packageManager = await provisionPrivatePnpm")).toBeLessThan(
+      source.indexOf("materializePinnedHarness(privatePnpm.environment)"),
+    );
+    expect(source.indexOf("summary.packageManager")).toBeLessThan(
+      source.indexOf('[cliBin, "plugin", "--profile", "smoke", "add"'),
+    );
+    expect(source).not.toContain("COREPACK_USE_LATEST");
     expect(source).toContain('"--no-hardlinks"');
     expect(source).not.toContain("const source = process.env.DSH_HARNESS_SOURCE");
     expect(source).toContain("observedCliSha256");
