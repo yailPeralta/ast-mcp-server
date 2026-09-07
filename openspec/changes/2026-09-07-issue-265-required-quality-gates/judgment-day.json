@@ -1,0 +1,202 @@
+{
+  "schema": "judgment-day",
+  "change": "2026-09-07-issue-265-required-quality-gates",
+  "target": {
+    "candidate": "41d3121f337e862626b5edf4b11639d9d10298fd",
+    "baseline": "d2dc5aa",
+    "u1": "4e4a428",
+    "pullRequests": [272, 273],
+    "immutable": true
+  },
+  "round": 1,
+  "maxRounds": 2,
+  "mode": "parent-orchestrated-initial-dual",
+  "judgeResults": [
+    {
+      "id": "judge-one",
+      "independent": true,
+      "terminalVerdict": "ESCALATED",
+      "result": {
+        "findings": [
+          {
+            "location": "scripts/private-pnpm.mjs:76-84,131-147",
+            "severity": "CRITICAL",
+            "claim": "The fallback launcher write can follow the real Corepack shim symlink and overwrite the globally installed Corepack pnpm launcher; disposable-root cleanup then leaves the host launcher broken.",
+            "evidence_class": "deterministic",
+            "causal_disposition": "introduced",
+            "proof_refs": [
+              "Real `corepack enable pnpm --install-directory <private-bin>` creates `<private-bin>/pnpm` as a symlink to the globally installed `corepack/dist/pnpm.js`.",
+              "After classified `corepack prepare` failure, `createPnpmExecLauncher` calls `writeFile(<private-bin>/pnpm, ...)` without unlink, exclusive creation, or no-follow containment, so the write follows that symlink.",
+              "Removing the disposable root removes only the private symlink and does not restore the overwritten global Corepack launcher.",
+              "The defect violates R3 no ambient authority, R4 bounded cleanup/repetition, and R5 fail-closed fallback launcher."
+            ]
+          },
+          {
+            "location": "test/private-pnpm.test.ts:66-138",
+            "severity": "INFO",
+            "claim": "The tests do not exercise a real Corepack-created shim before fallback launcher creation.",
+            "evidence_class": "deterministic",
+            "causal_disposition": "introduced",
+            "proof_refs": [
+              "The fallback tests stub `runCommand`; none invokes real `corepack enable --install-directory <private-bin>` and verifies that global launcher bytes remain unchanged."
+            ]
+          },
+          {
+            "location": "scripts/private-pnpm.mjs:65-69",
+            "severity": "INFO",
+            "claim": "The fallback classifier may treat a mixed error containing a compatibility phrase plus a network, timeout, integrity, extraction, or platform failure as fallback-eligible.",
+            "evidence_class": "reasoned",
+            "causal_disposition": "suspect",
+            "proof_refs": [
+              "Classification is a positive phrase regex over concatenated message and stderr, without explicit denial when disallowed failure classes are also present."
+            ]
+          }
+        ],
+        "evidence": [
+          "Inspected the immutable candidate launcher and tests at 41d3121f337e862626b5edf4b11639d9d10298fd.",
+          "Confirmed the real-shim overwrite sequence and requirement impact R3/R4/R5 independently."
+        ]
+      }
+    },
+    {
+      "id": "judge-two",
+      "independent": true,
+      "terminalVerdict": "ESCALATED",
+      "result": {
+        "findings": [
+          {
+            "location": "scripts/private-pnpm.mjs:76-84,131-147",
+            "severity": "CRITICAL",
+            "claim": "Fallback launcher materialization writes through the real Corepack-generated symlink into global `corepack/dist/pnpm.js`, damaging host state outside the disposable boundary and surviving cleanup.",
+            "evidence_class": "deterministic",
+            "causal_disposition": "introduced",
+            "proof_refs": [
+              "A real `corepack enable pnpm --install-directory <private-bin>` installs a symlink targeting globally installed `corepack/dist/pnpm.js`.",
+              "Fallback reuses the same pathname with ordinary `writeFile`, which follows the symlink and overwrites the global target.",
+              "Temporary-root cleanup cannot restore the host target, contradicting isolation, cleanup, and fail-closed requirements R3/R4/R5."
+            ]
+          },
+          {
+            "location": "specs/required-quality-gates/spec.md:109-117; chain.md:47,61",
+            "severity": "INFO",
+            "claim": "R11 wording requires one combined rollback while the planned chain documents separate U1 and U2 rollback boundaries and ordering constraints.",
+            "evidence_class": "deterministic",
+            "causal_disposition": "introduced",
+            "proof_refs": [
+              "The requirement says rollback removes private pnpm provisioning and tests together with both resolutions and lock entries.",
+              "The chain separately defines U1 and U2 rollback operations and forbids removing U1 after U2 exists except as part of the complete candidate."
+            ]
+          },
+          {
+            "location": "apply-progress.json:134-140",
+            "severity": "INFO",
+            "claim": "The complete exact-candidate Node 22 matrix proof remains external to the persisted change artifacts.",
+            "evidence_class": "reasoned",
+            "causal_disposition": "suspect",
+            "proof_refs": [
+              "Persisted progress summarizes prior Node-cell runs but does not bind full Node 22 evidence to exact candidate 41d3121f337e862626b5edf4b11639d9d10298fd."
+            ]
+          }
+        ],
+        "evidence": [
+          "Inspected the immutable candidate, requirements, chain rollback wording, and persisted evidence independently.",
+          "Confirmed the real-shim overwrite sequence and requirement impact R3/R4/R5 independently."
+        ]
+      }
+    }
+  ],
+  "ledger": [
+    {
+      "id": "C1",
+      "severity": "SEVERE",
+      "status": "confirmed-open",
+      "title": "Fallback launcher overwrites the global Corepack pnpm launcher through a real shim symlink",
+      "confirmedBy": ["judge-one", "judge-two"],
+      "requirementImpact": ["R3", "R4", "R5"],
+      "rootCause": "Real `corepack enable pnpm --install-directory <private-bin>` creates a symlink to globally installed `corepack/dist/pnpm.js`; fallback `writeFile(<private-bin>/pnpm)` follows it and overwrites global Corepack, while disposable cleanup leaves the host launcher broken.",
+      "correctionEligible": true,
+      "autoAuthorized": false
+    },
+    {
+      "id": "I1",
+      "severity": "INFO",
+      "status": "confirmed-info",
+      "title": "Real Corepack shim behavior lacks a regression test",
+      "reportedBy": ["judge-one"],
+      "autoFix": false
+    },
+    {
+      "id": "I2",
+      "severity": "INFO",
+      "status": "suspect-info",
+      "title": "Mixed-message fallback classification may admit a disallowed failure",
+      "reportedBy": ["judge-one"],
+      "autoFix": false
+    },
+    {
+      "id": "I3",
+      "severity": "INFO",
+      "status": "confirmed-info",
+      "title": "R11 combined rollback wording contradicts separate chain rollback boundaries",
+      "reportedBy": ["judge-two"],
+      "autoFix": false
+    },
+    {
+      "id": "I4",
+      "severity": "INFO",
+      "status": "suspect-info",
+      "title": "Full exact-candidate Node 22 matrix proof remains external",
+      "reportedBy": ["judge-two"],
+      "autoFix": false
+    }
+  ],
+  "counts": {
+    "judgeResults": 2,
+    "confirmedSevere": 1,
+    "remainingSevere": 1,
+    "confirmedInfo": 2,
+    "suspect": 2,
+    "contradictions": 0,
+    "info": 4
+  },
+  "hostCleanupReceipt": {
+    "performedBy": "parent",
+    "node": "v24.16.0",
+    "restoredPath": ".../corepack/dist/pnpm.js",
+    "restorationSource": "independently matching pristine launcher bytes",
+    "sha256": "7c2a67995976b5b592b611d8b236e3b0633bd654fb49aedd96c6eb7ce04c9cbb",
+    "verificationCommand": "COREPACK_ENABLE_PROJECT_SPEC=0 pnpm --version",
+    "verificationOutput": "11.24.0",
+    "status": "restored-and-verified"
+  },
+  "proposedCorrection": {
+    "decision": "required",
+    "authorized": false,
+    "round": 1,
+    "maxRounds": 2,
+    "requiredScope": [
+      "Unlink or reject the Corepack-created symlink before launcher materialization.",
+      "Create a regular launcher with exclusive and no-follow containment.",
+      "Add a real-Corepack-shim regression proving global launcher bytes remain unchanged and cleanup remains contained."
+    ],
+    "optionalScope": [
+      "Harden mixed-message fallback classification only if directly necessary and budget allows.",
+      "Reconcile R11 rollback wording only if directly necessary and budget allows."
+    ],
+    "forecast": {
+      "authoredLines": "40-100",
+      "budget": 400,
+      "risk": "Low",
+      "workUnits": 1
+    },
+    "scopedRejudgment": "not_run"
+  },
+  "terminalVerdict": "ESCALATED",
+  "nextRecommended": "decision-required: authorize-or-decline-correction-round-1",
+  "authority": {
+    "correction": false,
+    "reviewApproval": false,
+    "delivery": false
+  },
+  "updatedAt": "2026-09-07T04:12:43Z"
+}

@@ -50,6 +50,7 @@ artifacts:
   tasks: done
   applyProgress: done
   verifyReport: missing
+  judgmentDay: done
   reviewLedger: missing
   reviewReceipt: missing
   reviewBundle: missing
@@ -57,18 +58,18 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 16
-  completed: 11
-  pending: 5
+  completed: 12
+  pending: 4
   allComplete: false
 dependencies:
   proposal: all_done
   specs: all_done
   design: all_done
   tasks: all_done
-  apply: ready
+  apply: blocked
   verify: blocked
   archive: blocked
-applyState: ready
+applyState: blocked
 actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
@@ -89,8 +90,26 @@ remediationState:
   generation: 0
   fixBatch: 0
   reason: ""
-nextRecommended: apply
-blockedReasons: []
+judgmentDay:
+  artifact: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/judgment-day.json
+  target: 41d3121f337e862626b5edf4b11639d9d10298fd
+  round: 1
+  maxRounds: 2
+  terminalVerdict: ESCALATED
+  confirmedSevere:
+    - C1
+  confirmedInfo:
+    - I1
+    - I3
+  suspectInfo:
+    - I2
+    - I4
+  contradictions: []
+  correctionAuthorized: false
+nextRecommended: resolve-review
+blockedReasons:
+  - "Judgment Day confirmed severe C1 through both independent judges; explicit authorization or decline is required before correction round 1."
+  - "Strict verification and delivery remain blocked; Judgment grants no approval, receipt, or delivery authority."
 planningBase:
   pullRequest: 270
   commit: 5e9d303

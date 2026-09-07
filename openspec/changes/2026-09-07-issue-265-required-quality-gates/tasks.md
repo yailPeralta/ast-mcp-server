@@ -44,11 +44,11 @@ See `chain.md` for exact execution and delivery contracts.
 - [x] 2.2 Add only dependency-policy tests; run the exact focused command twice unchanged and require identical old-version failures; record audit baseline separately.
 - [x] 2.3 Add exact `fast-uri@3.1.6` and `qs@6.16.0` resolutions; regenerate `yarn.lock` only with Yarn 4.15.0, never hand-edit integrity data.
 - [x] 2.4 GREEN/refactor; prove selectors/parent ranges, immutable no-mutation install, clean audit, policy negatives, exclusions, and Node 22.13.0/24 chain.
-- [ ] 2.5 Run all gates, measure ≤400 authored lines, record rollback/candidate identity, then settle `issue265-u2-settle-v1` and freeze the complete candidate.
+- [x] 2.5 Run all gates, measure ≤400 authored lines, record rollback/candidate identity, then settle `issue265-u2-settle-v1` and freeze the complete candidate at PR #273 / `41d3121f337e862626b5edf4b11639d9d10298fd`.
 
 ## Final Candidate and Delivery
 
-- [ ] 3.1 Run two blind read-only Judgment judges on the same immutable U1+U2 candidate; require complete agreement handling and `JUDGMENT: APPROVED`.
+- [ ] 3.1 Run two blind read-only Judgment judges on the same immutable U1+U2 candidate; initial round completed with both judges `ESCALATED` on confirmed severe C1. Await explicit correction-round-1 authorization; no approval is recorded.
 - [ ] 3.2 Independently verify strict 11/11 traceability, full gates, immutable install/audit, exclusions, and required exact-SHA CI in both Node cells.
 - [ ] 3.3 With separate delivery authority, merge issue #265 independently to `main`; Judgment grants none.
 - [ ] 3.4 Rebase #247 root-to-child onto final `main`, regenerate lock conflicts, and reverify locally plus exact-SHA CI.

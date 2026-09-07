@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-07-issue-265-required-quality-gates",
   "phase": "apply",
-  "stage": "candidate-ready-awaiting-settlement",
+  "stage": "judgment-escalated-awaiting-correction-round-1-decision",
   "planningBase": {
     "pullRequest": 271,
     "commit": "d2dc5aa",
@@ -12,6 +12,12 @@
     "pullRequest": 272,
     "commit": "4e4a42860a447d6246c29e1bd76b73f37db52fbf",
     "role": "frozen-u1-candidate"
+  },
+  "completeCandidate": {
+    "pullRequest": 273,
+    "commit": "41d3121f337e862626b5edf4b11639d9d10298fd",
+    "baseline": "d2dc5aa",
+    "role": "immutable-u1-u2-judgment-target"
   },
   "issue": 265,
   "rddMode": "disabled/unmanaged",
@@ -40,7 +46,7 @@
     {
       "id": "U2",
       "name": "Audit-safe resolutions and lock",
-      "status": "candidate-ready-awaiting-settlement",
+      "status": "settled-candidate-judgment-escalated",
       "branch": "fix/265-u2-audit-resolutions",
       "base": "PR-272@4e4a42860a447d6246c29e1bd76b73f37db52fbf",
       "immediatePredecessor": "PR-272@4e4a42860a447d6246c29e1bd76b73f37db52fbf",
@@ -55,8 +61,8 @@
   ],
   "taskProgress": {
     "total": 16,
-    "completed": 11,
-    "pending": 5,
+    "completed": 12,
+    "pending": 4,
     "allComplete": false
   },
   "requirementMap": {
@@ -141,13 +147,27 @@
     "structuredData": "package and apply-progress JSON plus lock, OpenSpec config, and state YAML parsed successfully"
   },
   "finalGate": {
-    "status": "pending-settlement",
-    "candidate": "working-tree-frozen-after-final-hash",
-    "judgment": "next-after-settlement-and-pr",
-    "strictVerification": "pending-11-of-11-requirements-and-scenarios",
+    "status": "judgment-escalated-awaiting-correction-decision",
+    "candidate": "PR-273@41d3121f337e862626b5edf4b11639d9d10298fd",
+    "judgment": "round-1-initial-dual-escalated-confirmed-severe-C1",
+    "judgmentLedger": "judgment-day.json",
+    "correctionRound": "decision-required-not-authorized",
+    "strictVerification": "blocked-by-confirmed-severe-C1",
     "requiredCi": "pending-exact-sha-node-22.13.0-and-24",
     "delivery": "pending-independent-authority"
   },
+  "judgmentDay": {
+    "round": 1,
+    "maxRounds": 2,
+    "judgeOne": "ESCALATED",
+    "judgeTwo": "ESCALATED",
+    "confirmedSevere": ["C1"],
+    "confirmedInfo": ["I1", "I3"],
+    "suspectInfo": ["I2", "I4"],
+    "contradictions": [],
+    "correctionAuthorized": false,
+    "nextRecommended": "decision-required: authorize-or-decline-correction-round-1"
+  },
   "activeRed": [],
-  "updatedAt": "2026-09-07T03:41:54Z"
+  "updatedAt": "2026-09-07T04:12:43Z"
 }
