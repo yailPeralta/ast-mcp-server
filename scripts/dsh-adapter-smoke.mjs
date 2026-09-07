@@ -34,6 +34,7 @@ import { URL, fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import yaml from "yaml";
 import { validateTimeoutBudget } from "./harness-timeout-budget.mjs";
+import { createPrivatePnpmEnvironment, provisionPrivatePnpm } from "./private-pnpm.mjs";
 // prettier-ignore
 import { classifyExactHostToolError, createH03CleanupEvidence, parseProbeMarker, requireExactIdentity, runBoundedCommand, runOrderedCleanup, sanitizeDiagnosticText, terminateProcessTree } from "./runtime-process.mjs";
 
@@ -290,7 +291,12 @@ async function resolveHarnessNode() {
 /** Resolve the pinned harness source and return its runnable CLI bin, verifying identity. */
 async function resolvePinnedHarness() {
   const { nodeBin, nodeBinDir } = await resolveHarnessNode();
-  const source = await materializePinnedHarness(nodeBinDir);
+  const privatePnpm = await createPrivatePnpmEnvironment({ temporaryRoot, nodeBin, nodeBinDir });
+  const packageManager = await provisionPrivatePnpm({
+    ...privatePnpm,
+    cwd: temporaryRoot,
+  });
+  const source = await materializePinnedHarness(privatePnpm.environment);
   const nodeVersion = (await run(nodeBin, ["--version"])).stdout.trim();
   assert(
     satisfiesHarnessEngine(nodeVersion),
@@ -318,6 +324,8 @@ async function resolvePinnedHarness() {
     source,
     cliBin,
     nodeBin,
+    packageManager,
+    packageManagerEnvironment: privatePnpm.environment,
     identity: {
       revision: head,
       tag: PINNED_TAG,
@@ -331,16 +339,9 @@ async function resolvePinnedHarness() {
 }
 
 /** Pack @deepseek-ai/dsh-mcp-client from the pinned source into an installable tarball. */
-async function packPinnedMcpClient(source) {
+async function packPinnedMcpClient(source, environment) {
   const cwd = path.join(source, "packages", "mcp", "mcp-client");
-  const environment = {
-    ...process.env,
-    NODE_OPTIONS: "",
-    CI: "true",
-    COREPACK_INTEGRITY_KEYS: "0",
-    COREPACK_USE_LATEST: "0",
-  };
-  await run("corepack", ["pnpm", "pack", "--pack-destination", temporaryRoot], {
+  await run("pnpm", ["pack", "--pack-destination", temporaryRoot], {
     cwd,
     env: environment,
   });
@@ -386,7 +387,7 @@ async function fetchPublicPackage() {
 }
 
 /** Materialize, install, and build a fresh harness tree at the pinned revision. */
-async function materializePinnedHarness(nodeBinDir) {
+async function materializePinnedHarness(environment) {
   const root = path.join(temporaryRoot, "pinned-harness");
   const suppliedEvidence = process.env.DSH_HARNESS_SOURCE
     ? path.resolve(process.env.DSH_HARNESS_SOURCE)
@@ -412,22 +413,9 @@ async function materializePinnedHarness(nodeBinDir) {
     { cwd: temporaryRoot },
   );
   await run("git", ["-C", root, "checkout", "--detach", PINNED_REVISION]);
-  // The git commit is the authoritative identity (verified via rev-parse HEAD);
-  // corepack verifies the pnpm download signature, which fails when the registry
-  // rotates its signing key, so disable that check for the pinned source build.
-  // A qualifying node's bin directory leads PATH so pnpm/tsx/tsc/tsdown run under
-  // a Node that meets the harness engine floor.
-  const provisionEnvironment = {
-    ...process.env,
-    PATH: `${nodeBinDir}${path.delimiter}${process.env.PATH ?? ""}`,
-    NODE_OPTIONS: "",
-    CI: "true",
-    COREPACK_INTEGRITY_KEYS: "0",
-    COREPACK_USE_LATEST: "0",
-  };
-  await run("corepack", ["pnpm", "--version"], { cwd: root, env: provisionEnvironment });
-  await run("corepack", ["pnpm", "install"], { cwd: root, env: provisionEnvironment });
-  await run("corepack", ["pnpm", "build"], { cwd: root, env: provisionEnvironment });
+  await run("pnpm", ["--version"], { cwd: root, env: environment });
+  await run("pnpm", ["install"], { cwd: root, env: environment });
+  await run("pnpm", ["build"], { cwd: root, env: environment });
   return root;
 }
 
@@ -932,12 +920,10 @@ async function runNativeAgentJourney({
   const capturePath = path.join(temporaryRoot, `h01-${label}-capture.json`);
   await mkdir(home, { recursive: true });
   const environment = {
-    ...process.env,
+    ...harness.packageManagerEnvironment,
     DSH_HOME: home,
     DSH_TOOLS_MODE: "native",
     DSH_TELEMETRY_DISABLED: "1",
-    COREPACK_INTEGRITY_KEYS: "0",
-    COREPACK_USE_LATEST: "0",
   };
   const profileDir = await installJourneyProfile({
     cliBin: harness.cliBin,
@@ -1451,12 +1437,11 @@ try {
   summary.phases.b = "ok";
 
   // ── Phase C: pinned-Harness proof (mandatory) ──────────────────────────────
-  const { source, cliBin, nodeBin, identity } = await requirePrerequisite(
-    "pinned Harness identity",
-    resolvePinnedHarness,
-  );
+  const { source, cliBin, nodeBin, identity, packageManager, packageManagerEnvironment } =
+    await requirePrerequisite("pinned Harness identity", resolvePinnedHarness);
+  summary.packageManager = packageManager;
   const mcpClientArchive = await requirePrerequisite("pinned MCP bridge artifact", () =>
-    packPinnedMcpClient(source),
+    packPinnedMcpClient(source, packageManagerEnvironment),
   );
   const expectedHostCliSha256 = identity.observedCliSha256;
   const expectedBridgeTarballSha256 = await sha256(mcpClientArchive);
@@ -1468,11 +1453,9 @@ try {
   };
   await mkdir(dshHome, { recursive: true });
   const dshEnvironment = {
-    ...process.env,
+    ...packageManagerEnvironment,
     DSH_HOME: dshHome,
     DSH_TOOLS_MODE: "native",
-    COREPACK_INTEGRITY_KEYS: "0",
-    COREPACK_USE_LATEST: "0",
   };
   await run(nodeBin, [cliBin, "plugin", "--profile", "smoke", "add", archiveReference], {
     cwd: temporaryRoot,
@@ -2054,7 +2037,7 @@ try {
   }
 
   // ── Phase D: native agent/session visibility + durable cold replay (H-01a) ──
-  const harness = { source, cliBin, nodeBin };
+  const harness = { source, cliBin, nodeBin, packageManagerEnvironment };
   const expectedWorkspaceSha256 = await fixtureSha256(fixtureProject);
   const publicBaseline = await runNativeAgentJourney({
     label: "public",
