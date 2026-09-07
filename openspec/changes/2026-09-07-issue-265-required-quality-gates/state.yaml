@@ -7,7 +7,8 @@ planningHome:
   path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates
 artifactPaths:
-  proposal: []
+  proposal:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/proposal.md
   specs: []
   design: []
   tasks: []
@@ -20,7 +21,8 @@ artifactPaths:
   reviewContext: []
   reviewState: []
 contextFiles:
-  proposal: []
+  proposal:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/proposal.md
   specs: []
   design: []
   tasks: []
@@ -33,7 +35,8 @@ contextFiles:
   reviewContext: []
   reviewState: []
 artifacts:
-  proposal: missing
+  exploration: done
+  proposal: done
   specs: missing
   design: missing
   tasks: missing
@@ -50,8 +53,8 @@ taskProgress:
   pending: 0
   allComplete: false
 dependencies:
-  proposal: ready
-  specs: blocked
+  proposal: all_done
+  specs: ready
   design: blocked
   tasks: blocked
   apply: blocked
@@ -68,7 +71,8 @@ relationships:
   supersedes: []
   amends: []
   conflictsWith: []
-  sameDomainActiveChanges: []
+  sameDomainActiveChanges:
+    - 2026-09-06-issue-247-honest-scoped-call-coverage
 remediationState:
   required: false
   complete: false
@@ -77,5 +81,18 @@ remediationState:
   generation: 0
   fixBatch: 0
   reason: ""
-nextRecommended: propose
+nextRecommended: spec
 blockedReasons: []
+planningBase:
+  pullRequest: 267
+  commit: 4e24b03d26fe5d8245b7200d2109f75ebccc79fa
+  role: planning-only
+authority:
+  issue: 265
+  issueState: OPEN
+  labels:
+    - status:approved
+    - type:bug
+  rddMode: disabled/unmanaged
+  reviewAuthority: false
+  deliveryAuthority: false
