@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-07-issue-265-required-quality-gates",
   "phase": "apply",
-  "stage": "judgment-r1-approved-awaiting-strict-verification",
+  "stage": "strict-verification-passed-awaiting-independent-delivery",
   "planningBase": {
     "pullRequest": 271,
     "commit": "d2dc5aa",
@@ -78,8 +78,8 @@
   ],
   "taskProgress": {
     "total": 17,
-    "completed": 14,
-    "pending": 3,
+    "completed": 15,
+    "pending": 2,
     "allComplete": false
   },
   "requirementMap": {
@@ -166,25 +166,28 @@
       "yarn.lock": "7c735bc093c6c704228bd29c70b41599c7d6054ac53a59854a72b1f06f6c9ad1",
       "checks": 2
     },
-    "audit": "two consecutive exit-0 runs plus prior Node 22.13.0 and 24.16.0 cell runs; no audit suggestions",
-    "nodeCells": "Yarn 4.15.0 immutable install, focused U2 test, and audit passed on Node 22.13.0 and 24.16.0",
-    "u1": "focused regression passed 27 tests; real adapter smoke reached DSH_ADAPTER_SMOKE_OK with pnpm 11.7.0 and cleanup ok",
-    "fullTests": "76 files and 994 tests plus 2 supervised-worker integration tests passed under Node v24.16.0 after unsetting ambient GIT_PAGER; the first baseline run failed only because the invoked command set forbidden GIT_PAGER=cat",
-    "qualityGates": "lint, format check, typecheck, build, MCP, lifecycle, CLI, public errors, and package smoke passed",
-    "correctionR1": "code/test diff sha256 c3e6de3226bf018ff221b981c56d7453e3f11ab64b0b6c6e0f9791ccc10ad942; 119 additions + 9 deletions = 128 authored lines; actual global Corepack pnpm.js remained sha256 7c2a67995976b5b592b611d8b236e3b0633bd654fb49aedd96c6eb7ce04c9cbb; no correction temp roots or processes remained",
-    "workflow": "unchanged blob c14a3ebb1843c5bb8c8e0da22ab4ae7e5e424c3e; policy test passed 17 tests; executable policy passed 3 workflows, 9 jobs, 24 actions",
-    "format": "repository-wide Prettier check passed after formatting only four current issue 265 OpenSpec artifacts; normalized substantive-line hashes matched their pre-format bytes",
-    "structuredData": "package and apply-progress JSON plus lock, OpenSpec config, and state YAML parsed successfully"
+    "audit": "fresh strict verification ran immutable install and audit twice under exact Node 22.13.0 and 24.16.0; all four audits exited zero with no suggestions",
+    "nodeCells": "exact Node 22.13.0 and 24.16.0 each passed 46 focused tests, two immutable installs, two audits, and two complete adapter smokes",
+    "u1": "focused U1 regression passed 28 tests twice; real copied-Corepack fixture passed; four adapter smokes reached DSH_ADAPTER_SMOKE_OK with exact pnpm 11.7.0 and cleanup ok",
+    "fullTests": "76 files and 994 tests plus 2 supervised-worker integration tests passed under Node v24.16.0 with env -u GIT_PAGER; exact output sha256 14e882952df752a0a85d9f68c3689209860c54e1d82be27ea5e9681dc82d962c",
+    "qualityGates": "format check, lint, typecheck, build, MCP, lifecycle, CLI, public errors, package smoke, pack dry-run, workflow checker, and diff check passed",
+    "correctionR1": "code/test diff sha256 c3e6de3226bf018ff221b981c56d7453e3f11ab64b0b6c6e0f9791ccc10ad942; 119 additions + 9 deletions = 128 authored lines; both Node Corepack corepack.js/pnpm.js pairs remained sha256 3655bc798f300951f2070fee411b337d626b0c3ae80c2d24c46ccac4595d4bf9/7c2a67995976b5b592b611d8b236e3b0633bd654fb49aedd96c6eb7ce04c9cbb; no adapter/private test/toolcache roots remained",
+    "workflow": "unchanged blob c14a3ebb1843c5bb8c8e0da22ab4ae7e5e424c3e; policy test passed 17 tests twice; executable policy passed 3 workflows, 9 jobs, 24 actions",
+    "remoteCi": "PR 276 exact SHA 66ae5fc661eb82a9ef96910fda7e9d3f6ee775b4 passed push run 34156045218 and pull_request run 34156074124; both Node quality cells green in both runs",
+    "format": "repository-wide Prettier check passed before verification artifact reconciliation",
+    "structuredData": "package and apply-progress JSON plus lock, OpenSpec config, and state YAML parsed successfully before final reconciliation"
   },
   "finalGate": {
-    "status": "judgment-r1-approved-pending-strict-verification",
-    "candidate": "PR-275@8d1ac82",
+    "status": "strict-verification-passed-pending-independent-delivery",
+    "candidate": "PR-276@66ae5fc661eb82a9ef96910fda7e9d3f6ee775b4",
+    "runtimeCandidate": "PR-275@8d1ac82b635282f38a38d5cf29705650cd20ff06",
     "ledgerBase": "9893930",
-    "judgment": "both independent scoped R1 judges approved C1 closed",
+    "judgment": "both independent scoped R1 judges approved C1 closed with zero open severe",
     "judgmentLedger": "judgment-day.json",
     "correctionRound": "round-1-terminal-approved",
-    "strictVerification": "pending",
-    "requiredCi": "full exact-candidate Node 22 CI pending",
+    "strictVerification": "pass-11-of-11",
+    "verificationToken": "sha256:e794b7f919fcd8a1855fbabeadf4546c22e726427ecb0fe37d3cc97f1f227335",
+    "requiredCi": "exact candidate push and pull_request CI green in Node 22.13.0 and 24 cells",
     "delivery": "pending-independent-authority"
   },
   "judgmentDay": {
@@ -202,5 +205,5 @@
     "nextRecommended": "verify"
   },
   "activeRed": [],
-  "updatedAt": "2026-09-07T15:02:27Z"
+  "updatedAt": "2026-09-07T20:01:56Z"
 }
