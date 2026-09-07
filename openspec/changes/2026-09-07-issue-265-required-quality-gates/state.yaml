@@ -11,7 +11,8 @@ artifactPaths:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/proposal.md
   specs:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/specs/required-quality-gates/spec.md
-  design: []
+  design:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/design.md
   tasks: []
   applyProgress: []
   verifyReport: []
@@ -26,7 +27,8 @@ contextFiles:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/proposal.md
   specs:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/specs/required-quality-gates/spec.md
-  design: []
+  design:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/design.md
   tasks: []
   applyProgress: []
   verifyReport: []
@@ -40,7 +42,7 @@ artifacts:
   exploration: done
   proposal: done
   specs: done
-  design: missing
+  design: done
   tasks: missing
   applyProgress: missing
   verifyReport: missing
@@ -57,8 +59,8 @@ taskProgress:
 dependencies:
   proposal: all_done
   specs: all_done
-  design: ready
-  tasks: blocked
+  design: all_done
+  tasks: ready
   apply: blocked
   verify: blocked
   archive: blocked
@@ -83,11 +85,11 @@ remediationState:
   generation: 0
   fixBatch: 0
   reason: ""
-nextRecommended: design
+nextRecommended: tasks
 blockedReasons: []
 planningBase:
-  pullRequest: 268
-  commit: f973579
+  pullRequest: 269
+  commit: 8ae73b3
   role: planning-only
 authority:
   issue: 265
