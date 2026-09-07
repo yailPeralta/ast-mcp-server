@@ -13,8 +13,10 @@ artifactPaths:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/specs/required-quality-gates/spec.md
   design:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/design.md
-  tasks: []
-  applyProgress: []
+  tasks:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/tasks.md
+  applyProgress:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/apply-progress.json
   verifyReport: []
   reviewPolicy: []
   reviewLedger: []
@@ -29,8 +31,10 @@ contextFiles:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/specs/required-quality-gates/spec.md
   design:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/design.md
-  tasks: []
-  applyProgress: []
+  tasks:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/tasks.md
+  applyProgress:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/apply-progress.json
   verifyReport: []
   reviewPolicy: []
   reviewLedger: []
@@ -43,8 +47,8 @@ artifacts:
   proposal: done
   specs: done
   design: done
-  tasks: missing
-  applyProgress: missing
+  tasks: done
+  applyProgress: done
   verifyReport: missing
   reviewLedger: missing
   reviewReceipt: missing
@@ -52,19 +56,19 @@ artifacts:
   reviewContext: missing
   reviewState: missing
 taskProgress:
-  total: 0
+  total: 16
   completed: 0
-  pending: 0
+  pending: 16
   allComplete: false
 dependencies:
   proposal: all_done
   specs: all_done
   design: all_done
-  tasks: ready
-  apply: blocked
+  tasks: all_done
+  apply: ready
   verify: blocked
   archive: blocked
-applyState: blocked
+applyState: ready
 actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
@@ -85,11 +89,11 @@ remediationState:
   generation: 0
   fixBatch: 0
   reason: ""
-nextRecommended: tasks
+nextRecommended: apply
 blockedReasons: []
 planningBase:
-  pullRequest: 269
-  commit: 8ae73b3
+  pullRequest: 270
+  commit: 5e9d303
   role: planning-only
 authority:
   issue: 265
