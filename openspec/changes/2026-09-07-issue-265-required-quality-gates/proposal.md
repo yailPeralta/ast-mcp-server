@@ -36,20 +36,20 @@ Pin both patched transitives through existing Yarn `resolutions`, regenerate `ya
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|---|---|---|
-| `scripts/dsh-adapter-smoke.mjs` | Modified | Private pnpm authority, identity, cleanup |
-| `test/dsh-adapter.test.ts` | Modified | Authority and regression assertions |
-| `package.json`, `yarn.lock` | Modified | Exact security resolutions |
-| `.github/workflows/ci.yml` | Unchanged | Preserved mandatory topology |
+| Area                            | Impact    | Description                               |
+| ------------------------------- | --------- | ----------------------------------------- |
+| `scripts/dsh-adapter-smoke.mjs` | Modified  | Private pnpm authority, identity, cleanup |
+| `test/dsh-adapter.test.ts`      | Modified  | Authority and regression assertions       |
+| `package.json`, `yarn.lock`     | Modified  | Exact security resolutions                |
+| `.github/workflows/ci.yml`      | Unchanged | Preserved mandatory topology              |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|---|---|---|
-| Corepack divergence | Medium | Prove both Nodes; bounded launcher fallback |
-| Supply-chain drift/integrity bypass | Medium | Exact digest, private cache, identity assertion |
-| Dependabot lock conflict | Medium | Rebase and regenerate; never hand-merge integrity data |
+| Risk                                | Likelihood | Mitigation                                             |
+| ----------------------------------- | ---------- | ------------------------------------------------------ |
+| Corepack divergence                 | Medium     | Prove both Nodes; bounded launcher fallback            |
+| Supply-chain drift/integrity bypass | Medium     | Exact digest, private cache, identity assertion        |
+| Dependabot lock conflict            | Medium     | Rebase and regenerate; never hand-merge integrity data |
 
 ## Rollback Plan
 

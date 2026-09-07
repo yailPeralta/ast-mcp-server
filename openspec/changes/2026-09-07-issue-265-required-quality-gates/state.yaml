@@ -57,8 +57,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 16
-  completed: 0
-  pending: 16
+  completed: 11
+  pending: 5
   allComplete: false
 dependencies:
   proposal: all_done

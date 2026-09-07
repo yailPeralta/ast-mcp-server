@@ -44,10 +44,10 @@ The same signature occurred on prior completed run `34070085488` at `1715ddca...
 
 **Observed exact evidence:** the same PR #266 run's `quality (24)` job passed the complete DSH adapter (`DSH_ADAPTER_SMOKE_OK`) and then `yarn audit` exited 1. The lockfile and CI log identify six deterministic advisories:
 
-| Locked package | Advisory IDs | Severity | Vulnerable range | Patched candidate |
-| --- | --- | --- | --- | --- |
-| `fast-uri@3.1.5` | `GHSA-5jgf-p345-68v8`, `GHSA-f65p-4m7j-42xc`, `GHSA-fph4-wmhf-6fwf`, `GHSA-jqff-g426-hqxp` | high | all four exclude `3.1.6` (`<3.1.6` under their lower bounds) | `3.1.6` |
-| `qs@6.15.3` | `GHSA-x5fp-wj9c-mxmx`, `GHSA-4mjr-xmp4-gh2g` | moderate | `>=6.14.2 <=6.15.3`; `>=2.2.5 <6.16.0` | `6.16.0` |
+| Locked package   | Advisory IDs                                                                               | Severity | Vulnerable range                                             | Patched candidate |
+| ---------------- | ------------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------ | ----------------- |
+| `fast-uri@3.1.5` | `GHSA-5jgf-p345-68v8`, `GHSA-f65p-4m7j-42xc`, `GHSA-fph4-wmhf-6fwf`, `GHSA-jqff-g426-hqxp` | high     | all four exclude `3.1.6` (`<3.1.6` under their lower bounds) | `3.1.6`           |
+| `qs@6.15.3`      | `GHSA-x5fp-wj9c-mxmx`, `GHSA-4mjr-xmp4-gh2g`                                               | moderate | `>=6.14.2 <=6.15.3`; `>=2.2.5 <6.16.0`                       | `6.16.0`          |
 
 **Observed dependency paths from `yarn.lock`:**
 
@@ -137,12 +137,12 @@ Implement one independent bug-fix work unit combining approach 1 and approach 5:
 
 #### Strict behavior-first RED map
 
-| Requirement | RED before fix | GREEN after fix |
-| --- | --- | --- |
-| Exact profile package manager | Existing Node 22 CI `yarn test:dsh-adapter`: exit 1 after selecting `pnpm@12.3.4` and missing `bin/pnpm.cjs`; focused test should reject absent private exact authority and undocumented `COREPACK_USE_LATEST`. | Focused assertion passes; smoke records exact `pnpm@11.7.0`, uses only disposable `COREPACK_HOME`, completes `DSH_ADAPTER_SMOKE_OK`, and removes the entire temporary root. |
-| Audit-safe graph | Existing Node 24 CI `yarn audit`: exit 1 with exactly four high fast-uri and two moderate qs advisories. | Lock assertions resolve only `fast-uri@3.1.6` and `qs@6.16.0`; `yarn install --immutable` and `yarn audit` exit 0. |
-| No CI weakening | Negative workflow-policy tests already reject matrix/command removal or reordering. | Existing workflow-policy unit suite and executable checker remain green with byte-unchanged `ci.yml`. |
-| No relationship/DSH behavior change | Existing relationship, impact, candidate, adapter catalog/guard, and exact Harness smoke results are baseline controls. | Same tests and Harness identities/catalog semantics pass; only package-manager provisioning and dependency lock identities differ. |
+| Requirement                         | RED before fix                                                                                                                                                                                                  | GREEN after fix                                                                                                                                                             |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exact profile package manager       | Existing Node 22 CI `yarn test:dsh-adapter`: exit 1 after selecting `pnpm@12.3.4` and missing `bin/pnpm.cjs`; focused test should reject absent private exact authority and undocumented `COREPACK_USE_LATEST`. | Focused assertion passes; smoke records exact `pnpm@11.7.0`, uses only disposable `COREPACK_HOME`, completes `DSH_ADAPTER_SMOKE_OK`, and removes the entire temporary root. |
+| Audit-safe graph                    | Existing Node 24 CI `yarn audit`: exit 1 with exactly four high fast-uri and two moderate qs advisories.                                                                                                        | Lock assertions resolve only `fast-uri@3.1.6` and `qs@6.16.0`; `yarn install --immutable` and `yarn audit` exit 0.                                                          |
+| No CI weakening                     | Negative workflow-policy tests already reject matrix/command removal or reordering.                                                                                                                             | Existing workflow-policy unit suite and executable checker remain green with byte-unchanged `ci.yml`.                                                                       |
+| No relationship/DSH behavior change | Existing relationship, impact, candidate, adapter catalog/guard, and exact Harness smoke results are baseline controls.                                                                                         | Same tests and Harness identities/catalog semantics pass; only package-manager provisioning and dependency lock identities differ.                                          |
 
 #### Compatibility and rollback
 

@@ -6,11 +6,11 @@ At PR #269 commit `8ae73b3`, add smoke-owned package-manager authority and pin v
 
 ## Architecture Decisions
 
-| Question | Options / tradeoff | Decision |
-|---|---|---|
-| How should the smoke own pnpm authority? | Ambient Corepack is small but moving; profile mutation couples to Harness internals; private Corepack preserves Harness behavior. | New `scripts/private-pnpm.mjs` prepares the exact descriptor with a private `COREPACK_HOME`, then verifies bare `pnpm --version` is `11.7.0`. |
-| What is the fallback? | Retrying/latest masks authority; a launcher adds code. | Only classified Corepack incompatibility may `npm pack` exact `pnpm@11.7.0`, verify registry integrity `sha512-GcyFLBIMcSV2DyRD7mvgyltA+fUFmN4aCaHxd1A+AQ5Xwjx3ZG4B52HeWb+HT7IqM5jDOrlpH8E+uUa28PTWIA==` and local digest, extract privately, and install an `exec` launcher. Timeout, network, digest, or platform failures close without fallback. |
-| How should audit remediation persist? | Lock-only refresh may regress; broad parent upgrades expand risk. | Add exact `resolutions` for `fast-uri: 3.1.6` and `qs: 6.16.0`; regenerate, never hand-edit, `yarn.lock` with Yarn 4.15.0. |
+| Question                                 | Options / tradeoff                                                                                                                | Decision                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| How should the smoke own pnpm authority? | Ambient Corepack is small but moving; profile mutation couples to Harness internals; private Corepack preserves Harness behavior. | New `scripts/private-pnpm.mjs` prepares the exact descriptor with a private `COREPACK_HOME`, then verifies bare `pnpm --version` is `11.7.0`.                                                                                                                                                                                                        |
+| What is the fallback?                    | Retrying/latest masks authority; a launcher adds code.                                                                            | Only classified Corepack incompatibility may `npm pack` exact `pnpm@11.7.0`, verify registry integrity `sha512-GcyFLBIMcSV2DyRD7mvgyltA+fUFmN4aCaHxd1A+AQ5Xwjx3ZG4B52HeWb+HT7IqM5jDOrlpH8E+uUa28PTWIA==` and local digest, extract privately, and install an `exec` launcher. Timeout, network, digest, or platform failures close without fallback. |
+| How should audit remediation persist?    | Lock-only refresh may regress; broad parent upgrades expand risk.                                                                 | Add exact `resolutions` for `fast-uri: 3.1.6` and `qs: 6.16.0`; regenerate, never hand-edit, `yarn.lock` with Yarn 4.15.0.                                                                                                                                                                                                                           |
 
 ## Data Flow
 
@@ -27,28 +27,28 @@ Provision/identity use `runBoundedCommand` with 120/30-second bounds, no retries
 
 ## File Changes
 
-| File | Action | Exact seam |
-|---|---|---|
-| `scripts/private-pnpm.mjs` | Create | constants; `createPrivatePnpmEnvironment`, `isCorepackCompatibilityFailure`, `provisionPrivatePnpm` |
-| `scripts/dsh-adapter-smoke.mjs` | Modify | provision inside `resolvePinnedHarness` after `resolveHarnessNode`; replace four ad-hoc Corepack environments; record `summary.packageManager` before plugin add |
-| `test/private-pnpm.test.ts` | Create | environment ownership, order, mismatch, fallback allow/deny, repeated-root cleanup |
-| `test/dsh-adapter.test.ts` | Modify | assert provisioning precedes every plugin add and obsolete `COREPACK_USE_LATEST` is absent |
-| `test/dependency-policy.test.ts` | Create | exact manifest/lock selectors and admitted parent ranges |
-| `package.json`, `yarn.lock` | Modify | exact resolutions and Yarn-generated patched entries |
-| `.github/workflows/ci.yml`, Harness, relationship sources | Unchanged | negative controls |
+| File                                                      | Action    | Exact seam                                                                                                                                                       |
+| --------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/private-pnpm.mjs`                                | Create    | constants; `createPrivatePnpmEnvironment`, `isCorepackCompatibilityFailure`, `provisionPrivatePnpm`                                                              |
+| `scripts/dsh-adapter-smoke.mjs`                           | Modify    | provision inside `resolvePinnedHarness` after `resolveHarnessNode`; replace four ad-hoc Corepack environments; record `summary.packageManager` before plugin add |
+| `test/private-pnpm.test.ts`                               | Create    | environment ownership, order, mismatch, fallback allow/deny, repeated-root cleanup                                                                               |
+| `test/dsh-adapter.test.ts`                                | Modify    | assert provisioning precedes every plugin add and obsolete `COREPACK_USE_LATEST` is absent                                                                       |
+| `test/dependency-policy.test.ts`                          | Create    | exact manifest/lock selectors and admitted parent ranges                                                                                                         |
+| `package.json`, `yarn.lock`                               | Modify    | exact resolutions and Yarn-generated patched entries                                                                                                             |
+| `.github/workflows/ci.yml`, Harness, relationship sources | Unchanged | negative controls                                                                                                                                                |
 
 ## Strict RED / GREEN and Trace
 
 Capture each RED before its production edit, then rerun the identical focused command for GREEN.
 
-| Req/scenario | RED | GREEN evidence |
-|---|---|---|
-| R1–R5 (5/5) | New helper tests fail because private authority/fallback is absent. | Focused tests plus twice-run adapter smoke prove env, digest/version, hostile ambient isolation, compatibility-only fallback, cleanup. |
-| R6–R7 (2/2) | Dependency-policy assertion sees 3.1.5/6.15.3; audit exits 1. | Exact lock selectors/checksums, `yarn install --immutable`, `yarn audit` exit 0. |
-| R8 (1/1) | Existing Node 22/24 jobs fail. | Unchanged matrix passes exact-SHA chain and reports `DSH_ADAPTER_SMOKE_OK`. |
-| R9 (1/1) | Existing policy negatives reject weakening. | Policy tests/checker pass; `ci.yml` blob unchanged. |
-| R10 (1/1) | Exclusion snapshot is baseline. | Diff allowlist and existing adapter/relationship suites pass. |
-| R11 (1/1) | Work-unit inventory rejects mixed rollback. | Two independent reverts are documented below. |
+| Req/scenario | RED                                                                 | GREEN evidence                                                                                                                         |
+| ------------ | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| R1–R5 (5/5)  | New helper tests fail because private authority/fallback is absent. | Focused tests plus twice-run adapter smoke prove env, digest/version, hostile ambient isolation, compatibility-only fallback, cleanup. |
+| R6–R7 (2/2)  | Dependency-policy assertion sees 3.1.5/6.15.3; audit exits 1.       | Exact lock selectors/checksums, `yarn install --immutable`, `yarn audit` exit 0.                                                       |
+| R8 (1/1)     | Existing Node 22/24 jobs fail.                                      | Unchanged matrix passes exact-SHA chain and reports `DSH_ADAPTER_SMOKE_OK`.                                                            |
+| R9 (1/1)     | Existing policy negatives reject weakening.                         | Policy tests/checker pass; `ci.yml` blob unchanged.                                                                                    |
+| R10 (1/1)    | Exclusion snapshot is baseline.                                     | Diff allowlist and existing adapter/relationship suites pass.                                                                          |
+| R11 (1/1)    | Work-unit inventory rejects mixed rollback.                         | Two independent reverts are documented below.                                                                                          |
 
 ## Work Units, Rollout, and Rollback
 
@@ -59,13 +59,13 @@ Each unit is below 400 lines; combined forecast 200–360, so one PR is acceptab
 
 ## Threat Matrix
 
-| Boundary | Applicability |
-|---|---|
+| Boundary                 | Applicability                      |
+| ------------------------ | ---------------------------------- |
 | Documentation-like paths | N/A — no executable classification |
-| Git repository selection | N/A — no new Git command |
-| Commit state | N/A — no commit automation |
-| Push state | N/A — no push automation |
-| PR commands | N/A — no PR automation |
+| Git repository selection | N/A — no new Git command           |
+| Commit state             | N/A — no commit automation         |
+| Push state               | N/A — no push automation           |
+| PR commands              | N/A — no PR automation             |
 
 ## Open Questions
 

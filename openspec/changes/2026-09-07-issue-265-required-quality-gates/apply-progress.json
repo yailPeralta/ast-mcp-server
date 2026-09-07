@@ -2,11 +2,16 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-07-issue-265-required-quality-gates",
   "phase": "apply",
-  "stage": "candidate-ready-not-reviewed",
+  "stage": "candidate-ready-awaiting-settlement",
   "planningBase": {
     "pullRequest": 271,
     "commit": "d2dc5aa",
     "role": "planning-only"
+  },
+  "immediateBase": {
+    "pullRequest": 272,
+    "commit": "4e4a42860a447d6246c29e1bd76b73f37db52fbf",
+    "role": "frozen-u1-candidate"
   },
   "issue": 265,
   "rddMode": "disabled/unmanaged",
@@ -19,9 +24,10 @@
     {
       "id": "U1",
       "name": "Deterministic adapter pnpm authority",
-      "status": "candidate-ready-not-reviewed",
+      "status": "settled-candidate-not-reviewed",
       "branch": "fix/265-u1-pnpm-authority",
       "base": "PR-271@d2dc5aa",
+      "candidate": "PR-272@4e4a42860a447d6246c29e1bd76b73f37db52fbf",
       "immediatePredecessor": "PR-271@d2dc5aa",
       "forecast": "260-390",
       "hardMax": 400,
@@ -34,23 +40,23 @@
     {
       "id": "U2",
       "name": "Audit-safe resolutions and lock",
-      "status": "pending",
+      "status": "candidate-ready-awaiting-settlement",
       "branch": "fix/265-u2-audit-resolutions",
-      "base": "fix/265-u1-private-pnpm",
-      "immediatePredecessor": "frozen U1 candidate",
+      "base": "PR-272@4e4a42860a447d6246c29e1bd76b73f37db52fbf",
+      "immediatePredecessor": "PR-272@4e4a42860a447d6246c29e1bd76b73f37db52fbf",
       "forecast": "30-90",
       "hardMax": 400,
       "acquireId": "issue265-u2-apply-v1",
       "settleId": "issue265-u2-settle-v1",
       "focusedCommand": "yarn vitest run test/dependency-policy.test.ts --reporter=dot",
-      "runtimeHarness": "NODE_OPTIONS= yarn install --immutable && yarn audit",
-      "rollback": "remove both resolutions/test and regenerate yarn.lock with Yarn 4.15.0"
+      "runtimeHarness": "NODE_OPTIONS= yarn install --immutable twice; yarn audit twice",
+      "rollback": "remove both resolutions and test, then regenerate yarn.lock with Yarn 4.15.0"
     }
   ],
   "taskProgress": {
     "total": 16,
-    "completed": 0,
-    "pending": 16,
+    "completed": 11,
+    "pending": 5,
     "allComplete": false
   },
   "requirementMap": {
@@ -59,40 +65,89 @@
     "completeCandidate": ["R8", "R9", "R10", "R11"]
   },
   "tdd": {
-    "red": [],
-    "green": [],
-    "refactored": [
+    "red": [
       {
-        "id": "U1-private-pnpm-authority",
-        "name": "exact private pnpm provisioning remains green",
+        "id": "U1-private-pnpm-authority-red",
+        "name": "private exact pnpm authority was absent before implementation",
         "file": "test/private-pnpm.test.ts",
         "taskId": "U1"
+      },
+      {
+        "id": "U2-audit-safe-graph-red",
+        "name": "patched resolutions were absent and vulnerable lock versions remained",
+        "file": "test/dependency-policy.test.ts",
+        "taskId": "U2"
+      }
+    ],
+    "green": [
+      {
+        "id": "U1-private-pnpm-authority-green",
+        "name": "private exact pnpm authority passed the focused regression suite",
+        "file": "test/private-pnpm.test.ts",
+        "taskId": "U1"
+      },
+      {
+        "id": "U2-audit-safe-graph-green",
+        "name": "patched exact selectors and admitted parent ranges passed policy",
+        "file": "test/dependency-policy.test.ts",
+        "taskId": "U2"
+      }
+    ],
+    "refactored": [
+      {
+        "id": "U1-private-pnpm-authority-refactor",
+        "name": "exact private pnpm provisioning remained green under focused and real smoke checks",
+        "file": "test/private-pnpm.test.ts",
+        "taskId": "U1"
+      },
+      {
+        "id": "U2-audit-safe-graph-refactor",
+        "name": "minimal manifest and generated-lock change remained green after immutable and audit repetition",
+        "file": "test/dependency-policy.test.ts",
+        "taskId": "U2"
       }
     ]
   },
-  "tddPlan": [
-    {
-      "id": "U1",
-      "redTwice": "Exact focused command fails twice with one stable authority-behavior fingerprint",
-      "green": "Private exact pnpm authority and adapter ordering pass",
-      "refactor": "Bounded fallback, cleanup, and four matrix smokes remain green"
+  "tddCycleEvidence": {
+    "U1": {
+      "red": "historical RED completed before commit 4e4a428; detailed run receipt was not persisted",
+      "green": "focused U1 regression passed 27 tests",
+      "refactor": "real adapter smoke reached DSH_ADAPTER_SMOKE_OK with pnpm 11.7.0 and cleanup ok"
     },
-    {
-      "id": "U2",
-      "redTwice": "Exact focused command fails twice on old manifest and lock resolutions",
-      "green": "Patched selectors and admitted parent ranges pass",
-      "refactor": "Immutable installs, clean audit, policy, and exclusions remain green"
+    "U2": {
+      "red": "two unchanged runs failed with five identical assertions for absent pins and locked 3.1.5/6.15.3",
+      "green": "focused policy passed with generated exact selectors and admitted parent ranges",
+      "refactor": "minimal graph remained green through repeated immutable installs, audits, and both Node cells"
     }
-  ],
+  },
+  "evidence": {
+    "u2RedHashes": {
+      "package.json": "17fb2d304fde50c7f85a0436fc2a9ccaea49eb1d8ea0b94c1e14a1e7c29fc39d",
+      "yarn.lock": "bee78305b87d0b551edd07b03368e4ea533256cf4c29c39f053d0017f1d9073e",
+      "test/dependency-policy.test.ts": "e41baa35463dcd56424724d6c731520a9d7749985e5233220c10e64cb901e46d"
+    },
+    "immutableHashes": {
+      "package.json": "55e22e8885db36a4ccceb878aefabbc30977b249481621ab2ca615b9da230961",
+      "yarn.lock": "7c735bc093c6c704228bd29c70b41599c7d6054ac53a59854a72b1f06f6c9ad1",
+      "checks": 2
+    },
+    "audit": "two consecutive exit-0 runs plus prior Node 22.13.0 and 24.16.0 cell runs; no audit suggestions",
+    "nodeCells": "Yarn 4.15.0 immutable install, focused U2 test, and audit passed on Node 22.13.0 and 24.16.0",
+    "u1": "focused regression passed 27 tests; real adapter smoke reached DSH_ADAPTER_SMOKE_OK with pnpm 11.7.0 and cleanup ok",
+    "fullTests": "76 files and 993 tests plus 2 supervised-worker integration tests passed under Node v24.16.0 after unsetting ambient GIT_PAGER",
+    "qualityGates": "lint, typecheck, build, MCP, lifecycle, CLI, public errors, and package smoke passed",
+    "workflow": "unchanged blob c14a3ebb1843c5bb8c8e0da22ab4ae7e5e424c3e; policy test passed 17 tests; executable policy passed 3 workflows, 9 jobs, 24 actions",
+    "format": "repository-wide Prettier check passed after formatting only four current issue 265 OpenSpec artifacts; normalized substantive-line hashes matched their pre-format bytes",
+    "structuredData": "package and apply-progress JSON plus lock, OpenSpec config, and state YAML parsed successfully"
+  },
   "finalGate": {
-    "status": "pending",
-    "candidate": "unfrozen",
-    "judgment": "pending-dual-blind-read-only",
+    "status": "pending-settlement",
+    "candidate": "working-tree-frozen-after-final-hash",
+    "judgment": "next-after-settlement-and-pr",
     "strictVerification": "pending-11-of-11-requirements-and-scenarios",
     "requiredCi": "pending-exact-sha-node-22.13.0-and-24",
-    "delivery": "pending-independent-issue-265-main-merge-then-issue-247-root-to-child-rebase-and-reverify"
+    "delivery": "pending-independent-authority"
   },
-  "runs": [],
   "activeRed": [],
-  "updatedAt": "2026-09-07T02:49:17Z"
+  "updatedAt": "2026-09-07T03:41:54Z"
 }
