@@ -9,7 +9,8 @@ changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-
 artifactPaths:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/proposal.md
-  specs: []
+  specs:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/specs/required-quality-gates/spec.md
   design: []
   tasks: []
   applyProgress: []
@@ -23,7 +24,8 @@ artifactPaths:
 contextFiles:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/proposal.md
-  specs: []
+  specs:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/specs/required-quality-gates/spec.md
   design: []
   tasks: []
   applyProgress: []
@@ -37,7 +39,7 @@ contextFiles:
 artifacts:
   exploration: done
   proposal: done
-  specs: missing
+  specs: done
   design: missing
   tasks: missing
   applyProgress: missing
@@ -54,8 +56,8 @@ taskProgress:
   allComplete: false
 dependencies:
   proposal: all_done
-  specs: ready
-  design: blocked
+  specs: all_done
+  design: ready
   tasks: blocked
   apply: blocked
   verify: blocked
@@ -81,11 +83,11 @@ remediationState:
   generation: 0
   fixBatch: 0
   reason: ""
-nextRecommended: spec
+nextRecommended: design
 blockedReasons: []
 planningBase:
-  pullRequest: 267
-  commit: 4e24b03d26fe5d8245b7200d2109f75ebccc79fa
+  pullRequest: 268
+  commit: f973579
   role: planning-only
 authority:
   issue: 265
