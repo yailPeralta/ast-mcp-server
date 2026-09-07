@@ -1,8 +1,22 @@
-import { spawn } from "node:child_process";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
+
+const execFileAsync = promisify(execFile);
 // @ts-expect-error Internal MJS smoke helper has runtime-tested exports.
 // prettier-ignore
 import { PNPM_DESCRIPTOR, PNPM_REGISTRY_INTEGRITY, PNPM_VERSION, createPnpmExecLauncher, createPrivatePnpmEnvironment, isCorepackCompatibilityFailure, provisionPrivatePnpm } from "../scripts/private-pnpm.mjs";
@@ -103,6 +117,52 @@ describe("private pnpm authority", () => {
     for (const message of ["network unreachable", "timed out after 120000ms", "integrity mismatch"])
       expect(isCorepackCompatibilityFailure(new Error(message))).toBe(false);
   });
+  it.runIf(process.platform !== "win32")(
+    "replaces a real Corepack shim without mutating its fixture-global target",
+    async () => {
+      const { temporaryRoot, authority } = await privateEnvironment();
+      const installedCorepack = await realpath(
+        path.join(path.dirname(process.execPath), "corepack"),
+      );
+      const installedCorepackRoot = path.dirname(path.dirname(installedCorepack));
+      const fixtureCorepackRoot = path.join(temporaryRoot, "corepack-fixture");
+      await cp(installedCorepackRoot, fixtureCorepackRoot, { recursive: true });
+      const fixtureCorepack = path.join(fixtureCorepackRoot, "dist", "corepack.js");
+      await mkdir(authority.binDirectory, { recursive: true });
+      await execFileAsync(process.execPath, [
+        fixtureCorepack,
+        "enable",
+        "pnpm",
+        "--install-directory",
+        authority.binDirectory,
+      ]);
+
+      const launcher = path.join(authority.binDirectory, "pnpm");
+      const fixtureGlobalTarget = path.join(fixtureCorepackRoot, "dist", "pnpm.js");
+      const targetHash = createHash("sha256")
+        .update(await readFile(fixtureGlobalTarget))
+        .digest("hex");
+      expect((await lstat(launcher)).isSymbolicLink()).toBe(true);
+      expect(await realpath(launcher)).toBe(fixtureGlobalTarget);
+
+      await createPnpmExecLauncher({
+        binDirectory: authority.binDirectory,
+        nodeBin: process.execPath,
+        entrypoint: "/isolated/fallback/pnpm.cjs",
+      });
+
+      expect(
+        createHash("sha256")
+          .update(await readFile(fixtureGlobalTarget))
+          .digest("hex"),
+      ).toBe(targetHash);
+      const launcherStat = await lstat(launcher);
+      expect(launcherStat.isFile()).toBe(true);
+      expect(launcherStat.isSymbolicLink()).toBe(false);
+      expect(await realpath(launcher)).toBe(launcher);
+    },
+  );
+
   it.runIf(process.platform !== "win32")(
     "preserves launcher exit and signal outcomes",
     async () => {

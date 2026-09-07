@@ -10,7 +10,7 @@
   },
   "round": 1,
   "maxRounds": 2,
-  "mode": "parent-orchestrated-initial-dual",
+  "mode": "correction-round-1-applied-pending-scoped-dual-rejudgment",
   "judgeResults": [
     {
       "id": "judge-one",
@@ -109,7 +109,7 @@
     {
       "id": "C1",
       "severity": "SEVERE",
-      "status": "confirmed-open",
+      "status": "correction-r1-applied-not-rejudged",
       "title": "Fallback launcher overwrites the global Corepack pnpm launcher through a real shim symlink",
       "confirmedBy": ["judge-one", "judge-two"],
       "requirementImpact": ["R3", "R4", "R5"],
@@ -171,7 +171,8 @@
   },
   "proposedCorrection": {
     "decision": "required",
-    "authorized": false,
+    "authorized": true,
+    "authorizationToken": "sha256:d14945b8aaa1fb6f83a68c79603420d04c578c2e09ba2afa9fdfb66307402e2a",
     "round": 1,
     "maxRounds": 2,
     "requiredScope": [
@@ -191,12 +192,33 @@
     },
     "scopedRejudgment": "not_run"
   },
+  "appliedCorrection": {
+    "round": 1,
+    "status": "applied-not-rejudged",
+    "base": "PR-274@9893930fe8b19b21254f1a6e5cf7629c4710967f",
+    "branch": "fix/265-r1-symlink-containment",
+    "findingIds": ["C1"],
+    "files": ["scripts/private-pnpm.mjs", "test/private-pnpm.test.ts"],
+    "algorithm": "lstat the private bin and launcher; unlink only a Corepack-shaped dist/pnpm.js symlink; create with open wx; verify regular-file lstat and canonical parent containment",
+    "red": "two unchanged deterministic runs: 1 failed, 6 passed; copied Corepack fixture target changed from sha256 7c2a6799... to 30903fbb...",
+    "green": "two unchanged runs: 7 passed; all four issue-265 focused files: 46 passed",
+    "runtime": "forced verified fallback passed twice with pnpm 11.7.0 and unchanged fixture target; real adapter smoke passed twice with cleanup ok",
+    "hostProof": "global corepack.js sha256 3655bc79... and pnpm.js sha256 7c2a6799... unchanged; pnpm 11.24.0 still launches outside the project",
+    "diff": {
+      "sha256": "c3e6de3226bf018ff221b981c56d7453e3f11ab64b0b6c6e0f9791ccc10ad942",
+      "additions": 119,
+      "deletions": 9,
+      "authoredLines": 128,
+      "hardMax": 400
+    },
+    "scopedRejudgment": "pending-parent-settlement-and-pr"
+  },
   "terminalVerdict": "ESCALATED",
-  "nextRecommended": "decision-required: authorize-or-decline-correction-round-1",
+  "nextRecommended": "parent-settle-and-open-pr-then-scoped-dual-rejudgment",
   "authority": {
-    "correction": false,
+    "correction": true,
     "reviewApproval": false,
     "delivery": false
   },
-  "updatedAt": "2026-09-07T04:12:43Z"
+  "updatedAt": "2026-09-07T15:02:27Z"
 }

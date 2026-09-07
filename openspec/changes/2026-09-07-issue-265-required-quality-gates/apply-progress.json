@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-07-issue-265-required-quality-gates",
   "phase": "apply",
-  "stage": "judgment-escalated-awaiting-correction-round-1-decision",
+  "stage": "correction-round-1-applied-awaiting-parent-settlement-pr-and-scoped-rejudgment",
   "planningBase": {
     "pullRequest": 271,
     "commit": "d2dc5aa",
@@ -57,17 +57,28 @@
       "focusedCommand": "yarn vitest run test/dependency-policy.test.ts --reporter=dot",
       "runtimeHarness": "NODE_OPTIONS= yarn install --immutable twice; yarn audit twice",
       "rollback": "remove both resolutions and test, then regenerate yarn.lock with Yarn 4.15.0"
+    },
+    {
+      "id": "R1-C1",
+      "name": "Judgment correction round 1 symlink containment",
+      "status": "applied-not-rejudged",
+      "branch": "fix/265-r1-symlink-containment",
+      "base": "PR-274@9893930fe8b19b21254f1a6e5cf7629c4710967f",
+      "hardMax": 400,
+      "focusedCommand": "yarn vitest run test/private-pnpm.test.ts --reporter=dot",
+      "runtimeHarness": "forced fallback twice and real adapter smoke twice on Node 24.16.0"
     }
   ],
   "taskProgress": {
-    "total": 16,
-    "completed": 12,
+    "total": 17,
+    "completed": 13,
     "pending": 4,
     "allComplete": false
   },
   "requirementMap": {
     "U1": ["R1", "R2", "R3", "R4", "R5"],
     "U2": ["R6", "R7"],
+    "R1-C1": ["R3", "R4", "R5"],
     "completeCandidate": ["R8", "R9", "R10", "R11"]
   },
   "tdd": {
@@ -111,6 +122,12 @@
         "name": "minimal manifest and generated-lock change remained green after immutable and audit repetition",
         "file": "test/dependency-policy.test.ts",
         "taskId": "U2"
+      },
+      {
+        "id": "R1-C1-corepack-shim-containment",
+        "name": "real copied Corepack shim target remains unchanged and fallback launcher is regular and contained",
+        "file": "test/private-pnpm.test.ts",
+        "taskId": "R1-C1"
       }
     ]
   },
@@ -124,6 +141,11 @@
       "red": "two unchanged runs failed with five identical assertions for absent pins and locked 3.1.5/6.15.3",
       "green": "focused policy passed with generated exact selectors and admitted parent ranges",
       "refactor": "minimal graph remained green through repeated immutable installs, audits, and both Node cells"
+    },
+    "R1-C1": {
+      "red": "two unchanged runs failed identically because fallback changed copied fixture-global pnpm.js from sha256 7c2a6799... to 30903fbb...",
+      "green": "two unchanged runs passed 7 tests; all four issue-265 focused files passed 46 tests",
+      "refactor": "forced fallback passed twice with exact pnpm 11.7.0; real adapter passed twice with cleanup ok"
     }
   },
   "evidence": {
@@ -140,19 +162,20 @@
     "audit": "two consecutive exit-0 runs plus prior Node 22.13.0 and 24.16.0 cell runs; no audit suggestions",
     "nodeCells": "Yarn 4.15.0 immutable install, focused U2 test, and audit passed on Node 22.13.0 and 24.16.0",
     "u1": "focused regression passed 27 tests; real adapter smoke reached DSH_ADAPTER_SMOKE_OK with pnpm 11.7.0 and cleanup ok",
-    "fullTests": "76 files and 993 tests plus 2 supervised-worker integration tests passed under Node v24.16.0 after unsetting ambient GIT_PAGER",
-    "qualityGates": "lint, typecheck, build, MCP, lifecycle, CLI, public errors, and package smoke passed",
+    "fullTests": "76 files and 994 tests plus 2 supervised-worker integration tests passed under Node v24.16.0 after unsetting ambient GIT_PAGER; the first baseline run failed only because the invoked command set forbidden GIT_PAGER=cat",
+    "qualityGates": "lint, format check, typecheck, build, MCP, lifecycle, CLI, public errors, and package smoke passed",
+    "correctionR1": "code/test diff sha256 c3e6de3226bf018ff221b981c56d7453e3f11ab64b0b6c6e0f9791ccc10ad942; 119 additions + 9 deletions = 128 authored lines; global Corepack launcher hashes unchanged; no correction temp roots or processes remained",
     "workflow": "unchanged blob c14a3ebb1843c5bb8c8e0da22ab4ae7e5e424c3e; policy test passed 17 tests; executable policy passed 3 workflows, 9 jobs, 24 actions",
     "format": "repository-wide Prettier check passed after formatting only four current issue 265 OpenSpec artifacts; normalized substantive-line hashes matched their pre-format bytes",
     "structuredData": "package and apply-progress JSON plus lock, OpenSpec config, and state YAML parsed successfully"
   },
   "finalGate": {
-    "status": "judgment-escalated-awaiting-correction-decision",
-    "candidate": "PR-273@41d3121f337e862626b5edf4b11639d9d10298fd",
-    "judgment": "round-1-initial-dual-escalated-confirmed-severe-C1",
+    "status": "correction-round-1-applied-not-rejudged",
+    "candidate": "uncommitted correction on PR-274@9893930fe8b19b21254f1a6e5cf7629c4710967f",
+    "judgment": "initial dual remains escalated until scoped dual rejudgment",
     "judgmentLedger": "judgment-day.json",
-    "correctionRound": "decision-required-not-authorized",
-    "strictVerification": "blocked-by-confirmed-severe-C1",
+    "correctionRound": "round-1-applied-not-rejudged",
+    "strictVerification": "local correction gates passed; scoped rejudgment and exact-SHA CI pending",
     "requiredCi": "pending-exact-sha-node-22.13.0-and-24",
     "delivery": "pending-independent-authority"
   },
@@ -165,9 +188,10 @@
     "confirmedInfo": ["I1", "I3"],
     "suspectInfo": ["I2", "I4"],
     "contradictions": [],
-    "correctionAuthorized": false,
-    "nextRecommended": "decision-required: authorize-or-decline-correction-round-1"
+    "correctionAuthorized": true,
+    "correctionStatus": "round-1-applied-not-rejudged",
+    "nextRecommended": "parent-settle-and-open-pr-then-scoped-dual-rejudgment"
   },
   "activeRed": [],
-  "updatedAt": "2026-09-07T04:12:43Z"
+  "updatedAt": "2026-09-07T15:02:27Z"
 }

@@ -57,8 +57,8 @@ artifacts:
   reviewContext: missing
   reviewState: missing
 taskProgress:
-  total: 16
-  completed: 12
+  total: 17
+  completed: 13
   pending: 4
   allComplete: false
 dependencies:
@@ -105,10 +105,12 @@ judgmentDay:
     - I2
     - I4
   contradictions: []
-  correctionAuthorized: false
+  correctionAuthorized: true
+  correctionStatus: round-1-applied-not-rejudged
+  correctionBase: PR-274@9893930fe8b19b21254f1a6e5cf7629c4710967f
 nextRecommended: resolve-review
 blockedReasons:
-  - "Judgment Day confirmed severe C1 through both independent judges; explicit authorization or decline is required before correction round 1."
+  - "Correction round 1 for confirmed severe C1 is applied but not rejudged; parent settlement and PR must precede scoped dual rejudgment."
   - "Strict verification and delivery remain blocked; Judgment grants no approval, receipt, or delivery authority."
 planningBase:
   pullRequest: 270

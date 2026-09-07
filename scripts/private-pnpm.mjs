@@ -1,5 +1,14 @@
 import { createHash } from "node:crypto";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  readlink,
+  realpath,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { runBoundedCommand } from "./runtime-process.mjs";
@@ -75,13 +84,54 @@ function shellQuote(value) {
 
 export async function createPnpmExecLauncher({ binDirectory, nodeBin, entrypoint }) {
   if (process.platform === "win32") blocked("fallback launcher is unsupported on win32");
+  const binStat = await lstat(binDirectory);
+  if (!binStat.isDirectory() || binStat.isSymbolicLink())
+    blocked("fallback bin directory is not a real directory");
+  const containedBin = await realpath(binDirectory);
   const launcher = path.join(binDirectory, "pnpm");
-  await writeFile(
-    launcher,
-    `#!/bin/sh\nexec ${shellQuote(nodeBin)} ${shellQuote(entrypoint)} "$@"\n`,
-    "utf8",
-  );
-  await chmod(launcher, 0o700);
+  try {
+    const existing = await lstat(launcher);
+    if (!existing.isSymbolicLink()) blocked("fallback launcher path is already occupied");
+    const shimTarget = path.normalize(await readlink(launcher));
+    if (
+      path.basename(shimTarget) !== "pnpm.js" ||
+      path.basename(path.dirname(shimTarget)) !== "dist"
+    )
+      blocked("fallback launcher path contains an unsafe symbolic link");
+    await unlink(launcher);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+
+  let handle;
+  let created = false;
+  try {
+    handle = await open(launcher, "wx", 0o700);
+    created = true;
+    await handle.writeFile(
+      `#!/bin/sh\nexec ${shellQuote(nodeBin)} ${shellQuote(entrypoint)} "$@"\n`,
+      "utf8",
+    );
+    await handle.chmod(0o700);
+    if (!(await handle.stat()).isFile()) blocked("fallback launcher is not a regular file");
+  } catch (error) {
+    if (created) await unlink(launcher).catch(() => {});
+    if (error?.code === "EEXIST") blocked("fallback launcher path changed during creation");
+    throw error;
+  } finally {
+    await handle?.close();
+  }
+
+  const launcherStat = await lstat(launcher);
+  const containedLauncher = await realpath(launcher);
+  if (
+    !launcherStat.isFile() ||
+    launcherStat.isSymbolicLink() ||
+    path.dirname(containedLauncher) !== containedBin
+  ) {
+    await unlink(launcher).catch(() => {});
+    blocked("fallback launcher escaped its private bin directory");
+  }
   return launcher;
 }
 
