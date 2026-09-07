@@ -48,8 +48,8 @@ See `chain.md` for exact execution and delivery contracts.
 
 ## Final Candidate and Delivery
 
-- [x] C1-R1 Apply only authorized correction round 1 on PR #274 / `9893930`: preserve the real copied-Corepack shim target, create and verify a regular contained fallback launcher, and leave the correction applied but not rejudged.
-- [ ] 3.1 Run two blind read-only Judgment judges on the same immutable U1+U2 candidate; initial round completed with both judges `ESCALATED` on confirmed severe C1, and correction round 1 is applied but not rejudged. Parent settlement/PR comes next, followed by scoped dual rejudgment; no approval is recorded.
+- [x] C1-R1 Apply only authorized correction round 1 from ledger base `9893930` through PR #275 / `8d1ac82`: preserve the real copied-Corepack shim target, create and verify a regular contained fallback launcher, and close C1 through independent scoped dual rejudgment.
+- [x] 3.1 Run two blind read-only Judgment judges on the same immutable correction delta; both scoped R1 judges `APPROVED`, with C1 closed, zero confirmed or suspect correction-caused severe defects, and zero contradictions.
 - [ ] 3.2 Independently verify strict 11/11 traceability, full gates, immutable install/audit, exclusions, and required exact-SHA CI in both Node cells.
 - [ ] 3.3 With separate delivery authority, merge issue #265 independently to `main`; Judgment grants none.
 - [ ] 3.4 Rebase #247 root-to-child onto final `main`, regenerate lock conflicts, and reverify locally plus exact-SHA CI.

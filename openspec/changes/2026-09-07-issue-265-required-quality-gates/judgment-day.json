@@ -2,16 +2,16 @@
   "schema": "judgment-day",
   "change": "2026-09-07-issue-265-required-quality-gates",
   "target": {
-    "candidate": "41d3121f337e862626b5edf4b11639d9d10298fd",
-    "baseline": "d2dc5aa",
-    "u1": "4e4a428",
-    "pullRequests": [272, 273],
+    "candidate": "8d1ac82",
+    "ledgerBase": "9893930",
+    "pullRequest": 275,
+    "initialCandidate": "41d3121f337e862626b5edf4b11639d9d10298fd",
     "immutable": true
   },
   "round": 1,
   "maxRounds": 2,
-  "mode": "correction-round-1-applied-pending-scoped-dual-rejudgment",
-  "judgeResults": [
+  "mode": "terminal-scoped-dual-rejudgment-approved",
+  "initialJudgeResults": [
     {
       "id": "judge-one",
       "independent": true,
@@ -105,59 +105,105 @@
       }
     }
   ],
+  "scopedRejudgment": {
+    "scope": "frozen C1 ledger plus correction delta 9893930..8d1ac82",
+    "round": 1,
+    "results": [
+      {
+        "id": "judge-one",
+        "independent": true,
+        "terminalVerdict": "APPROVED",
+        "result": {
+          "findings": [],
+          "evidence": [
+            "Used an isolated copied-Corepack fixture and confirmed the Corepack shim is removed before fallback materialization.",
+            "Confirmed the replacement launcher is an exclusively created regular file contained by the private bin, while occupied and unsafe paths are rejected.",
+            "Verified exact pnpm 11.7.0 integrity and version, cleanup, signal and exit propagation, and unchanged actual global launcher hash 7c2a67995976b5b592b611d8b236e3b0633bd654fb49aedd96c6eb7ce04c9cbb."
+          ]
+        }
+      },
+      {
+        "id": "judge-two",
+        "independent": true,
+        "terminalVerdict": "APPROVED",
+        "result": {
+          "findings": [],
+          "evidence": [
+            "Independently used an isolated copied-Corepack fixture and confirmed symlink removal before fallback launcher creation.",
+            "Confirmed exclusive regular-file creation, canonical containment, rejection of occupied or unsafe paths, and exact pnpm 11.7.0 integrity and version.",
+            "Verified cleanup, signals and exits and confirmed the actual global launcher remained unchanged at sha256 7c2a67995976b5b592b611d8b236e3b0633bd654fb49aedd96c6eb7ce04c9cbb."
+          ]
+        }
+      }
+    ],
+    "confirmedCorrectionCausedSevere": [],
+    "suspectCorrectionCausedSevere": [],
+    "contradictions": [],
+    "status": "approved"
+  },
   "ledger": [
     {
       "id": "C1",
       "severity": "SEVERE",
-      "status": "correction-r1-applied-not-rejudged",
+      "status": "closed-r1",
       "title": "Fallback launcher overwrites the global Corepack pnpm launcher through a real shim symlink",
       "confirmedBy": ["judge-one", "judge-two"],
-      "requirementImpact": ["R3", "R4", "R5"],
-      "rootCause": "Real `corepack enable pnpm --install-directory <private-bin>` creates a symlink to globally installed `corepack/dist/pnpm.js`; fallback `writeFile(<private-bin>/pnpm)` follows it and overwrites global Corepack, while disposable cleanup leaves the host launcher broken.",
-      "correctionEligible": true,
-      "autoAuthorized": false
+      "closedBy": "correction delta 9893930..8d1ac82 and two independent scoped approvals",
+      "requirementImpact": ["R3", "R4", "R5"]
     },
     {
       "id": "I1",
       "severity": "INFO",
-      "status": "confirmed-info",
-      "title": "Real Corepack shim behavior lacks a regression test",
-      "reportedBy": ["judge-one"],
-      "autoFix": false
+      "status": "closed-r1",
+      "title": "Real Corepack shim behavior lacked a regression test",
+      "closedBy": "isolated copied-Corepack fixture regression in correction delta 9893930..8d1ac82"
     },
     {
       "id": "I2",
       "severity": "INFO",
-      "status": "suspect-info",
-      "title": "Mixed-message fallback classification may admit a disallowed failure",
-      "reportedBy": ["judge-one"],
-      "autoFix": false
+      "status": "open-suspect-info",
+      "title": "Fallback classifier mixed-message handling remains conjunctive and suspect",
+      "blocking": false
     },
     {
       "id": "I3",
       "severity": "INFO",
-      "status": "confirmed-info",
-      "title": "R11 combined rollback wording contradicts separate chain rollback boundaries",
-      "reportedBy": ["judge-two"],
-      "autoFix": false
+      "status": "open-confirmed-info",
+      "title": "R11 combined rollback wording remains inconsistent with separate chain rollback boundaries",
+      "blocking": false
     },
     {
       "id": "I4",
       "severity": "INFO",
-      "status": "suspect-info",
-      "title": "Full exact-candidate Node 22 matrix proof remains external",
-      "reportedBy": ["judge-two"],
-      "autoFix": false
+      "status": "open-pending-evidence",
+      "title": "Full exact-candidate Node 22 CI proof remains pending",
+      "blocking": false
+    },
+    {
+      "id": "I5",
+      "severity": "INFO",
+      "status": "open-confirmed-info",
+      "title": "An arbitrary symlink whose textual target ends in dist/pnpm.js could be accepted, but its target is never followed or mutated",
+      "blocking": false
+    },
+    {
+      "id": "I6",
+      "severity": "INFO",
+      "status": "open-confirmed-info",
+      "title": "A caller-supplied package-manager ancestor symlink could escape, outside actual fresh random adapter-root usage",
+      "blocking": false
     }
   ],
   "counts": {
-    "judgeResults": 2,
-    "confirmedSevere": 1,
-    "remainingSevere": 1,
-    "confirmedInfo": 2,
-    "suspect": 2,
+    "scopedJudgeResults": 2,
+    "confirmedCorrectionCausedSevere": 0,
+    "suspectCorrectionCausedSevere": 0,
     "contradictions": 0,
-    "info": 4
+    "closedSevere": 1,
+    "openSevere": 0,
+    "closedInfo": 1,
+    "openInfo": 5,
+    "info": 5
   },
   "hostCleanupReceipt": {
     "performedBy": "parent",
@@ -190,12 +236,13 @@
       "risk": "Low",
       "workUnits": 1
     },
-    "scopedRejudgment": "not_run"
+    "scopedRejudgment": "approved"
   },
   "appliedCorrection": {
     "round": 1,
-    "status": "applied-not-rejudged",
-    "base": "PR-274@9893930fe8b19b21254f1a6e5cf7629c4710967f",
+    "status": "closed-by-scoped-dual-rejudgment",
+    "base": "9893930",
+    "candidate": "PR-275@8d1ac82",
     "branch": "fix/265-r1-symlink-containment",
     "findingIds": ["C1"],
     "files": ["scripts/private-pnpm.mjs", "test/private-pnpm.test.ts"],
@@ -211,12 +258,13 @@
       "authoredLines": 128,
       "hardMax": 400
     },
-    "scopedRejudgment": "pending-parent-settlement-and-pr"
+    "scopedRejudgment": "approved"
   },
-  "terminalVerdict": "ESCALATED",
-  "nextRecommended": "parent-settle-and-open-pr-then-scoped-dual-rejudgment",
+  "terminalVerdict": "APPROVED",
+  "nextRecommended": "verify",
   "authority": {
     "correction": true,
+    "judgmentApproval": true,
     "reviewApproval": false,
     "delivery": false
   },

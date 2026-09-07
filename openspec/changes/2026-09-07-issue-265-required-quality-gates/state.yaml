@@ -58,18 +58,18 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 17
-  completed: 13
-  pending: 4
+  completed: 14
+  pending: 3
   allComplete: false
 dependencies:
   proposal: all_done
   specs: all_done
   design: all_done
   tasks: all_done
-  apply: blocked
-  verify: blocked
+  apply: all_done
+  verify: ready
   archive: blocked
-applyState: blocked
+applyState: all_done
 actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
@@ -92,26 +92,28 @@ remediationState:
   reason: ""
 judgmentDay:
   artifact: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-07-issue-265-required-quality-gates/judgment-day.json
-  target: 41d3121f337e862626b5edf4b11639d9d10298fd
+  target: 8d1ac82
+  ledgerBase: 9893930
+  pullRequest: 275
   round: 1
   maxRounds: 2
-  terminalVerdict: ESCALATED
-  confirmedSevere:
+  terminalVerdict: APPROVED
+  closed:
     - C1
-  confirmedInfo:
     - I1
-    - I3
-  suspectInfo:
+  openInfo:
     - I2
+    - I3
     - I4
+    - I5
+    - I6
+  confirmedCorrectionCausedSevere: []
+  suspectCorrectionCausedSevere: []
   contradictions: []
   correctionAuthorized: true
-  correctionStatus: round-1-applied-not-rejudged
-  correctionBase: PR-274@9893930fe8b19b21254f1a6e5cf7629c4710967f
-nextRecommended: resolve-review
-blockedReasons:
-  - "Correction round 1 for confirmed severe C1 is applied but not rejudged; parent settlement and PR must precede scoped dual rejudgment."
-  - "Strict verification and delivery remain blocked; Judgment grants no approval, receipt, or delivery authority."
+  correctionStatus: round-1-terminal-approved
+nextRecommended: verify
+blockedReasons: []
 planningBase:
   pullRequest: 270
   commit: 5e9d303

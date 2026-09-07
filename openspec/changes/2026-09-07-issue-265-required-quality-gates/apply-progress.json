@@ -2,7 +2,7 @@
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-07-issue-265-required-quality-gates",
   "phase": "apply",
-  "stage": "correction-round-1-applied-awaiting-parent-settlement-pr-and-scoped-rejudgment",
+  "stage": "judgment-r1-approved-awaiting-strict-verification",
   "planningBase": {
     "pullRequest": 271,
     "commit": "d2dc5aa",
@@ -17,7 +17,13 @@
     "pullRequest": 273,
     "commit": "41d3121f337e862626b5edf4b11639d9d10298fd",
     "baseline": "d2dc5aa",
-    "role": "immutable-u1-u2-judgment-target"
+    "role": "immutable-u1-u2-initial-judgment-target"
+  },
+  "correctedCandidate": {
+    "pullRequest": 275,
+    "commit": "8d1ac82",
+    "ledgerBase": "9893930",
+    "role": "immutable-r1-scoped-rejudgment-target"
   },
   "issue": 265,
   "rddMode": "disabled/unmanaged",
@@ -46,7 +52,7 @@
     {
       "id": "U2",
       "name": "Audit-safe resolutions and lock",
-      "status": "settled-candidate-judgment-escalated",
+      "status": "settled-pre-correction-candidate",
       "branch": "fix/265-u2-audit-resolutions",
       "base": "PR-272@4e4a42860a447d6246c29e1bd76b73f37db52fbf",
       "immediatePredecessor": "PR-272@4e4a42860a447d6246c29e1bd76b73f37db52fbf",
@@ -61,9 +67,10 @@
     {
       "id": "R1-C1",
       "name": "Judgment correction round 1 symlink containment",
-      "status": "applied-not-rejudged",
+      "status": "scoped-dual-rejudgment-approved",
       "branch": "fix/265-r1-symlink-containment",
-      "base": "PR-274@9893930fe8b19b21254f1a6e5cf7629c4710967f",
+      "base": "9893930",
+      "candidate": "PR-275@8d1ac82",
       "hardMax": 400,
       "focusedCommand": "yarn vitest run test/private-pnpm.test.ts --reporter=dot",
       "runtimeHarness": "forced fallback twice and real adapter smoke twice on Node 24.16.0"
@@ -71,8 +78,8 @@
   ],
   "taskProgress": {
     "total": 17,
-    "completed": 13,
-    "pending": 4,
+    "completed": 14,
+    "pending": 3,
     "allComplete": false
   },
   "requirementMap": {
@@ -164,33 +171,35 @@
     "u1": "focused regression passed 27 tests; real adapter smoke reached DSH_ADAPTER_SMOKE_OK with pnpm 11.7.0 and cleanup ok",
     "fullTests": "76 files and 994 tests plus 2 supervised-worker integration tests passed under Node v24.16.0 after unsetting ambient GIT_PAGER; the first baseline run failed only because the invoked command set forbidden GIT_PAGER=cat",
     "qualityGates": "lint, format check, typecheck, build, MCP, lifecycle, CLI, public errors, and package smoke passed",
-    "correctionR1": "code/test diff sha256 c3e6de3226bf018ff221b981c56d7453e3f11ab64b0b6c6e0f9791ccc10ad942; 119 additions + 9 deletions = 128 authored lines; global Corepack launcher hashes unchanged; no correction temp roots or processes remained",
+    "correctionR1": "code/test diff sha256 c3e6de3226bf018ff221b981c56d7453e3f11ab64b0b6c6e0f9791ccc10ad942; 119 additions + 9 deletions = 128 authored lines; actual global Corepack pnpm.js remained sha256 7c2a67995976b5b592b611d8b236e3b0633bd654fb49aedd96c6eb7ce04c9cbb; no correction temp roots or processes remained",
     "workflow": "unchanged blob c14a3ebb1843c5bb8c8e0da22ab4ae7e5e424c3e; policy test passed 17 tests; executable policy passed 3 workflows, 9 jobs, 24 actions",
     "format": "repository-wide Prettier check passed after formatting only four current issue 265 OpenSpec artifacts; normalized substantive-line hashes matched their pre-format bytes",
     "structuredData": "package and apply-progress JSON plus lock, OpenSpec config, and state YAML parsed successfully"
   },
   "finalGate": {
-    "status": "correction-round-1-applied-not-rejudged",
-    "candidate": "uncommitted correction on PR-274@9893930fe8b19b21254f1a6e5cf7629c4710967f",
-    "judgment": "initial dual remains escalated until scoped dual rejudgment",
+    "status": "judgment-r1-approved-pending-strict-verification",
+    "candidate": "PR-275@8d1ac82",
+    "ledgerBase": "9893930",
+    "judgment": "both independent scoped R1 judges approved C1 closed",
     "judgmentLedger": "judgment-day.json",
-    "correctionRound": "round-1-applied-not-rejudged",
-    "strictVerification": "local correction gates passed; scoped rejudgment and exact-SHA CI pending",
-    "requiredCi": "pending-exact-sha-node-22.13.0-and-24",
+    "correctionRound": "round-1-terminal-approved",
+    "strictVerification": "pending",
+    "requiredCi": "full exact-candidate Node 22 CI pending",
     "delivery": "pending-independent-authority"
   },
   "judgmentDay": {
     "round": 1,
     "maxRounds": 2,
-    "judgeOne": "ESCALATED",
-    "judgeTwo": "ESCALATED",
-    "confirmedSevere": ["C1"],
-    "confirmedInfo": ["I1", "I3"],
-    "suspectInfo": ["I2", "I4"],
+    "judgeOne": "APPROVED",
+    "judgeTwo": "APPROVED",
+    "confirmedCorrectionCausedSevere": [],
+    "suspectCorrectionCausedSevere": [],
     "contradictions": [],
+    "closed": ["C1", "I1"],
+    "openInfo": ["I2", "I3", "I4", "I5", "I6"],
     "correctionAuthorized": true,
-    "correctionStatus": "round-1-applied-not-rejudged",
-    "nextRecommended": "parent-settle-and-open-pr-then-scoped-dual-rejudgment"
+    "correctionStatus": "round-1-terminal-approved",
+    "nextRecommended": "verify"
   },
   "activeRed": [],
   "updatedAt": "2026-09-07T15:02:27Z"
