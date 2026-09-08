@@ -400,6 +400,7 @@ describe("bounded impact traversal", () => {
         max_depth: 1,
         max_nodes: 20,
         max_edges: 30,
+        relationship_kinds: ["reference", "import", "export", "extends", "implements"] as const,
       };
       const expected = traverseImpact(root, edges, options);
       const actual = traverseCompilerImpact(project, fixture.root, root, freshness, options);
@@ -1601,8 +1602,8 @@ describe("relationship coverage", () => {
         cell("reference", "outgoing", "symbol", "completed"),
         cell("export", "incoming", "symbol", "completed"),
         cell("export", "outgoing", "symbol", "not_applicable"),
-        cell("call", "incoming", "symbol", "unsupported"),
-        cell("call", "outgoing", "symbol", "unsupported"),
+        cell("call", "incoming", "symbol", "completed"),
+        cell("call", "outgoing", "symbol", "completed"),
         cell("contains", "incoming", "symbol", "unsupported"),
         cell("contains", "outgoing", "symbol", "unsupported"),
       ]),
@@ -1666,8 +1667,8 @@ describe("relationship coverage", () => {
       cell("reference", "outgoing", "symbol", "unfinished"),
       cell("export", "incoming", "symbol", "unfinished"),
       cell("export", "outgoing", "symbol", "not_applicable"),
-      cell("call", "incoming", "symbol", "unsupported"),
-      cell("call", "outgoing", "symbol", "unsupported"),
+      cell("call", "incoming", "symbol", "unfinished"),
+      cell("call", "outgoing", "symbol", "unfinished"),
       cell("contains", "incoming", "symbol", "unsupported"),
       cell("contains", "outgoing", "symbol", "unsupported"),
     ]);
@@ -1715,7 +1716,7 @@ describe("honest impact authority", () => {
     }
   });
 
-  it("preserves useful edges while coverage work records a semantic gap", async () => {
+  it("preserves useful reference and direct-call edges after call coverage completes", async () => {
     const { fixture, project, root } = await impactFixture({
       "src/target.ts": "export function target(): number { return 1; }\n",
       "src/use.ts": 'import { target } from "./target.js"; export const value = target();\n',
@@ -1729,9 +1730,9 @@ describe("honest impact authority", () => {
       authority: "semantic",
     });
 
-    expect(result.edges).toHaveLength(1);
+    expect(result.edges.map((edge) => edge.kind)).toEqual(["call", "reference"]);
     expect(result).toMatchObject({
-      incomplete: true,
+      incomplete: false,
       proven_empty: false,
       truncation: { truncated: false },
       work: { work_limit_reached: false, max_work_items: 100_000 },
@@ -1786,6 +1787,116 @@ describe("honest impact authority", () => {
     expect(result.work).toMatchObject({ work_limit_reached: true, max_work_items: 100_000 });
     expect(result.coverage[0]).toMatchObject({ status: "unfinished" });
     expect(result.incomplete).toBe(true);
+  });
+});
+
+describe("scoped direct call impact", () => {
+  async function scopedCallFixture(files: Record<string, string>, symbol = "caller") {
+    const fixture = await createProjectFixture(files);
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest(symbol, "src/root.ts"));
+    return { fixture, project, root };
+  }
+
+  it("returns an exact incoming scoped direct call and completed coverage", async () => {
+    const { fixture, project, root } = await scopedCallFixture(
+      {
+        "src/root.ts": "export function target(): number { return 1; }\n",
+        "src/use.ts": [
+          'import { target } from "./root.js";',
+          "export function caller(dynamic: unknown): number {",
+          "  if (typeof dynamic === 'function') dynamic();",
+          "  Math.max(1, 2);",
+          "  return target();",
+          "}",
+        ].join("\n"),
+      },
+      "target",
+    );
+
+    const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      direction: "incoming",
+      max_depth: 1,
+      max_nodes: 10,
+      max_edges: 10,
+      relationship_kinds: ["call"],
+      authority: "semantic",
+    });
+
+    expect(result.edges.map((edge) => [edge.source.symbol_path, edge.target.symbol_path])).toEqual([
+      ["caller", "target"],
+    ]);
+    expect(result.coverage).toEqual([
+      { kind: "call", direction: "incoming", endpoint_class: "symbol", status: "completed" },
+    ]);
+    expect(result).toMatchObject({ incomplete: false, proven_empty: false });
+  });
+
+  it("returns stable outgoing function constructor and tagged template edges owned by the caller", async () => {
+    const { fixture, project, root } = await scopedCallFixture({
+      "src/root.ts": [
+        "export function target(): void {}",
+        "export class Box {}",
+        "export function tag(parts: TemplateStringsArray): string { return parts[0]; }",
+        "export function nestedTarget(): void {}",
+        "export function caller(): void {",
+        "  target();",
+        "  new Box();",
+        "  tag`value`;",
+        "  function nested(): void { nestedTarget(); }",
+        "  void nested;",
+        "}",
+      ].join("\n"),
+    });
+
+    const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      direction: "outgoing",
+      max_depth: 1,
+      max_nodes: 10,
+      max_edges: 10,
+      relationship_kinds: ["call"],
+      authority: "semantic",
+    });
+
+    expect(result.edges.map((edge) => edge.target.symbol_path)).toEqual(["Box", "tag", "target"]);
+    expect(result.edges.every((edge) => edge.compiler_authoritative)).toBe(true);
+    expect(result.coverage[0]).toMatchObject({ direction: "outgoing", status: "completed" });
+  });
+
+  it("keeps uncertain dispatch edge-free and marks only outgoing coverage unfinished", async () => {
+    const { fixture, project, root } = await scopedCallFixture({
+      "src/root.ts": [
+        "type Key = 'first' | 'second';",
+        "const handlers = { first(): void {}, second(): void {} };",
+        "function overloaded(value: number): void;",
+        "function overloaded(value: string): void;",
+        "function overloaded(_value: number | string): void {}",
+        "export function caller(dynamic: unknown, key: Key): void {",
+        "  handlers.first();",
+        "  handlers[key]();",
+        "  overloaded(1);",
+        "  setTimeout(() => undefined, 0);",
+        "  if (typeof dynamic === 'function') dynamic();",
+        "}",
+      ].join("\n"),
+    });
+
+    const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      direction: "both",
+      max_depth: 1,
+      max_nodes: 10,
+      max_edges: 10,
+      relationship_kinds: ["call"],
+      authority: "semantic",
+    });
+
+    expect(result.edges).toEqual([]);
+    expect(result.coverage).toEqual([
+      { kind: "call", direction: "incoming", endpoint_class: "symbol", status: "completed" },
+      { kind: "call", direction: "outgoing", endpoint_class: "symbol", status: "unfinished" },
+    ]);
+    expect(result).toMatchObject({ incomplete: true, proven_empty: false });
   });
 });
 
