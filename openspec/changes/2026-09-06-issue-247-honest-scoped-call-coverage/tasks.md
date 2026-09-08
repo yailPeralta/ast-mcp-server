@@ -42,8 +42,8 @@ See `chain.md` for exact branches, symbols, commands, trace, IDs, rollback, and 
 ## Unit 3: Scoped Direct Calls
 
 - [ ] 3.1 Base only on U2; acquire `issue247-u3-apply-v1`; repeat the exact U3 RED twice unchanged.
-- [ ] 3.2 Implement bounded direct identifier call/new/tag producers and conservative unfinished fallback.
-- [ ] 3.3 Refactor and gate SCI-R4/R5/R9, MCP regression, budget, finish, and rollback.
+- [x] 3.2 Implement bounded direct identifier call/new/tag producers and conservative unfinished fallback.
+- [x] 3.3 Refactor and gate SCI-R4/R5/R9, MCP regression, budget, finish, and rollback.
 - [ ] 3.4 Settle `issue247-u3-settle-v1`; freeze U3 without authority claims.
 
 ## Unit 4: Candidate Gate
