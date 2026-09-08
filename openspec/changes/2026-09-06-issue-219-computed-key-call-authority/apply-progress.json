@@ -4,17 +4,17 @@
   "phase": "apply",
   "deliveryStrategy": "auto-chain",
   "chainStrategy": "feature-branch-chain",
-  "candidateAuthority": false,
+  "candidateAuthority": true,
   "deliveryAuthority": false,
-  "attempt": "active supplied token sha256:127984cddac2eaaa6f9d0e0276ae1efcb23747115c63b821ce764b4a199e17df; gentle-ai unavailable; unsettled",
+  "attempt": "token sha256:c907f531c1b5d61a889d8a8b4bb1c789b84933b60e724d800916a0da3f36f23b settled with verification evidence sha256:82ac7fc1871a1c70916782b815b07c022c8589ac3d13af1d57d2ad3bea67561b; no delivery authority",
   "baseline": "six-file exit 0; 141/141; sha256:f6b8408dc7b8fda45a56517d61f3f3ff0b775ac1dee7571a4b1b7bb3f110c41b",
-  "gates": "MCP+CLI exit 0 sha256:583b3053cd6c067438ac403a46cdd36d2b340400322772fbedbbe2660d3fe738; benchmark exit 0 unchanged sha256:be262944aac8f4329feeec8ee655250744e8bb0fc0c715b7daff1a4bae076030; final full exit 0 sha256:ea15ec868ac2cc7b7f87a151951d8fea6087df5a690fffd9dca189b3fd137885; prior supervised-env run failed only because GIT_PAGER=cat, and one contention retry timed out",
-  "scope": "3 requirements/19 scenarios traced; rollback allowed files only; no settlement/review/verify/CI/archive; cleanup /tmp evidence only; authored line budget measured against HEAD",
+  "gates": "focused twice 6/6 stable; six-file 147/147; full 1000/1000 plus supervised 2/2; format/lint/typecheck/build and public/package gates pass; benchmark twice identical sha256:be262944aac8f4329feeec8ee655250744e8bb0fc0c715b7daff1a4bae076030; exact Node22.13 adapter/audit and Node24 CI pass",
+  "scope": "3 requirements/19 scenarios verified at HEAD 315c887 over runtime 1ac6b84; runtime budget 400/400; settlement complete; only archive and delivery pending; cleanup owned temporary evidence only",
   "tasks": [
     {
       "id": "U1",
       "name": "Computed-key call authority",
-      "status": "judgment-approved-unsettled",
+      "status": "verified-settled",
       "taskIds": [
         "0.1",
         "0.2",
@@ -70,5 +70,17 @@
     "ledger": "reviews/ledger.json",
     "deliveryAuthority": false
   },
-  "updatedAt": "2026-09-08T07:42:18Z"
+  "verification": {
+    "verdict": "PASS WITH WARNINGS",
+    "evidenceRevision": "sha256:82ac7fc1871a1c70916782b815b07c022c8589ac3d13af1d57d2ad3bea67561b",
+    "head": "315c8873bb45e5c3ab8f2535b33fd733e0858ce6",
+    "runtimeTarget": "1ac6b84a2df402e8275f417fed2bfb7605a20d07",
+    "requirements": "3/3",
+    "scenarios": "19/19",
+    "ciRun": 34201296000,
+    "settled": true,
+    "deliveryAuthority": false,
+    "report": "verify-report.md"
+  },
+  "updatedAt": "2026-09-08T09:00:15Z"
 }

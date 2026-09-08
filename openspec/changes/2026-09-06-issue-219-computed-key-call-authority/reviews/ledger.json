@@ -13,8 +13,8 @@
   "deliveryAuthority": false,
   "budget": {
     "hardMaxAuthoredChangedLines": 400,
-    "measuredAuthoredChangedLines": null,
-    "existingEvidence": "U1 stayed <=400; exact measured count was not supplied",
+    "measuredAuthoredChangedLines": 400,
+    "existingEvidence": "PR #289 exact runtime diff: 365 additions + 35 deletions = 400",
     "ledgerDiffRequirement": "total allowed artifact diff <=400 lines"
   },
   "judgeCounts": {
@@ -98,13 +98,23 @@
   "scopedRejudgment": "not_run",
   "verdict": "APPROVED",
   "qualification": "Judgment approval records zero dual-critical defects; it does not establish functional completeness or delivery authority.",
+  "postJudgmentVerification": {
+    "verdict": "PASS WITH WARNINGS",
+    "evidenceRevision": "sha256:82ac7fc1871a1c70916782b815b07c022c8589ac3d13af1d57d2ad3bea67561b",
+    "head": "315c8873bb45e5c3ab8f2535b33fd733e0858ce6",
+    "runtimeTarget": "1ac6b84a2df402e8275f417fed2bfb7605a20d07",
+    "confirmedSeverePreserved": 0,
+    "suspectSeverePreserved": 2,
+    "warningsRetained": true,
+    "settled": true,
+    "deliveryAuthority": false
+  },
   "unknowns": [
-    "Exact authored changed-line count was not supplied; only existing <=400 evidence is recorded.",
     "No correction or re-judgment was authorized or run.",
     "Warnings and single-judge severe risks remain unresolved.",
-    "Settlement, strict verification, exact-head CI, archive, and delivery remain outside this judgment."
+    "Settlement completed separately; archive and delivery remain outside this judgment, and strict verification plus exact-head CI do not confer delivery authority."
   ],
-  "nextRecommended": "Resolve or explicitly accept warnings and unconfirmed risks, then obtain separate settlement/verification authority without treating this judgment as delivery authority.",
+  "nextRecommended": "Archive the settled PASS WITH WARNINGS change while retaining all Judgment warnings; delivery remains separately pending.",
   "skillResolution": "judgment-day loaded; dsh-sdd loaded for state protocol; no delegation used because the caller prohibited delegation",
   "recordedAt": "2026-09-08T07:42:18Z"
 }
