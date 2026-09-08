@@ -13,7 +13,8 @@ artifactPaths:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/affected-test-candidates/spec.md
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/ast-explore-call-spines/spec.md
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/scoped-compiler-impact/spec.md
-  design: []
+  design:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/design.md
   tasks: []
   applyProgress: []
   verifyReport: []
@@ -30,7 +31,8 @@ contextFiles:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/affected-test-candidates/spec.md
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/ast-explore-call-spines/spec.md
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/scoped-compiler-impact/spec.md
-  design: []
+  design:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/design.md
   tasks: []
   applyProgress: []
   verifyReport: []
@@ -44,7 +46,7 @@ artifacts:
   exploration: done
   proposal: done
   specs: done
-  design: missing
+  design: done
   tasks: missing
   applyProgress: missing
   verifyReport: missing
@@ -61,8 +63,8 @@ taskProgress:
 dependencies:
   proposal: all_done
   specs: all_done
-  design: ready
-  tasks: blocked
+  design: all_done
+  tasks: ready
   apply: blocked
   verify: blocked
   archive: blocked
@@ -71,7 +73,8 @@ actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
   allowedEditRoots:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/design.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/state.yaml
 relationships:
   dependsOn: []
   resolvedDependencies:
@@ -94,18 +97,18 @@ remediationState:
   reason: ""
 phaseInstructions:
   apply:
-    - Do not apply during PROPOSE; route next to spec only.
+    - Do not apply during DESIGN; route next to tasks only.
     - Keep issue 220, broad property or element dispatch, external or multiple-target edges, and DeepSeek Harness apply excluded.
     - Preserve issue 186, issue 188, and F-01 as historical evidence without inherited Judgment, review, correction, or delivery authority.
     - Keep authored changes at or below 400 lines per review unit; auto-chain only at independently testable boundaries if required.
   verify:
-    - No verify authority is created by this proposal.
+    - No verify authority is created by this design.
   remediate: []
   archive: []
-nextRecommended: design
+nextRecommended: tasks
 blockedReasons: []
 baseline:
-  branch: docs/219-exploration
+  branch: docs/219-spec
   pullRequest: 248
   head: d9e1cd01fedcd55522356095e56e4a3e4a489bc2
   originMain: 7bb0c6800a9bfabddce11d26f61e00a90ed168b2
@@ -159,4 +162,13 @@ spec:
   changedLineEstimate: 141
   reviewBudgetChangedLines: 400
   deliveryStrategy: auto-chain
-lastPhase: spec
+design:
+  status: success
+  detailLevel: high
+  requirementCount: 3
+  scenarioCount: 19
+  artifactWordCount: 798
+  artifactLineCount: 79
+  reviewBudgetChangedLines: 400
+  deliveryStrategy: auto-chain
+lastPhase: design
