@@ -1,0 +1,168 @@
+schemaName: gentle-ai.sdd-status
+schemaVersion: 1
+changeName: 2026-09-06-issue-247-honest-scoped-call-coverage
+artifactStore: openspec
+planningHome:
+  mode: repo-local
+  path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage
+artifactPaths:
+  proposal: []
+  specs: []
+  design: []
+  tasks: []
+  applyProgress: []
+  verifyReport: []
+  reviewPolicy: []
+  reviewLedger: []
+  reviewReceipt: []
+  reviewBundle: []
+  reviewContext: []
+  reviewState: []
+contextFiles:
+  proposal: []
+  specs: []
+  design: []
+  tasks: []
+  applyProgress: []
+  verifyReport: []
+  reviewPolicy: []
+  reviewLedger: []
+  reviewReceipt: []
+  reviewBundle: []
+  reviewContext: []
+  reviewState: []
+artifacts:
+  exploration: done
+  proposal: missing
+  specs: missing
+  design: missing
+  tasks: missing
+  applyProgress: missing
+  verifyReport: missing
+  reviewLedger: missing
+  reviewReceipt: missing
+  reviewBundle: missing
+  reviewContext: missing
+  reviewState: missing
+taskProgress:
+  total: 0
+  completed: 0
+  pending: 0
+  allComplete: false
+dependencies:
+  proposal: ready
+  specs: blocked
+  design: blocked
+  tasks: blocked
+  apply: blocked
+  verify: blocked
+  archive: blocked
+applyState: blocked
+actionContext:
+  mode: repo-local
+  workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
+  allowedEditRoots:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage
+relationships:
+  dependsOn: []
+  supersedes: []
+  amends: []
+  conflictsWith:
+    - inherited-or-reopened-issue-186-judgment-authority
+    - inherited-or-reopened-issue-188-recovery-authority
+    - issue-219-computed-key-classifier-in-prerequisite
+  sameDomainActiveChanges:
+    - 2026-09-06-issue-219-computed-key-call-authority
+remediationState:
+  required: false
+  complete: false
+  failedEvidenceRevision: ""
+  lineageId: ""
+  generation: 0
+  fixBatch: 0
+  reason: ""
+phaseInstructions:
+  apply:
+    - Do not apply until proposal, specs, design, and tasks are complete.
+    - Keep every Feature Branch Chain unit at or below 400 authored changed lines.
+    - Do not implement issue 219 computed-key classification or issue 220 external alternatives.
+    - Keep DeepSeek Harness work absent.
+  verify:
+    - Distinguish semantic coverage incompleteness from traversal truncation.
+    - Preserve exact baseline CI and dependency-audit failures as non-change evidence.
+  remediate: []
+  archive: []
+nextRecommended: propose
+blockedReasons: []
+baseline:
+  branch: main
+  head: 6173a39a73f1540c17335a330ea7f14f982387cb
+  originMain: 6173a39a73f1540c17335a330ea7f14f982387cb
+  requestedCommit: 6173a39
+  cleanAtStart: false
+  preExistingWorkspacePaths:
+    - openspec/changes/2026-09-06-issue-219-computed-key-call-authority/
+authority:
+  issue: 247
+  issueState: OPEN
+  labels:
+    - status:approved
+    - type:feature
+  independence: issue-247-only
+  historicalEvidenceOnly:
+    - issue-186
+    - issue-188
+  prerequisiteFor:
+    - issue-219
+  rddMode: disabled/unmanaged
+  reviewAuthority: false
+  deliveryAuthority: false
+exploration:
+  status: success
+  detailLevel: high
+  reproduction: confirmed-on-main-registered-mcp
+  uniquelyNamedDirectCall: createPaginationInputSchema
+  observedFalseEmpty:
+    edges: 0
+    visitedNodes: 1
+    visitedEdges: 0
+    incomplete: false
+    truncated: false
+  minimalInvariant: every-requested-kind-direction-cell-needs-applicability-and-completion-evidence
+  coverageStatuses:
+    - not_applicable
+    - completed
+    - unsupported
+    - unfinished
+  containsSupportRequired: false
+  computedKeyClassifierIncluded: false
+  externalAlternativeClassifierIncluded: false
+  readyForProposal: true
+  changedLineBudgetRisk: High
+  chainedPRsRecommended: true
+  forecastUnits: 5
+  decisionNeededBeforeApply: true
+baselineEvidence:
+  focusedTests:
+    command: yarn vitest run test/relationships.test.ts test/impact.test.ts test/test-candidates.test.ts --reporter=dot
+    result: pass
+    tests: 68
+  typecheck:
+    command: yarn typecheck
+    result: pass
+  github:
+    sha: 6173a39a73f1540c17335a330ea7f14f982387cb
+    security: pass
+    ci: fail
+    failingJob: quality-node-22.13.0-test-dsh-adapter
+    node24Quality: pass
+  audit:
+    command: yarn npm audit --all --recursive
+    result: fail
+    high: 4
+    moderate: 2
+    packages:
+      - fast-uri@3.1.5
+      - qs@6.15.3
+lastPhase: explore
