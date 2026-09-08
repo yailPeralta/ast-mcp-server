@@ -2,9 +2,14 @@ import path from "node:path";
 import { Project } from "ts-morph";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  RELATIONSHIP_EDGE_KINDS,
+  canonicalRelationshipCoverage,
   collectCompilerRelationships,
   createCompilerRelationshipResolver,
   createRelationshipEdge,
+  isRelationshipCoverageComplete,
+  mergeRelationshipCoverage,
+  type RelationshipCoverageEntry,
   type RelationshipEdge,
 } from "../src/services/relationships.js";
 import {
@@ -1521,6 +1526,139 @@ describe("bounded impact traversal", () => {
     expect(() =>
       traverseImpact(root, edges, override as unknown as ImpactTraversalOptions),
     ).toThrow();
+  });
+});
+
+describe("relationship coverage", () => {
+  const cell = (
+    kind: RelationshipCoverageEntry["kind"],
+    direction: RelationshipCoverageEntry["direction"],
+    endpoint_class: RelationshipCoverageEntry["endpoint_class"],
+    status: RelationshipCoverageEntry["status"],
+  ): RelationshipCoverageEntry => ({ kind, direction, endpoint_class, status });
+
+  it("uses canonical kind, direction, endpoint ordering and fail-closed precedence", () => {
+    const actual = mergeRelationshipCoverage(
+      [cell("call", "outgoing", "symbol", "completed")],
+      [
+        cell("reference", "outgoing", "symbol", "not_applicable"),
+        cell("call", "outgoing", "symbol", "unsupported"),
+        cell("call", "incoming", "symbol", "completed"),
+        cell("reference", "incoming", "module", "unfinished"),
+      ],
+    );
+
+    expect(actual).toEqual([
+      cell("reference", "incoming", "module", "unfinished"),
+      cell("reference", "outgoing", "symbol", "not_applicable"),
+      cell("call", "incoming", "symbol", "completed"),
+      cell("call", "outgoing", "symbol", "unsupported"),
+    ]);
+    expect(canonicalRelationshipCoverage([...actual].reverse())).toEqual(actual);
+    expect(
+      isRelationshipCoverageComplete([
+        cell("call", "incoming", "symbol", "completed"),
+        cell("call", "outgoing", "module", "not_applicable"),
+      ]),
+    ).toBe(true);
+  });
+
+  it("reports fourteen canonical symbol cells with directional applicability", async () => {
+    const fixture = await createProjectFixture({
+      "src/target.ts": "export function target(): number { return 1; }\n",
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("target", "src/target.ts"));
+
+    const actual = createCompilerRelationshipResolver(project, fixture.root, freshness).edgesFor(
+      root,
+      {
+        direction: "both",
+        relationship_kinds: RELATIONSHIP_EDGE_KINDS,
+        max_edges: 10,
+      },
+    );
+
+    expect(actual.coverage.map(({ kind, direction }) => `${kind}:${direction}`)).toEqual(
+      RELATIONSHIP_EDGE_KINDS.flatMap((kind) => [`${kind}:incoming`, `${kind}:outgoing`]),
+    );
+    expect(actual.coverage).toEqual(
+      expect.arrayContaining([
+        cell("reference", "incoming", "symbol", "completed"),
+        cell("reference", "outgoing", "symbol", "completed"),
+        cell("export", "incoming", "symbol", "completed"),
+        cell("export", "outgoing", "symbol", "not_applicable"),
+        cell("call", "incoming", "symbol", "unsupported"),
+        cell("call", "outgoing", "symbol", "unsupported"),
+        cell("contains", "incoming", "symbol", "unsupported"),
+        cell("contains", "outgoing", "symbol", "unsupported"),
+      ]),
+    );
+  });
+
+  it("keeps module applicability isolated from unsupported kinds", async () => {
+    const fixture = await createProjectFixture({ "src/module.ts": "export {};\n" });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const moduleEndpoint = {
+      file: "src/module.ts",
+      symbol_path: "<module>",
+      selector: "<module>@1",
+    };
+
+    const actual = createCompilerRelationshipResolver(project, fixture.root, freshness).edgesFor(
+      moduleEndpoint,
+      {
+        direction: "both",
+        relationship_kinds: ["import", "call", "contains"],
+        max_edges: 10,
+      },
+    );
+
+    expect(actual.coverage).toEqual([
+      cell("import", "incoming", "module", "completed"),
+      cell("import", "outgoing", "module", "completed"),
+      cell("call", "incoming", "module", "not_applicable"),
+      cell("call", "outgoing", "module", "not_applicable"),
+      cell("contains", "incoming", "module", "unsupported"),
+      cell("contains", "outgoing", "module", "unsupported"),
+    ]);
+  });
+
+  it("shares one work snapshot and marks interrupted applicable producers unfinished", async () => {
+    const fixture = await createProjectFixture({
+      "src/target.ts": "export function target(): number { return 1; }\n",
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("target", "src/target.ts"));
+
+    const actual = createCompilerRelationshipResolver(project, fixture.root, freshness).edgesFor(
+      root,
+      {
+        direction: "both",
+        relationship_kinds: ["reference", "export", "call", "contains"],
+        max_edges: 10,
+        max_work_items: 1,
+      },
+    );
+
+    expect(actual.work).toEqual({
+      work_items: 1,
+      max_work_items: 1,
+      work_limit_reached: true,
+    });
+    expect(actual.coverage).toEqual([
+      cell("reference", "incoming", "symbol", "unfinished"),
+      cell("reference", "outgoing", "symbol", "unfinished"),
+      cell("export", "incoming", "symbol", "unfinished"),
+      cell("export", "outgoing", "symbol", "not_applicable"),
+      cell("call", "incoming", "symbol", "unsupported"),
+      cell("call", "outgoing", "symbol", "unsupported"),
+      cell("contains", "incoming", "symbol", "unsupported"),
+      cell("contains", "outgoing", "symbol", "unsupported"),
+    ]);
   });
 });
 
