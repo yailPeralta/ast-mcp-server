@@ -9,7 +9,10 @@ changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-
 artifactPaths:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/proposal.md
-  specs: []
+  specs:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/affected-test-candidates/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/ast-explore-call-spines/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/scoped-compiler-impact/spec.md
   design: []
   tasks: []
   applyProgress: []
@@ -23,7 +26,10 @@ artifactPaths:
 contextFiles:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/proposal.md
-  specs: []
+  specs:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/affected-test-candidates/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/ast-explore-call-spines/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/scoped-compiler-impact/spec.md
   design: []
   tasks: []
   applyProgress: []
@@ -37,7 +43,7 @@ contextFiles:
 artifacts:
   exploration: done
   proposal: done
-  specs: missing
+  specs: done
   design: missing
   tasks: missing
   applyProgress: missing
@@ -54,8 +60,8 @@ taskProgress:
   allComplete: false
 dependencies:
   proposal: all_done
-  specs: ready
-  design: blocked
+  specs: all_done
+  design: ready
   tasks: blocked
   apply: blocked
   verify: blocked
@@ -96,7 +102,7 @@ phaseInstructions:
     - No verify authority is created by this proposal.
   remediate: []
   archive: []
-nextRecommended: spec
+nextRecommended: design
 blockedReasons: []
 baseline:
   branch: docs/219-exploration
@@ -145,4 +151,12 @@ proposal:
   reviewBudgetChangedLines: 400
   changedLineBudgetRisk: Medium
   decisionNeededBeforeApply: false
-lastPhase: propose
+spec:
+  status: success
+  detailLevel: high
+  requirementCount: 3
+  scenarioCount: 19
+  changedLineEstimate: 141
+  reviewBudgetChangedLines: 400
+  deliveryStrategy: auto-chain
+lastPhase: spec
