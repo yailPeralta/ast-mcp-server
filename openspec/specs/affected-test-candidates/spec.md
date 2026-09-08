@@ -20,29 +20,47 @@ The operation MUST accept a project root, file selector, and symbol selector, re
 
 ### Requirement: Traverse incoming compiler relationships
 
-The operation SHALL use a synchronized compiler session, incoming traversal, and depth, node, and edge budgets. Caller-provided or outgoing/bidirectional relationships MUST NOT become affected-test evidence.
+The operation SHALL use a synchronized compiler session and only incoming `reference`, `import`, `export`, `extends`, `implements`, and `call` relationships, with depth, node, edge, and shared work bounds. It MUST exclude `contains`; caller-provided, outgoing, or bidirectional relationships MUST NOT become evidence.
 
 #### Scenario: Incoming traversal is authoritative
 
 - GIVEN a resolvable root and fresh compiler session
 - WHEN analysis runs
-- THEN only compiler-owned incoming relationships are used and budgets are reported.
+- THEN exactly the six incoming kinds are evaluated and their bounds are reported.
+
+#### Scenario: Containment is isolated
+
+- GIVEN default impact selection would include `contains`
+- WHEN candidate traversal runs
+- THEN containment is not requested and cannot block or certify candidate evidence.
 
 ### Requirement: Fail closed on untrusted evidence
 
-Candidates MAY be returned only when evidence is complete, fresh, exact, resolved, and compiler-authoritative. Stale, rebuilding, degraded, truncated, incomplete, unresolved, heuristic, or otherwise non-authoritative evidence MUST produce an error, never an empty result. A complete authoritative traversal with no matches MUST be marked proven empty.
+Candidates MAY be returned only when evidence is fresh, exact, resolved, compiler-authoritative, untruncated, within work bounds, and every applicable six-kind cell is `completed`. `unsupported` or `unfinished` coverage and any exhausted bound MUST return stable `INCOMPLETE_EVIDENCE`, never an empty page. Zero matches MUST be proven empty only after this gate.
 
 #### Scenario: Partial traversal is rejected
 
-- GIVEN traversal reaches a node, edge, or byte budget before completion
+- GIVEN traversal or work reaches a bound before completion
 - WHEN analysis is requested
-- THEN it returns a incomplete-analysis error and none.
+- THEN it returns `INCOMPLETE_EVIDENCE` and no page.
+
+#### Scenario: Semantic gap is rejected
+
+- GIVEN any selected incoming cell is unsupported or unfinished
+- WHEN analysis is requested
+- THEN it returns `INCOMPLETE_EVIDENCE`, even without traversal truncation.
 
 #### Scenario: Proven empty result
 
-- GIVEN complete authoritative traversal finds no eligible test relationship
-- WHEN requested
-- THEN it returns an empty page marked complete and proven-empty.
+- GIVEN all six incoming cells complete and no eligible test is found
+- WHEN requested within bounds
+- THEN it returns an empty page marked complete and proven empty.
+
+#### Scenario: Deferred dispatch is not certified
+
+- GIVEN property, element, dynamic, #219 union-key, or #220 convergence evidence is unproved
+- WHEN candidate analysis encounters it
+- THEN no candidate edge is guessed and `INCOMPLETE_EVIDENCE` is returned.
 
 ### Requirement: Classify deterministic candidates
 
@@ -62,36 +80,36 @@ The operation MUST preserve deterministic ordering and report direct, transitive
 
 ### Requirement: Paginate whole candidate proofs
 
-The operation MUST support bounded offset/limit pagination over a deterministic sequence. Pages MUST include candidates atomically and MUST NOT truncate, split, or weaken relationship paths. Traversal budgets remain distinct from page limits.
+The operation MUST paginate a deterministic candidate sequence by bounded offset/limit. It MUST include each candidate and full path atomically, without splitting proof or paginating away coverage/work authority; traversal bounds remain distinct from page limits.
 
 #### Scenario: Page boundary preserves evidence
 
 - GIVEN more candidates than the page limit
 - WHEN consecutive pages are requested
-- THEN candidates are neither duplicated nor omitted, and each retains full proof.
+- THEN ordering is stable, candidates are neither duplicated nor omitted, and every proof remains whole.
 
 ### Requirement: Return trust and budget metadata
 
-Responses MUST identify the TypeScript compiler backend, resolved root, `compiler_authoritative`, freshness, completeness, truncation/proven-empty state, traversal counts, effective depth/node/edge budgets, and page bounds. Errors MUST use bounded codes/messages without source paths, stacks, raw arguments, or secrets.
+Successful responses MUST identify compiler backend, root, authority, freshness, canonical admitted coverage/work, completeness, truncation/proven-empty state, traversal counts, effective traversal bounds, and page bounds. Additive fields MUST be bounded. Errors MUST retain stable public codes and bounded messages without paths, stacks, raw arguments, or secrets.
 
 #### Scenario: Metadata distinguishes confidence
 
 - GIVEN a successful non-empty or proven-empty analysis
-- WHEN the response is serialized
-- THEN trust, freshness, completeness, truncation, and budget metadata are present and valid.
+- WHEN serialized
+- THEN canonical coverage, work, trust, freshness, completeness, bounds, and pagination metadata are present.
 
 ### Requirement: Keep MCP and batch semantics identical
 
-MCP and `ast-tool run` MUST use one implementation and produce identical candidate ordering, relationship proof, metadata, and errors; serialization differences MUST NOT change meaning. Capability inventory, read-only batch allowlist, compatibility checks, tests, documentation, and managed skill metadata MUST advertise the same contract.
+MCP and `ast-tool run` MUST share one implementation and produce identical gate decisions, candidate order, proofs, additive metadata, and stable errors. JSON/TOON or transport serialization MUST NOT change logical meaning; inventory, allowlists, compatibility checks, tests, docs, and managed skill metadata MUST remain synchronized.
 
 #### Scenario: Cross-surface parity
 
-- GIVEN identical selectors, conventions, budgets, and page bounds
-- WHEN invoked through MCP and `ast-tool run`
-- THEN both return equivalent logical results and evidence.
+- GIVEN identical selectors, conventions, bounds, and page inputs
+- WHEN invoked through MCP and batch
+- THEN both return equivalent logical results or the same public error.
 
 #### Scenario: Inventory remains synchronized
 
-- GIVEN the capability is installed and queried by compatibility checks
-- WHEN the public tool list is inspected
-- THEN `ast_find_test_candidates` appears exactly once and synchronized surfaces agree on availability.
+- GIVEN the capability is installed and checked
+- WHEN public surfaces are inspected
+- THEN it appears exactly once and all surfaces advertise the same contract.

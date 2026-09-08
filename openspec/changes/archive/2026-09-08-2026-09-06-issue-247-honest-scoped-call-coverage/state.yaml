@@ -5,45 +5,45 @@ artifactStore: openspec
 planningHome:
   mode: repo-local
   path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
-changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage
 artifactPaths:
   proposal:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/proposal.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/proposal.md
   specs:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/scoped-compiler-impact/spec.md
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/affected-test-candidates/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/specs/scoped-compiler-impact/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/specs/affected-test-candidates/spec.md
   design:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/design.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/design.md
   tasks:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/tasks.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/tasks.md
   applyProgress:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/apply-progress.json
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/apply-progress.json
   verifyReport:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/verify-report.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/verify-report.md
   reviewPolicy: []
   reviewLedger:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/reviews/ledger.json
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/reviews/ledger.json
   reviewReceipt: []
   reviewBundle: []
   reviewContext: []
   reviewState: []
 contextFiles:
   proposal:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/proposal.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/proposal.md
   specs:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/scoped-compiler-impact/spec.md
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/affected-test-candidates/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/specs/scoped-compiler-impact/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/specs/affected-test-candidates/spec.md
   design:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/design.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/design.md
   tasks:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/tasks.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/tasks.md
   applyProgress:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/apply-progress.json
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/apply-progress.json
   verifyReport:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/verify-report.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/verify-report.md
   reviewPolicy: []
   reviewLedger:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/reviews/ledger.json
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/reviews/ledger.json
   reviewReceipt: []
   reviewBundle: []
   reviewContext: []
@@ -73,7 +73,7 @@ dependencies:
   tasks: all_done
   apply: all_done
   verify: all_done
-  archive: ready
+  archive: all_done
 applyState: all_done
 actionContext:
   mode: repo-local
@@ -111,16 +111,16 @@ phaseInstructions:
     - If consented, run R1A, R1B, and R1C only from each frozen immediate predecessor and keep each authored delta at or below 400 lines.
     - R1A corrects incoming uncertainty only and MUST NOT add exact issue 219 computed-key or issue 220 external-alternative edges.
   verify:
-    - Strict verification passed for approved candidate 0e3955ffe2f576b6f87f4c2e654eb0a15e89721e against origin/main 3b57de77d21a7514cc6436f9824ea85fee285d9e.
+    - Strict verification passed for implementation candidate 0e3955ffe2f576b6f87f4c2e654eb0a15e89721e against origin/main 3b57de77d21a7514cc6436f9824ea85fee285d9e.
     - Evidence sha256:d8278ab4fbdf4766efafab62548570058a353a3adf3c3966021d9afe0bd9f07d proves 14/14 requirements, 25/25 scenarios, dual-Node local gates, and newest exact-head CI.
     - PR 256 run 34182622615 and PR 281 run 34182647317 passed unchanged attempt-2 reruns on both Node cells.
-    - Keep attempt sha256:7f5cba93b225f8f24e7b6628aa1e938d7c4ce5e2ca97bc8e7ae48d7b12574f8f unsettled.
-    - Any later passing settle must remediate sha256:7d1e791a44ac709a2e68ebf1cef4ed4fffaaa5b480f0e6cfcb8e0ae18324ebc8.
+    - Final runtime objective sha256:a2b381d984e33f8f3cd3360c8c96f9a9c37bacfd5106969ac193e03f5f2b4ebf settled passed with finish identity sha256:f782767aa96185f9dfa70d16e4c08c308531076d1a8b84260012d0e459b1075e and zero changed lines.
   remediate: []
   archive:
-    - After parent commit and push, require newest exact-head PR 266 CI green before archive or delivery.
-    - Judgment provides no receipt or delivery authority; use ordinary repository policy.
-nextRecommended: archive
+    - PR 266 exact head e416336f941ee43c3fe6dd9d9561dbd1623b78ef has final CI green.
+    - Archive is complete; delivery remains pending ordinary repository authority.
+    - Judgment provides no receipt, delivery, review, or merge authority.
+nextRecommended: deliver
 blockedReasons: []
 planningBase:
   pullRequest: 254
@@ -128,11 +128,11 @@ planningBase:
   role: immediate-planning-only
   supersedesArtifactReference: stale-planning-base
 baseline:
-  branch: main
-  head: 6173a39a73f1540c17335a330ea7f14f982387cb
-  originMain: 6173a39a73f1540c17335a330ea7f14f982387cb
-  requestedCommit: 6173a39
-  cleanAtStart: false
+  branch: docs/247-verify-blocked
+  head: e416336f941ee43c3fe6dd9d9561dbd1623b78ef
+  originMain: 3b57de77d21a7514cc6436f9824ea85fee285d9e
+  requestedCommit: 3b57de77
+  cleanAtStart: true
   preExistingWorkspacePaths:
     - openspec/changes/2026-09-06-issue-219-computed-key-call-authority/
 authority:
@@ -278,7 +278,7 @@ tasks:
   implementationUnits: 5
   deliveryStrategy: auto-chain
   chainStrategy: feature-branch-chain
-  chainPath: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/chain.md
+  chainPath: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-247-honest-scoped-call-coverage/chain.md
   requirementsMapped: 14
   scenariosMapped: 25
   strictRedRunsPerUnit: 2
@@ -369,8 +369,8 @@ judgmentDay:
         hardMax: 400
         status: closed-by-scoped-dual-rejudgment
   scopedRejudgment: approved
-  strictVerification: required-next
-  archive: blocked-pending-strict-verification
+  strictVerification: passed
+  archive: complete-delivery-pending
 strictVerification:
   verdict: pass
   candidate: 0e3955ffe2f576b6f87f4c2e654eb0a15e89721e
@@ -381,10 +381,28 @@ strictVerification:
   node22_13: pass
   node24: pass
   judgmentOpenSevere: 0
-  newestExactHeadCI: pass-pr249-through-pr264-and-pr280-through-pr283
+  newestExactHeadCI: pass-pr249-through-pr264-pr266-and-pr280-through-pr283
   transientReruns:
     pr256: run-34182622615-attempt-2-success-node24-job-101934333779-node22-job-101934335008
     pr281: run-34182647317-attempt-2-success-node24-job-101934336929-node22-job-101934338207
-  postPushDeliveryGate: pr266-new-exact-head-ci-green
-  attempt: active-unsettled
-lastPhase: strict-remediation-verification-passed
+  postPushDeliveryGate: passed-pr266-exact-head-e416336f941ee43c3fe6dd9d9561dbd1623b78ef-ci-green
+  attempt: settled-passed
+archive:
+  status: complete
+  archivedAt: 2026-09-08
+  archiveHead: e416336f941ee43c3fe6dd9d9561dbd1623b78ef
+  sourceTreeAtArchiveBase: 3b579bd167f7a694f6d3fef4d8d6800774936f83
+  canonicalCapabilities:
+    scopedCompilerImpact:
+      requirements: 9
+      scenarios: 15
+      action: created
+    affectedTestCandidates:
+      requirements: 7
+      scenarios: 14
+      action: modified-five-preserved-two
+  delivery: pending
+  deliveryAuthority: false
+  issueClosureAuthority: false
+  mergeAuthority: false
+lastPhase: archive
