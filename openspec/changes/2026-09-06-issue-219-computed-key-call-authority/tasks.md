@@ -53,10 +53,18 @@ No edits are expected in `src/services/impact.ts`, `src/tools/get_impact.ts`, `s
 
 ## Phase 3: Review, Verify, CI, Archive
 
-- [ ] 3.1 **[R1,R2,R3; S1–S19; D1–D3]** Freeze the complete U1 candidate and run two independent blind Judgment reviewers with identical scope; merge findings, allow at most two explicitly authorized correction/re-judgment rounds, and require both final judgments to approve the same candidate.
+- [x] 3.1 **[R1,R2,R3; S1–S19; D1–D3]** Freeze the complete U1 candidate and run two independent blind Judgment reviewers with identical scope; merge findings, allow at most two explicitly authorized correction/re-judgment rounds, and require both final judgments to approve the same candidate.
 - [ ] 3.2 **[R1,R2,R3; S1–S19; D1–D3]** On the approved immutable candidate, create the verify report and run `/home/yail/.local/bin/gentle-ai sdd-verify-validate --input openspec/changes/2026-09-06-issue-219-computed-key-call-authority/verify-report.md --requirements 3 --scenarios 19`; expect exit 0 with 3/3 requirements and 19/19 scenarios admitted.
 - [ ] 3.3 **[R1,R2,R3; S1–S19; D1–D3]** Require newest exact-head CI success on Node `22.13.0` and `24` for `.github/workflows/ci.yml`, including immutable install, format, lint, typecheck, test/build, MCP/errors/lifecycle/CLI/package/adapter smokes, audit, pack, policy, and diff check.
 - [ ] 3.4 **[R1,R2,R3; S1–S19; D1–D3]** Archive only after all tasks are complete, active RED is empty, dual Judgment and strict verify match the final tree, exact-head CI is green, and no exclusion changed. Cleanup owned fixtures/processes. Roll back by reverting U1 classifier/gap propagation with paired tests while retaining a coarse edge-free unfinished computed-element guard and all #247 foundations; never restore guessed or proven-empty authority.
+
+## Initial Judgment Day — target `1ac6b84`
+
+- Blind exact-target Judge A: 2 CRITICAL, 2 WARNING; Judge B: 2 CRITICAL, 3 WARNING.
+- Corroborated defects: numeric-key support (A WARNING/B CRITICAL), work-budget accounting (A CRITICAL/B WARNING), and public/TOON evidence overstatement (A WARNING/B WARNING).
+- Unconfirmed risks: generic constrained keys (A-only), endpoint identity deduplication (B-only), and unresolved exact strings completing silently (B-only).
+- The contract does not authorize severity normalization. Therefore confirmed severe = 0, suspect severe = 2, contradictions = 0, INFO = 4; no correction IDs or R1 exist, and no correction/re-judgment round was used.
+- Verdict: APPROVED with warnings/unconfirmed risks. This does not claim functional completeness or confer review, settlement, delivery, verify, CI, archive, Git, or GitHub authority. Ledger: `reviews/ledger.json`.
 
 ## Traceability Matrix (3 Requirements / 19 Scenarios)
 

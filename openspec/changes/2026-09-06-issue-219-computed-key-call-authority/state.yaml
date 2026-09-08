@@ -21,7 +21,8 @@ artifactPaths:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/apply-progress.json
   verifyReport: []
   reviewPolicy: []
-  reviewLedger: []
+  reviewLedger:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/reviews/ledger.json
   reviewReceipt: []
   reviewBundle: []
   reviewContext: []
@@ -41,7 +42,8 @@ contextFiles:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/apply-progress.json
   verifyReport: []
   reviewPolicy: []
-  reviewLedger: []
+  reviewLedger:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/reviews/ledger.json
   reviewReceipt: []
   reviewBundle: []
   reviewContext: []
@@ -54,15 +56,15 @@ artifacts:
   tasks: done
   applyProgress: done
   verifyReport: missing
-  reviewLedger: missing
+  reviewLedger: done
   reviewReceipt: missing
   reviewBundle: missing
   reviewContext: missing
   reviewState: missing
 taskProgress:
   total: 14
-  completed: 9
-  pending: 5
+  completed: 10
+  pending: 4
   allComplete: false
 dependencies:
   proposal: all_done
@@ -72,7 +74,7 @@ dependencies:
   apply: ready
   verify: blocked
   archive: blocked
-applyState: ready
+applyState: judgment-approved-unsettled
 actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
@@ -111,7 +113,7 @@ phaseInstructions:
   remediate: []
   archive:
     - Archive only after strict verify passes, exact-head CI is green, review authority is valid when present, and no active RED remains.
-nextRecommended: review
+nextRecommended: settlement-authorization
 blockedReasons: []
 risks:
   - U1 used the prompt-fixed exact path allowlist and supplied active token; gentle-ai was unavailable, and settlement remains prohibited.
@@ -119,6 +121,9 @@ risks:
   - Compiler-derived union-key and receiver-alternative enumeration can overclaim authority if any branch is missed.
   - Scoped impact and whole-project call-spine producers can drift unless they share one bounded decision.
   - Issue 220 adjacency creates scope-creep risk; external convergence must remain unfinished and edge-free.
+  - Judgment confirmed numeric-key support and budget-accounting defects with mismatched severities, so neither is correction-authoritative under the dual-critical contract.
+  - Public/TOON evidence overstatement is confirmed warning-only; generic constraints, endpoint identity, and unresolved exact strings remain single-judge risks.
+  - Exact authored changed-line count remains unknown; existing apply evidence states only that U1 stayed at or below the 400-line limit.
 baseline:
   branch: docs/219-design
   pullRequest: null
@@ -146,6 +151,32 @@ authority:
   rddMode: disabled/unmanaged
   reviewAuthority: false
   deliveryAuthority: false
+judgment:
+  status: success
+  target: 1ac6b84
+  base: 816be951c1eb36320b46292d078c026baf84a2af
+  blind: true
+  exactTarget: true
+  round: 1
+  maxCorrectionRounds: 2
+  correctionRoundsUsed: 0
+  judgeA:
+    critical: 2
+    warning: 2
+  judgeB:
+    critical: 2
+    warning: 3
+  confirmedSevere: 0
+  suspectSevere: 2
+  contradictions: 0
+  info: 4
+  severityNormalizationPermitted: false
+  correctionAuthority: false
+  correctionIds: []
+  scopedRejudgment: not_run
+  verdict: APPROVED
+  functionalCompletenessClaimed: false
+  ledger: reviews/ledger.json
 tasks:
   status: success
   detailLevel: deep/high
@@ -164,5 +195,5 @@ tasks:
   runtimeChild: U1
   acquireRequestId: issue219-u1-apply-v1
   settleRequestId: issue219-u1-settle-v1
-lastPhase: apply
-updatedAt: 2026-09-08T07:15:47Z
+lastPhase: review
+updatedAt: 2026-09-08T07:42:18Z

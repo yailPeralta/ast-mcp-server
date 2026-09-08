@@ -14,7 +14,7 @@
     {
       "id": "U1",
       "name": "Computed-key call authority",
-      "status": "green-unsettled",
+      "status": "judgment-approved-unsettled",
       "taskIds": [
         "0.1",
         "0.2",
@@ -55,5 +55,20 @@
       "none; final gates sha256:ea15ec868ac2cc7b7f87a151951d8fea6087df5a690fffd9dca189b3fd137885"
     ]
   },
-  "updatedAt": "2026-09-08T07:15:47Z"
+  "judgment": {
+    "target": "1ac6b84",
+    "base": "816be951c1eb36320b46292d078c026baf84a2af",
+    "round": 1,
+    "maxCorrectionRounds": 2,
+    "confirmedSevere": 0,
+    "suspectSevere": 2,
+    "contradictions": 0,
+    "info": 4,
+    "correctionAuthority": false,
+    "scopedRejudgment": "not_run",
+    "verdict": "APPROVED",
+    "ledger": "reviews/ledger.json",
+    "deliveryAuthority": false
+  },
+  "updatedAt": "2026-09-08T07:42:18Z"
 }
