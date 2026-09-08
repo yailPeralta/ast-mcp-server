@@ -15,7 +15,7 @@
     {
       "id": "U1",
       "name": "Coverage contract",
-      "status": "judgment-approved-awaiting-strict-verification",
+      "status": "strict-verification-passed-awaiting-archive-delivery",
       "branch": "feat/247-u1-coverage-contract",
       "base": "PR-254@c5309ec",
       "forecast": "300-380",
@@ -26,7 +26,7 @@
     {
       "id": "U2",
       "name": "Impact projection",
-      "status": "judgment-approved-awaiting-strict-verification",
+      "status": "strict-verification-passed-awaiting-archive-delivery",
       "branch": "feat/247-u2-impact-authority",
       "base": "feat/247-u1-coverage-contract",
       "forecast": "320-395",
@@ -37,7 +37,7 @@
     {
       "id": "U3",
       "name": "Scoped direct calls",
-      "status": "judgment-approved-awaiting-strict-verification",
+      "status": "strict-verification-passed-awaiting-archive-delivery",
       "branch": "feat/247-u3-scoped-direct-calls",
       "base": "feat/247-u2-impact-authority",
       "forecast": "330-395",
@@ -48,7 +48,7 @@
     {
       "id": "U4",
       "name": "Candidate gate",
-      "status": "judgment-approved-awaiting-strict-verification",
+      "status": "strict-verification-passed-awaiting-archive-delivery",
       "branch": "feat/247-u4-candidate-completeness",
       "base": "feat/247-u3-scoped-direct-calls",
       "forecast": "320-395",
@@ -59,7 +59,7 @@
     {
       "id": "U5",
       "name": "Documentation and audit convergence",
-      "status": "judgment-approved-awaiting-strict-verification",
+      "status": "strict-verification-passed-awaiting-archive-delivery",
       "branch": "docs/247-u5-contract-and-audit",
       "base": "feat/247-u4-candidate-completeness",
       "forecast": "180-300",
@@ -295,8 +295,24 @@
       "rollback": "revert only R1C formatting and metadata changes under the issue #247 OpenSpec change directory"
     },
     "scopedRejudgment": "approved",
-    "strictVerification": "required-next-on-8666149bab9eaa935870dc14c0b779b98281c72b",
-    "archive": "blocked-pending-strict-verification"
+    "strictVerification": "passed",
+    "archive": "pending-pr266-post-push-ci"
   },
-  "updatedAt": "2026-09-07T00:15:48Z"
+  "verification": {
+    "candidate": "0e3955ffe2f576b6f87f4c2e654eb0a15e89721e",
+    "evidenceRevision": "sha256:d8278ab4fbdf4766efafab62548570058a353a3adf3c3966021d9afe0bd9f07d",
+    "requirements": "14/14",
+    "scenarios": "25/25",
+    "local": "pass",
+    "node22_13": "pass",
+    "node24": "pass",
+    "newestExactHeadCI": "pass-pr249-through-pr264-and-pr280-through-pr283",
+    "transientReruns": {
+      "pr256": "run-34182622615-attempt-2-success-node24-job-101934333779-node22-job-101934335008",
+      "pr281": "run-34182647317-attempt-2-success-node24-job-101934336929-node22-job-101934338207"
+    },
+    "postPushDeliveryGate": "pr266-new-exact-head-ci-green",
+    "attempt": "active-unsettled"
+  },
+  "updatedAt": "2026-09-08T04:21:00Z"
 }

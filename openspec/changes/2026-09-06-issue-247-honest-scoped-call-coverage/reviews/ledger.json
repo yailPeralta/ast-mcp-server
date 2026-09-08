@@ -184,12 +184,28 @@
     "corroborationMerged": true,
     "correctionApplied": "R1A-R1C via PRs #261-#263",
     "scopedRejudgment": "approved",
-    "strictVerification": "required-next-on-8666149bab9eaa935870dc14c0b779b98281c72b",
-    "archive": "blocked-pending-strict-verification"
+    "strictVerification": "passed",
+    "strictVerificationEvidence": "sha256:d8278ab4fbdf4766efafab62548570058a353a3adf3c3966021d9afe0bd9f07d",
+    "verifiedCandidate": "0e3955ffe2f576b6f87f4c2e654eb0a15e89721e",
+    "newestExactHeadCI": "pass-pr249-through-pr264-and-pr280-through-pr283",
+    "transientReruns": {
+      "pr256": "run-34182622615-attempt-2-success-node24-job-101934333779-node22-job-101934335008",
+      "pr281": "run-34182647317-attempt-2-success-node24-job-101934336929-node22-job-101934338207"
+    },
+    "openConfirmedSevere": 0,
+    "archive": "pending-pr266-post-push-ci"
   },
   "skillResolution": {
     "status": "paths-loaded",
     "paths": [
+      "/home/yail/.local/share/dsh-oauth-cutover/cd5ef8148158c3a752a658978873241fdf8e2bbc/dsh-home/skills/dsh-sdd/SKILL.md",
+      "/home/yail/.agents/skills/sdd-verify/SKILL.md",
+      "/home/yail/.agents/skills/sdd-verify/strict-tdd-verify.md",
+      "/home/yail/.agents/skills/sdd-verify/references/report-format.md",
+      "/home/yail/.agents/skills/_shared/sdd-phase-common.md",
+      "/home/yail/.agents/skills/daily-engineering-quality-gates/SKILL.md",
+      "/home/yail/.agents/skills/chained-pr/SKILL.md",
+      "/home/yail/.agents/skills/gentle-ai-bench/SKILL.md",
       "/home/yail/.agents/skills/sdd-apply/SKILL.md",
       "/home/yail/.agents/skills/_shared/review-ledger-contract.md",
       "/home/yail/.agents/skills/_shared/sdd-status-contract.md",
@@ -198,5 +214,5 @@
       "/home/yail/.agents/skills/work-unit-commits/SKILL.md"
     ]
   },
-  "updatedAt": "2026-09-07T00:15:48Z"
+  "updatedAt": "2026-09-08T04:21:00Z"
 }

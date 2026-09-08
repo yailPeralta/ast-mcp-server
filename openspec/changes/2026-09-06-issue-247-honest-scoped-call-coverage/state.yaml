@@ -18,7 +18,8 @@ artifactPaths:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/tasks.md
   applyProgress:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/apply-progress.json
-  verifyReport: []
+  verifyReport:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/verify-report.md
   reviewPolicy: []
   reviewLedger:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/reviews/ledger.json
@@ -38,7 +39,8 @@ contextFiles:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/tasks.md
   applyProgress:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/apply-progress.json
-  verifyReport: []
+  verifyReport:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/verify-report.md
   reviewPolicy: []
   reviewLedger:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/reviews/ledger.json
@@ -53,7 +55,7 @@ artifacts:
   design: done
   tasks: done
   applyProgress: done
-  verifyReport: missing
+  verifyReport: done
   reviewLedger: done
   reviewReceipt: missing
   reviewBundle: missing
@@ -61,17 +63,17 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 28
-  completed: 15
-  pending: 13
-  allComplete: false
+  completed: 28
+  pending: 0
+  allComplete: true
 dependencies:
   proposal: all_done
   specs: all_done
   design: all_done
   tasks: all_done
   apply: all_done
-  verify: ready
-  archive: blocked
+  verify: all_done
+  archive: ready
 applyState: all_done
 actionContext:
   mode: repo-local
@@ -109,17 +111,16 @@ phaseInstructions:
     - If consented, run R1A, R1B, and R1C only from each frozen immediate predecessor and keep each authored delta at or below 400 lines.
     - R1A corrects incoming uncertainty only and MUST NOT add exact issue 219 computed-key or issue 220 external-alternative edges.
   verify:
-    - Strictly verify exact frozen candidate 8666149bab9eaa935870dc14c0b779b98281c72b after terminal scoped dual Judgment approval.
-    - Verify SCI-R1 through SCI-R9 and ATC-R1 through ATC-R5 across all 25 specified scenarios.
-    - Distinguish semantic coverage incompleteness from traversal truncation.
-    - Preserve exact baseline CI and dependency-audit failures as non-change evidence.
-    - Require current strict local gates and required CI on the same candidate identity.
-    - Do not infer receipt, delivery, commit, push, PR, merge, release, or archive authority from Judgment.
+    - Strict verification passed for approved candidate 0e3955ffe2f576b6f87f4c2e654eb0a15e89721e against origin/main 3b57de77d21a7514cc6436f9824ea85fee285d9e.
+    - Evidence sha256:d8278ab4fbdf4766efafab62548570058a353a3adf3c3966021d9afe0bd9f07d proves 14/14 requirements, 25/25 scenarios, dual-Node local gates, and newest exact-head CI.
+    - PR 256 run 34182622615 and PR 281 run 34182647317 passed unchanged attempt-2 reruns on both Node cells.
+    - Keep attempt sha256:7f5cba93b225f8f24e7b6628aa1e938d7c4ce5e2ca97bc8e7ae48d7b12574f8f unsettled.
+    - Any later passing settle must remediate sha256:7d1e791a44ac709a2e68ebf1cef4ed4fffaaa5b480f0e6cfcb8e0ae18324ebc8.
   remediate: []
   archive:
-    - Archive or deliver only after approved Judgment, strict verification, and CI policy pass.
+    - After parent commit and push, require newest exact-head PR 266 CI green before archive or delivery.
     - Judgment provides no receipt or delivery authority; use ordinary repository policy.
-nextRecommended: verify
+nextRecommended: archive
 blockedReasons: []
 planningBase:
   pullRequest: 254
@@ -370,4 +371,20 @@ judgmentDay:
   scopedRejudgment: approved
   strictVerification: required-next
   archive: blocked-pending-strict-verification
-lastPhase: judgment-day-scoped-rejudgment-approved
+strictVerification:
+  verdict: pass
+  candidate: 0e3955ffe2f576b6f87f4c2e654eb0a15e89721e
+  evidenceRevision: sha256:d8278ab4fbdf4766efafab62548570058a353a3adf3c3966021d9afe0bd9f07d
+  requirements: 14/14
+  scenarios: 25/25
+  local: pass
+  node22_13: pass
+  node24: pass
+  judgmentOpenSevere: 0
+  newestExactHeadCI: pass-pr249-through-pr264-and-pr280-through-pr283
+  transientReruns:
+    pr256: run-34182622615-attempt-2-success-node24-job-101934333779-node22-job-101934335008
+    pr281: run-34182647317-attempt-2-success-node24-job-101934336929-node22-job-101934338207
+  postPushDeliveryGate: pr266-new-exact-head-ci-green
+  attempt: active-unsettled
+lastPhase: strict-remediation-verification-passed
