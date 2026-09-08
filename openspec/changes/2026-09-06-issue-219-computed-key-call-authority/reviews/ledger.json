@@ -1,0 +1,110 @@
+{
+  "schema": "judgment-day-ledger",
+  "change": "2026-09-06-issue-219-computed-key-call-authority",
+  "target": "1ac6b84",
+  "base": "816be951c1eb36320b46292d078c026baf84a2af",
+  "round": 1,
+  "maxCorrectionRounds": 2,
+  "correctionRoundsUsed": 0,
+  "blind": true,
+  "exactTarget": true,
+  "rddMode": "disabled/unmanaged",
+  "reviewAuthority": false,
+  "deliveryAuthority": false,
+  "budget": {
+    "hardMaxAuthoredChangedLines": 400,
+    "measuredAuthoredChangedLines": null,
+    "existingEvidence": "U1 stayed <=400; exact measured count was not supplied",
+    "ledgerDiffRequirement": "total allowed artifact diff <=400 lines"
+  },
+  "judgeCounts": {
+    "A": { "critical": 2, "warning": 2, "total": 4 },
+    "B": { "critical": 2, "warning": 3, "total": 5 }
+  },
+  "mergedCounts": {
+    "confirmedSevere": 0,
+    "suspectSevere": 2,
+    "contradictions": 0,
+    "info": 4
+  },
+  "findings": [
+    {
+      "id": "S1",
+      "rootCause": "generic constrained keys miss alternatives",
+      "judgeA": "CRITICAL",
+      "judgeB": null,
+      "classification": "suspect-severe",
+      "confirmedDefect": false,
+      "confirmedSevere": false,
+      "disposition": "unconfirmed risk; no correction authority"
+    },
+    {
+      "id": "I1",
+      "rootCause": "numeric exact and union literal keys are unsupported or regress",
+      "judgeA": "WARNING",
+      "judgeB": "CRITICAL",
+      "classification": "info-severity-mismatch",
+      "confirmedDefect": true,
+      "confirmedSevere": false,
+      "disposition": "warning; shared defect but not CRITICAL from both judges"
+    },
+    {
+      "id": "I2",
+      "rootCause": "budget accounting undercounts or performs key-by-receiver Cartesian work before or beneath the bound",
+      "judgeA": "CRITICAL",
+      "judgeB": "WARNING",
+      "classification": "info-severity-mismatch",
+      "confirmedDefect": true,
+      "confirmedSevere": false,
+      "disposition": "warning; shared defect but not CRITICAL from both judges"
+    },
+    {
+      "id": "I3",
+      "rootCause": "public and TOON evidence overstates support or completeness",
+      "judgeA": "WARNING",
+      "judgeB": "WARNING",
+      "classification": "info",
+      "confirmedDefect": true,
+      "confirmedSevere": false,
+      "disposition": "confirmed warning; no correction authority"
+    },
+    {
+      "id": "S2",
+      "rootCause": "endpoint deduplication by selector loses identical selectors from different files",
+      "judgeA": null,
+      "judgeB": "CRITICAL",
+      "classification": "suspect-severe",
+      "confirmedDefect": false,
+      "confirmedSevere": false,
+      "disposition": "unconfirmed risk; no correction authority"
+    },
+    {
+      "id": "I4",
+      "rootCause": "an unresolved exact string key can be silently treated as complete",
+      "judgeA": null,
+      "judgeB": "WARNING",
+      "classification": "info-single-judge",
+      "confirmedDefect": false,
+      "confirmedSevere": false,
+      "disposition": "unconfirmed warning; no correction authority"
+    }
+  ],
+  "severityNormalization": {
+    "applied": false,
+    "reason": "The active Judgment Day contract requires severe confirmation by both judges and does not authorize promotion of severity-mismatched reports based on shared impact."
+  },
+  "confirmedSevereIds": [],
+  "correctionWorkUnits": [],
+  "scopedRejudgment": "not_run",
+  "verdict": "APPROVED",
+  "qualification": "Judgment approval records zero dual-critical defects; it does not establish functional completeness or delivery authority.",
+  "unknowns": [
+    "Exact authored changed-line count was not supplied; only existing <=400 evidence is recorded.",
+    "No correction or re-judgment was authorized or run.",
+    "Warnings and single-judge severe risks remain unresolved.",
+    "Settlement, strict verification, exact-head CI, archive, and delivery remain outside this judgment."
+  ],
+  "nextRecommended": "Resolve or explicitly accept warnings and unconfirmed risks, then obtain separate settlement/verification authority without treating this judgment as delivery authority.",
+  "skillResolution": "judgment-day loaded; dsh-sdd loaded for state protocol; no delegation used because the caller prohibited delegation",
+  "recordedAt": "2026-09-08T07:42:18Z"
+}
