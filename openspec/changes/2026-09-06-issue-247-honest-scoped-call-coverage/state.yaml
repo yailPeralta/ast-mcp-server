@@ -20,7 +20,8 @@ artifactPaths:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/apply-progress.json
   verifyReport: []
   reviewPolicy: []
-  reviewLedger: []
+  reviewLedger:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/reviews/ledger.json
   reviewReceipt: []
   reviewBundle: []
   reviewContext: []
@@ -39,7 +40,8 @@ contextFiles:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/apply-progress.json
   verifyReport: []
   reviewPolicy: []
-  reviewLedger: []
+  reviewLedger:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/reviews/ledger.json
   reviewReceipt: []
   reviewBundle: []
   reviewContext: []
@@ -52,25 +54,25 @@ artifacts:
   tasks: done
   applyProgress: done
   verifyReport: missing
-  reviewLedger: missing
+  reviewLedger: done
   reviewReceipt: missing
   reviewBundle: missing
   reviewContext: missing
   reviewState: missing
 taskProgress:
   total: 28
-  completed: 11
-  pending: 17
+  completed: 14
+  pending: 14
   allComplete: false
 dependencies:
   proposal: all_done
   specs: all_done
   design: all_done
   tasks: all_done
-  apply: ready
+  apply: blocked
   verify: blocked
   archive: blocked
-applyState: ready
+applyState: blocked
 actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
@@ -103,6 +105,9 @@ phaseInstructions:
     - Use each unit's unique acquire and settle IDs from chain.md.
     - Do not implement issue 219, issue 220, contains production, or Harness work.
     - Do not claim candidate, review, archive, or delivery authority before its gate.
+    - Do not start Judgment correction round 1 without explicit maintainer consent.
+    - If consented, run R1A, R1B, and R1C only from each frozen immediate predecessor and keep each authored delta at or below 400 lines.
+    - R1A corrects incoming uncertainty only and MUST NOT add exact issue 219 computed-key or issue 220 external-alternative edges.
   verify:
     - Freeze the complete immutable U5 candidate before blind dual Judgment.
     - Require both judges; only mutually confirmed severe findings enter at most two correction rounds.
@@ -114,8 +119,13 @@ phaseInstructions:
   archive:
     - Archive or deliver only after approved Judgment, strict verification, and CI policy pass.
     - Judgment provides no receipt or delivery authority; use ordinary repository policy.
-nextRecommended: apply
-blockedReasons: []
+reviewGate:
+  result: escalated
+  reason: Judgment Day round 1 on frozen ec235b0 has three corroborated open SEVERE roots; correction requires explicit maintainer consent.
+nextRecommended: resolve-review
+blockedReasons:
+  - blocked(maintainer_consent_required): approve or decline bounded Judgment correction round 1 R1A -> R1B -> R1C.
+  - Strict verification and archive remain blocked until scoped re-judgment approves a frozen corrected candidate.
 planningBase:
   pullRequest: 254
   commit: c5309ec
@@ -281,7 +291,7 @@ tasks:
   decisionNeededBeforeApply: false
   candidateAuthority: false
   deliveryAuthority: false
-  readyForApply: true
+  readyForApply: false
 apply:
   u2:
     status: candidate-ready-not-reviewed
@@ -305,11 +315,46 @@ apply:
     fullTest: clean-984/984
     redFingerprint: 06b510f8c097ebd5fe631be1cec55eee08ad53d644453aaa8d4ae47215e7832f
   u5:
-    status: candidate-ready-not-reviewed
+    status: judgment-escalated
     base: 58f3213bb999f82ef08002911d60b2d5e1dc34b9
     focused: mcp-batch-45/45-benchmark-8/8-cli-pass
     runtimeMcpLifecycleCliErrors: pass
     fullTest: clean-984/984
     audit: unchanged-fast-uri-4-high-qs-2-moderate
-    nextGate: settle-and-pr-then-blind-dual-judgment
-lastPhase: apply
+    nextGate: maintainer-consent-for-bounded-correction-round-1
+judgmentDay:
+  round: 1
+  targetHead: ec235b0
+  frozen: true
+  judgeA: ESCALATED
+  judgeB: ESCALATED
+  verdict: ESCALATED
+  terminal: false
+  confirmedSevere:
+    - JD-C1
+    - JD-C2
+    - JD-C3
+  suspectSevere:
+    - JD-S1
+    - JD-S2
+  contradictions: 0
+  info: 3
+  correctionRound1:
+    status: pending-maintainer-consent
+    units:
+      - id: R1A
+        predecessor: ec235b0
+        forecast: 180-320
+        hardMax: 400
+      - id: R1B
+        predecessor: R1A-corrected-candidate
+        forecast: 20-80
+        hardMax: 400
+      - id: R1C
+        predecessor: R1B-corrected-candidate
+        forecast: 20-120
+        hardMax: 400
+  scopedRejudgment: blocked
+  strictVerification: blocked
+  archive: blocked
+lastPhase: judgment-day-round-1

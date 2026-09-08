@@ -203,8 +203,43 @@
     "red": "exact compound twice; MCP/batch 45 pass then benchmark impact_corpus_pass=false; fingerprint 13aeafbb4856eee3fe25860115d8a057ed820a33c147cc6f889008bf39985fa0",
     "greenRefactor": "exact compound pass; eight benchmark scenarios/all eight gates pass twice; CLI impact-authority/candidate fail-closed assertions pass; full clean 984/984",
     "runtime": "test:mcp/lifecycle/cli/errors pass; JSON/TOON authority parity and incomplete candidate rejection observed through built artifacts",
-    "audit": "baseline unchanged: fast-uri 4 high, qs 2 moderate; format baseline five untouched OpenSpec files; lint/typecheck/build pass",
+    "audit": "baseline preserved: fast-uri 4 high, qs 2 moderate; Judgment C3 supersedes the prior format classification with seven candidate-owned OpenSpec failures; lint/typecheck/build previously passed",
     "rollback": "revert the seven U5 docs/audit files and compact skill release metadata; retain U1-U4 runtime behavior"
   },
-  "updatedAt": "2026-09-06T22:45:00Z"
+  "judgmentDay": {
+    "round": 1,
+    "targetHead": "ec235b0",
+    "targetFrozen": true,
+    "judgeA": "ESCALATED",
+    "judgeB": "ESCALATED",
+    "verdict": "ESCALATED",
+    "terminal": false,
+    "confirmedSevere": ["JD-C1", "JD-C2", "JD-C3"],
+    "suspectSevere": ["JD-S1", "JD-S2"],
+    "contradictions": [],
+    "infoPreserved": 3,
+    "ledger": "reviews/ledger.json",
+    "correctionRound1": {
+      "status": "pending-maintainer-consent",
+      "units": [
+        { "id": "R1A", "predecessor": "ec235b0", "forecast": "180-320", "hardMax": 400 },
+        {
+          "id": "R1B",
+          "predecessor": "R1A corrected candidate",
+          "forecast": "20-80",
+          "hardMax": 400
+        },
+        {
+          "id": "R1C",
+          "predecessor": "R1B corrected candidate",
+          "forecast": "20-120",
+          "hardMax": 400
+        }
+      ]
+    },
+    "scopedRejudgment": "blocked-pending-consent-and-fix-deltas",
+    "strictVerification": "blocked",
+    "archive": "blocked"
+  },
+  "updatedAt": "2026-09-06T23:23:20Z"
 }
