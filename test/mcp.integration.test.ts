@@ -844,8 +844,10 @@ export function formatValue(value: number): string { return String(value); }
         selector: "formatValue@2",
       },
       direction: "incoming",
-      incomplete: false,
+      incomplete: true,
+      proven_empty: false,
       truncation: { truncated: false, reason: null },
+      work: { work_limit_reached: false },
       freshness: {
         state: "fresh",
         causes: [],
@@ -1464,6 +1466,45 @@ export function formatValue(value: number): string { return String(value); }
       releaseRunning();
       await blocker;
     }
+  });
+
+  it("keeps honest impact coverage work and proven empty logically equal in JSON and TOON", async () => {
+    const argumentsBase = {
+      project_root: fixture.root,
+      file_path: "src/value.ts",
+      symbol_path: "formatValue",
+      direction: "incoming" as const,
+      max_depth: 3,
+      max_nodes: 10,
+      max_edges: 10,
+      relationship_kinds: ["reference", "call", "contains"],
+    };
+    const jsonImpact = structured(
+      await client.callTool({ name: "ast_get_impact", arguments: argumentsBase }),
+    );
+    const toonImpact = toon(
+      await client.callTool({
+        name: "ast_get_impact",
+        arguments: { ...argumentsBase, output_format: "toon" },
+      }),
+    );
+    const authority = (impact: Record<string, unknown>) => ({
+      coverage: impact.coverage,
+      work: impact.work,
+      incomplete: impact.incomplete,
+      proven_empty: impact.proven_empty,
+      edge_ids: (impact.edges as Array<{ relationship_id: string }>).map(
+        ({ relationship_id }) => relationship_id,
+      ),
+    });
+
+    expect(authority(toonImpact)).toEqual(authority(jsonImpact));
+    expect(jsonImpact).toMatchObject({
+      incomplete: true,
+      proven_empty: false,
+      truncation: { truncated: false },
+      work: { work_limit_reached: false },
+    });
   });
 
   it("exposes lossless TOON envelopes for eligible collection reads only when requested", async () => {
