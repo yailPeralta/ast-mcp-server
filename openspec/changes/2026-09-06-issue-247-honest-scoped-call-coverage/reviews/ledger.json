@@ -9,7 +9,7 @@
   "round": 1,
   "verdict": "ESCALATED",
   "terminal": false,
-  "pendingDecision": "maintainer-consent-round-1-correction",
+  "pendingDecision": "complete-r1c-then-scoped-rejudgment",
   "judges": {
     "A": {
       "verdict": "ESCALATED",
@@ -40,11 +40,13 @@
       {
         "id": "JD-C2",
         "severity": "SEVERE",
-        "status": "open",
+        "status": "corrected-rejudgment-pending",
         "confirmedBy": ["A", "B"],
         "location": "checked benchmark report",
         "claim": "The checked benchmark report is stale at five scenarios while the candidate corpus and gate execute eight scenarios.",
-        "correctionUnit": "R1B"
+        "correctionUnit": "R1B",
+        "correctionBase": "5b827b3",
+        "correctionEvidence": "Two unchanged-base runs both changed checked evidence from sha256:56038cac3b1c9da1d6aa1c5e26a981cb3f36389e791262105c59ceddaa244d75 to sha256:d3fd705e82f556dc1b2a58a58b60e5936f58318e733affa4b907c4c4b8fde38c. Regenerated report records 8/8 scenarios and all eight top-level gates true; repeated final runs are byte-idempotent with changed=false and the same evidence SHA."
       },
       {
         "id": "JD-C3",
@@ -95,11 +97,11 @@
     "suspectSevere": 2,
     "contradictions": 0,
     "info": 3,
-    "openConfirmedSevere": 2,
-    "correctedRejudgmentPending": 1
+    "openConfirmedSevere": 1,
+    "correctedRejudgmentPending": 2
   },
   "correctionRound1": {
-    "status": "in-progress-r1a-corrected",
+    "status": "in-progress-r1b-corrected",
     "budgetRule": "Each immediate-predecessor work unit must remain at or below 400 authored additions plus deletions.",
     "units": [
       {
@@ -121,6 +123,8 @@
         "scope": "Regenerate the eight-scenario benchmark report and bind it to the corrected candidate and corpus projection.",
         "forecastAuthoredLines": "20-80",
         "hardMax": 400,
+        "status": "corrected-rejudgment-pending",
+        "evidence": "benchmark/results/self-agent-workflows.json sha256:d3fd705e82f556dc1b2a58a58b60e5936f58318e733affa4b907c4c4b8fde38c; 8/8 scenarios; repeated changed=false",
         "rollback": "Revert only the regenerated benchmark report and candidate binding."
       },
       {
@@ -133,14 +137,14 @@
       }
     ],
     "aggregateForecastAuthoredLines": "220-520 across three independently reviewed units; never aggregated into one over-budget unit",
-    "scopedRejudgment": "blocked-until-consent-and-frozen-fix-deltas"
+    "scopedRejudgment": "pending-after-r1c-frozen-fix-delta"
   },
   "validation": {
     "judgesComplete": true,
     "bothEscalated": true,
     "corroborationMerged": true,
-    "correctionApplied": "R1A-only",
-    "scopedRejudgment": "pending-after-R1B-R1C",
+    "correctionApplied": "R1A-R1B",
+    "scopedRejudgment": "pending-after-R1C",
     "strictVerification": "blocked",
     "archive": "blocked"
   },
@@ -155,5 +159,5 @@
       "/home/yail/.agents/skills/work-unit-commits/SKILL.md"
     ]
   },
-  "updatedAt": "2026-09-06T23:43:38Z"
+  "updatedAt": "2026-09-06T23:52:29Z"
 }

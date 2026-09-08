@@ -238,7 +238,7 @@
     "infoPreserved": 3,
     "ledger": "reviews/ledger.json",
     "correctionRound1": {
-      "status": "in-progress-r1a-corrected",
+      "status": "in-progress-r1b-corrected",
       "units": [
         {
           "id": "R1A",
@@ -249,9 +249,10 @@
         },
         {
           "id": "R1B",
-          "predecessor": "R1A corrected candidate",
+          "predecessor": "5b827b3",
           "forecast": "20-80",
-          "hardMax": 400
+          "hardMax": 400,
+          "status": "corrected-rejudgment-pending"
         },
         {
           "id": "R1C",
@@ -268,9 +269,15 @@
       "baselines": "format remains pending C3 (8 reported files); audit unchanged fast-uri 4 high and qs 2 moderate",
       "rollback": "revert relationships uncertainty helper and R1A test/artifact hunks"
     },
-    "scopedRejudgment": "pending-after-R1B-R1C",
+    "r1bEvidence": {
+      "red": "two unchanged-base benchmark runs; each changed checked report sha256:56038cac3b1c9da1d6aa1c5e26a981cb3f36389e791262105c59ceddaa244d75 to sha256:d3fd705e82f556dc1b2a58a58b60e5936f58318e733affa4b907c4c4b8fde38c with changed=true",
+      "greenRefactor": "checked report has 8/8 passing impact scenarios and all eight top-level gates true; two final benchmark runs changed=false with identical evidence SHA",
+      "runtime": "yarn benchmark:agent-workflows exercises built MCP workflows and deterministic impact corpus without private paths in checked evidence",
+      "rollback": "revert benchmark/results/self-agent-workflows.json and R1B artifact entries only; retain R1A behavior"
+    },
+    "scopedRejudgment": "pending-after-R1C",
     "strictVerification": "blocked",
     "archive": "blocked"
   },
-  "updatedAt": "2026-09-06T23:43:38Z"
+  "updatedAt": "2026-09-06T23:52:29Z"
 }

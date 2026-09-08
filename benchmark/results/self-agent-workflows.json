@@ -8,7 +8,7 @@
     "fallback": "Any incomplete ast_explore evidence is reported; it is never treated as a successful complete context.",
     "impact_corpus": "Compiler-backed relationships are checked against exact, stale, same-name, dynamic-dispatch and bounded-traversal controls; candidate tests are never executed."
   },
-  "static_tool_metadata": { "tool_count": 16, "characters": 50087, "bytes": 50087 },
+  "static_tool_metadata": { "tool_count": 16, "characters": 50528, "bytes": 50528 },
   "index_lifecycle": {
     "schema_version": 1,
     "query": "benchmarkTarget",
@@ -20,8 +20,86 @@
   "impact_corpus": {
     "schema_version": 1,
     "corpus": "benchmark/impact-corpus.json",
-    "scenario_count": 5,
+    "scenario_count": 8,
     "scenarios": [
+      {
+        "id": "complete_proven_empty",
+        "description": "A bounded two-kind traversal may claim a proven empty result only after complete semantic coverage.",
+        "root": { "file_path": "src/unused.ts", "symbol_path": "unused" },
+        "expected": {
+          "candidate_files": [],
+          "candidate_error": false,
+          "exact_edge_count": 0,
+          "incomplete": false,
+          "proven_empty": true,
+          "coverage_states": [
+            "reference:incoming:symbol:completed",
+            "call:incoming:symbol:completed"
+          ],
+          "forbidden_edge_files": [],
+          "forbidden_call_edge_files": []
+        },
+        "observed": {
+          "candidate_files": [],
+          "candidate_error": false,
+          "exact_edge_count": 0,
+          "heuristic_edge_count": 0,
+          "heuristic_authority_violation_count": 0,
+          "forbidden_edge_count": 0,
+          "forbidden_call_edge_count": 0,
+          "coverage_states": [
+            "reference:incoming:symbol:completed",
+            "call:incoming:symbol:completed"
+          ],
+          "work_limit_reached": false,
+          "incomplete": false,
+          "proven_empty": true,
+          "truncation_reasons": [],
+          "visited_nodes": 1,
+          "visited_edges": 0
+        },
+        "pass": true
+      },
+      {
+        "id": "default_contains_unsupported",
+        "description": "Default-all impact reports applicable containment as unsupported without traversal truncation.",
+        "root": { "file_path": "src/unused.ts", "symbol_path": "unused" },
+        "expected": {
+          "candidate_files": [],
+          "candidate_error": false,
+          "exact_edge_count": 0,
+          "incomplete": true,
+          "proven_empty": false,
+          "coverage_states": ["contains:incoming:symbol:unsupported"],
+          "forbidden_edge_files": [],
+          "forbidden_call_edge_files": []
+        },
+        "observed": {
+          "candidate_files": [],
+          "candidate_error": false,
+          "exact_edge_count": 0,
+          "heuristic_edge_count": 0,
+          "heuristic_authority_violation_count": 0,
+          "forbidden_edge_count": 0,
+          "forbidden_call_edge_count": 0,
+          "coverage_states": [
+            "reference:incoming:symbol:completed",
+            "import:incoming:symbol:completed",
+            "export:incoming:symbol:completed",
+            "extends:incoming:symbol:not_applicable",
+            "implements:incoming:symbol:not_applicable",
+            "call:incoming:symbol:completed",
+            "contains:incoming:symbol:unsupported"
+          ],
+          "work_limit_reached": false,
+          "incomplete": true,
+          "proven_empty": false,
+          "truncation_reasons": [],
+          "visited_nodes": 1,
+          "visited_edges": 0
+        },
+        "pass": true
+      },
       {
         "id": "direct_exact_reference",
         "description": "A direct test reference is returned with exact compiler evidence.",
@@ -29,21 +107,41 @@
         "expected": {
           "candidate_files": ["test/target.test.ts"],
           "candidate_error": false,
-          "exact_edge_count": 2,
+          "exact_edge_count": 3,
           "incomplete": false,
-          "forbidden_edge_files": []
+          "proven_empty": false,
+          "coverage_states": ["call:incoming:symbol:completed"],
+          "forbidden_edge_files": [],
+          "forbidden_call_edge_files": []
         },
         "observed": {
           "candidate_files": ["test/target.test.ts"],
           "candidate_error": false,
-          "exact_edge_count": 2,
+          "exact_edge_count": 3,
           "heuristic_edge_count": 0,
           "heuristic_authority_violation_count": 0,
           "forbidden_edge_count": 0,
+          "forbidden_call_edge_count": 0,
+          "coverage_states": [
+            "reference:incoming:module:not_applicable",
+            "reference:incoming:symbol:completed",
+            "import:incoming:module:completed",
+            "import:incoming:symbol:completed",
+            "export:incoming:module:completed",
+            "export:incoming:symbol:completed",
+            "extends:incoming:module:not_applicable",
+            "extends:incoming:symbol:not_applicable",
+            "implements:incoming:module:not_applicable",
+            "implements:incoming:symbol:not_applicable",
+            "call:incoming:module:not_applicable",
+            "call:incoming:symbol:completed"
+          ],
+          "work_limit_reached": false,
           "incomplete": false,
+          "proven_empty": false,
           "truncation_reasons": [],
           "visited_nodes": 3,
-          "visited_edges": 2
+          "visited_edges": 3
         },
         "pass": true
       },
@@ -56,7 +154,9 @@
           "candidate_error": false,
           "exact_edge_count": 2,
           "incomplete": false,
-          "forbidden_edge_files": ["src/other.ts"]
+          "proven_empty": false,
+          "forbidden_edge_files": ["src/other.ts"],
+          "forbidden_call_edge_files": []
         },
         "observed": {
           "candidate_files": ["test/target.test.ts"],
@@ -65,9 +165,16 @@
           "heuristic_edge_count": 0,
           "heuristic_authority_violation_count": 0,
           "forbidden_edge_count": 0,
+          "forbidden_call_edge_count": 0,
+          "coverage_states": [
+            "reference:incoming:symbol:completed",
+            "call:incoming:symbol:completed"
+          ],
+          "work_limit_reached": false,
           "incomplete": false,
+          "proven_empty": false,
           "truncation_reasons": [],
-          "visited_nodes": 3,
+          "visited_nodes": 2,
           "visited_edges": 2
         },
         "pass": true
@@ -81,7 +188,9 @@
           "candidate_error": true,
           "exact_edge_count": 0,
           "incomplete": false,
-          "forbidden_edge_files": []
+          "proven_empty": false,
+          "forbidden_edge_files": [],
+          "forbidden_call_edge_files": []
         },
         "observed": {
           "candidate_files": [],
@@ -90,9 +199,16 @@
           "heuristic_edge_count": 0,
           "heuristic_authority_violation_count": 0,
           "forbidden_edge_count": 0,
+          "forbidden_call_edge_count": 0,
+          "coverage_states": [
+            "reference:incoming:symbol:completed",
+            "call:incoming:symbol:completed"
+          ],
+          "work_limit_reached": false,
           "incomplete": false,
+          "proven_empty": false,
           "truncation_reasons": [],
-          "visited_nodes": 3,
+          "visited_nodes": 2,
           "visited_edges": 2
         },
         "pass": true
@@ -104,21 +220,75 @@
         "expected": {
           "candidate_files": [],
           "candidate_error": true,
-          "exact_edge_count": 2,
+          "exact_edge_count": 3,
           "incomplete": true,
-          "forbidden_edge_files": []
+          "proven_empty": false,
+          "forbidden_edge_files": [],
+          "forbidden_call_edge_files": []
         },
         "observed": {
           "candidate_files": [],
           "candidate_error": true,
-          "exact_edge_count": 2,
+          "exact_edge_count": 3,
           "heuristic_edge_count": 0,
           "heuristic_authority_violation_count": 0,
           "forbidden_edge_count": 0,
+          "forbidden_call_edge_count": 0,
+          "coverage_states": [
+            "reference:incoming:module:not_applicable",
+            "reference:incoming:symbol:unfinished",
+            "import:incoming:module:completed",
+            "import:incoming:symbol:unfinished",
+            "export:incoming:module:completed",
+            "export:incoming:symbol:unfinished",
+            "extends:incoming:module:not_applicable",
+            "extends:incoming:symbol:not_applicable",
+            "implements:incoming:module:not_applicable",
+            "implements:incoming:symbol:not_applicable",
+            "call:incoming:module:not_applicable",
+            "call:incoming:symbol:unfinished"
+          ],
+          "work_limit_reached": false,
           "incomplete": true,
+          "proven_empty": false,
           "truncation_reasons": ["depth_limit"],
           "visited_nodes": 3,
-          "visited_edges": 2
+          "visited_edges": 3
+        },
+        "pass": true
+      },
+      {
+        "id": "unfinished_property_dispatch",
+        "description": "A property call emits no guessed call edge and leaves candidate evidence unfinished.",
+        "root": { "file_path": "src/property-target.ts", "symbol_path": "propertyTarget" },
+        "expected": {
+          "candidate_files": [],
+          "candidate_error": true,
+          "exact_edge_count": 1,
+          "incomplete": true,
+          "proven_empty": false,
+          "coverage_states": ["call:incoming:symbol:unfinished"],
+          "forbidden_edge_files": [],
+          "forbidden_call_edge_files": ["src/property.ts"]
+        },
+        "observed": {
+          "candidate_files": [],
+          "candidate_error": true,
+          "exact_edge_count": 1,
+          "heuristic_edge_count": 0,
+          "heuristic_authority_violation_count": 0,
+          "forbidden_edge_count": 0,
+          "forbidden_call_edge_count": 0,
+          "coverage_states": [
+            "reference:incoming:symbol:completed",
+            "call:incoming:symbol:unfinished"
+          ],
+          "work_limit_reached": false,
+          "incomplete": true,
+          "proven_empty": false,
+          "truncation_reasons": ["edge_limit"],
+          "visited_nodes": 2,
+          "visited_edges": 1
         },
         "pass": true
       },
@@ -131,7 +301,9 @@
           "candidate_error": false,
           "exact_edge_count": 2,
           "incomplete": false,
-          "forbidden_edge_files": ["src/dynamic.ts"]
+          "proven_empty": false,
+          "forbidden_edge_files": ["src/dynamic.ts"],
+          "forbidden_call_edge_files": []
         },
         "observed": {
           "candidate_files": ["test/target.test.ts"],
@@ -140,9 +312,16 @@
           "heuristic_edge_count": 0,
           "heuristic_authority_violation_count": 0,
           "forbidden_edge_count": 0,
+          "forbidden_call_edge_count": 0,
+          "coverage_states": [
+            "reference:incoming:symbol:completed",
+            "call:incoming:symbol:completed"
+          ],
+          "work_limit_reached": false,
           "incomplete": false,
+          "proven_empty": false,
           "truncation_reasons": [],
-          "visited_nodes": 3,
+          "visited_nodes": 2,
           "visited_edges": 2
         },
         "pass": true
@@ -152,7 +331,9 @@
       "all_scenarios_pass": true,
       "no_heuristic_presented_as_exact": true,
       "negative_controls_pass": true,
-      "candidate_fail_closed": true
+      "candidate_fail_closed": true,
+      "honest_coverage_states": true,
+      "no_guessed_call_edges": true
     }
   },
   "scenarios": [
@@ -253,6 +434,8 @@
     "impact_corpus_pass": true,
     "impact_no_heuristic_authority": true,
     "impact_negative_controls_pass": true,
-    "impact_candidate_fail_closed": true
+    "impact_candidate_fail_closed": true,
+    "impact_honest_coverage_states": true,
+    "impact_no_guessed_call_edges": true
   }
 }

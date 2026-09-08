@@ -121,10 +121,10 @@ phaseInstructions:
     - Judgment provides no receipt or delivery authority; use ordinary repository policy.
 reviewGate:
   result: escalated
-  reason: Judgment Day round 1 on frozen ec235b0 has three corroborated open SEVERE roots; correction requires explicit maintainer consent.
+  reason: Judgment Day round 1 correction is in progress; R1A and R1B are corrected with rejudgment pending, while JD-C3 remains open for R1C.
 nextRecommended: resolve-review
 blockedReasons:
-  - blocked(maintainer_consent_required): approve or decline bounded Judgment correction round 1 R1A -> R1B -> R1C.
+  - Complete bounded R1C for JD-C3 from the frozen R1B candidate, then run scoped re-judgment.
   - Strict verification and archive remain blocked until scoped re-judgment approves a frozen corrected candidate.
 planningBase:
   pullRequest: 254
@@ -321,7 +321,7 @@ apply:
     runtimeMcpLifecycleCliErrors: pass
     fullTest: clean-984/984
     audit: unchanged-fast-uri-4-high-qs-2-moderate
-    nextGate: maintainer-consent-for-bounded-correction-round-1
+    nextGate: complete-r1c-then-scoped-rejudgment
 judgmentDay:
   round: 1
   targetHead: ec235b0
@@ -340,7 +340,7 @@ judgmentDay:
   contradictions: 0
   info: 3
   correctionRound1:
-    status: in-progress-r1a-corrected
+    status: in-progress-r1b-corrected
     units:
       - id: R1A
         predecessor: f72d40b
@@ -349,14 +349,17 @@ judgmentDay:
         status: corrected-rejudgment-pending
         focused: red-4/4-twice-green-4/4-authority-133/133-full-clean-988/988
       - id: R1B
-        predecessor: R1A-corrected-candidate
+        predecessor: 5b827b3
         forecast: 20-80
         hardMax: 400
+        status: corrected-rejudgment-pending
+        focused: red-changed-true-twice-green-8/8-idempotent-same-sha
+        evidenceSha256: d3fd705e82f556dc1b2a58a58b60e5936f58318e733affa4b907c4c4b8fde38c
       - id: R1C
         predecessor: R1B-corrected-candidate
         forecast: 20-120
         hardMax: 400
-  scopedRejudgment: pending-after-R1B-R1C
+  scopedRejudgment: pending-after-R1C
   strictVerification: blocked
   archive: blocked
-lastPhase: judgment-day-correction-round-1-r1a
+lastPhase: judgment-day-correction-round-1-r1b
