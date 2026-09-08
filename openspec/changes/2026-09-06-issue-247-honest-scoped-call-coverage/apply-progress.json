@@ -59,7 +59,7 @@
     {
       "id": "U5",
       "name": "Documentation and audit convergence",
-      "status": "pending",
+      "status": "candidate-ready-not-reviewed",
       "branch": "docs/247-u5-contract-and-audit",
       "base": "feat/247-u4-candidate-completeness",
       "forecast": "180-300",
@@ -93,6 +93,12 @@
         "name": "stable six-test RED twice; fingerprint 06b510f8c097ebd5fe631be1cec55eee08ad53d644453aaa8d4ae47215e7832f",
         "file": "candidate+MCP+batch",
         "taskId": "U4"
+      },
+      {
+        "id": "u5-audit",
+        "name": "exact compound RED twice; impact_corpus_pass=false; fingerprint 13aeafbb4856eee3fe25860115d8a057ed820a33c147cc6f889008bf39985fa0",
+        "file": "benchmark+CLI",
+        "taskId": "U5"
       }
     ],
     "green": [
@@ -119,6 +125,12 @@
         "name": "ten focused assertions pass across eight scenarios",
         "file": "candidate+MCP+batch",
         "taskId": "U4"
+      },
+      {
+        "id": "u5-audit",
+        "name": "45 MCP/batch tests plus eight-scenario benchmark and CLI smoke pass",
+        "file": "benchmark+CLI",
+        "taskId": "U5"
       }
     ],
     "refactored": [
@@ -145,6 +157,12 @@
         "name": "62 candidate/MCP/batch and 50 registry/canary tests pass",
         "file": "candidate+MCP+batch",
         "taskId": "U4"
+      },
+      {
+        "id": "u5-audit",
+        "name": "cognitive docs, deterministic projections, and CLI fail-closed controls converge",
+        "file": "seven U5 files plus release metadata",
+        "taskId": "U5"
       }
     ]
   },
@@ -180,5 +198,13 @@
     "audit": "baseline unchanged: fast-uri 4 high, qs 2 moderate; code format/lint/typecheck/build pass; seven-file OpenSpec format baseline remains",
     "rollback": "revert candidate service/tool/tests and three derived hash lines; retain U1-U3 honest impact and scoped calls"
   },
-  "updatedAt": "2026-09-06T22:12:22Z"
+  "u5Evidence": {
+    "base": "58f3213bb999f82ef08002911d60b2d5e1dc34b9",
+    "red": "exact compound twice; MCP/batch 45 pass then benchmark impact_corpus_pass=false; fingerprint 13aeafbb4856eee3fe25860115d8a057ed820a33c147cc6f889008bf39985fa0",
+    "greenRefactor": "exact compound pass; eight benchmark scenarios/all eight gates pass twice; CLI impact-authority/candidate fail-closed assertions pass; full clean 984/984",
+    "runtime": "test:mcp/lifecycle/cli/errors pass; JSON/TOON authority parity and incomplete candidate rejection observed through built artifacts",
+    "audit": "baseline unchanged: fast-uri 4 high, qs 2 moderate; format baseline five untouched OpenSpec files; lint/typecheck/build pass",
+    "rollback": "revert the seven U5 docs/audit files and compact skill release metadata; retain U1-U4 runtime behavior"
+  },
+  "updatedAt": "2026-09-06T22:45:00Z"
 }

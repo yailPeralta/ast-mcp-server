@@ -59,8 +59,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 28
-  completed: 9
-  pending: 19
+  completed: 11
+  pending: 17
   allComplete: false
 dependencies:
   proposal: all_done
@@ -304,4 +304,12 @@ apply:
     runtimeMcpLifecycleCliErrors: pass
     fullTest: clean-984/984
     redFingerprint: 06b510f8c097ebd5fe631be1cec55eee08ad53d644453aaa8d4ae47215e7832f
+  u5:
+    status: candidate-ready-not-reviewed
+    base: 58f3213bb999f82ef08002911d60b2d5e1dc34b9
+    focused: mcp-batch-45/45-benchmark-8/8-cli-pass
+    runtimeMcpLifecycleCliErrors: pass
+    fullTest: clean-984/984
+    audit: unchanged-fast-uri-4-high-qs-2-moderate
+    nextGate: settle-and-pr-then-blind-dual-judgment
 lastPhase: apply

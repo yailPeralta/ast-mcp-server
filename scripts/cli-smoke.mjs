@@ -426,8 +426,23 @@ try {
   const logicalCandidateToon = JSON.stringify(candidateToon.result, (key, value) =>
     key === "checked_at" ? "<timestamp>" : value,
   );
+  const candidateCoverage = candidateJson.result?.coverage ?? [];
   if (
     candidateJson.result?.total !== 2 ||
+    candidateJson.result?.direction !== "incoming" ||
+    JSON.stringify(candidateJson.result?.relationship_kinds) !==
+      JSON.stringify(["reference", "import", "export", "extends", "implements", "call"]) ||
+    new Set(candidateCoverage.map((entry) => entry.kind)).size !== 6 ||
+    candidateCoverage.some(
+      (entry) =>
+        entry.direction !== "incoming" || !["completed", "not_applicable"].includes(entry.status),
+    ) ||
+    candidateCoverage.some((entry) => entry.kind === "contains") ||
+    candidateJson.result?.work?.work_limit_reached !== false ||
+    candidateJson.result?.incomplete !== false ||
+    candidateJson.result?.truncation?.truncated !== false ||
+    candidateJson.result?.completeness?.complete !== true ||
+    candidateJson.result?.completeness?.proven_empty !== false ||
     candidateJson.result?.candidates?.[0]?.file !== "src/value.test.ts" ||
     candidateJson.result?.candidates?.[0]?.evidence?.relationships?.length !== 1 ||
     logicalCandidateToon !== logicalCandidateJson
@@ -436,6 +451,28 @@ try {
       `Unexpected candidate batch parity: ${JSON.stringify({ candidateJson, candidateToon })}`,
     );
   }
+
+  await writeFile(
+    path.join(fixtureRoot, "src/property-call.ts"),
+    'import * as values from "./value.js";\nexport const propertyCall = values.formatValue(2);\n',
+  );
+  const incompleteCandidates = await invokeFailure(["run", candidatePipelineFile]);
+  const incompleteCandidateEvents = incompleteCandidates.stderr
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  if (
+    incompleteCandidates.code !== 1 ||
+    incompleteCandidates.stdout !== "" ||
+    incompleteCandidateEvents.find((event) => event.event === "tool_failure")?.code !==
+      "INCOMPLETE_EVIDENCE" ||
+    incompleteCandidateEvents.find((event) => event.status === "error")?.code !== "TOOL_ERROR"
+  ) {
+    throw new Error(
+      `Unfinished impact did not fail the candidate CLI closed: ${JSON.stringify(incompleteCandidates)}`,
+    );
+  }
+  await rm(path.join(fixtureRoot, "src/property-call.ts"));
 
   const explorePipelineFile = path.join(fixtureRoot, "explore-pipeline.json");
   await writeFile(

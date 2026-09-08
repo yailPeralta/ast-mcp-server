@@ -311,12 +311,12 @@ function equalStringArrays(left, right) {
 
 async function runImpactCorpus(impactCorpus, runtime) {
   const {
-    collectCompilerRelationships,
+    AFFECTED_TEST_RELATIONSHIP_KINDS,
     createFreshProject,
     findTestCandidates,
     isExactImpactEdge,
     resolveImpactRoot,
-    traverseImpact,
+    traverseCompilerImpact,
   } = runtime;
   if (!Array.isArray(impactCorpus.scenarios) || impactCorpus.scenarios.length === 0) {
     throw new Error("Impact corpus must contain at least one scenario.");
@@ -333,34 +333,55 @@ async function runImpactCorpus(impactCorpus, runtime) {
     const scenarios = [];
     for (const scenario of impactCorpus.scenarios) {
       const freshness = scenario.freshness ?? defaultFreshness;
-      const edges = collectCompilerRelationships(context.project, projectRoot, freshness);
       const root = resolveImpactRoot(context.project, projectRoot, scenario.root);
-      const impact = traverseImpact(root, edges, {
+      const impact = traverseCompilerImpact(context.project, projectRoot, root, freshness, {
         direction: scenario.direction,
         max_depth: scenario.max_depth,
         max_nodes: scenario.max_nodes,
         max_edges: scenario.max_edges,
         relationship_kinds: scenario.relationship_kinds,
+        authority: "semantic",
       });
+      const candidateImpact = traverseCompilerImpact(
+        context.project,
+        projectRoot,
+        root,
+        freshness,
+        {
+          direction: "incoming",
+          max_depth: scenario.max_depth,
+          max_nodes: scenario.max_nodes,
+          max_edges: scenario.max_edges,
+          relationship_kinds: AFFECTED_TEST_RELATIONSHIP_KINDS,
+          authority: "semantic",
+        },
+      );
       const exactEdges = impact.edges.filter(isExactImpactEdge);
       const heuristicAuthorityViolations = impact.edges.filter(
         (edge) => edge.provenance === "heuristic" && edge.compiler_authoritative === true,
       );
       const forbiddenEdgeFiles = scenario.expected.forbidden_edge_files ?? [];
-      const forbiddenEdges = impact.edges.filter(
-        (edge) =>
-          forbiddenEdgeFiles.includes(edge.source.file) ||
-          forbiddenEdgeFiles.includes(edge.target.file),
+      const forbiddenCallEdgeFiles = scenario.expected.forbidden_call_edge_files ?? [];
+      const touchesFile = (edge, files) =>
+        files.includes(edge.source.file) || files.includes(edge.target.file);
+      const forbiddenEdges = impact.edges.filter((edge) => touchesFile(edge, forbiddenEdgeFiles));
+      const forbiddenCallEdges = impact.edges.filter(
+        (edge) => edge.kind === "call" && touchesFile(edge, forbiddenCallEdgeFiles),
       );
       let candidates = [];
       let candidateError = false;
       try {
-        candidates = [...findTestCandidates(impact)].map((candidate) => candidate.file).sort();
+        candidates = [...findTestCandidates(candidateImpact)]
+          .map((candidate) => candidate.file)
+          .sort();
       } catch {
         candidateError = true;
       }
 
       const expected = scenario.expected;
+      const coverageStates = impact.coverage.map(
+        (entry) => `${entry.kind}:${entry.direction}:${entry.endpoint_class}:${entry.status}`,
+      );
       const observed = {
         candidate_files: candidates,
         candidate_error: candidateError,
@@ -368,17 +389,26 @@ async function runImpactCorpus(impactCorpus, runtime) {
         heuristic_edge_count: impact.edges.filter((edge) => edge.provenance === "heuristic").length,
         heuristic_authority_violation_count: heuristicAuthorityViolations.length,
         forbidden_edge_count: forbiddenEdges.length,
+        forbidden_call_edge_count: forbiddenCallEdges.length,
+        coverage_states: coverageStates,
+        work_limit_reached: impact.work.work_limit_reached,
         incomplete: impact.incomplete,
+        proven_empty: impact.proven_empty,
         truncation_reasons: impact.truncation_reasons,
         visited_nodes: impact.visited_nodes,
         visited_edges: impact.visited_edges,
       };
+      const expectedCoverage = expected.coverage_states ?? [];
       const pass =
         equalStringArrays(observed.candidate_files, [...(expected.candidate_files ?? [])].sort()) &&
         observed.candidate_error === expected.candidate_error &&
         observed.exact_edge_count === expected.exact_edge_count &&
         observed.incomplete === expected.incomplete &&
+        observed.proven_empty === expected.proven_empty &&
+        expectedCoverage.every((state) => observed.coverage_states.includes(state)) &&
+        observed.work_limit_reached === false &&
         observed.forbidden_edge_count === 0 &&
+        observed.forbidden_call_edge_count === 0 &&
         observed.heuristic_authority_violation_count === 0;
       scenarios.push({
         id: scenario.id,
@@ -400,6 +430,15 @@ async function runImpactCorpus(impactCorpus, runtime) {
       ),
       candidate_fail_closed: scenarios.every(
         (scenario) => !scenario.expected.candidate_error || scenario.observed.candidate_error,
+      ),
+      honest_coverage_states: scenarios.every(
+        (scenario) =>
+          scenario.expected.coverage_states?.every((state) =>
+            scenario.observed.coverage_states.includes(state),
+          ) ?? true,
+      ),
+      no_guessed_call_edges: scenarios.every(
+        (scenario) => scenario.observed.forbidden_call_edge_count === 0,
       ),
     };
     return {
@@ -430,12 +469,16 @@ const gateKeys = [
   "impact_no_heuristic_authority",
   "impact_negative_controls_pass",
   "impact_candidate_fail_closed",
+  "impact_honest_coverage_states",
+  "impact_no_guessed_call_edges",
 ];
 const impactGateKeys = [
   "all_scenarios_pass",
   "no_heuristic_presented_as_exact",
   "negative_controls_pass",
   "candidate_fail_closed",
+  "honest_coverage_states",
+  "no_guessed_call_edges",
 ];
 
 export function projectDeterministicReport(report) {
@@ -455,7 +498,10 @@ export function projectDeterministicReport(report) {
         "candidate_error",
         "exact_edge_count",
         "incomplete",
+        "proven_empty",
+        "coverage_states",
         "forbidden_edge_files",
+        "forbidden_call_edge_files",
       ]),
       observed: pick(scenario.observed, [
         "candidate_files",
@@ -464,7 +510,11 @@ export function projectDeterministicReport(report) {
         "heuristic_edge_count",
         "heuristic_authority_violation_count",
         "forbidden_edge_count",
+        "forbidden_call_edge_count",
+        "coverage_states",
+        "work_limit_reached",
         "incomplete",
+        "proven_empty",
         "truncation_reasons",
         "visited_nodes",
         "visited_edges",
@@ -608,7 +658,12 @@ export async function publishBenchmarkReports({
   await mkdir(path.dirname(observationsOutput), { recursive: true });
   await writeFile(observationsOutput, observationBytes);
   if (Object.values(report.gates).some((gate) => gate !== true)) {
-    throw new Error(`Benchmark gates failed: ${JSON.stringify(report.gates)}`);
+    const failedImpactScenarios = report.impact_corpus.scenarios
+      .filter((scenario) => !scenario.pass)
+      .map(({ id, expected, observed }) => ({ id, expected, observed }));
+    throw new Error(
+      `Benchmark gates failed: ${JSON.stringify({ gates: report.gates, failedImpactScenarios })}`,
+    );
   }
   await beforeTrackedPublication?.();
   await assertDistinctOutputPaths(output, observationsOutput);
@@ -697,6 +752,8 @@ export async function main(argv = process.argv.slice(2)) {
         impact_no_heuristic_authority: impactReport.gates.no_heuristic_presented_as_exact,
         impact_negative_controls_pass: impactReport.gates.negative_controls_pass,
         impact_candidate_fail_closed: impactReport.gates.candidate_fail_closed,
+        impact_honest_coverage_states: impactReport.gates.honest_coverage_states,
+        impact_no_guessed_call_edges: impactReport.gates.no_guessed_call_edges,
       },
     };
     const publication = await publishBenchmarkReports({
