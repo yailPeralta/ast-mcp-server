@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "tools_list_sha256": "1f5de12c6f683600740fdfccfe978355dfe981938a6652a1f0ec7fa0afc74e25",
+  "tools_list_sha256": "eb39944011c4c005e20f097c1e201464bc193f973fa2862f9f6eed77976d3f3c",
   "names": [
     "ast_list_files",
     "ast_get_project_status",

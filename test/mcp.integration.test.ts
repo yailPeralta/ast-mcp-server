@@ -878,7 +878,7 @@ export function formatValue(value: number): string { return String(value); }
     expect(impact).not.toHaveProperty("edits");
   });
 
-  it("finds exact compiler-backed test candidates with bounded trust metadata", async () => {
+  it("uses the exact six-kind incoming gate with unpaginated authority metadata", async () => {
     await addCandidateFixtures(fixture);
     const tools = await client.listTools();
     const registered = tools.tools.find((tool) => tool.name === "ast_find_test_candidates");
@@ -907,11 +907,17 @@ export function formatValue(value: number): string { return String(value); }
       compiler_authoritative: true,
       root: { file: "src/value.ts", symbol_path: "formatValue", selector: "formatValue@2" },
       direction: "incoming",
+      relationship_kinds: ["reference", "import", "export", "extends", "implements", "call"],
       max_depth: 3,
       max_nodes: 100,
       max_edges: 200,
       incomplete: false,
       truncation: { truncated: false, reason: null },
+      work: {
+        work_items: expect.any(Number),
+        max_work_items: expect.any(Number),
+        work_limit_reached: false,
+      },
       completeness: { complete: true, proven_empty: false },
       freshness: { state: "fresh", causes: [], checked_at: expect.any(String) },
       offset: 0,
@@ -920,6 +926,24 @@ export function formatValue(value: number): string { return String(value); }
       has_more: false,
       next_offset: null,
     });
+    expect(candidates.coverage).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "reference", direction: "incoming", status: "completed" }),
+        expect.objectContaining({ kind: "call", direction: "incoming", status: "completed" }),
+      ]),
+    );
+    expect(
+      new Set(
+        (candidates.coverage as Array<{ kind: string; direction: string }>).map(
+          (entry) => entry.kind,
+        ),
+      ),
+    ).toEqual(new Set(["reference", "import", "export", "extends", "implements", "call"]));
+    expect(
+      (candidates.coverage as Array<{ direction: string }>).every(
+        (entry) => entry.direction === "incoming",
+      ),
+    ).toBe(true);
     const summary = (candidates.candidates as Array<Record<string, unknown>>).map((candidate) => [
       candidate.file,
       candidate.reason,
@@ -957,10 +981,25 @@ export function formatValue(value: number): string { return String(value); }
     });
   });
 
-  it("fails closed before pagination and keeps candidate proofs atomic", async () => {
+  it("returns stable incomplete evidence before pagination and keeps whole proofs atomic", async () => {
     await addCandidateFixtures(fixture);
     const incomplete = publicFailure(await callCandidates(client, fixture, { max_nodes: 1 }));
-    expect(incomplete).toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
+    expect(incomplete).toMatchObject({
+      code: "INCOMPLETE_EVIDENCE",
+      message: "Evidence is incomplete.",
+    });
+
+    await fixture.write(
+      "src/property-call.test.ts",
+      'import * as values from "./value.js";\nexport const propertyCall = values.formatValueHelper(4);\n',
+    );
+    const unfinished = publicFailure(
+      await callCandidates(client, fixture, { symbol_path: "formatValueHelper" }),
+    );
+    expect(unfinished).toMatchObject({
+      code: "INCOMPLETE_EVIDENCE",
+      message: "Evidence is incomplete.",
+    });
 
     const missing = publicFailure(
       await callCandidates(client, fixture, { symbol_path: "missingSymbol" }),

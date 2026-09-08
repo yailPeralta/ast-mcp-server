@@ -1,5 +1,22 @@
-import { assertExactImpactEvidence, type ImpactResult } from "./impact.js";
-import type { RelationshipEdge, RelationshipEndpoint } from "./relationships.js";
+import { assertCompleteExactImpactEvidence, type ImpactResult } from "./impact.js";
+import {
+  isRelationshipCoverageComplete,
+  type RelationshipEdge,
+  type RelationshipEdgeKind,
+  type RelationshipEndpoint,
+} from "./relationships.js";
+
+export const AFFECTED_TEST_RELATIONSHIP_KINDS = Object.freeze([
+  "reference",
+  "import",
+  "export",
+  "extends",
+  "implements",
+  "call",
+] as const satisfies readonly RelationshipEdgeKind[]);
+const AFFECTED_TEST_RELATIONSHIP_KIND_SET = new Set<RelationshipEdgeKind>(
+  AFFECTED_TEST_RELATIONSHIP_KINDS,
+);
 
 export const DEFAULT_TEST_FILE_PATTERNS = Object.freeze(["**/*.test.*", "**/*.spec.*"] as const);
 export const DEFAULT_TEST_DIRECTORIES = Object.freeze(["test", "tests", "__tests__"] as const);
@@ -248,11 +265,46 @@ function findPathToRoot(
   return null;
 }
 
+function assertCandidateImpactAuthority(impact: ImpactResult): void {
+  assertCompleteExactImpactEvidence(impact);
+  if (
+    impact.direction !== "incoming" ||
+    impact.relationship_kinds.length !== AFFECTED_TEST_RELATIONSHIP_KINDS.length ||
+    !impact.relationship_kinds.every(
+      (kind, index) => kind === AFFECTED_TEST_RELATIONSHIP_KINDS[index],
+    )
+  ) {
+    throw new Error("Test candidates require the six-kind incoming impact scope.");
+  }
+  const coveredKinds = new Set(impact.coverage?.map((entry) => entry.kind));
+  if (
+    !Array.isArray(impact.coverage) ||
+    coveredKinds.size !== AFFECTED_TEST_RELATIONSHIP_KINDS.length ||
+    !AFFECTED_TEST_RELATIONSHIP_KINDS.every((kind) => coveredKinds.has(kind)) ||
+    !impact.coverage.every(
+      (entry) =>
+        entry.direction === "incoming" &&
+        AFFECTED_TEST_RELATIONSHIP_KIND_SET.has(entry.kind) &&
+        (entry.status === "completed" || entry.status === "not_applicable"),
+    ) ||
+    !isRelationshipCoverageComplete(impact.coverage)
+  ) {
+    throw new Error("Test candidates require complete six-kind incoming coverage.");
+  }
+  if (
+    impact.work === undefined ||
+    impact.work.work_limit_reached ||
+    impact.work.work_items > impact.work.max_work_items
+  ) {
+    throw new Error("Test candidates require bounded impact work.");
+  }
+}
+
 export function findTestCandidates(
   impact: ImpactResult,
   conventions: TestCandidateConventions = {},
 ): readonly TestCandidate[] {
-  assertExactImpactEvidence(impact);
+  assertCandidateImpactAuthority(impact);
   if (
     typeof impact.root !== "object" ||
     impact.root === null ||

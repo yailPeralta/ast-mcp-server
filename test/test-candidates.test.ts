@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createRelationshipEdge,
+  type RelationshipCoverageStatus,
   type RelationshipEndpoint,
 } from "../src/services/relationships.js";
 import {
@@ -33,6 +34,8 @@ function impactFixture(
     readonly freshnessState?: "fresh" | "pending" | "stale" | "rebuilding" | "degraded";
     readonly provenance?: "compiler" | "syntax" | "heuristic";
     readonly resolution?: "resolved" | "unresolved" | "ambiguous";
+    readonly coverageStatus?: RelationshipCoverageStatus;
+    readonly workLimitReached?: boolean;
   } = {},
 ): ImpactResult {
   const service = endpoint("src/service.ts", "Service", "Service@1");
@@ -78,10 +81,18 @@ function impactFixture(
         { endpoint: service, depth: 0, direct: false },
         { endpoint: test, depth: 1, direct: true },
       ];
+  const relationshipKinds = [
+    "reference",
+    "import",
+    "export",
+    "extends",
+    "implements",
+    "call",
+  ] as const;
   return {
     root: service,
     direction: "incoming",
-    relationship_kinds: ["reference"],
+    relationship_kinds: relationshipKinds,
     nodes,
     edges: options.intermediate ? [first, second] : [first],
     visited_nodes: nodes.length,
@@ -90,6 +101,21 @@ function impactFixture(
     max_depth: 3,
     max_nodes: 10,
     max_edges: 10,
+    coverage: relationshipKinds.map((kind) => ({
+      kind,
+      direction: "incoming" as const,
+      endpoint_class: "symbol" as const,
+      status:
+        kind === "extends" || kind === "implements"
+          ? ("not_applicable" as const)
+          : (options.coverageStatus ?? "completed"),
+    })),
+    work: {
+      work_items: 6,
+      max_work_items: 100,
+      work_limit_reached: options.workLimitReached ?? false,
+    },
+    proven_empty: false,
     incomplete: options.incomplete ?? false,
     truncation: options.incomplete
       ? { truncated: true, reason: "depth_limit" }
@@ -200,7 +226,32 @@ describe("test candidate resolver", () => {
     expect(result).toEqual([]);
   });
 
-  it("paginates whole candidates without splitting relationship proof", () => {
+  it.each(["unsupported", "unfinished"] as const)(
+    "rejects %s six-kind incomplete evidence before candidate selection",
+    (coverageStatus) => {
+      expect(() => findTestCandidates(impactFixture({ coverageStatus }))).toThrow(
+        "Test candidates require complete six-kind incoming coverage.",
+      );
+    },
+  );
+
+  it("rejects missing six-kind incomplete evidence", () => {
+    const impact = impactFixture();
+    expect(() =>
+      findTestCandidates({
+        ...impact,
+        coverage: impact.coverage?.filter((entry) => entry.kind !== "call"),
+      }),
+    ).toThrow("Test candidates require complete six-kind incoming coverage.");
+  });
+
+  it("rejects exhausted work as incomplete evidence", () => {
+    expect(() => findTestCandidates(impactFixture({ workLimitReached: true }))).toThrow(
+      "Test candidates require bounded impact work.",
+    );
+  });
+
+  it("paginates each whole proof after deterministic candidate sorting", () => {
     const impact = impactFixture({ intermediate: true });
     const directTest = endpoint("test/service.integration.test.ts", "<module>", "<module>@2");
     const directEdge = createRelationshipEdge({

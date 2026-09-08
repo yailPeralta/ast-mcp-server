@@ -15,6 +15,7 @@ import { withProject } from "../services/project.js";
 import { PublicOperationalError } from "../services/public-errors.js";
 import { createRequestContext } from "../services/request-context.js";
 import {
+  AFFECTED_TEST_RELATIONSHIP_KINDS,
   findTestCandidates,
   MAX_TEST_CANDIDATE_CONVENTION_ITEMS,
   MAX_TEST_CANDIDATE_CONVENTION_LENGTH,
@@ -23,10 +24,14 @@ import {
 } from "../services/test-candidates.js";
 import {
   FreshnessSchema,
+  RelationshipCoverageEntrySchema,
   RelationshipEdgeSchema,
   RelationshipEndpointSchema,
+  RelationshipWorkSchema,
 } from "./relationship-schema.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
+
+export { AFFECTED_TEST_RELATIONSHIP_KINDS } from "../services/test-candidates.js";
 
 const TOOL_NAME = "ast_find_test_candidates";
 
@@ -65,6 +70,16 @@ const FindTestCandidatesOutputSchema = z.object({
   compiler_authoritative: z.literal(true),
   root: RelationshipEndpointSchema,
   direction: z.literal("incoming"),
+  relationship_kinds: z.tuple([
+    z.literal("reference"),
+    z.literal("import"),
+    z.literal("export"),
+    z.literal("extends"),
+    z.literal("implements"),
+    z.literal("call"),
+  ]),
+  coverage: z.array(RelationshipCoverageEntrySchema),
+  work: RelationshipWorkSchema,
   candidates: z.array(TestCandidateSchema),
   ...PaginationOutputSchema,
   visited_nodes: z.number().int().min(0),
@@ -140,7 +155,14 @@ export function registerFindTestCandidates(server: McpServer): void {
               context.projectRoot,
               root,
               freshness,
-              { direction: "incoming", max_depth, max_nodes, max_edges },
+              {
+                direction: "incoming",
+                relationship_kinds: AFFECTED_TEST_RELATIONSHIP_KINDS,
+                max_depth,
+                max_nodes,
+                max_edges,
+                authority: "semantic",
+              },
               operationContext,
             );
             if (impact.incomplete || impact.truncation.truncated) {
@@ -156,6 +178,9 @@ export function registerFindTestCandidates(server: McpServer): void {
               compiler_authoritative: true as const,
               root: impact.root,
               direction: "incoming" as const,
+              relationship_kinds: AFFECTED_TEST_RELATIONSHIP_KINDS,
+              coverage: impact.coverage,
+              work: impact.work,
               candidates: page.items,
               offset: page.offset,
               limit: page.limit,
