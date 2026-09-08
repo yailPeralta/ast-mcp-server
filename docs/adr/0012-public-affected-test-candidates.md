@@ -14,13 +14,13 @@ The public contract must distinguish a proven empty result from missing evidence
 
 Expose `ast_find_test_candidates` as a read-only MCP tool and admit it to `ast-tool run` as a read step.
 
-The tool resolves an exact symbol in the synchronized TypeScript project and forces bounded incoming traversal. Callers cannot provide an impact graph, direction, relationship filters, or MCP TOON output. A candidate is eligible only when every relationship is fresh, exact, resolved, and compiler-authoritative.
+The tool resolves an exact symbol in the synchronized TypeScript project and forces exactly six incoming kinds, in order: `reference`, `import`, `export`, `extends`, `implements`, and `call`. `contains` is excluded so its unsupported producer cannot block or certify candidate evidence. Callers cannot provide an impact graph, direction, relationship filters, or MCP TOON output.
 
-Stale, rebuilding, degraded, truncated, incomplete, unresolved, heuristic, or non-authoritative analysis fails closed with a bounded public error. Only a complete authoritative traversal with no eligible test may return an empty page marked `proven_empty: true`.
+Admission requires fresh, exact, resolved, compiler-authoritative edges; complete/inapplicable coverage for every six-kind cell; and no depth/node/edge/work exhaustion. Any semantic gap (`unsupported` or `unfinished`) or bounded traversal gap returns stable `INCOMPLETE_EVIDENCE` and no page. Deferred property/element/dynamic dispatch and the #219/#220 classifiers therefore cannot produce guessed candidates or a false empty result.
 
-Pagination applies to deterministic candidate objects, not their evidence. Each returned candidate retains its complete relationship IDs and relationship path. Traversal budgets remain independent from `offset` and `limit`.
+Pagination applies only after admission and deterministic sorting. Each candidate retains its complete relationship IDs and path; unpaginated `coverage`, `work`, relationship kinds, trust, freshness, traversal bounds, and counts remain available on every page. Only admitted zero-candidate evidence sets `completeness: { complete: true, proven_empty: true }`.
 
-The batch runner injects its authoritative `project_root`, rejects conflicts, and calls the registered MCP implementation through its in-memory client. JSON is the canonical logical result. `ast-tool run --output-format toon` encodes that final result losslessly; intermediate tool calls remain JSON.
+The batch runner injects its authoritative `project_root`, rejects conflicts, and calls the registered MCP implementation through its in-memory client. The additive metadata and gate decision are identical across MCP and batch. Candidate MCP output is canonical JSON; `ast-tool run --output-format toon` losslessly encodes that same final logical result while intermediate calls remain JSON.
 
 ## Consequences
 
@@ -43,7 +43,8 @@ Remove `ast_find_test_candidates` from MCP registration, the read-batch allowlis
 
 ## Evidence and verification
 
-- `test/test-candidates.test.ts` proves trust rejection, classification, and whole-candidate pagination.
-- `test/mcp.integration.test.ts` proves the public schema, annotations, errors, and deterministic candidates.
-- `test/batch.test.ts` proves allowlisting, authoritative root injection, logical parity, and atomic pages.
-- `scripts/cli-smoke.mjs` proves built CLI JSON/TOON parity through the registered implementation.
+- `test/test-candidates.test.ts` proves six-kind admission, semantic/bounded rejection, classification, and whole proofs.
+- `test/mcp.integration.test.ts` proves additive authority metadata, stable errors, proven empty, and public registration.
+- `test/batch.test.ts` proves authoritative root injection, unpaginated metadata, logical parity, and atomic pages.
+- `benchmark/impact-corpus.json` separates unsupported containment, unfinished dispatch, proven empty, and bounded negative controls.
+- `scripts/cli-smoke.mjs` proves built CLI JSON/TOON parity and fail-closed incomplete candidate evidence.

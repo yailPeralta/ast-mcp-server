@@ -1,12 +1,15 @@
 {
-  "schema_version": 1,
-  "description": "Deterministic compiler-backed relationship and impact corpus with negative controls.",
+  "schema_version": 2,
+  "description": "Deterministic scoped compiler impact and six-kind candidate corpus with semantic and traversal negative controls.",
   "fixture": {
     "include": ["src/**/*", "test/**/*"],
     "files": {
       "src/target.ts": "export function target(value: number): number { return value + 1; }\n",
       "src/other.ts": "export function target(value: number): number { return value - 1; }\n",
       "src/dynamic.ts": "type Handler = () => number;\nconst handlers: Record<string, Handler> = { target: () => 0 };\nexport function invokeDynamic(name: string): number { return handlers[name]?.() ?? 0; }\n",
+      "src/property-target.ts": "export function propertyTarget(value: number): number { return value; }\n",
+      "src/property.ts": "import * as values from \"./property-target.js\";\nexport const propertyResult = values.propertyTarget(1);\n",
+      "src/unused.ts": "export function unused(): number { return 0; }\n",
       "src/leaf.ts": "export function leaf(): number { return 1; }\n",
       "src/adapter.ts": "import { leaf } from \"./leaf.js\";\nexport function adapter(): number { return leaf(); }\n",
       "test/target.test.ts": "import { target } from \"../src/target.js\";\nexport const targetResult = target(1);\n",
@@ -19,13 +22,17 @@
       "description": "A direct test reference is returned with exact compiler evidence.",
       "root": { "file_path": "src/target.ts", "symbol_path": "target" },
       "direction": "incoming",
+      "relationship_kinds": ["reference", "import", "export", "extends", "implements", "call"],
       "max_depth": 1,
       "expected": {
         "candidate_files": ["test/target.test.ts"],
         "candidate_error": false,
-        "exact_edge_count": 2,
+        "exact_edge_count": 3,
         "incomplete": false,
-        "forbidden_edge_files": []
+        "proven_empty": false,
+        "coverage_states": ["call:incoming:symbol:completed"],
+        "forbidden_edge_files": [],
+        "forbidden_call_edge_files": []
       }
     },
     {
@@ -33,13 +40,16 @@
       "description": "An unrelated declaration with the same name does not become impact evidence.",
       "root": { "file_path": "src/target.ts", "symbol_path": "target" },
       "direction": "incoming",
+      "relationship_kinds": ["reference", "call"],
       "max_depth": 2,
       "expected": {
         "candidate_files": ["test/target.test.ts"],
         "candidate_error": false,
         "exact_edge_count": 2,
         "incomplete": false,
-        "forbidden_edge_files": ["src/other.ts"]
+        "proven_empty": false,
+        "forbidden_edge_files": ["src/other.ts"],
+        "forbidden_call_edge_files": []
       }
     },
     {
@@ -47,13 +57,72 @@
       "description": "A string-keyed handler table does not create a guessed relationship to the exact target.",
       "root": { "file_path": "src/target.ts", "symbol_path": "target" },
       "direction": "incoming",
+      "relationship_kinds": ["reference", "call"],
       "max_depth": 2,
       "expected": {
         "candidate_files": ["test/target.test.ts"],
         "candidate_error": false,
         "exact_edge_count": 2,
         "incomplete": false,
-        "forbidden_edge_files": ["src/dynamic.ts"]
+        "proven_empty": false,
+        "forbidden_edge_files": ["src/dynamic.ts"],
+        "forbidden_call_edge_files": []
+      }
+    },
+    {
+      "id": "unfinished_property_dispatch",
+      "description": "A property call emits no guessed call edge and leaves candidate evidence unfinished.",
+      "root": { "file_path": "src/property-target.ts", "symbol_path": "propertyTarget" },
+      "direction": "incoming",
+      "relationship_kinds": ["reference", "call"],
+      "max_depth": 2,
+      "expected": {
+        "candidate_files": [],
+        "candidate_error": true,
+        "exact_edge_count": 1,
+        "incomplete": true,
+        "proven_empty": false,
+        "coverage_states": ["call:incoming:symbol:unfinished"],
+        "forbidden_edge_files": [],
+        "forbidden_call_edge_files": ["src/property.ts"]
+      }
+    },
+    {
+      "id": "default_contains_unsupported",
+      "description": "Default-all impact reports applicable containment as unsupported without traversal truncation.",
+      "root": { "file_path": "src/unused.ts", "symbol_path": "unused" },
+      "direction": "incoming",
+      "max_depth": 1,
+      "expected": {
+        "candidate_files": [],
+        "candidate_error": false,
+        "exact_edge_count": 0,
+        "incomplete": true,
+        "proven_empty": false,
+        "coverage_states": ["contains:incoming:symbol:unsupported"],
+        "forbidden_edge_files": [],
+        "forbidden_call_edge_files": []
+      }
+    },
+    {
+      "id": "complete_proven_empty",
+      "description": "A bounded two-kind traversal may claim a proven empty result only after complete semantic coverage.",
+      "root": { "file_path": "src/unused.ts", "symbol_path": "unused" },
+      "direction": "incoming",
+      "relationship_kinds": ["reference", "call"],
+      "max_depth": 1,
+      "expected": {
+        "candidate_files": [],
+        "candidate_error": false,
+        "exact_edge_count": 0,
+        "incomplete": false,
+        "proven_empty": true,
+        "coverage_states": [
+          "reference:incoming:symbol:completed",
+          "call:incoming:symbol:completed"
+        ],
+        "forbidden_edge_files": [],
+        "forbidden_call_edge_files": []
       }
     },
     {
@@ -61,6 +130,7 @@
       "description": "Stale relationship metadata cannot produce an exact candidate list.",
       "root": { "file_path": "src/target.ts", "symbol_path": "target" },
       "direction": "incoming",
+      "relationship_kinds": ["reference", "call"],
       "max_depth": 1,
       "freshness": {
         "state": "stale",
@@ -72,7 +142,9 @@
         "candidate_error": true,
         "exact_edge_count": 0,
         "incomplete": false,
-        "forbidden_edge_files": []
+        "proven_empty": false,
+        "forbidden_edge_files": [],
+        "forbidden_call_edge_files": []
       }
     },
     {
@@ -80,13 +152,16 @@
       "description": "A depth-limited traversal cannot present the transitive test as complete evidence.",
       "root": { "file_path": "src/leaf.ts", "symbol_path": "leaf" },
       "direction": "incoming",
+      "relationship_kinds": ["reference", "import", "export", "extends", "implements", "call"],
       "max_depth": 1,
       "expected": {
         "candidate_files": [],
         "candidate_error": true,
-        "exact_edge_count": 2,
+        "exact_edge_count": 3,
         "incomplete": true,
-        "forbidden_edge_files": []
+        "proven_empty": false,
+        "forbidden_edge_files": [],
+        "forbidden_call_edge_files": []
       }
     }
   ]

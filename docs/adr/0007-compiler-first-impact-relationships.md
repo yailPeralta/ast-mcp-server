@@ -30,9 +30,11 @@ Represent each relationship as a normalized edge with project-relative endpoints
 
 A derived index may provide candidates for routing, but exact selector resolution and semantic relationship evidence are rechecked through the active compiler project. Index state never upgrades an edge's authority.
 
-`ast_get_impact` is read-only and accepts one exact root selector. It performs deterministic bounded traversal with explicit direction, relationship-kind filters, maximum depth, node and edge budgets. The response reports visited counts, maximum depth, direct versus transitive nodes, per-edge trust metadata, incomplete state and machine-readable truncation reasons. If the relationship set is not fresh, the tool fails closed instead of presenting cached impact as current.
+`ast_get_impact` is read-only and accepts one exact root selector. It performs deterministic bounded traversal with explicit direction, relationship-kind filters, and depth/node/edge/work budgets. If the compiler session is not fresh, the tool fails closed instead of presenting cached impact as current.
 
-The initial authoritative relationship set is limited to compiler-backed relationships that the project can resolve exactly, including references, imports, exports, inheritance and implemented interfaces where represented by the existing compiler service. Syntax or heuristic relationships may be represented as non-authoritative context only when their provenance is preserved. Unsupported relationship kinds remain incomplete; traversal must not claim runtime or whole-program completeness.
+Completeness is not inferred from edge count. Every requested kind/direction/endpoint-class cell is `not_applicable`, `completed`, `unsupported`, or `unfinished`; aggregation uses fail-closed precedence (`unfinished` before `unsupported`, `completed`, then `not_applicable`). This semantic `coverage` remains separate from traversal `truncation` and shared `work`. `incomplete` is their conservative union, and `proven_empty` requires zero edges, complete applicable cells, and no exhausted bound.
+
+The seven public relationship kinds and default-all selection remain stable. Exact direct identifier calls, constructors, and tagged templates are compiler-backed when they resolve to one project target. Property, element, dynamic, unresolved, multiple, or external dispatch emits no guessed call edge and leaves only the applicable direction `unfinished`. Applicable `contains` is `unsupported` because this decision adds no scoped containment producer. Computed-key alternatives (#219) and external convergence (#220) remain uncertified.
 
 The internal test-candidate resolver is a pure read-side projection over exact impact evidence. It accepts only fresh, exact compiler-authoritative impact, applies bounded project conventions for test filenames/directories, and returns candidates with direct/transitive reason, confidence, relationship IDs and full bounded paths to the root. It never executes Jest, Vitest or another test runner, does not inspect coverage, and does not authorize a mutation.
 
@@ -44,7 +46,8 @@ Mutation preparation and apply remain separate. Impact, relationship and candida
 
 - Semantic authority is explicit and mechanically testable rather than implied by a field name or graph position.
 - Stale, unresolved, ambiguous, syntax and heuristic evidence cannot silently become exact compiler evidence.
-- Impact responses remain deterministic and bounded for large projects.
+- Impact responses distinguish semantic gaps from traversal/work exhaustion while remaining deterministic and bounded.
+- Complete zero-edge results can be recognized without treating unsupported analysis as proven empty.
 - Candidate-test suggestions are explainable through relationship IDs and direct/transitive paths.
 - The index remains replaceable and useful for routing without becoming a second compiler.
 - Mutation safety stays on the existing operation-plan path.
@@ -52,8 +55,8 @@ Mutation preparation and apply remain separate. Impact, relationship and candida
 ### Negative
 
 - Some useful framework, callback, dynamic-dispatch and runtime relationships remain unavailable or non-authoritative.
-- Impact can fail closed or report incomplete traversal where a heuristic graph would return more edges.
-- Every edge carries provenance, confidence, resolution and freshness metadata, increasing payload size.
+- Impact may return useful exact edges while still reporting semantic or bounded incompleteness.
+- Additive coverage/work authority and per-edge trust metadata increase payload size.
 - Candidate-test discovery is conservative and may omit tests that are related only through conventions, coverage or runtime behavior.
 
 ## Alternatives considered
@@ -78,9 +81,9 @@ Rejected. Storage can accelerate derived queries but cannot replace the TypeScri
 
 Rejected. It adds side effects, runtime/framework coupling and unbounded execution to a read tool. Candidate resolution remains pure and bounded; test execution belongs to an explicit external workflow.
 
-### Return an unmarked truncated traversal
+### Collapse every gap into traversal truncation
 
-Rejected. Depth, node, edge and unsupported-kind gaps must be visible so callers do not interpret a bounded graph as a complete impact closure.
+Rejected. Semantic `unsupported`/`unfinished` coverage and depth/node/edge/work exhaustion answer different questions. Both must remain visible so an untruncated traversal cannot certify an absent producer.
 
 ## Evidence and verification
 

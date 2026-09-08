@@ -29,6 +29,14 @@ Published v0.12.0 requires Node.js `>=22.13.0` and retains immutable release evi
 - Nunca reconstruir postimages desde un diff; después del apply, ejecutar el gate canónico del proyecto.
 - Conservar `correlation_id` en errores públicos sin exponer source, paths absolutos, argumentos, environment, cache, stacks ni credenciales.
 
+## Impacto y candidatos de test
+
+`ast_get_impact` separa dos canales. `coverage` asigna a cada kind/direction/endpoint una de `not_applicable`, `completed`, `unsupported` o `unfinished`; `truncation` y `work` describen límites de recorrido. `incomplete` es true si falla cualquiera. `proven_empty` exige cero edges, cobertura aplicable completa y ningún límite agotado.
+
+La selección default conserva los siete kinds. `contains` aplicable es `unsupported`, por lo que el default puede ser semánticamente incompleto sin truncamiento. Calls directas por identificador, `new` y tagged templates pueden ser exactas; property, element, dynamic, unresolved, multiple o external dispatch no generan edges adivinados y dejan esa dirección `unfinished`. No presentar esto como certificación de #219 o #220.
+
+`ast_find_test_candidates` fija seis kinds incoming (`reference`, `import`, `export`, `extends`, `implements`, `call`) y excluye `contains`. Solo acepta evidencia fresh/exact/resolved/compiler-authoritative, cobertura completa y trabajo/recorrido sin agotar. Si no, devuelve `INCOMPLETE_EVIDENCE`, no una página vacía. Después de admitir, pagina candidatos ordenados sin partir paths ni ocultar `coverage`/`work`. MCP entrega JSON canónico; TOON de batch debe conservar el mismo significado lógico.
+
 ## Diagnostic aggregates
 
 `ast_get_diagnostics` keeps its existing response shape unless `include_aggregates: true` is requested. Enabled summaries cover the complete normalized snapshot, not only the selected raw page, and cap both code and file groups at 20.

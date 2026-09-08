@@ -56,8 +56,8 @@ See `chain.md` for exact branches, symbols, commands, trace, IDs, rollback, and 
 ## Unit 5: Documentation and Audit
 
 - [ ] 5.1 Base only on U4; acquire `issue247-u5-apply-v1`; repeat the exact U5 RED twice unchanged.
-- [ ] 5.2 Converge README, ADRs, managed skill, benchmark corpus/runner, and CLI smoke assertions.
-- [ ] 5.3 Refactor and gate ATC-R5, benchmark/smoke, full checks, budget, finish, and rollback.
+- [x] 5.2 Converge README, ADRs, managed skill, benchmark corpus/runner, and CLI smoke assertions.
+- [x] 5.3 Refactor and gate ATC-R5, benchmark/smoke, full checks, budget, finish, and rollback.
 - [ ] 5.4 Settle `issue247-u5-settle-v1`; freeze immutable candidate.
 
 ## Final Candidate Gate

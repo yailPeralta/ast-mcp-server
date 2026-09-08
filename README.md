@@ -46,8 +46,8 @@ Reads can start with a bounded file slice, a compact outline, or exact source on
 - Use `ast_explore` when the question spans discovery and evidence. Its default summary is bounded; use `detail: "context"` for selected source and `detail: "full"` for source plus compiler references.
 - Use `ast_get_outline` for a compact body-free view of a known file without source lines.
 - Use `ast_get_symbol_source` when one declaration or implementation is the required evidence.
-- Use `ast_get_impact` when the exact symbol is known and bounded direct/transitive compiler relationships are needed; it is read-only evidence, not a mutation plan.
-- Use `ast_find_test_candidates` when an exact symbol should map to conservative test candidates. It forces incoming compiler traversal, returns complete relationship paths, and never executes tests.
+- Use `ast_get_impact` when the exact symbol is known and bounded direct/transitive compiler relationships are needed. Check `coverage`, `work`, `truncation`, `incomplete`, and `proven_empty`; this is read-only evidence, not a mutation plan.
+- Use `ast_find_test_candidates` when an exact symbol should map to conservative tests. It admits only complete incoming `reference`, `import`, `export`, `extends`, `implements`, and `call` evidence, returns whole paths, and never executes tests.
 
 `snapshot_state: "fresh"` means that the returned file bytes match the synchronized compiler snapshot. The separate `freshness` object describes the project/session state and preserves causes such as source changes or watcher failure. Neither field means that the project has zero TypeScript diagnostics; use `ast_get_diagnostics` for compiler errors and warnings.
 
@@ -64,7 +64,20 @@ The server exposes evidence labels instead of collapsing every result into an un
 
 Freshness is orthogonal to TypeScript diagnostics. `fresh` means the evidence matches the synchronized snapshot; `pending`, `rebuilding`, `stale`, or `degraded` means the response must not be presented as current compiler evidence. Read tools expose the state, causes (`source_change`, `config_change`, `index_failure`, `watcher_failure`, or `compiler_rebuild`), and bounded `checked_at` timestamp. `ast_get_impact` refuses non-fresh compiler relationships. `ast_explore` returns the state together with `completeness`, `unresolved`, `budget`, and `truncation` metadata rather than silently dropping evidence.
 
-All reads are budgeted. Callers control pagination and, where applicable, `max_bytes`, `reference_limit`, `max_depth`, `max_nodes`, and `max_edges`; responses report the effective limits and whether a record, byte, depth, edge, invocation, or serialization limit truncated the result. A truncated or unresolved result is incomplete evidence, not an empty negative result. `ast_find_test_candidates` follows the same rule: it accepts only fresh, exact compiler-backed impact, emits direct/transitive evidence and bounded relationship IDs, and never executes tests or guesses from filenames alone. Only a complete authoritative traversal may return `candidates: []` with `proven_empty: true`.
+All reads are budgeted. Callers control pagination and, where applicable, `max_bytes`, `reference_limit`, `max_depth`, `max_nodes`, and `max_edges`; responses report effective limits. A bounded stop is incomplete evidence, not an empty negative result.
+
+Impact has two independent completeness channels:
+
+| Channel           | Evidence                                                                                                                            | Incomplete when                                      |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Semantic coverage | One canonical cell per requested kind, direction, and endpoint class: `not_applicable`, `completed`, `unsupported`, or `unfinished` | Any applicable cell is `unsupported` or `unfinished` |
+| Traversal/work    | `truncation` plus `work.work_limit_reached` and its counters                                                                        | A depth/node/edge/work bound prevents completion     |
+
+`incomplete` is true when either channel is incomplete. `proven_empty` is true only when there are zero edges, every applicable cell completed, and no bound was exhausted. The public seven-kind/default impact request includes `contains`; because no scoped `contains` producer exists, applicable default or explicit containment is `unsupported`, so the result is incomplete even when traversal was not truncated.
+
+`ast_find_test_candidates` deliberately excludes `contains` and fixes the admission scope to six incoming kinds: `reference`, `import`, `export`, `extends`, `implements`, and `call`. It returns `INCOMPLETE_EVIDENCE` before pagination for stale, inexact, unresolved, truncated, work-exhausted, unsupported, or unfinished evidence. Only complete six-kind authority may return `candidates: []` with `completeness.proven_empty: true`; pagination slices deterministic candidates while each proof and the unpaginated `coverage`, `work`, and traversal metadata stay whole.
+
+These fields are additive: existing edge shapes, kind strings, defaults, and public errors remain stable. MCP `ast_get_impact` JSON and TOON represent the same logical coverage/work result; candidate MCP output remains canonical JSON, while read-only batch output may encode that same candidate result as TOON. Property, element, dynamic, computed-key, and external-alternative dispatch remains edge-free and unfinished—this contract does not certify the deferred #219 or #220 classifiers.
 
 ## Why this helps
 
