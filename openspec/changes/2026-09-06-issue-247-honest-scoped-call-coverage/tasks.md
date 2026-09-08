@@ -49,8 +49,8 @@ See `chain.md` for exact branches, symbols, commands, trace, IDs, rollback, and 
 ## Unit 4: Candidate Gate
 
 - [ ] 4.1 Base only on U3; acquire `issue247-u4-apply-v1`; repeat the exact U4 RED twice unchanged.
-- [ ] 4.2 Implement six-kind incoming admission, complete-evidence failure, metadata, and whole-proof pagination.
-- [ ] 4.3 Refactor and gate ATC-R1–R4, MCP/batch parity, budget, finish, and rollback.
+- [x] 4.2 Implement six-kind incoming admission, complete-evidence failure, metadata, and whole-proof pagination.
+- [x] 4.3 Refactor and gate ATC-R1–R4, MCP/batch parity, budget, finish, and rollback.
 - [ ] 4.4 Settle `issue247-u4-settle-v1`; freeze U4 without authority claims.
 
 ## Unit 5: Documentation and Audit
