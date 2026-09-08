@@ -48,7 +48,7 @@
     {
       "id": "U4",
       "name": "Candidate gate",
-      "status": "pending",
+      "status": "candidate-ready-not-reviewed",
       "branch": "feat/247-u4-candidate-completeness",
       "base": "feat/247-u3-scoped-direct-calls",
       "forecast": "320-395",
@@ -87,6 +87,12 @@
         "name": "stable three-test RED twice; fingerprint 8b545be0ca2a9f40573370d17c03b74280be7eb637e92ceb11dee96313caf981",
         "file": "test/impact.test.ts",
         "taskId": "U3"
+      },
+      {
+        "id": "u4-candidates",
+        "name": "stable six-test RED twice; fingerprint 06b510f8c097ebd5fe631be1cec55eee08ad53d644453aaa8d4ae47215e7832f",
+        "file": "candidate+MCP+batch",
+        "taskId": "U4"
       }
     ],
     "green": [
@@ -107,6 +113,12 @@
         "name": "four focused tests pass",
         "file": "impact+relationships",
         "taskId": "U3"
+      },
+      {
+        "id": "u4-candidates",
+        "name": "ten focused assertions pass across eight scenarios",
+        "file": "candidate+MCP+batch",
+        "taskId": "U4"
       }
     ],
     "refactored": [
@@ -127,6 +139,12 @@
         "name": "67 impact/relationship tests pass",
         "file": "impact+relationships",
         "taskId": "U3"
+      },
+      {
+        "id": "u4-candidates",
+        "name": "62 candidate/MCP/batch and 50 registry/canary tests pass",
+        "file": "candidate+MCP+batch",
+        "taskId": "U4"
       }
     ]
   },
@@ -153,5 +171,14 @@
     "audit": "baseline unchanged: fast-uri 4 high, qs 2 moderate; code format/lint/typecheck/build pass; OpenSpec format baseline remains",
     "rollback": "revert scoped call producer/helper and paired impact tests; U1/U2 restore call unsupported"
   },
-  "updatedAt": "2026-09-06T21:00:00Z"
+  "u4Evidence": {
+    "base": "29ba9c44170e923da06ebfe6d75b763cf200d0b4",
+    "red": "isolated base, test-only exact command twice; stable 6/6 failures; fingerprint 06b510f8c097ebd5fe631be1cec55eee08ad53d644453aaa8d4ae47215e7832f",
+    "greenRefactor": "focused 10/10; candidate+MCP+batch 62/62; registry/canary compatibility 50/50; full clean 984/984",
+    "runtime": "test:mcp/lifecycle/cli/errors pass; exact six incoming kinds, contains excluded, authority metadata unpaginated, JSON/TOON/batch parity",
+    "compatibilityHashes": "three one-line derived updates synchronize additive registered output schema: canary-local-mcp, registry-consumer-smoke, tool-inventory",
+    "audit": "baseline unchanged: fast-uri 4 high, qs 2 moderate; code format/lint/typecheck/build pass; seven-file OpenSpec format baseline remains",
+    "rollback": "revert candidate service/tool/tests and three derived hash lines; retain U1-U3 honest impact and scoped calls"
+  },
+  "updatedAt": "2026-09-06T22:12:22Z"
 }

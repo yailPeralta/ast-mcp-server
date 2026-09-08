@@ -59,8 +59,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 28
-  completed: 7
-  pending: 21
+  completed: 9
+  pending: 19
   allComplete: false
 dependencies:
   proposal: all_done
@@ -297,4 +297,11 @@ apply:
     runtimeMcpLifecycleCliErrors: pass
     fullTest: clean-980/980
     authoredBudget: 374
+  u4:
+    status: candidate-ready-not-reviewed
+    base: 29ba9c44170e923da06ebfe6d75b763cf200d0b4
+    focused: u4-10/10-candidate-mcp-batch-62/62-registry-canary-50/50
+    runtimeMcpLifecycleCliErrors: pass
+    fullTest: clean-984/984
+    redFingerprint: 06b510f8c097ebd5fe631be1cec55eee08ad53d644453aaa8d4ae47215e7832f
 lastPhase: apply
