@@ -7,7 +7,8 @@ planningHome:
   path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
 changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority
 artifactPaths:
-  proposal: []
+  proposal:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/proposal.md
   specs: []
   design: []
   tasks: []
@@ -20,7 +21,8 @@ artifactPaths:
   reviewContext: []
   reviewState: []
 contextFiles:
-  proposal: []
+  proposal:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/proposal.md
   specs: []
   design: []
   tasks: []
@@ -34,7 +36,7 @@ contextFiles:
   reviewState: []
 artifacts:
   exploration: done
-  proposal: missing
+  proposal: done
   specs: missing
   design: missing
   tasks: missing
@@ -51,8 +53,8 @@ taskProgress:
   pending: 0
   allComplete: false
 dependencies:
-  proposal: blocked
-  specs: blocked
+  proposal: all_done
+  specs: ready
   design: blocked
   tasks: blocked
   apply: blocked
@@ -65,13 +67,16 @@ actionContext:
   allowedEditRoots:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority
 relationships:
-  dependsOn:
-    - separately-authorized-minimal-relationship-coverage-and-scoped-call-dispatch-redesign
+  dependsOn: []
+  resolvedDependencies:
+    - issue-247-honest-scoped-call-coverage-merged-and-archived-on-main
   supersedes: []
   amends: []
   conflictsWith:
     - inherited-or-reopened-issue-186-judgment-authority
     - inherited-or-reopened-issue-188-recovery-authority
+    - inherited-or-reopened-f-01-authority
+    - issue-220-external-alternative-convergence
   sameDomainActiveChanges: []
 remediationState:
   required: false
@@ -83,21 +88,22 @@ remediationState:
   reason: ""
 phaseInstructions:
   apply:
-    - Do not apply; prerequisite authority and substrate are absent.
-    - Keep DeepSeek Harness apply absent.
+    - Do not apply during PROPOSE; route next to spec only.
+    - Keep issue 220, broad property or element dispatch, external or multiple-target edges, and DeepSeek Harness apply excluded.
+    - Preserve issue 186, issue 188, and F-01 as historical evidence without inherited Judgment, review, correction, or delivery authority.
+    - Keep authored changes at or below 400 lines per review unit; auto-chain only at independently testable boundaries if required.
   verify:
-    - Re-enter only after a separately authorized prerequisite or explicit issue-scope decision.
+    - No verify authority is created by this proposal.
   remediate: []
   archive: []
-nextRecommended: resolve-blockers
-blockedReasons:
-  - Main at 6173a39 lacks scoped call producers and per-kind/per-direction coverage needed to express issue 219 unfinished authority.
-  - Delivering the full issue standalone would require an unauthorized prerequisite redesign and exceed the 400-line review budget.
-  - Closed issue 186 and issue 188 lineage is historical evidence only and grants no Judgment, review, correction, or delivery authority.
+nextRecommended: spec
+blockedReasons: []
 baseline:
-  branch: main
-  head: 6173a39a73f1540c17335a330ea7f14f982387cb
-  originMain: 6173a39a73f1540c17335a330ea7f14f982387cb
+  branch: docs/219-exploration
+  pullRequest: 248
+  head: d9e1cd01fedcd55522356095e56e4a3e4a489bc2
+  originMain: 7bb0c6800a9bfabddce11d26f61e00a90ed168b2
+  mergeBase: 7bb0c6800a9bfabddce11d26f61e00a90ed168b2
   cleanAtStart: true
 authority:
   issue: 219
@@ -105,18 +111,38 @@ authority:
   labels:
     - status:approved
     - type:bug
-  independence: issue-186-judgment-authority-excluded
+  independence: issue-219-only
+  historicalEvidenceOnly:
+    - issue-186
+    - issue-188
+    - F-01
+  excludedIssue:
+    - issue-220
   rddMode: disabled/unmanaged
   reviewAuthority: false
   deliveryAuthority: false
 exploration:
   status: success
+  evidenceBaseline: 6173a39a73f1540c17335a330ea7f14f982387cb
   reproduction: confirmed-on-main-public-mcp
   runtimeDefect: true
-  missingCapability: true
-  absentPrerequisite: true
-  readyForProposal: false
-  changedLineBudgetRisk: High
-  chainedPRsRecommended: true
-  decisionNeededBeforeApply: true
-lastPhase: explore
+  missingCapabilityAtExploration: true
+  absentPrerequisiteAtExploration: true
+  readyForProposalAtExploration: false
+  changedLineBudgetRiskAtExploration: High
+  chainedPRsRecommendedAtExploration: true
+  decisionNeededBeforeApplyAtExploration: true
+currentReadiness:
+  prerequisiteIssue: 247
+  prerequisiteState: merged-and-archived
+  canonicalScopedImpactSpecPresent: true
+  scopedCallCoveragePresent: true
+  readyForSpec: true
+proposal:
+  status: success
+  detailLevel: high
+  deliveryStrategy: auto-chain
+  reviewBudgetChangedLines: 400
+  changedLineBudgetRisk: Medium
+  decisionNeededBeforeApply: false
+lastPhase: propose
