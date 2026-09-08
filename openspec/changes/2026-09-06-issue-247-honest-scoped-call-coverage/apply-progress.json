@@ -238,7 +238,7 @@
     "infoPreserved": 3,
     "ledger": "reviews/ledger.json",
     "correctionRound1": {
-      "status": "in-progress-r1b-corrected",
+      "status": "correction1-complete-rejudgment-pending",
       "units": [
         {
           "id": "R1A",
@@ -256,9 +256,10 @@
         },
         {
           "id": "R1C",
-          "predecessor": "R1B corrected candidate",
+          "predecessor": "41f124f",
           "forecast": "20-120",
-          "hardMax": 400
+          "hardMax": 400,
+          "status": "corrected-rejudgment-pending"
         }
       ]
     },
@@ -275,9 +276,16 @@
       "runtime": "yarn benchmark:agent-workflows exercises built MCP workflows and deterministic impact corpus without private paths in checked evidence",
       "rollback": "revert benchmark/results/self-agent-workflows.json and R1B artifact entries only; retain R1A behavior"
     },
-    "scopedRejudgment": "pending-after-R1C",
-    "strictVerification": "blocked",
+    "r1cEvidence": {
+      "base": "41f124f",
+      "red": "exact focused Prettier check twice unchanged; both runs failed on the same eight current candidate-owned OpenSpec artifacts",
+      "greenRefactor": "repository-configured formatter applied to every artifact in the issue #247 change directory; focused and full format checks pass",
+      "semanticPreservation": "JSON/YAML parse, ledger invariants, benchmark changed=false, key runtime gates, and diff hygiene pass without runtime edits",
+      "rollback": "revert only R1C formatting and metadata changes under the issue #247 OpenSpec change directory"
+    },
+    "scopedRejudgment": "pending-on-corrected-candidate",
+    "strictVerification": "pending-scoped-dual-rejudgment",
     "archive": "blocked"
   },
-  "updatedAt": "2026-09-06T23:52:29Z"
+  "updatedAt": "2026-09-07T00:06:08Z"
 }

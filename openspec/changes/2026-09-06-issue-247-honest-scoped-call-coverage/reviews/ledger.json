@@ -9,7 +9,7 @@
   "round": 1,
   "verdict": "ESCALATED",
   "terminal": false,
-  "pendingDecision": "complete-r1c-then-scoped-rejudgment",
+  "pendingDecision": "scoped-dual-rejudgment",
   "judges": {
     "A": {
       "verdict": "ESCALATED",
@@ -51,11 +51,13 @@
       {
         "id": "JD-C3",
         "severity": "SEVERE",
-        "status": "open",
+        "status": "corrected-rejudgment-pending",
         "confirmedBy": ["A", "B"],
         "location": "candidate-owned OpenSpec artifacts",
         "claim": "The format gate fails on seven candidate-owned OpenSpec files.",
-        "correctionUnit": "R1C"
+        "correctionUnit": "R1C",
+        "correctionBase": "41f124f",
+        "correctionEvidence": "Two unchanged focused Prettier checks failed on the same eight current candidate-owned artifacts; the repository-configured formatter was then applied to the complete issue #247 change directory. Focused and full format checks pass; JSON/YAML parsing and semantic-preservation checks pass. The original seven-file C3 scope is preserved; ledger/progress metadata made the current failing set eight before correction."
       }
     ],
     "suspect": [
@@ -97,11 +99,11 @@
     "suspectSevere": 2,
     "contradictions": 0,
     "info": 3,
-    "openConfirmedSevere": 1,
-    "correctedRejudgmentPending": 2
+    "openConfirmedSevere": 0,
+    "correctedRejudgmentPending": 3
   },
   "correctionRound1": {
-    "status": "in-progress-r1b-corrected",
+    "status": "correction1-complete-rejudgment-pending",
     "budgetRule": "Each immediate-predecessor work unit must remain at or below 400 authored additions plus deletions.",
     "units": [
       {
@@ -129,23 +131,25 @@
       },
       {
         "id": "R1C",
-        "predecessor": "R1B corrected candidate",
-        "scope": "Format exactly the seven candidate-owned OpenSpec files reported by the format gate.",
+        "predecessor": "41f124f",
+        "scope": "Format exactly the seven candidate-owned OpenSpec files reported by the format gate, plus the candidate-owned ledger/progress metadata updated by this correction.",
         "forecastAuthoredLines": "20-120",
         "hardMax": 400,
-        "rollback": "Revert only formatting changes in those seven OpenSpec files."
+        "status": "corrected-rejudgment-pending",
+        "evidence": "Focused Prettier RED reproduced unchanged twice on eight current artifacts; repository-configured formatting, focused/full format checks, JSON/YAML parsing, and ledger invariants pass.",
+        "rollback": "Revert only formatting and R1C metadata changes in the issue #247 OpenSpec change directory."
       }
     ],
     "aggregateForecastAuthoredLines": "220-520 across three independently reviewed units; never aggregated into one over-budget unit",
-    "scopedRejudgment": "pending-after-r1c-frozen-fix-delta"
+    "scopedRejudgment": "pending-on-corrected-candidate"
   },
   "validation": {
     "judgesComplete": true,
     "bothEscalated": true,
     "corroborationMerged": true,
-    "correctionApplied": "R1A-R1B",
-    "scopedRejudgment": "pending-after-R1C",
-    "strictVerification": "blocked",
+    "correctionApplied": "R1A-R1C",
+    "scopedRejudgment": "pending-on-corrected-candidate",
+    "strictVerification": "pending-scoped-dual-rejudgment",
     "archive": "blocked"
   },
   "skillResolution": {
@@ -159,5 +163,5 @@
       "/home/yail/.agents/skills/work-unit-commits/SKILL.md"
     ]
   },
-  "updatedAt": "2026-09-06T23:52:29Z"
+  "updatedAt": "2026-09-07T00:06:08Z"
 }

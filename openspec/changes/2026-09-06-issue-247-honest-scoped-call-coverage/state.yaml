@@ -121,11 +121,11 @@ phaseInstructions:
     - Judgment provides no receipt or delivery authority; use ordinary repository policy.
 reviewGate:
   result: escalated
-  reason: Judgment Day round 1 correction is in progress; R1A and R1B are corrected with rejudgment pending, while JD-C3 remains open for R1C.
+  reason: Judgment Day correction round 1 is complete; R1A, R1B, and R1C are corrected with scoped dual rejudgment pending.
 nextRecommended: resolve-review
 blockedReasons:
-  - Complete bounded R1C for JD-C3 from the frozen R1B candidate, then run scoped re-judgment.
-  - Strict verification and archive remain blocked until scoped re-judgment approves a frozen corrected candidate.
+  - Run scoped dual rejudgment on the frozen corrected candidate.
+  - Strict verification and archive remain blocked until scoped rejudgment approves that candidate.
 planningBase:
   pullRequest: 254
   commit: c5309ec
