@@ -5,51 +5,55 @@ artifactStore: openspec
 planningHome:
   mode: repo-local
   path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
-changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority
 artifactPaths:
   proposal:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/proposal.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/proposal.md
   specs:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/affected-test-candidates/spec.md
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/ast-explore-call-spines/spec.md
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/scoped-compiler-impact/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/specs/affected-test-candidates/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/specs/ast-explore-call-spines/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/specs/scoped-compiler-impact/spec.md
   design:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/design.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/design.md
   tasks:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/tasks.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/tasks.md
   applyProgress:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/apply-progress.json
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/apply-progress.json
   verifyReport:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/verify-report.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/verify-report.md
   reviewPolicy: []
   reviewLedger:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/reviews/ledger.json
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/reviews/ledger.json
   reviewReceipt: []
   reviewBundle: []
   reviewContext: []
   reviewState: []
+  archiveReport:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/archive-report.md
 contextFiles:
   proposal:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/proposal.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/proposal.md
   specs:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/affected-test-candidates/spec.md
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/ast-explore-call-spines/spec.md
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/scoped-compiler-impact/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/specs/affected-test-candidates/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/specs/ast-explore-call-spines/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/specs/scoped-compiler-impact/spec.md
   design:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/design.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/design.md
   tasks:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/tasks.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/tasks.md
   applyProgress:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/apply-progress.json
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/apply-progress.json
   verifyReport:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/verify-report.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/verify-report.md
   reviewPolicy: []
   reviewLedger:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/reviews/ledger.json
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/reviews/ledger.json
   reviewReceipt: []
   reviewBundle: []
   reviewContext: []
   reviewState: []
+  archiveReport:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority/archive-report.md
 artifacts:
   exploration: done
   proposal: done
@@ -63,11 +67,12 @@ artifacts:
   reviewBundle: missing
   reviewContext: missing
   reviewState: missing
+  archiveReport: done
 taskProgress:
   total: 14
-  completed: 13
-  pending: 1
-  allComplete: false
+  completed: 14
+  pending: 0
+  allComplete: true
 dependencies:
   proposal: all_done
   specs: all_done
@@ -75,13 +80,13 @@ dependencies:
   tasks: all_done
   apply: all_done
   verify: all_done
-  archive: ready
+  archive: all_done
 applyState: verified-settled
 actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
   allowedEditRoots:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/archive/2026-09-08-2026-09-06-issue-219-computed-key-call-authority
 relationships:
   dependsOn:
     - issue-247-honest-scoped-call-coverage
@@ -115,10 +120,10 @@ phaseInstructions:
   remediate: []
   archive:
     - Archive only after strict verify passes, exact-head CI is green, review authority is valid when present, and no active RED remains.
-nextRecommended: archive
+nextRecommended: none
 blockedReasons: []
 risks:
-  - Settlement is complete for attempt sha256:c907f531c1b5d61a889d8a8b4bb1c789b84933b60e724d800916a0da3f36f23b; archive and delivery remain pending, and strict verification plus CI confer no delivery authority.
+  - Settlement and archive are complete for attempt sha256:c907f531c1b5d61a889d8a8b4bb1c789b84933b60e724d800916a0da3f36f23b; strict verification plus CI confer no delivery authority.
   - The runtime child exactly reaches the hard review boundary: 365 additions + 35 deletions = 400/400.
   - Compiler-derived union-key and receiver-alternative enumeration can overclaim authority if any branch is missed.
   - Scoped impact and whole-project call-spine producers can drift unless they share one bounded decision.
@@ -181,7 +186,8 @@ judgment:
 verification:
   status: pass-with-warnings
   evidenceRevision: sha256:82ac7fc1871a1c70916782b815b07c022c8589ac3d13af1d57d2ad3bea67561b
-  head: 315c8873bb45e5c3ab8f2535b33fd733e0858ce6
+  reportHead: 315c8873bb45e5c3ab8f2535b33fd733e0858ce6
+  localVerificationHead: a4ae924
   runtimeTarget: 1ac6b84a2df402e8275f417fed2bfb7605a20d07
   mainBase: 7bb0c6800a9bfabddce11d26f61e00a90ed168b2
   requirementCount: 3
@@ -213,5 +219,16 @@ tasks:
   runtimeChild: U1
   acquireRequestId: issue219-u1-apply-v1
   settleRequestId: issue219-u1-settle-v1
-lastPhase: verify
+archive:
+  status: complete-with-warnings
+  date: 2026-09-08
+  report: archive-report.md
+  canonicalRequirementsMerged: 3
+  canonicalScenariosMerged: 19
+delivery:
+  status: pending
+  authority: false
+  blocker: GitHub credential expired; local verification HEAD a4ae924 is not pushed.
+  next: Renew the credential, push a4ae924, and read back the remote result.
+lastPhase: archive
 updatedAt: 2026-09-08T09:00:15Z
