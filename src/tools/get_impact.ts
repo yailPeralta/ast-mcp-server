@@ -17,8 +17,10 @@ import { createRequestContext } from "../services/request-context.js";
 import { RELATIONSHIP_EDGE_KINDS } from "../services/relationships.js";
 import {
   FreshnessSchema,
+  RelationshipCoverageEntrySchema,
   RelationshipEdgeSchema,
   RelationshipEndpointSchema,
+  RelationshipWorkSchema,
 } from "./relationship-schema.js";
 import {
   createToolErrorContext,
@@ -85,6 +87,9 @@ const ImpactOutputSchema = z.object({
   max_depth: z.number().int().min(0),
   max_nodes: z.number().int().positive(),
   max_edges: z.number().int().positive(),
+  coverage: z.array(RelationshipCoverageEntrySchema),
+  work: RelationshipWorkSchema,
+  proven_empty: z.boolean(),
   incomplete: z.boolean(),
   truncation: z.object({
     truncated: z.boolean(),
@@ -147,7 +152,14 @@ export function registerGetImpact(server: McpServer): void {
               context.projectRoot,
               root,
               freshness,
-              { direction, max_depth, max_nodes, max_edges, relationship_kinds },
+              {
+                direction,
+                max_depth,
+                max_nodes,
+                max_edges,
+                relationship_kinds,
+                authority: "semantic",
+              },
               operationContext,
             );
             return {

@@ -12,8 +12,12 @@ import { findLocatedDeclaration } from "./symbols.js";
 import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
 import {
   createCompilerRelationshipResolver,
+  isRelationshipCoverageComplete,
+  mergeRelationshipCoverage,
   RELATIONSHIP_EDGE_KINDS,
+  type RelationshipCoverageEntry,
   type RelationshipEdge,
+  type RelationshipWork,
   type RelationshipEdgeKind,
   type RelationshipEndpoint,
 } from "./relationships.js";
@@ -41,6 +45,10 @@ export interface ImpactTraversalOptions {
   readonly relationship_kinds?: readonly RelationshipEdgeKind[];
 }
 
+export interface CompilerImpactTraversalOptions extends ImpactTraversalOptions {
+  readonly authority?: "legacy" | "semantic";
+}
+
 export interface ImpactNode {
   readonly endpoint: RelationshipEndpoint;
   readonly depth: number;
@@ -59,9 +67,18 @@ export interface ImpactResult {
   readonly max_depth: number;
   readonly max_nodes: number;
   readonly max_edges: number;
+  readonly coverage?: readonly RelationshipCoverageEntry[];
+  readonly work?: RelationshipWork;
+  readonly proven_empty?: boolean;
   readonly incomplete: boolean;
   readonly truncation: TruncationMetadata;
   readonly truncation_reasons: readonly TruncationReason[];
+}
+
+export interface ImpactResultWithAuthority extends ImpactResult {
+  readonly coverage: readonly RelationshipCoverageEntry[];
+  readonly work: RelationshipWork;
+  readonly proven_empty: boolean;
 }
 
 interface NormalizedImpactOptions {
@@ -93,7 +110,7 @@ export function isExactImpactEdge(edge: RelationshipEdge): boolean {
   );
 }
 
-export function assertExactImpactEvidence(
+export function assertCompleteExactImpactEvidence(
   impact: Pick<ImpactResult, "incomplete" | "edges">,
 ): void {
   if (typeof impact !== "object" || impact === null || !Array.isArray(impact.edges)) {
@@ -105,6 +122,12 @@ export function assertExactImpactEvidence(
   if (!impact.edges.every(isExactImpactEdge)) {
     throw new Error("Test candidates require fresh exact compiler impact evidence.");
   }
+}
+
+export function assertExactImpactEvidence(
+  impact: Pick<ImpactResult, "incomplete" | "edges">,
+): void {
+  assertCompleteExactImpactEvidence(impact);
 }
 
 interface QueuedNode {
@@ -302,6 +325,8 @@ type NeighborProvider = (
   maxWorkItems?: number,
 ) => {
   readonly neighbors: readonly Neighbor[];
+  readonly coverage?: readonly RelationshipCoverageEntry[];
+  readonly work?: RelationshipWork;
   readonly incomplete: boolean;
   readonly excludedNeighbors: boolean;
   readonly workLimitReached: boolean;
@@ -312,7 +337,8 @@ function traverseWithNeighborProvider(
   neighborsFor: NeighborProvider,
   options: ImpactTraversalOptions = {},
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
-): ImpactResult {
+  semanticAuthority = false,
+): ImpactResultWithAuthority {
   requestContext.checkpoint();
   if (typeof root !== "object" || root === null) {
     throw new Error("Impact traversal input is invalid.");
@@ -325,6 +351,45 @@ function traverseWithNeighborProvider(
   const queue: QueuedNode[] = [{ key: endpointKey(root), endpoint: root, depth: 0 }];
   const truncationReasons = new Set<TruncationReason>();
   let maxDepthReached = 0;
+  let coverage: readonly RelationshipCoverageEntry[] = [];
+  let relationshipWorkItems = 0;
+  let relationshipWorkLimitReached = false;
+  const resolveNeighbors: NeighborProvider = (
+    current,
+    providerOptions,
+    context,
+    maxEdges,
+    stopAfterFirst,
+    allowedNeighborKeys,
+    excludedRelationshipIds,
+    maxWorkItems,
+  ) => {
+    const remainingWorkItems = IMPACT_RELATIONSHIP_WORK_ITEMS - relationshipWorkItems;
+    if (remainingWorkItems <= 0) {
+      relationshipWorkLimitReached = true;
+      return {
+        neighbors: [],
+        incomplete: true,
+        excludedNeighbors: false,
+        workLimitReached: true,
+      };
+    }
+    const result = neighborsFor(
+      current,
+      providerOptions,
+      context,
+      maxEdges,
+      stopAfterFirst,
+      allowedNeighborKeys,
+      excludedRelationshipIds,
+      Math.min(maxWorkItems ?? remainingWorkItems, remainingWorkItems),
+    );
+    coverage = mergeRelationshipCoverage(coverage, result.coverage ?? []);
+    relationshipWorkItems += result.work?.work_items ?? 0;
+    relationshipWorkLimitReached ||=
+      result.workLimitReached || result.work?.work_limit_reached === true;
+    return result;
+  };
   const classifyObservedNeighbor = (
     current: QueuedNode,
     neighbor: Neighbor,
@@ -346,7 +411,7 @@ function traverseWithNeighborProvider(
     const current = queue.shift()!;
     const remainingEdges = normalized.max_edges - selectedEdges.size;
     if (remainingEdges <= 0) {
-      const probe = neighborsFor(
+      const probe = resolveNeighbors(
         current.endpoint,
         normalized,
         requestContext,
@@ -370,7 +435,7 @@ function traverseWithNeighborProvider(
           ? "record_limit"
           : undefined;
     const allowedNeighborKeys = restrictionReason ? new Set(nodes.keys()) : undefined;
-    const batch = neighborsFor(
+    const batch = resolveNeighbors(
       current.endpoint,
       normalized,
       requestContext,
@@ -380,7 +445,6 @@ function traverseWithNeighborProvider(
       new Set(selectedEdges.keys()),
     );
     if (batch.excludedNeighbors && restrictionReason) truncationReasons.add(restrictionReason);
-    if (batch.workLimitReached) truncationReasons.add("record_limit");
     let skippedNewNode = false;
     for (const neighbor of batch.neighbors) {
       requestContext.checkpoint();
@@ -415,7 +479,7 @@ function traverseWithNeighborProvider(
 
     if (restrictionReason) {
       if (batch.incomplete && !batch.workLimitReached) truncationReasons.add("edge_limit");
-      const probe = neighborsFor(
+      const probe = resolveNeighbors(
         current.endpoint,
         normalized,
         requestContext,
@@ -435,7 +499,7 @@ function traverseWithNeighborProvider(
       (skippedNewNode || nodes.size >= normalized.max_nodes) &&
       selectedEdges.size < normalized.max_edges
     ) {
-      const knownBatch = neighborsFor(
+      const knownBatch = resolveNeighbors(
         current.endpoint,
         normalized,
         requestContext,
@@ -445,7 +509,6 @@ function traverseWithNeighborProvider(
         new Set(selectedEdges.keys()),
       );
       if (knownBatch.excludedNeighbors) truncationReasons.add("record_limit");
-      if (knownBatch.workLimitReached) truncationReasons.add("record_limit");
       for (const neighbor of knownBatch.neighbors) {
         requestContext.checkpoint();
         if (selectedEdges.size >= normalized.max_edges) {
@@ -459,7 +522,7 @@ function traverseWithNeighborProvider(
       }
     } else if (batch.incomplete && !batch.workLimitReached) {
       truncationReasons.add("edge_limit");
-      const overflowProbe = neighborsFor(
+      const overflowProbe = resolveNeighbors(
         current.endpoint,
         normalized,
         requestContext,
@@ -479,6 +542,9 @@ function traverseWithNeighborProvider(
     truncationReasons.has(reason as TruncationReason),
   ) as TruncationReason[];
   const truncated = orderedReasons.length > 0;
+  const boundedIncomplete = truncated || relationshipWorkLimitReached;
+  const semanticIncomplete = boundedIncomplete || !isRelationshipCoverageComplete(coverage);
+  const incomplete = semanticAuthority ? semanticIncomplete : boundedIncomplete;
   requestContext.checkpoint();
   return {
     root,
@@ -498,7 +564,14 @@ function traverseWithNeighborProvider(
     max_depth: normalized.max_depth,
     max_nodes: normalized.max_nodes,
     max_edges: normalized.max_edges,
-    incomplete: truncated,
+    coverage,
+    work: {
+      work_items: relationshipWorkItems,
+      max_work_items: IMPACT_RELATIONSHIP_WORK_ITEMS,
+      work_limit_reached: relationshipWorkLimitReached,
+    },
+    proven_empty: selectedEdges.size === 0 && !semanticIncomplete,
+    incomplete,
     truncation: createTruncationMetadata(truncated, truncated ? orderedReasons[0] : null),
     truncation_reasons: orderedReasons,
   };
@@ -509,7 +582,7 @@ export function traverseImpact(
   edges: readonly RelationshipEdge[],
   options: ImpactTraversalOptions = {},
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
-): ImpactResult {
+): ImpactResultWithAuthority {
   if (!Array.isArray(edges)) throw new Error("Impact traversal input is invalid.");
   return traverseWithNeighborProvider(
     root,
@@ -549,9 +622,9 @@ export function traverseCompilerImpact(
   projectRoot: string,
   root: RelationshipEndpoint,
   freshness: FreshnessMetadata,
-  options: ImpactTraversalOptions = {},
+  options: CompilerImpactTraversalOptions = {},
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
-): ImpactResult {
+): ImpactResultWithAuthority {
   const resolver = createCompilerRelationshipResolver(
     project,
     projectRoot,
@@ -583,6 +656,8 @@ export function traverseCompilerImpact(
       });
       return {
         neighbors: collectNeighbors(current, resolution.edges, normalized, requestContext),
+        coverage: resolution.coverage,
+        work: resolution.work,
         incomplete: resolution.incomplete,
         excludedNeighbors: resolution.excluded_neighbors,
         workLimitReached: resolution.work_limit_reached,
@@ -590,5 +665,6 @@ export function traverseCompilerImpact(
     },
     options,
     requestContext,
+    options.authority === "semantic",
   );
 }

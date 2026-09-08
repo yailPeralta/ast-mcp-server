@@ -38,6 +38,14 @@ afterEach(async () => {
   await Promise.all(fixtures.splice(0).map((fixture) => fixture.cleanup()));
 });
 
+function legacyImpact(result: ReturnType<typeof traverseImpact>) {
+  const { coverage, work, proven_empty, ...legacy } = result;
+  void coverage;
+  void work;
+  void proven_empty;
+  return legacy;
+}
+
 async function graphFixture(): Promise<{
   fixture: ProjectFixture;
   project: Project;
@@ -484,9 +492,9 @@ describe("bounded impact traversal", () => {
       rootRequest("Child.run", "src/child.ts"),
     ]) {
       const root = resolveImpactRoot(project, fixture.root, request);
-      expect(traverseCompilerImpact(project, fixture.root, root, freshness, options)).toEqual(
-        traverseImpact(root, edges, options),
-      );
+      expect(
+        legacyImpact(traverseCompilerImpact(project, fixture.root, root, freshness, options)),
+      ).toEqual(legacyImpact(traverseImpact(root, edges, options)));
     }
   });
 
@@ -520,7 +528,7 @@ describe("bounded impact traversal", () => {
       const actual = traverseCompilerImpact(project, fixture.root, root, freshness, options);
 
       expect(expected.edges).toEqual([]);
-      expect(actual).toEqual(expected);
+      expect(legacyImpact(actual)).toEqual(legacyImpact(expected));
     }
   });
 
@@ -560,7 +568,7 @@ describe("bounded impact traversal", () => {
       const actual = traverseCompilerImpact(project, fixture.root, root, freshness, options);
 
       expect(expected.edges).toEqual([]);
-      expect(actual).toEqual(expected);
+      expect(legacyImpact(actual)).toEqual(legacyImpact(expected));
     }
   });
 
@@ -652,9 +660,9 @@ describe("bounded impact traversal", () => {
       rootRequest("use", "src/box.ts"),
     ]) {
       const root = resolveImpactRoot(project, fixture.root, request);
-      expect(traverseCompilerImpact(project, fixture.root, root, freshness, options)).toEqual(
-        traverseImpact(root, edges, options),
-      );
+      expect(
+        legacyImpact(traverseCompilerImpact(project, fixture.root, root, freshness, options)),
+      ).toEqual(legacyImpact(traverseImpact(root, edges, options)));
     }
   });
 
@@ -778,9 +786,9 @@ describe("bounded impact traversal", () => {
       relationship_kinds: ["reference" as const],
     };
 
-    expect(traverseCompilerImpact(project, fixture.root, root, freshness, options)).toEqual(
-      traverseImpact(root, edges, options),
-    );
+    expect(
+      legacyImpact(traverseCompilerImpact(project, fixture.root, root, freshness, options)),
+    ).toEqual(legacyImpact(traverseImpact(root, edges, options)));
   });
 
   it("does not expose dependency declarations as project impact endpoints", async () => {
@@ -1378,11 +1386,15 @@ describe("bounded impact traversal", () => {
     };
 
     expect(
-      traverseCompilerImpact(project, fixture.root, root, freshness, edgeLimitedOptions),
-    ).toEqual(traverseImpact(root, oracle, edgeLimitedOptions));
+      legacyImpact(
+        traverseCompilerImpact(project, fixture.root, root, freshness, edgeLimitedOptions),
+      ),
+    ).toEqual(legacyImpact(traverseImpact(root, oracle, edgeLimitedOptions)));
     expect(
-      traverseCompilerImpact(project, fixture.root, target, freshness, completeOptions),
-    ).toEqual(traverseImpact(target, oracle, completeOptions));
+      legacyImpact(
+        traverseCompilerImpact(project, fixture.root, target, freshness, completeOptions),
+      ),
+    ).toEqual(legacyImpact(traverseImpact(target, oracle, completeOptions)));
   });
 
   it("reports simultaneous node and edge exhaustion independently", async () => {
@@ -1410,7 +1422,7 @@ describe("bounded impact traversal", () => {
     const actual = traverseCompilerImpact(project, fixture.root, root, freshness, options);
 
     expect(actual.truncation_reasons).toEqual(["record_limit", "edge_limit"]);
-    expect(actual).toEqual(traverseImpact(root, oracle, options));
+    expect(legacyImpact(actual)).toEqual(legacyImpact(traverseImpact(root, oracle, options)));
   });
 
   it("walks outgoing exact references deterministically", async () => {
@@ -1659,6 +1671,142 @@ describe("relationship coverage", () => {
       cell("contains", "incoming", "symbol", "unsupported"),
       cell("contains", "outgoing", "symbol", "unsupported"),
     ]);
+  });
+});
+
+describe("honest impact authority", () => {
+  async function impactFixture(files: Record<string, string>, symbol = "target") {
+    const fixture = await createProjectFixture(files);
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest(symbol, "src/target.ts"));
+    return { fixture, project, root };
+  }
+
+  it("marks explicit and default contains coverage incomplete without traversal truncation", async () => {
+    const { fixture, project, root } = await impactFixture({
+      "src/target.ts": "export function target(): number { return 1; }\n",
+    });
+
+    for (const relationship_kinds of [["contains" as const], undefined]) {
+      const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+        direction: "incoming",
+        max_depth: 1,
+        max_nodes: 10,
+        max_edges: 10,
+        relationship_kinds,
+        authority: "semantic",
+      });
+      expect(result).toMatchObject({
+        incomplete: true,
+        proven_empty: false,
+        truncation: { truncated: false, reason: null },
+      });
+      expect(result.coverage).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "contains",
+            direction: "incoming",
+            endpoint_class: "symbol",
+            status: "unsupported",
+          }),
+        ]),
+      );
+    }
+  });
+
+  it("preserves useful edges while coverage work records a semantic gap", async () => {
+    const { fixture, project, root } = await impactFixture({
+      "src/target.ts": "export function target(): number { return 1; }\n",
+      "src/use.ts": 'import { target } from "./target.js"; export const value = target();\n',
+    });
+    const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      direction: "incoming",
+      max_depth: 1,
+      max_nodes: 10,
+      max_edges: 10,
+      relationship_kinds: ["reference", "call"],
+      authority: "semantic",
+    });
+
+    expect(result.edges).toHaveLength(1);
+    expect(result).toMatchObject({
+      incomplete: true,
+      proven_empty: false,
+      truncation: { truncated: false },
+      work: { work_limit_reached: false, max_work_items: 100_000 },
+    });
+    expect(result.work.work_items).toBeGreaterThan(0);
+  });
+
+  it("reports proven empty only after every applicable requested cell completes", async () => {
+    const { fixture, project, root } = await impactFixture({
+      "src/target.ts": "export function target(): number { return 1; }\n",
+    });
+    const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      direction: "incoming",
+      relationship_kinds: ["reference"],
+      authority: "semantic",
+    });
+
+    expect(result).toMatchObject({
+      edges: [],
+      coverage: [
+        {
+          kind: "reference",
+          direction: "incoming",
+          endpoint_class: "symbol",
+          status: "completed",
+        },
+      ],
+      incomplete: false,
+      proven_empty: true,
+      truncation: { truncated: false },
+      work: { work_limit_reached: false },
+    });
+  });
+
+  it("keeps exhausted probe work distinct from traversal truncation", async () => {
+    const uses = Array.from(
+      { length: 1_100 },
+      (_, index) => `export const value${index} = target();`,
+    ).join("\n");
+    const { fixture, project, root } = await impactFixture({
+      "src/target.ts": "export function target(): number { return 1; }\n",
+      "src/use.ts": `import { target } from "./target.js";\n${uses}\n`,
+    });
+    const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      direction: "incoming",
+      max_depth: 0,
+      relationship_kinds: ["reference"],
+      authority: "semantic",
+    });
+
+    expect(result.truncation.truncated).toBe(false);
+    expect(result.work).toMatchObject({ work_limit_reached: true, max_work_items: 100_000 });
+    expect(result.coverage[0]).toMatchObject({ status: "unfinished" });
+    expect(result.incomplete).toBe(true);
+  });
+});
+
+describe("compiler impact projection compatibility", () => {
+  it("keeps default incomplete semantics limited to traversal and work bounds", async () => {
+    const fixture = await createProjectFixture({
+      "src/target.ts": "export function target(): number { return 1; }\n",
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(project, fixture.root, rootRequest("target", "src/target.ts"));
+
+    const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      direction: "incoming",
+      relationship_kinds: ["contains"],
+    });
+
+    expect(result).toMatchObject({
+      incomplete: false,
+      coverage: [expect.objectContaining({ kind: "contains", status: "unsupported" })],
+    });
   });
 });
 

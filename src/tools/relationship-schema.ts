@@ -2,6 +2,7 @@ import { z } from "zod";
 import { FRESHNESS_CAUSES, SNAPSHOT_STATES } from "../services/read-contracts.js";
 import {
   RELATIONSHIP_CONFIDENCES,
+  RELATIONSHIP_COVERAGE_STATUSES,
   RELATIONSHIP_EDGE_KINDS,
   RELATIONSHIP_PROVENANCES,
   RELATIONSHIP_RESOLUTIONS,
@@ -25,6 +26,19 @@ export const FreshnessSchema = z.object({
   state: z.enum(SNAPSHOT_STATES),
   causes: z.array(z.enum(FRESHNESS_CAUSES)),
   checked_at: z.string().nullable(),
+});
+
+export const RelationshipCoverageEntrySchema = z.object({
+  kind: z.enum(RELATIONSHIP_EDGE_KINDS),
+  direction: z.enum(["incoming", "outgoing"]),
+  endpoint_class: z.enum(["module", "symbol"]),
+  status: z.enum(RELATIONSHIP_COVERAGE_STATUSES),
+});
+
+export const RelationshipWorkSchema = z.object({
+  work_items: z.number().int().min(0),
+  max_work_items: z.number().int().positive(),
+  work_limit_reached: z.boolean(),
 });
 
 export const RelationshipEdgeSchema = z.object({
