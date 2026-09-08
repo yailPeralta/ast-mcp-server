@@ -1600,6 +1600,32 @@ function scopedDirectCallTarget(
   return targets.size === 1 ? [...targets.values()][0] : undefined;
 }
 
+function scopedReferenceFlowsToUncertainCall(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  reference: Node,
+): boolean {
+  const declaration = reference.getFirstAncestorByKind(SyntaxKind.VariableDeclaration);
+  const initializer = declaration?.getInitializer();
+  const name = declaration?.getNameNode();
+  if (
+    !initializer ||
+    !name ||
+    !Node.isIdentifier(name) ||
+    reference.getStart() < initializer.getStart() ||
+    reference.getEnd() > initializer.getEnd()
+  ) {
+    return false;
+  }
+
+  consumeScopedWork(state, collector);
+  const carrierReferences = name.findReferencesAsNodes();
+  reserveScopedWork(state, collector, carrierReferences.length);
+  return carrierReferences.some((carrierReference) =>
+    Boolean(scopedInvocationForReference(carrierReference)),
+  );
+}
+
 function addScopedIncomingCalls(
   state: ScopedCompilerRelationshipState,
   collector: ScopedEdgeCollector,
@@ -1617,7 +1643,12 @@ function addScopedIncomingCalls(
   const candidates = createScopedCandidateSet(collector);
   for (const reference of references) {
     const site = scopedInvocationForReference(reference);
-    if (!site) continue;
+    if (!site) {
+      if (scopedReferenceFlowsToUncertainCall(state, collector, reference)) {
+        collector.unfinished = true;
+      }
+      continue;
+    }
     const source = scopedContainingSymbol(
       state,
       collector,

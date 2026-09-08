@@ -340,12 +340,14 @@ judgmentDay:
   contradictions: 0
   info: 3
   correctionRound1:
-    status: pending-maintainer-consent
+    status: in-progress-r1a-corrected
     units:
       - id: R1A
-        predecessor: ec235b0
+        predecessor: f72d40b
         forecast: 180-320
         hardMax: 400
+        status: corrected-rejudgment-pending
+        focused: red-4/4-twice-green-4/4-authority-133/133-full-clean-988/988
       - id: R1B
         predecessor: R1A-corrected-candidate
         forecast: 20-80
@@ -354,7 +356,7 @@ judgmentDay:
         predecessor: R1B-corrected-candidate
         forecast: 20-120
         hardMax: 400
-  scopedRejudgment: blocked
+  scopedRejudgment: pending-after-R1B-R1C
   strictVerification: blocked
   archive: blocked
-lastPhase: judgment-day-round-1
+lastPhase: judgment-day-correction-round-1-r1a
