@@ -35,8 +35,8 @@ See `chain.md` for exact branches, symbols, commands, trace, IDs, rollback, and 
 ## Unit 2: Impact Projection
 
 - [ ] 2.1 Base only on U1; acquire `issue247-u2-apply-v1`; repeat the exact U2 RED twice unchanged.
-- [ ] 2.2 Implement coverage/work/proven-empty propagation and public JSON/TOON schemas with tests.
-- [ ] 2.3 Refactor and gate SCI-R3/R6–R8, registered MCP parity, budget, finish, and rollback.
+- [x] 2.2 Implement coverage/work/proven-empty propagation and public JSON/TOON schemas with tests.
+- [x] 2.3 Refactor and gate SCI-R3/R6–R8, registered MCP parity, budget, finish, and rollback.
 - [ ] 2.4 Settle `issue247-u2-settle-v1`; freeze U2 without authority claims.
 
 ## Unit 3: Scoped Direct Calls

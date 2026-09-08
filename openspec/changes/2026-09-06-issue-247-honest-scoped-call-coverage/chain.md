@@ -51,6 +51,7 @@ After GREEN, refactor only while focused tests stay green. Every unit records ex
 - **GREEN/refactor:** merge coverage/work from normal, restricted, and probe resolver calls; keep traversal truncation separate; compute `incomplete = truncated || work_limit_reached || !coverageComplete`; compute proven empty only for zero edges and complete authority.
 - **Acceptance:** SCI-R3 S1, SCI-R6 S1–S2, SCI-R7 S1–S2, SCI-R8 S1 (6 scenarios). Runtime harness: `yarn test:mcp`, including registered `ast_get_impact` JSON/TOON logical parity.
 - **Rollback:** revert only impact projection, schemas, handler fields, and paired tests; U1 remains internal and call cells remain unsupported.
+- **Apply progress:** candidate-ready-not-reviewed on `6e459ad`; explicit semantic authority preserves public honesty while legacy candidate/batch behavior remains unchanged. Focused/runtime/full clean gates pass; ambient `GIT_PAGER`, OpenSpec format, and audit baselines remain classified. Settlement remains parent-owned.
 
 ## U3 — Scoped Direct Calls
 

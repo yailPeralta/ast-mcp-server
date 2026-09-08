@@ -59,8 +59,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 28
-  completed: 5
-  pending: 23
+  completed: 7
+  pending: 21
   allComplete: false
 dependencies:
   proposal: all_done
@@ -75,7 +75,7 @@ actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
   allowedEditRoots:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage
+    - /home/yail/Documentos/proyects/ast-mcp-server
 relationships:
   dependsOn: []
   supersedes: []
@@ -282,4 +282,12 @@ tasks:
   candidateAuthority: false
   deliveryAuthority: false
   readyForApply: true
-lastPhase: tasks
+apply:
+  u2:
+    status: candidate-ready-not-reviewed
+    base: 6e459ad721cba5e8e44f74eee253c1d11c79664f
+    focused: compatibility-1/1-and-u2-7/7-pass
+    runtimeMcp: pass
+    fullTest: clean-977/977-ambient-GIT_PAGER-baseline-only
+    authoredBudget: 400
+lastPhase: apply

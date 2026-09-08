@@ -26,7 +26,7 @@
     {
       "id": "U2",
       "name": "Impact projection",
-      "status": "pending",
+      "status": "candidate-ready-not-reviewed",
       "branch": "feat/247-u2-impact-authority",
       "base": "feat/247-u1-coverage-contract",
       "forecast": "320-395",
@@ -75,6 +75,12 @@
         "name": "stable four-test RED twice",
         "file": "test/impact.test.ts",
         "taskId": "U1"
+      },
+      {
+        "id": "u2-impact-authority",
+        "name": "stable five-test RED twice",
+        "file": "test/impact.test.ts",
+        "taskId": "U2"
       }
     ],
     "green": [
@@ -83,6 +89,12 @@
         "name": "four canonical scenarios pass",
         "file": "test/impact.test.ts",
         "taskId": "U1"
+      },
+      {
+        "id": "u2-impact-authority",
+        "name": "seven semantic authority scenarios pass",
+        "file": "test/impact.test.ts",
+        "taskId": "U2"
       }
     ],
     "refactored": [
@@ -91,6 +103,12 @@
         "name": "focused and related suites pass",
         "file": "test/impact.test.ts",
         "taskId": "U1"
+      },
+      {
+        "id": "u2-impact-authority",
+        "name": "impact and MCP suites pass",
+        "file": "test/mcp.integration.test.ts",
+        "taskId": "U2"
       }
     ]
   },
@@ -100,5 +118,14 @@
     "runtimeHarness": "N/A: internal resolver contract; public response intentionally unchanged",
     "rollback": "revert relationships coverage contract/registry and paired impact test hunks"
   },
-  "updatedAt": "2026-09-06T19:43:44Z"
+  "u2Evidence": {
+    "base": "6e459ad721cba5e8e44f74eee253c1d11c79664f",
+    "red": "exact U2 command twice; 5/5 stable failures for absent authority fields/semantics",
+    "green": "compatibility 1/1; U2 7/7; impact 54/54; MCP 29/29; batch 16/16; candidates 13/13",
+    "fullGate": "clean 977/977; ambient 974/975 with baseline GIT_PAGER only; format code pass/OpenSpec baseline",
+    "audit": "baseline unchanged: fast-uri 4 high, qs 2 moderate",
+    "runtimeHarness": "yarn test:mcp: ok, stdio 16 tools, JSON/TOON enabled",
+    "rollback": "revert U2 impact projection/schema/test hunks; retain U1 resolver contract"
+  },
+  "updatedAt": "2026-09-06T20:32:08Z"
 }
