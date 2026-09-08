@@ -37,7 +37,7 @@
     {
       "id": "U3",
       "name": "Scoped direct calls",
-      "status": "pending",
+      "status": "candidate-ready-not-reviewed",
       "branch": "feat/247-u3-scoped-direct-calls",
       "base": "feat/247-u2-impact-authority",
       "forecast": "330-395",
@@ -77,10 +77,16 @@
         "taskId": "U1"
       },
       {
-        "id": "u2-impact-authority",
+        "id": "u2-impact",
         "name": "stable five-test RED twice",
-        "file": "test/impact.test.ts",
+        "file": "impact+MCP",
         "taskId": "U2"
+      },
+      {
+        "id": "u3-calls",
+        "name": "stable three-test RED twice; fingerprint 8b545be0ca2a9f40573370d17c03b74280be7eb637e92ceb11dee96313caf981",
+        "file": "test/impact.test.ts",
+        "taskId": "U3"
       }
     ],
     "green": [
@@ -91,10 +97,16 @@
         "taskId": "U1"
       },
       {
-        "id": "u2-impact-authority",
-        "name": "seven semantic authority scenarios pass",
-        "file": "test/impact.test.ts",
+        "id": "u2-impact",
+        "name": "seven impact authority scenarios pass",
+        "file": "impact+MCP",
         "taskId": "U2"
+      },
+      {
+        "id": "u3-calls",
+        "name": "four focused tests pass",
+        "file": "impact+relationships",
+        "taskId": "U3"
       }
     ],
     "refactored": [
@@ -105,10 +117,16 @@
         "taskId": "U1"
       },
       {
-        "id": "u2-impact-authority",
-        "name": "impact and MCP suites pass",
-        "file": "test/mcp.integration.test.ts",
+        "id": "u2-impact",
+        "name": "focused, MCP, batch and full gates pass",
+        "file": "impact+MCP",
         "taskId": "U2"
+      },
+      {
+        "id": "u3-calls",
+        "name": "67 impact/relationship tests pass",
+        "file": "impact+relationships",
+        "taskId": "U3"
       }
     ]
   },
@@ -127,5 +145,13 @@
     "runtimeHarness": "yarn test:mcp: ok, stdio 16 tools, JSON/TOON enabled",
     "rollback": "revert U2 impact projection/schema/test hunks; retain U1 resolver contract"
   },
-  "updatedAt": "2026-09-06T20:32:08Z"
+  "u3Evidence": {
+    "base": "fb742d3487ea5e858955cad5fc0fa9aea1f268cc",
+    "red": "exact U3 command twice; stable 3/3 failures; fingerprint 8b545be0ca2a9f40573370d17c03b74280be7eb637e92ceb11dee96313caf981",
+    "greenRefactor": "U3 4/4; impact+relationships 67/67; focused/downstream 125/125; full 980/980",
+    "runtime": "test:mcp/lifecycle/cli/errors pass; public createPaginationInputSchema has three exact direct callers",
+    "audit": "baseline unchanged: fast-uri 4 high, qs 2 moderate; code format/lint/typecheck/build pass; OpenSpec format baseline remains",
+    "rollback": "revert scoped call producer/helper and paired impact tests; U1/U2 restore call unsupported"
+  },
+  "updatedAt": "2026-09-06T21:00:00Z"
 }

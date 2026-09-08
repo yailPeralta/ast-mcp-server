@@ -290,4 +290,11 @@ apply:
     runtimeMcp: pass
     fullTest: clean-977/977-ambient-GIT_PAGER-baseline-only
     authoredBudget: 400
+  u3:
+    status: candidate-ready-not-reviewed
+    base: fb742d3487ea5e858955cad5fc0fa9aea1f268cc
+    focused: u3-4/4-impact-relationships-67/67-downstream-125/125
+    runtimeMcpLifecycleCliErrors: pass
+    fullTest: clean-980/980
+    authoredBudget: 374
 lastPhase: apply
