@@ -1889,6 +1889,62 @@ describe("scoped direct call impact", () => {
     },
   );
 
+  it.each(["method", "other"])(
+    "computed-key call authority keeps incoming %s unfinished",
+    async (symbol) => {
+      const { fixture, project, root } = await scopedCallFixture(
+        {
+          "src/root.ts": "export class Base { method(): void {} other(): void {} }\n",
+          "src/use.ts": [
+            'import { Base } from "./root.js";',
+            "export function caller(base: Base, key: 'method' | 'other' | 'missing'): void { base[key](); }",
+          ].join("\n"),
+        },
+        `Base.${symbol}`,
+      );
+      const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+        direction: "incoming",
+        max_depth: 1,
+        max_nodes: 10,
+        max_edges: 10,
+        relationship_kinds: ["call"],
+        authority: "semantic",
+      });
+
+      expect(result.edges).toEqual([]);
+      expect(result.coverage).toEqual([
+        { kind: "call", direction: "incoming", endpoint_class: "symbol", status: "unfinished" },
+      ]);
+      expect(result).toMatchObject({
+        incomplete: true,
+        proven_empty: false,
+        truncation: { truncated: false },
+      });
+    },
+  );
+
+  it("computed-key call authority preserves an exact edge beside outgoing ambiguity", async () => {
+    const { fixture, project, root } = await scopedCallFixture({
+      "src/root.ts": [
+        "export class Base { method(): void {} other(): void {} }",
+        "export function target(): void {}",
+        "export function caller(base: Base, key: 'method' | 'other'): void { target(); base[key](); }",
+      ].join("\n"),
+    });
+    const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+      direction: "outgoing",
+      max_depth: 1,
+      max_nodes: 10,
+      max_edges: 10,
+      relationship_kinds: ["call"],
+      authority: "semantic",
+    });
+
+    expect(result.edges.map((edge) => edge.target.symbol_path)).toEqual(["target"]);
+    expect(result.coverage[0]).toMatchObject({ direction: "outgoing", status: "unfinished" });
+    expect(result).toMatchObject({ incomplete: true, proven_empty: false });
+  });
+
   it("returns an exact incoming scoped direct call and completed coverage", async () => {
     const { fixture, project, root } = await scopedCallFixture(
       {

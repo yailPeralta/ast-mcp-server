@@ -1,5 +1,9 @@
 import type { FreshnessMetadata } from "./read-contracts.js";
-import type { RelationshipEdge, RelationshipEndpoint } from "./relationships.js";
+import type {
+  CallRelationshipGap,
+  RelationshipEdge,
+  RelationshipEndpoint,
+} from "./relationships.js";
 
 export type CallSpineDirection = "incoming" | "outgoing";
 export interface CallSpineOptions {
@@ -8,6 +12,7 @@ export interface CallSpineOptions {
   readonly max_nodes: number;
   readonly max_edges: number;
   readonly discovery_complete?: boolean;
+  readonly unfinished_gaps?: readonly CallRelationshipGap[];
   readonly freshness?: FreshnessMetadata;
 }
 export interface CallSpinePath {
@@ -65,12 +70,7 @@ export function planCallSpines(
   const maxEdges = assertLimit(options.max_edges, 1, "max_edges");
   const accepted = edges.filter(exactCall);
   const freshness = options.freshness?.state ?? edges[0]?.freshness.state;
-  const authorityState =
-    freshness !== "fresh" || accepted.length !== edges.length
-      ? "untrusted"
-      : options.discovery_complete === false
-        ? "incomplete"
-        : "authoritative";
+  const trusted = freshness === "fresh" && accepted.length === edges.length;
   const reasons = new Set<"depth_limit" | "node_limit" | "edge_limit">();
   const rootKey = endpointKey(root);
   const initial = { endpoint: root, endpoints: [root], relationshipIds: [], depth: 0 };
@@ -142,6 +142,17 @@ export function planCallSpines(
       endpoints: record.endpoints,
       relationship_ids: record.relationshipIds,
     }));
+  const reached = new Set(records.keys());
+  const relevantGap = (options.unfinished_gaps ?? []).some((gap) =>
+    options.direction === "outgoing"
+      ? reached.has(endpointKey(gap.source))
+      : gap.alternatives.some((alternative) => reached.has(endpointKey(alternative))),
+  );
+  const authorityState = !trusted
+    ? "untrusted"
+    : options.discovery_complete === false || relevantGap
+      ? "incomplete"
+      : "authoritative";
   const incomplete = authorityState !== "authoritative" || reasons.size > 0;
   return {
     root,

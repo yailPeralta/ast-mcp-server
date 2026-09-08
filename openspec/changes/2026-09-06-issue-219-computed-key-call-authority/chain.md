@@ -37,7 +37,7 @@ There is one runtime child because the forecast is 300–390 authored changed li
 - **Acquire identifier:** `issue219-u1-apply-v1`; invoke compact `gentle-ai sdd-attempt acquire` only during later apply and proceed only on `state: proceed`. Retain the opaque token; a child authenticates the same attempt with that token and never acquires blind.
 - **RED twice:** run the exact filtered command from `tasks.md` twice after test-only edits. Both runs must exit 1 with the same test names and normalized fingerprint for the false selected/completed computed-key authority.
 - **GREEN/refactor:** use the same command until exit 0, then run all six relevant test files, MCP/CLI built smokes, format, lint, typecheck, full test, build, and the existing agent-workflow benchmark.
-- **Evidence:** record commands, exits, hashes, RED fingerprints, changed paths, authored line count, candidate identity, and cleanup. **Settle identifier:** `issue219-u1-settle-v1`; settle only after recording the bounded result.
+- **Evidence:** baseline 141/141; stable RED×2 was 6 failed/1 passed with normalized hash `110fd82a`; GREEN was 6/6, focused six 147/147, MCP/CLI/full/benchmark passed, and U1 stayed ≤400. **Settle identifier:** `issue219-u1-settle-v1`; settlement remains prohibited and incomplete.
 - **Rollback:** revert only the computed-key classifier/catalog, gap propagation, paired tests, and U1 evidence. Preserve #247 coverage and direct-call foundations plus an edge-free unfinished computed-element fallback; rollback must not restore guessed edges or proven emptiness.
 
 ## Review, Verification, CI, and Archive
@@ -46,4 +46,4 @@ Freeze one complete U1 candidate. Run two blind Judgment reviewers with identica
 
 After dual approval, strict verification must prove all 3 requirements and 19 scenarios on the same candidate and admit the report with `gentle-ai sdd-verify-validate`. Required CI is the newest exact-head `.github/workflows/ci.yml` matrix on Node 22.13.0 and 24. Any candidate change invalidates Judgment, verification, and CI evidence.
 
-Archive/delivery remains blocked until tasks are complete, no active RED remains, dual Judgment approves, strict verification passes, exact-head CI is green, the child diff is clean and ≤400, exclusions remain untouched, and the runtime attempt is settled. Archive, commit, push, PR creation, merge, release, and issue mutation require their own later authority; none occurs in this phase.
+U1 has no active RED and its local gates are green, but settlement, dual Judgment, strict verification, exact-head CI, and archive/delivery remain incomplete. Next recommended work is Judgment; no archive, commit, push, PR, merge, release, or issue mutation occurred.

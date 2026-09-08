@@ -194,6 +194,23 @@ describe("compiler-backed relationships", () => {
     expect(edges.every((candidate) => candidate.provenance === "compiler")).toBe(true);
   });
 
+  it("computed-key call authority excludes a selected union alternative", async () => {
+    const fixture = await createProjectFixture({
+      "src/calls.ts": [
+        "export class Base { method(): void {} other(): void {} }",
+        "export function invoke(base: Base, key: 'method' | 'other'): void { base[key](); }",
+        "export function literal(base: Base): void { base['method'](); }",
+      ].join("\n"),
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+
+    const calls = collectCompilerCallRelationships(project, fixture.root, freshness());
+    expect(calls.edges.filter((edge) => edge.source.symbol_path === "invoke")).toEqual([]);
+    expect(calls.edges.map((edge) => edge.source.symbol_path)).toContain("literal");
+    expect(calls.incomplete).toBe(true);
+  });
+
   it("classifies only compiler-resolved call, constructor, and tagged-template sites", async () => {
     const fixture = await createProjectFixture({
       "src/targets.ts":

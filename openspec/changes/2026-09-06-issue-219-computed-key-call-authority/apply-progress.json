@@ -1,16 +1,20 @@
 {
   "schema": "dsh-sdd-apply-progress",
   "change": "2026-09-06-issue-219-computed-key-call-authority",
-  "phase": "tasks",
+  "phase": "apply",
   "deliveryStrategy": "auto-chain",
   "chainStrategy": "feature-branch-chain",
   "candidateAuthority": false,
   "deliveryAuthority": false,
+  "attempt": "active supplied token sha256:127984cddac2eaaa6f9d0e0276ae1efcb23747115c63b821ce764b4a199e17df; gentle-ai unavailable; unsettled",
+  "baseline": "six-file exit 0; 141/141; sha256:f6b8408dc7b8fda45a56517d61f3f3ff0b775ac1dee7571a4b1b7bb3f110c41b",
+  "gates": "MCP+CLI exit 0 sha256:583b3053cd6c067438ac403a46cdd36d2b340400322772fbedbbe2660d3fe738; benchmark exit 0 unchanged sha256:be262944aac8f4329feeec8ee655250744e8bb0fc0c715b7daff1a4bae076030; final full exit 0 sha256:ea15ec868ac2cc7b7f87a151951d8fea6087df5a690fffd9dca189b3fd137885; prior supervised-env run failed only because GIT_PAGER=cat, and one contention retry timed out",
+  "scope": "3 requirements/19 scenarios traced; rollback allowed files only; no settlement/review/verify/CI/archive; cleanup /tmp evidence only; authored line budget measured against HEAD",
   "tasks": [
     {
       "id": "U1",
       "name": "Computed-key call authority",
-      "status": "pending",
+      "status": "green-unsettled",
       "taskIds": [
         "0.1",
         "0.2",
@@ -27,8 +31,8 @@
         "3.3",
         "3.4"
       ],
-      "branch": "fix/219-computed-key-call-authority",
-      "base": "docs/219-design",
+      "branch": "docs/219-tasks",
+      "base": "816be951c1eb36320b46292d078c026baf84a2af",
       "forecast": "300-390",
       "hardMax": 400,
       "acquireId": "issue219-u1-apply-v1",
@@ -36,9 +40,20 @@
     }
   ],
   "tdd": {
-    "red": [],
-    "green": [],
-    "refactored": []
+    "red": [
+      {
+        "task": "U1",
+        "command": "yarn vitest run test/relationships.test.ts test/impact.test.ts test/call-spines.test.ts test/mcp.integration.test.ts -t \"computed-key call authority\" --no-file-parallelism --reporter=dot",
+        "result": "twice exit 1; each 6 failed/1 passed; outputs fbc0bb7a,1445e37a; normalized names sha256:110fd82ac6c4d8f9aaeef1898afb00903b56772364b266e46ca154eb2a2e1882",
+        "active": false
+      }
+    ],
+    "green": [
+      "exit 0; 6/6; focused-six sha256:3d82527381f3f793ed614ab51d74925ec1e4dfdacef181f63be1a66ff1eac3ab"
+    ],
+    "refactored": [
+      "none; final gates sha256:ea15ec868ac2cc7b7f87a151951d8fea6087df5a690fffd9dca189b3fd137885"
+    ]
   },
-  "updatedAt": "2026-09-08T06:27:22Z"
+  "updatedAt": "2026-09-08T07:15:47Z"
 }

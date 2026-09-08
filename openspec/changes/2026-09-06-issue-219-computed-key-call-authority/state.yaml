@@ -61,8 +61,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 14
-  completed: 0
-  pending: 14
+  completed: 9
+  pending: 5
   allComplete: false
 dependencies:
   proposal: all_done
@@ -111,10 +111,10 @@ phaseInstructions:
   remediate: []
   archive:
     - Archive only after strict verify passes, exact-head CI is green, review authority is valid when present, and no active RED remains.
-nextRecommended: apply
+nextRecommended: review
 blockedReasons: []
 risks:
-  - Future apply requires explicit source/test edit authority because this tasks phase is planning-root-only.
+  - U1 used the prompt-fixed exact path allowlist and supplied active token; gentle-ai was unavailable, and settlement remains prohibited.
   - The 300-390 authored-line forecast leaves limited headroom below the 400-line review boundary.
   - Compiler-derived union-key and receiver-alternative enumeration can overclaim authority if any branch is missed.
   - Scoped impact and whole-project call-spine producers can drift unless they share one bounded decision.
@@ -164,5 +164,5 @@ tasks:
   runtimeChild: U1
   acquireRequestId: issue219-u1-apply-v1
   settleRequestId: issue219-u1-settle-v1
-lastPhase: tasks
-updatedAt: 2026-09-08T06:27:22Z
+lastPhase: apply
+updatedAt: 2026-09-08T07:15:47Z
