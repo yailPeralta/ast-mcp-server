@@ -1,0 +1,155 @@
+{
+  "schema": "gentle-ai.judgment-day/v1",
+  "change": "2026-09-06-issue-247-honest-scoped-call-coverage",
+  "target": {
+    "head": "ec235b0",
+    "frozen": true,
+    "scope": "complete immutable U5 candidate"
+  },
+  "round": 1,
+  "verdict": "ESCALATED",
+  "terminal": false,
+  "pendingDecision": "maintainer-consent-round-1-correction",
+  "judges": {
+    "A": {
+      "verdict": "ESCALATED",
+      "confirmedSevere": ["JD-C1", "JD-C2", "JD-C3"],
+      "suspectSevere": ["JD-S1"],
+      "complete": true
+    },
+    "B": {
+      "verdict": "ESCALATED",
+      "confirmedSevere": ["JD-C1", "JD-C2", "JD-C3"],
+      "suspectSevere": ["JD-S2"],
+      "complete": true
+    }
+  },
+  "ledger": {
+    "confirmed": [
+      {
+        "id": "JD-C1",
+        "severity": "SEVERE",
+        "status": "open",
+        "confirmedBy": ["A", "B"],
+        "location": "incoming scoped call resolution",
+        "claim": "Deferred computed-key and external-alternative incoming references can be skipped while their coverage cell is completed, allowing proven_empty without complete semantic evidence.",
+        "correctionUnit": "R1A"
+      },
+      {
+        "id": "JD-C2",
+        "severity": "SEVERE",
+        "status": "open",
+        "confirmedBy": ["A", "B"],
+        "location": "checked benchmark report",
+        "claim": "The checked benchmark report is stale at five scenarios while the candidate corpus and gate execute eight scenarios.",
+        "correctionUnit": "R1B"
+      },
+      {
+        "id": "JD-C3",
+        "severity": "SEVERE",
+        "status": "open",
+        "confirmedBy": ["A", "B"],
+        "location": "candidate-owned OpenSpec artifacts",
+        "claim": "The format gate fails on seven candidate-owned OpenSpec files.",
+        "correctionUnit": "R1C"
+      }
+    ],
+    "suspect": [
+      {
+        "id": "JD-S1",
+        "severity": "SEVERE",
+        "status": "judge-local",
+        "source": "A",
+        "claim": "Zero-edge freshness may be accepted vacuously without positive evidence that the requested incoming work was performed.",
+        "disposition": "Do not auto-fix; reassess only in scoped re-judgment."
+      },
+      {
+        "id": "JD-S2",
+        "severity": "SEVERE",
+        "status": "judge-local",
+        "source": "B",
+        "claim": "Semantic unfinished work may be mislabeled as edge_limit truncation.",
+        "disposition": "Do not auto-fix; reassess only in scoped re-judgment."
+      }
+    ],
+    "contradictions": [],
+    "info": [
+      {
+        "id": "JD-I1",
+        "claim": "The frozen candidate's recorded clean full suite remains 984/984 before Judgment findings are corrected."
+      },
+      {
+        "id": "JD-I2",
+        "claim": "Dependency audit baseline remains four high fast-uri findings and two moderate qs findings."
+      },
+      {
+        "id": "JD-I3",
+        "claim": "RDD remains disabled/unmanaged; Judgment grants no receipt or delivery authority."
+      }
+    ]
+  },
+  "counts": {
+    "confirmedSevere": 3,
+    "suspectSevere": 2,
+    "contradictions": 0,
+    "info": 3,
+    "openConfirmedSevere": 3
+  },
+  "correctionRound1": {
+    "status": "planned-awaiting-maintainer-consent",
+    "budgetRule": "Each immediate-predecessor work unit must remain at or below 400 authored additions plus deletions.",
+    "units": [
+      {
+        "id": "R1A",
+        "predecessor": "ec235b0",
+        "scope": "Correct incoming uncertainty accounting only so deferred computed-key and external-alternative references cannot complete or prove empty.",
+        "exclusions": [
+          "No exact issue #219 computed-key edges",
+          "No exact issue #220 external-alternative edges"
+        ],
+        "forecastAuthoredLines": "180-320",
+        "hardMax": 400,
+        "rollback": "Revert only incoming uncertainty accounting and its focused regression proof."
+      },
+      {
+        "id": "R1B",
+        "predecessor": "R1A corrected candidate",
+        "scope": "Regenerate the eight-scenario benchmark report and bind it to the corrected candidate and corpus projection.",
+        "forecastAuthoredLines": "20-80",
+        "hardMax": 400,
+        "rollback": "Revert only the regenerated benchmark report and candidate binding."
+      },
+      {
+        "id": "R1C",
+        "predecessor": "R1B corrected candidate",
+        "scope": "Format exactly the seven candidate-owned OpenSpec files reported by the format gate.",
+        "forecastAuthoredLines": "20-120",
+        "hardMax": 400,
+        "rollback": "Revert only formatting changes in those seven OpenSpec files."
+      }
+    ],
+    "aggregateForecastAuthoredLines": "220-520 across three independently reviewed units; never aggregated into one over-budget unit",
+    "scopedRejudgment": "blocked-until-consent-and-frozen-fix-deltas"
+  },
+  "validation": {
+    "judgesComplete": true,
+    "bothEscalated": true,
+    "corroborationMerged": true,
+    "correctionApplied": false,
+    "scopedRejudgment": "not_run",
+    "strictVerification": "blocked",
+    "archive": "blocked"
+  },
+  "skillResolution": {
+    "status": "paths-loaded",
+    "paths": [
+      "/home/yail/.agents/skills/sdd-apply/SKILL.md",
+      "/home/yail/.agents/skills/_shared/review-ledger-contract.md",
+      "/home/yail/.agents/skills/_shared/sdd-status-contract.md",
+      "/home/yail/.agents/skills/judgment-day/SKILL.md",
+      "/home/yail/.agents/skills/rdd-defect-workflow/SKILL.md",
+      "/home/yail/.agents/skills/work-unit-commits/SKILL.md"
+    ]
+  },
+  "updatedAt": "2026-09-06T23:23:20Z"
+}

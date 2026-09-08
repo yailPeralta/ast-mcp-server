@@ -109,3 +109,19 @@ After U5 gates and settle, freeze one immutable complete candidate identity cont
 Only `JUDGMENT: APPROVED` permits independent strict verification on the exact final candidate: prove all 14 requirements and 25 scenarios, run focused/runtime evidence, `yarn format:check`, `yarn lint`, `yarn typecheck`, `yarn test`, `yarn build`, `yarn test:mcp`, `yarn test:cli`, `yarn benchmark:agent-workflows`, dependency audit, and required remote CI for the same identity. Any candidate change invalidates Judgment and verification and requires a new bounded candidate path.
 
 Archive/delivery may proceed only after approved Judgment, strict verification, and CI policy pass. Judgment grants no receipt, commit, push, PR, merge, release, or archive authority; with RDD disabled/unmanaged, ordinary repository policy supplies any later delivery authority. This planning phase performs none of those operations.
+
+## Judgment Day Round 1 — Frozen `ec235b0`
+
+Both blind judges returned complete ESCALATED results. The frozen ledger records three corroborated SEVERE roots: JD-C1 incoming deferred computed-key/external-alternative uncertainty can be skipped then completed/proven empty; JD-C2 the checked benchmark report remains at five rather than eight scenarios; JD-C3 seven candidate-owned OpenSpec files fail the format gate. JD-S1 zero-edge freshness vacuity and JD-S2 semantic unfinished mislabeled as `edge_limit` remain judge-local SUSPECT severe and are not correction-authorized. INFO and baseline evidence remain unchanged. There are no contradictions.
+
+The current verdict is nonterminal `ESCALATED`: correction round 1 requires explicit maintainer consent. Until then, correction, scoped re-judgment, strict verification, and archive/delivery are blocked.
+
+### Correction round 1 immediate-predecessor chain
+
+| Unit | Base                 | Atomic finish                                                                                                                    | Forecast / hard max | Rollback                                             |
+| ---- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------: | ---------------------------------------------------- |
+| R1A  | `ec235b0`            | Incoming uncertainty cannot certify skipped deferred alternatives; no exact #219 computed-key or #220 external-alternative edges |       180–320 / 400 | Revert only uncertainty accounting and focused proof |
+| R1B  | frozen R1A candidate | Eight-scenario benchmark report is regenerated and candidate/corpus-bound                                                        |         20–80 / 400 | Revert only report and binding                       |
+| R1C  | frozen R1B candidate | Exact seven reported candidate OpenSpec files pass formatting                                                                    |        20–120 / 400 | Revert formatting-only delta                         |
+
+Each unit starts only from its immutable immediate predecessor, carries focused proof with the behavior/report/artifact it changes, and stops before edit if its forecast or measured authored additions plus deletions exceed 400. The scoped re-judgment may inspect only the frozen ledger and immutable R1A–R1C fix deltas, including any fix-caused defects.

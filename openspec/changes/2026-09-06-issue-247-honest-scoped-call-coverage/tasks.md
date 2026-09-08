@@ -62,7 +62,17 @@ See `chain.md` for exact branches, symbols, commands, trace, IDs, rollback, and 
 
 ## Final Candidate Gate
 
-- [ ] 6.1 Run blind dual read-only Judgment on one immutable U5 candidate; merge only complete results.
-- [ ] 6.2 Allow at most two confirmed-severe correction/re-judgment rounds; contradiction or exhaustion escalates.
-- [ ] 6.3 After approval, run strict 14/25 verification and required CI on that candidate.
-- [ ] 6.4 Archive/deliver only after candidate-bound gates under ordinary policy; Judgment grants no receipt.
+- [x] 6.1 Freeze `ec235b0`; record both complete round-1 judges as ESCALATED and merge three corroborated SEVERE, two judge-local SUSPECT severe, zero contradictions, and preserved INFO/baselines in `reviews/ledger.json`.
+- [ ] 6.2 **REVIEW PENDING:** obtain explicit maintainer consent before correction round 1; then apply only JD-C1–JD-C3 as R1A → R1B → R1C and run blind scoped re-judgment over the frozen ledger plus immutable fix deltas.
+- [ ] 6.3 **BLOCKED:** after Judgment approval, run strict 14/25 verification and required CI on that candidate.
+- [ ] 6.4 **BLOCKED:** archive/deliver only after candidate-bound gates under ordinary policy; Judgment grants no receipt.
+
+## Judgment Day Correction Round 1 Plan
+
+| Unit | Immediate predecessor | Confirmed root                                                                                                                                        | Forecast | Hard max | Status          |
+| ---- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------: | -------: | --------------- |
+| R1A  | frozen `ec235b0`      | Incoming uncertainty only: skipped deferred computed-key/external-alternative references cannot complete or prove empty; add no exact #219/#220 edges |  180–320 |      400 | Pending consent |
+| R1B  | frozen R1A candidate  | Regenerate the eight-scenario benchmark report and bind report, corpus projection, and corrected candidate                                            |    20–80 |      400 | Blocked by R1A  |
+| R1C  | frozen R1B candidate  | Format exactly the seven candidate-owned OpenSpec files reported by the gate                                                                          |   20–120 |      400 | Blocked by R1B  |
+
+Measured planning-artifact delta against frozen `ec235b0`: 267 additions and 19 deletions (286 authored changed lines) across `reviews/ledger.json`, `tasks.md`, `chain.md`, `apply-progress.json`, and `state.yaml`; within the 400-line artifact guard. Correction implementation is not included and has not started.
