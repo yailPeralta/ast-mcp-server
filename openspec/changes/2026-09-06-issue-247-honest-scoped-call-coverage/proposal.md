@@ -2,7 +2,7 @@
 
 ## Intent
 
-Issue #247 requires distinguishing “no relationship found” from “not proved.” On planning base PR #250 at `d0a0fa2`, absent scoped call/contains coverage lets impact and affected-test discovery falsely claim complete or proven-empty results.
+Issue #247 requires distinguishing “no relationship found” from “not proved.” On immediate planning base PR #254 at `c5309ec`, absent scoped call/contains coverage lets impact and affected-test discovery falsely claim complete or proven-empty results.
 
 ## Scope
 
@@ -39,7 +39,7 @@ Issue #247 requires distinguishing “no relationship found” from “not prove
 
 ## Authority and Delivery
 
-Issue #247 alone authorizes implementation. PR #250/`d0a0fa2` is the planning base, not delivery approval. Deliver five strict-RED units, each ≤400 authored changed lines and based on its immediate predecessor: U1 coverage contract; U2 impact propagation; U3 scoped direct calls; U4 candidate completeness; U5 docs/audit convergence. Each child includes tests, a usable finish state, and rollback. This sequential chain does not promise an atomic five-unit merge; each child is reviewed/delivered after its predecessor.
+Issue #247 alone authorizes implementation. PR #254/`c5309ec` is the immediate planning base, not delivery approval. Deliver five strict-RED units, each ≤400 authored changed lines and based on its immediate predecessor: U1 coverage contract; U2 impact propagation; U3 scoped direct calls; U4 candidate completeness; U5 docs/audit convergence. Each child includes tests, a usable finish state, and rollback. This sequential chain does not promise an atomic five-unit merge; each child is reviewed/delivered after its predecessor.
 
 ## Risks
 

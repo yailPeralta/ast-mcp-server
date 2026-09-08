@@ -2,7 +2,7 @@
 
 ## Governing Boundary
 
-- **Implementation authority:** approved issue #247 only. **Planning base:** PR #253 commit `2675a02`, planning-only and not candidate, review, correction, archive, or delivery authority.
+- **Implementation authority:** approved issue #247 only. **Immediate planning base:** PR #254 commit `c5309ec`, planning-only and not candidate, review, correction, archive, or delivery authority.
 - **Mode:** RDD `disabled/unmanaged`; no receipt is implied. `sdd-attempt acquire/settle` is runtime-attempt coordination, never approval.
 - **Edit rule during apply:** source, tests, and docs become editable only in their named unit under a future authorized apply context. This tasks phase edits this change directory only.
 - **Excluded:** issue #219 computed union-key classification, issue #220 external convergence, `contains` producer, inherited #186/#188 authority, whole-project call-spine authority changes, universal MCP `outputSchema`, Harness/DSH apply, UI, mutation behavior, commit/push/PR/issue operations.
@@ -11,20 +11,20 @@
 ## Phase 0 — Authority and Baseline
 
 1. Reconfirm issue #247 is open and `status:approved`; inspect conflicts/open PRs without mutation.
-2. Resolve PR #253 commit `2675a02`; create tracker `feat/247-honest-scoped-call-coverage` at that commit only during apply.
+2. Resolve PR #254 commit `c5309ec`; use `feat/247-u1-coverage-contract` at that immediate planning base.
 3. Require a clean dedicated worktree/branch and record pre-existing paths. Reproduce the registered-MCP false empty and run `yarn vitest run test/relationships.test.ts test/impact.test.ts test/test-candidates.test.ts --reporter=dot` plus `yarn typecheck`.
 4. Capture exact baseline CI and `yarn npm audit --all --recursive`; do not suppress or attribute unchanged failures to this change.
 5. Before each unit, verify its branch base equals the immediate predecessor candidate and its diff excludes all earlier-unit changes from the child review view.
 
 ## Branch and Review Forecast
 
-| Unit / branch                           | PR base and precondition                         | Forecast (hard max) | Independently usable finish                                                               |
-| --------------------------------------- | ------------------------------------------------ | ------------------: | ----------------------------------------------------------------------------------------- |
-| U1 `feat/247-u1-coverage-contract`      | tracker at PR #253 / `2675a02`; Phase 0 complete |       300–380 (400) | Resolver reports deterministic coverage; absent producers are never silently complete.    |
-| U2 `feat/247-u2-impact-authority`       | U1 branch/candidate; U1 gates green              |       320–395 (400) | Impact exposes honest additive coverage/work/proven-empty while calls remain unsupported. |
-| U3 `feat/247-u3-scoped-direct-calls`    | U2 branch/candidate; U2 gates green              |       330–395 (400) | Exact direct calls work; uncertain dispatch remains edge-free/unfinished.                 |
-| U4 `feat/247-u4-candidate-completeness` | U3 branch/candidate; U3 gates green              |       320–395 (400) | Candidate results require complete six-kind incoming evidence.                            |
-| U5 `docs/247-u5-contract-and-audit`     | U4 branch/candidate; U4 gates green              |       180–300 (400) | Public guidance, benchmark, inventory, and smoke evidence agree with runtime behavior.    |
+| Unit / branch                           | PR base and precondition              | Forecast (hard max) | Independently usable finish                                                               |
+| --------------------------------------- | ------------------------------------- | ------------------: | ----------------------------------------------------------------------------------------- |
+| U1 `feat/247-u1-coverage-contract`      | PR #254 / `c5309ec`; Phase 0 complete |       300–380 (400) | Resolver reports deterministic coverage; absent producers are never silently complete.    |
+| U2 `feat/247-u2-impact-authority`       | U1 branch/candidate; U1 gates green   |       320–395 (400) | Impact exposes honest additive coverage/work/proven-empty while calls remain unsupported. |
+| U3 `feat/247-u3-scoped-direct-calls`    | U2 branch/candidate; U2 gates green   |       330–395 (400) | Exact direct calls work; uncertain dispatch remains edge-free/unfinished.                 |
+| U4 `feat/247-u4-candidate-completeness` | U3 branch/candidate; U3 gates green   |       320–395 (400) | Candidate results require complete six-kind incoming evidence.                            |
+| U5 `docs/247-u5-contract-and-audit`     | U4 branch/candidate; U4 gates green   |       180–300 (400) | Public guidance, benchmark, inventory, and smoke evidence agree with runtime behavior.    |
 
 PR #1 targets the tracker; each later PR targets its immediate predecessor branch. Only the tracker may eventually target main. Auto-chain authorizes planning this topology, not creating branches, commits, PRs, reviews, or delivery.
 
@@ -41,7 +41,7 @@ After GREEN, refactor only while focused tests stay green. Every unit records ex
 - **Files/symbols:** `src/services/relationships.ts` — `RELATIONSHIP_EDGE_KINDS`, new `RELATIONSHIP_COVERAGE_STATUSES`, `RelationshipCoverageStatus`, `RelationshipEndpointClass`, `RelationshipCoverageEntry`, `RelationshipWork`, `CompilerRelationshipResolution`, `ScopedEdgeCollector`, `consumeScopedWork`, `createCompilerRelationshipResolver`/`edgesFor`, new `relationshipCoverageApplicability`, `canonicalRelationshipCoverage`, `mergeRelationshipCoverage`, `isRelationshipCoverageComplete`; `test/impact.test.ts` — resolver coverage cases.
 - **RED twice:** `yarn vitest run test/impact.test.ts -t "relationship coverage" --reporter=dot`; expected failure is missing contract/14 ordered symbol cells or wrong fail-closed precedence.
 - **GREEN/refactor:** add four-state canonical cells, endpoint/direction applicability, shared work snapshot, and producer completion registry. Applicable missing `call`/`contains` remains `unsupported`; N/A does not block.
-- **Acceptance:** SCI-R1 S1–S2 and SCI-R2 S1–S2 (4 scenarios). Runtime harness: N/A—this unit is an internal resolver contract; public transport remains unchanged.
+- **Acceptance/evidence:** SCI-R1 S1–S2 and SCI-R2 S1–S2 pass (4 focused tests); RED twice: 4 stable failures; GREEN/refactor: 4 pass. Runtime harness: N/A—internal resolver contract; registered public false-empty remained unchanged.
 - **Rollback:** revert only the named relationships contract/registry and paired test hunks; legacy edge resolution remains. Do not remove U1 after U2 exists.
 
 ## U2 — Honest Impact Projection

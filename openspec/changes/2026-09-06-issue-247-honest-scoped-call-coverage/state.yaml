@@ -59,8 +59,8 @@ artifacts:
   reviewState: missing
 taskProgress:
   total: 28
-  completed: 0
-  pending: 28
+  completed: 5
+  pending: 23
   allComplete: false
 dependencies:
   proposal: all_done
@@ -96,7 +96,7 @@ remediationState:
   reason: ""
 phaseInstructions:
   apply:
-    - Use PR #253 commit 2675a02 as the planning-only tracker base.
+    - Use PR #254 commit c5309ec as the immediate planning-only base.
     - Execute U1 through U5 only from each immediate predecessor named in chain.md.
     - Run each exact focused RED twice unchanged before production edits.
     - Keep every unit at or below 400 authored changed lines including metadata.
@@ -117,10 +117,10 @@ phaseInstructions:
 nextRecommended: apply
 blockedReasons: []
 planningBase:
-  pullRequest: 253
-  commit: 2675a02
-  role: planning-only
-  supersedesArtifactReference: PR-252/75b1479
+  pullRequest: 254
+  commit: c5309ec
+  role: immediate-planning-only
+  supersedesArtifactReference: stale-planning-base
 baseline:
   branch: main
   head: 6173a39a73f1540c17335a330ea7f14f982387cb
@@ -230,8 +230,8 @@ design:
   detailLevel: high
   wordCount: 798
   planningBase:
-    pullRequest: 253
-    commit: 2675a02
+    pullRequest: 254
+    commit: c5309ec
   architectureDecisions: 3
   requirementsTraced: 14
   scenariosTraced: 25

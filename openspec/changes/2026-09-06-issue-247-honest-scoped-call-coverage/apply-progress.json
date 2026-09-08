@@ -3,8 +3,8 @@
   "change": "2026-09-06-issue-247-honest-scoped-call-coverage",
   "phase": "apply",
   "planningBase": {
-    "pullRequest": 253,
-    "commit": "2675a02",
+    "pullRequest": 254,
+    "commit": "c5309ec",
     "role": "planning-only"
   },
   "deliveryStrategy": "auto-chain",
@@ -15,9 +15,9 @@
     {
       "id": "U1",
       "name": "Coverage contract",
-      "status": "pending",
+      "status": "candidate-ready-not-reviewed",
       "branch": "feat/247-u1-coverage-contract",
-      "base": "feat/247-honest-scoped-call-coverage@2675a02",
+      "base": "PR-254@c5309ec",
       "forecast": "300-380",
       "hardMax": 400,
       "acquireId": "issue247-u1-apply-v1",
@@ -69,9 +69,36 @@
     }
   ],
   "tdd": {
-    "red": [],
-    "green": [],
-    "refactored": []
+    "red": [
+      {
+        "id": "u1-coverage",
+        "name": "stable four-test RED twice",
+        "file": "test/impact.test.ts",
+        "taskId": "U1"
+      }
+    ],
+    "green": [
+      {
+        "id": "u1-coverage",
+        "name": "four canonical scenarios pass",
+        "file": "test/impact.test.ts",
+        "taskId": "U1"
+      }
+    ],
+    "refactored": [
+      {
+        "id": "u1-coverage",
+        "name": "focused and related suites pass",
+        "file": "test/impact.test.ts",
+        "taskId": "U1"
+      }
+    ]
   },
-  "updatedAt": "2026-09-06T19:23:54Z"
+  "u1Evidence": {
+    "phase0": "68/68 focused baseline; typecheck pass; registered MCP reproduced false empty",
+    "gates": "format baseline: six pre-existing OpenSpec files; lint/typecheck/build pass; test 968/969 with ambient GIT_PAGER failure passing isolated; lifecycle retry pass",
+    "runtimeHarness": "N/A: internal resolver contract; public response intentionally unchanged",
+    "rollback": "revert relationships coverage contract/registry and paired impact test hunks"
+  },
+  "updatedAt": "2026-09-06T19:43:44Z"
 }
