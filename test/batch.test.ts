@@ -123,7 +123,7 @@ describe("batch runner", () => {
     ).toThrow(/project_root/i);
   });
 
-  it("preserves whole candidate pages across logical JSON and final TOON output", async () => {
+  it("preserves whole proof pages and six-kind authority across JSON and TOON", async () => {
     const project = await candidateFixture();
     const runPage = (offset: number) =>
       runBatchDocument(
@@ -155,6 +155,9 @@ describe("batch runner", () => {
     expect(firstResult).toMatchObject({
       backend: "typescript_compiler",
       compiler_authoritative: true,
+      relationship_kinds: ["reference", "import", "export", "extends", "implements", "call"],
+      work: { work_limit_reached: false },
+      completeness: { complete: true, proven_empty: false },
       offset: 0,
       limit: 1,
       total: 2,
@@ -168,6 +171,13 @@ describe("batch runner", () => {
       has_more: false,
       next_offset: null,
     });
+    expect(firstResult.coverage).toEqual(secondResult.coverage);
+    expect(firstResult.work).toEqual(secondResult.work);
+    expect(firstResult.coverage).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "call", direction: "incoming", status: "completed" }),
+      ]),
+    );
     const pages = [firstResult, secondResult].map(
       (result) => (result.candidates as Array<Record<string, unknown>>)[0]!,
     );
