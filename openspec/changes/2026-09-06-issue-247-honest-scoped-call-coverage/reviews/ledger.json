@@ -29,11 +29,13 @@
       {
         "id": "JD-C1",
         "severity": "SEVERE",
-        "status": "open",
+        "status": "corrected-rejudgment-pending",
         "confirmedBy": ["A", "B"],
         "location": "incoming scoped call resolution",
         "claim": "Deferred computed-key and external-alternative incoming references can be skipped while their coverage cell is completed, allowing proven_empty without complete semantic evidence.",
-        "correctionUnit": "R1A"
+        "correctionUnit": "R1A",
+        "correctionBase": "f72d40b",
+        "correctionEvidence": "Four unchanged RED failures twice; 88 focused authority tests, 133 all-authority tests, 988 full-clean tests, and MCP/lifecycle/CLI/errors gates pass. No guessed edge; incoming call coverage remains unfinished."
       },
       {
         "id": "JD-C2",
@@ -93,10 +95,11 @@
     "suspectSevere": 2,
     "contradictions": 0,
     "info": 3,
-    "openConfirmedSevere": 3
+    "openConfirmedSevere": 2,
+    "correctedRejudgmentPending": 1
   },
   "correctionRound1": {
-    "status": "planned-awaiting-maintainer-consent",
+    "status": "in-progress-r1a-corrected",
     "budgetRule": "Each immediate-predecessor work unit must remain at or below 400 authored additions plus deletions.",
     "units": [
       {
@@ -109,6 +112,7 @@
         ],
         "forecastAuthoredLines": "180-320",
         "hardMax": 400,
+        "status": "corrected-rejudgment-pending",
         "rollback": "Revert only incoming uncertainty accounting and its focused regression proof."
       },
       {
@@ -135,8 +139,8 @@
     "judgesComplete": true,
     "bothEscalated": true,
     "corroborationMerged": true,
-    "correctionApplied": false,
-    "scopedRejudgment": "not_run",
+    "correctionApplied": "R1A-only",
+    "scopedRejudgment": "pending-after-R1B-R1C",
     "strictVerification": "blocked",
     "archive": "blocked"
   },
@@ -151,5 +155,5 @@
       "/home/yail/.agents/skills/work-unit-commits/SKILL.md"
     ]
   },
-  "updatedAt": "2026-09-06T23:23:20Z"
+  "updatedAt": "2026-09-06T23:43:38Z"
 }

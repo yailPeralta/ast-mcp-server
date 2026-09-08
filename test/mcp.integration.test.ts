@@ -1001,6 +1001,43 @@ export function formatValue(value: number): string { return String(value); }
       message: "Evidence is incomplete.",
     });
 
+    await fixture.write(
+      "src/deferred.ts",
+      [
+        "export function computedTarget(): number { return 1; }",
+        "export function alternativeTarget(): number { return 2; }",
+      ].join("\n"),
+    );
+    await fixture.write(
+      "src/deferred-call.test.ts",
+      [
+        'import { alternativeTarget, computedTarget } from "./deferred.js";',
+        'import { externalHandler } from "external-handler";',
+        "type Key = 'local' | 'other';",
+        "const handlers = { local: computedTarget, other: (): number => 0 };",
+        "const selected = Math.random() > 0.5 ? alternativeTarget : externalHandler;",
+        "export const computedResult = (key: Key): number => handlers[key]();",
+        "export const alternativeResult = (): number => selected();",
+      ].join("\n"),
+    );
+    await fixture.write(
+      "node_modules/external-handler/package.json",
+      JSON.stringify({ name: "external-handler", types: "index.d.ts" }),
+    );
+    await fixture.write(
+      "node_modules/external-handler/index.d.ts",
+      "export declare function externalHandler(): number;\n",
+    );
+    for (const symbol_path of ["computedTarget", "alternativeTarget"]) {
+      const deferred = publicFailure(
+        await callCandidates(client, fixture, { file_path: "src/deferred.ts", symbol_path }),
+      );
+      expect(deferred).toMatchObject({
+        code: "INCOMPLETE_EVIDENCE",
+        message: "Evidence is incomplete.",
+      });
+    }
+
     const missing = publicFailure(
       await callCandidates(client, fixture, { symbol_path: "missingSymbol" }),
     );

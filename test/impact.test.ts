@@ -1799,12 +1799,105 @@ describe("scoped direct call impact", () => {
     return { fixture, project, root };
   }
 
+  const incomingUncertaintyCases = [
+    {
+      name: "deferred computed-key dispatch",
+      useSource: [
+        'import { target } from "./root.js";',
+        "type Key = 'local' | 'other';",
+        "const handlers = { local: target, other: (): number => 2 };",
+        "export function caller(key: Key): number { return handlers[key](); }",
+      ].join("\n"),
+      externalSource: undefined,
+    },
+    {
+      name: "local or external alternative dispatch",
+      useSource: [
+        'import { externalHandler } from "external-handler";',
+        'import { target } from "./root.js";',
+        "const selected = Math.random() > 0.5 ? target : externalHandler;",
+        "export function caller(): number { return selected(); }",
+      ].join("\n"),
+      externalSource: "export declare function externalHandler(): number;\n",
+    },
+  ] as const;
+
+  it.each(incomingUncertaintyCases)(
+    "keeps internal incoming call coverage unfinished for $name",
+    async ({ useSource, externalSource }) => {
+      const files: Record<string, string> = {
+        "src/root.ts": "export function target(): number { return 1; }\n",
+        "src/use.ts": useSource,
+      };
+      if (externalSource) {
+        files["node_modules/external-handler/package.json"] = JSON.stringify({
+          name: "external-handler",
+          types: "index.d.ts",
+        });
+        files["node_modules/external-handler/index.d.ts"] = externalSource;
+      }
+      const { fixture, project, root } = await scopedCallFixture(files, "target");
+
+      const resolution = createCompilerRelationshipResolver(
+        project,
+        fixture.root,
+        freshness,
+      ).edgesFor(root, {
+        direction: "incoming",
+        relationship_kinds: ["call"],
+        max_edges: 10,
+      });
+
+      expect(resolution.edges).toEqual([]);
+      expect(resolution.coverage).toEqual([
+        { kind: "call", direction: "incoming", endpoint_class: "symbol", status: "unfinished" },
+      ]);
+      expect(resolution.incomplete).toBe(true);
+    },
+  );
+
+  it.each(incomingUncertaintyCases)(
+    "keeps public call-only impact incomplete for $name",
+    async ({ useSource, externalSource }) => {
+      const files: Record<string, string> = {
+        "src/root.ts": "export function target(): number { return 1; }\n",
+        "src/use.ts": useSource,
+      };
+      if (externalSource) {
+        files["node_modules/external-handler/package.json"] = JSON.stringify({
+          name: "external-handler",
+          types: "index.d.ts",
+        });
+        files["node_modules/external-handler/index.d.ts"] = externalSource;
+      }
+      const { fixture, project, root } = await scopedCallFixture(files, "target");
+
+      const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+        direction: "incoming",
+        max_depth: 1,
+        max_nodes: 10,
+        max_edges: 10,
+        relationship_kinds: ["call"],
+        authority: "semantic",
+      });
+
+      expect(result.edges).toEqual([]);
+      expect(result.coverage).toEqual([
+        { kind: "call", direction: "incoming", endpoint_class: "symbol", status: "unfinished" },
+      ]);
+      expect(result).toMatchObject({ incomplete: true, proven_empty: false });
+    },
+  );
+
   it("returns an exact incoming scoped direct call and completed coverage", async () => {
     const { fixture, project, root } = await scopedCallFixture(
       {
         "src/root.ts": "export function target(): number { return 1; }\n",
         "src/use.ts": [
           'import { target } from "./root.js";',
+          "export type TargetFunction = typeof target;",
+          "const metadata = { handler: target };",
+          "void metadata;",
           "export function caller(dynamic: unknown): number {",
           "  if (typeof dynamic === 'function') dynamic();",
           "  Math.max(1, 2);",

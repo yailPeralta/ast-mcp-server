@@ -99,6 +99,12 @@
         "name": "exact compound RED twice; impact_corpus_pass=false; fingerprint 13aeafbb4856eee3fe25860115d8a057ed820a33c147cc6f889008bf39985fa0",
         "file": "benchmark+CLI",
         "taskId": "U5"
+      },
+      {
+        "id": "r1a-c1",
+        "name": "unchanged four-case RED twice",
+        "file": "test/impact.test.ts",
+        "taskId": "R1A"
       }
     ],
     "green": [
@@ -131,6 +137,12 @@
         "name": "45 MCP/batch tests plus eight-scenario benchmark and CLI smoke pass",
         "file": "benchmark+CLI",
         "taskId": "U5"
+      },
+      {
+        "id": "r1a-c1",
+        "name": "four uncertainty cases and two candidate failures pass",
+        "file": "impact+MCP",
+        "taskId": "R1A"
       }
     ],
     "refactored": [
@@ -163,6 +175,12 @@
         "name": "cognitive docs, deterministic projections, and CLI fail-closed controls converge",
         "file": "seven U5 files plus release metadata",
         "taskId": "U5"
+      },
+      {
+        "id": "r1a-c1",
+        "name": "target-relevant carrier scan preserves direct and unrelated reference behavior",
+        "file": "relationships+impact+MCP",
+        "taskId": "R1A"
       }
     ]
   },
@@ -220,9 +238,15 @@
     "infoPreserved": 3,
     "ledger": "reviews/ledger.json",
     "correctionRound1": {
-      "status": "pending-maintainer-consent",
+      "status": "in-progress-r1a-corrected",
       "units": [
-        { "id": "R1A", "predecessor": "ec235b0", "forecast": "180-320", "hardMax": 400 },
+        {
+          "id": "R1A",
+          "predecessor": "f72d40b",
+          "forecast": "180-320",
+          "hardMax": 400,
+          "status": "corrected-rejudgment-pending"
+        },
         {
           "id": "R1B",
           "predecessor": "R1A corrected candidate",
@@ -237,9 +261,16 @@
         }
       ]
     },
-    "scopedRejudgment": "blocked-pending-consent-and-fix-deltas",
+    "r1aEvidence": {
+      "red": "unchanged exact command twice; stable 4/4 failures across computed-key and local/external-alternative internal/public cases",
+      "greenRefactor": "4/4 focused; 88/88 impact/relationship/candidate; 133/133 authority; 988/988 full clean",
+      "runtime": "build, MCP, lifecycle, CLI, errors pass; affected candidates reject both deferred classes with INCOMPLETE_EVIDENCE",
+      "baselines": "format remains pending C3 (8 reported files); audit unchanged fast-uri 4 high and qs 2 moderate",
+      "rollback": "revert relationships uncertainty helper and R1A test/artifact hunks"
+    },
+    "scopedRejudgment": "pending-after-R1B-R1C",
     "strictVerification": "blocked",
     "archive": "blocked"
   },
-  "updatedAt": "2026-09-06T23:23:20Z"
+  "updatedAt": "2026-09-06T23:43:38Z"
 }

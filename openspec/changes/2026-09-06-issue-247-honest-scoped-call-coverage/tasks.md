@@ -69,10 +69,10 @@ See `chain.md` for exact branches, symbols, commands, trace, IDs, rollback, and 
 
 ## Judgment Day Correction Round 1 Plan
 
-| Unit | Immediate predecessor | Confirmed root                                                                                                                                        | Forecast | Hard max | Status          |
-| ---- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------: | -------: | --------------- |
-| R1A  | frozen `ec235b0`      | Incoming uncertainty only: skipped deferred computed-key/external-alternative references cannot complete or prove empty; add no exact #219/#220 edges |  180–320 |      400 | Pending consent |
-| R1B  | frozen R1A candidate  | Regenerate the eight-scenario benchmark report and bind report, corpus projection, and corrected candidate                                            |    20–80 |      400 | Blocked by R1A  |
-| R1C  | frozen R1B candidate  | Format exactly the seven candidate-owned OpenSpec files reported by the gate                                                                          |   20–120 |      400 | Blocked by R1B  |
+| Unit | Immediate predecessor | Confirmed root                                                                                                                                        | Forecast | Hard max | Status                        |
+| ---- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------: | -------: | ----------------------------- |
+| R1A  | `f72d40b`             | Incoming uncertainty only: skipped deferred computed-key/external-alternative references cannot complete or prove empty; add no exact #219/#220 edges |  180–320 |      400 | Corrected; rejudgment pending |
+| R1B  | frozen R1A candidate  | Regenerate the eight-scenario benchmark report and bind report, corpus projection, and corrected candidate                                            |    20–80 |      400 | Blocked by R1A                |
+| R1C  | frozen R1B candidate  | Format exactly the seven candidate-owned OpenSpec files reported by the gate                                                                          |   20–120 |      400 | Blocked by R1B                |
 
-Measured planning-artifact delta against frozen `ec235b0`: 267 additions and 19 deletions (286 authored changed lines) across `reviews/ledger.json`, `tasks.md`, `chain.md`, `apply-progress.json`, and `state.yaml`; within the 400-line artifact guard. Correction implementation is not included and has not started.
+R1A is corrected from `f72d40b` with strict-TDD and fail-closed candidate evidence; its measured delta remains subject to the 400-line final audit. C2/R1B, C3/R1C, both suspects, scoped rejudgment, settlement, and approval remain pending.
