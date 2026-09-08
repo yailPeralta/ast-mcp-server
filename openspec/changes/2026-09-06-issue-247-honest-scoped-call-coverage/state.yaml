@@ -14,8 +14,10 @@ artifactPaths:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/affected-test-candidates/spec.md
   design:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/design.md
-  tasks: []
-  applyProgress: []
+  tasks:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/tasks.md
+  applyProgress:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/apply-progress.json
   verifyReport: []
   reviewPolicy: []
   reviewLedger: []
@@ -31,8 +33,10 @@ contextFiles:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/affected-test-candidates/spec.md
   design:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/design.md
-  tasks: []
-  applyProgress: []
+  tasks:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/tasks.md
+  applyProgress:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/apply-progress.json
   verifyReport: []
   reviewPolicy: []
   reviewLedger: []
@@ -45,8 +49,8 @@ artifacts:
   proposal: done
   specs: done
   design: done
-  tasks: missing
-  applyProgress: missing
+  tasks: done
+  applyProgress: done
   verifyReport: missing
   reviewLedger: missing
   reviewReceipt: missing
@@ -54,19 +58,19 @@ artifacts:
   reviewContext: missing
   reviewState: missing
 taskProgress:
-  total: 0
+  total: 28
   completed: 0
-  pending: 0
+  pending: 28
   allComplete: false
 dependencies:
   proposal: all_done
   specs: all_done
   design: all_done
-  tasks: ready
-  apply: blocked
+  tasks: all_done
+  apply: ready
   verify: blocked
   archive: blocked
-applyState: blocked
+applyState: ready
 actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
@@ -92,22 +96,31 @@ remediationState:
   reason: ""
 phaseInstructions:
   apply:
-    - Do not apply until proposal, specs, design, and tasks are complete.
-    - Keep every Feature Branch Chain unit at or below 400 authored changed lines.
-    - Do not implement issue 219 computed-key classification or issue 220 external alternatives.
-    - Keep DeepSeek Harness work absent.
+    - Use PR #253 commit 2675a02 as the planning-only tracker base.
+    - Execute U1 through U5 only from each immediate predecessor named in chain.md.
+    - Run each exact focused RED twice unchanged before production edits.
+    - Keep every unit at or below 400 authored changed lines including metadata.
+    - Use each unit's unique acquire and settle IDs from chain.md.
+    - Do not implement issue 219, issue 220, contains production, or Harness work.
+    - Do not claim candidate, review, archive, or delivery authority before its gate.
   verify:
+    - Freeze the complete immutable U5 candidate before blind dual Judgment.
+    - Require both judges; only mutually confirmed severe findings enter at most two correction rounds.
+    - After Judgment approval, verify all 14 requirements and 25 scenarios on the exact candidate.
     - Distinguish semantic coverage incompleteness from traversal truncation.
     - Preserve exact baseline CI and dependency-audit failures as non-change evidence.
+    - Require strict local gates and required CI on the same candidate identity.
   remediate: []
-  archive: []
-nextRecommended: tasks
+  archive:
+    - Archive or deliver only after approved Judgment, strict verification, and CI policy pass.
+    - Judgment provides no receipt or delivery authority; use ordinary repository policy.
+nextRecommended: apply
 blockedReasons: []
 planningBase:
-  pullRequest: 252
-  commit: 75b1479d9843960fb9690fc0ea4d65bbf0bd1e63
+  pullRequest: 253
+  commit: 2675a02
   role: planning-only
-  supersedesArtifactReference: PR-250/d0a0fa2
+  supersedesArtifactReference: PR-252/75b1479
 baseline:
   branch: main
   head: 6173a39a73f1540c17335a330ea7f14f982387cb
@@ -217,8 +230,8 @@ design:
   detailLevel: high
   wordCount: 798
   planningBase:
-    pullRequest: 252
-    commit: 75b1479d9843960fb9690fc0ea4d65bbf0bd1e63
+    pullRequest: 253
+    commit: 2675a02
   architectureDecisions: 3
   requirementsTraced: 14
   scenariosTraced: 25
@@ -251,4 +264,22 @@ baselineEvidence:
     packages:
       - fast-uri@3.1.5
       - qs@6.15.3
-lastPhase: design
+tasks:
+  status: success
+  detailLevel: high
+  wordCount: 529
+  checklistTasks: 28
+  implementationUnits: 5
+  deliveryStrategy: auto-chain
+  chainStrategy: feature-branch-chain
+  chainPath: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/chain.md
+  requirementsMapped: 14
+  scenariosMapped: 25
+  strictRedRunsPerUnit: 2
+  immediatePredecessorRequired: true
+  maxAuthoredChangedLinesPerUnit: 400
+  decisionNeededBeforeApply: false
+  candidateAuthority: false
+  deliveryAuthority: false
+  readyForApply: true
+lastPhase: tasks
