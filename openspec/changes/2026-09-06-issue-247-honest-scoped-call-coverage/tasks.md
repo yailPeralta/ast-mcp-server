@@ -20,16 +20,16 @@ See `chain.md` for exact branches, symbols, commands, trace, IDs, rollback, and 
 
 ## Phase 0: Authority and Baseline
 
-- [ ] 0.1 Confirm approved issue #247, RDD `disabled/unmanaged`, and planning-only PR #253/`2675a02`.
-- [ ] 0.2 Create tracker from `2675a02`; exclude #219, #220, Harness, and unrelated changes.
-- [ ] 0.3 Re-run focused baseline, typecheck, CI/audit; preserve unchanged failures.
-- [ ] 0.4 Freeze immediate-predecessor branches and ≤400 authored-line budgets.
+- [ ] 0.1 Confirm approved issue #247 and RDD `disabled/unmanaged`; planning base is PR #254/`c5309ec`.
+- [x] 0.2 Confirm `feat/247-u1-coverage-contract` at `c5309ec`; exclude #219, #220, Harness, and unrelated changes.
+- [x] 0.3 Re-run focused baseline, typecheck, false-empty reproduction, and audit; preserve unchanged failures.
+- [x] 0.4 Freeze immediate-predecessor branches and ≤400 authored-line budgets.
 
 ## Unit 1: Coverage Contract
 
 - [ ] 1.1 Acquire `issue247-u1-apply-v1`; run the exact U1 RED twice unchanged and retain matching failure fingerprints.
-- [ ] 1.2 Implement canonical coverage/applicability in `src/services/relationships.ts` with paired tests.
-- [ ] 1.3 Refactor, run gates, verify SCI-R1–R2, budget, finish, and rollback.
+- [x] 1.2 Implement canonical coverage/applicability in `src/services/relationships.ts` with paired tests.
+- [x] 1.3 Refactor, run gates, verify SCI-R1–R2, budget, finish, and rollback.
 - [ ] 1.4 Settle `issue247-u1-settle-v1`; freeze U1 without authority claims.
 
 ## Unit 2: Impact Projection
