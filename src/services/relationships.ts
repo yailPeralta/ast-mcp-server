@@ -39,6 +39,75 @@ export const RELATIONSHIP_EDGE_KINDS = Object.freeze([
 
 export type RelationshipEdgeKind = (typeof RELATIONSHIP_EDGE_KINDS)[number];
 
+export const RELATIONSHIP_COVERAGE_STATUSES = Object.freeze([
+  "not_applicable",
+  "completed",
+  "unsupported",
+  "unfinished",
+] as const);
+
+export type RelationshipCoverageStatus = (typeof RELATIONSHIP_COVERAGE_STATUSES)[number];
+export type RelationshipEndpointClass = "module" | "symbol";
+export type RelationshipCoverageDirection = Exclude<CompilerRelationshipDirection, "both">;
+
+export interface RelationshipCoverageEntry {
+  readonly kind: RelationshipEdgeKind;
+  readonly direction: RelationshipCoverageDirection;
+  readonly endpoint_class: RelationshipEndpointClass;
+  readonly status: RelationshipCoverageStatus;
+}
+
+export interface RelationshipWork {
+  readonly work_items: number;
+  readonly max_work_items: number;
+  readonly work_limit_reached: boolean;
+}
+
+const COVERAGE_STATUS_PRECEDENCE: Readonly<Record<RelationshipCoverageStatus, number>> = {
+  not_applicable: 0,
+  completed: 1,
+  unsupported: 2,
+  unfinished: 3,
+};
+
+function coverageKey(entry: Omit<RelationshipCoverageEntry, "status">): string {
+  return `${entry.kind}:${entry.direction}:${entry.endpoint_class}`;
+}
+
+export function canonicalRelationshipCoverage(
+  coverage: readonly RelationshipCoverageEntry[],
+): readonly RelationshipCoverageEntry[] {
+  const kindOrder = new Map(RELATIONSHIP_EDGE_KINDS.map((kind, index) => [kind, index]));
+  return [...coverage].sort(
+    (left, right) =>
+      kindOrder.get(left.kind)! - kindOrder.get(right.kind)! ||
+      left.direction.localeCompare(right.direction) ||
+      left.endpoint_class.localeCompare(right.endpoint_class),
+  );
+}
+
+export function mergeRelationshipCoverage(
+  ...observations: readonly (readonly RelationshipCoverageEntry[])[]
+): readonly RelationshipCoverageEntry[] {
+  const merged = new Map<string, RelationshipCoverageEntry>();
+  for (const entry of observations.flat()) {
+    const current = merged.get(coverageKey(entry));
+    if (
+      !current ||
+      COVERAGE_STATUS_PRECEDENCE[entry.status] > COVERAGE_STATUS_PRECEDENCE[current.status]
+    ) {
+      merged.set(coverageKey(entry), entry);
+    }
+  }
+  return canonicalRelationshipCoverage([...merged.values()]);
+}
+
+export function isRelationshipCoverageComplete(
+  coverage: readonly RelationshipCoverageEntry[],
+): boolean {
+  return coverage.every(({ status }) => status === "completed" || status === "not_applicable");
+}
+
 export const RELATIONSHIP_PROVENANCES = Object.freeze(["compiler", "syntax", "heuristic"] as const);
 
 export type RelationshipProvenance = (typeof RELATIONSHIP_PROVENANCES)[number];
@@ -439,6 +508,51 @@ interface ScopedCompilerRelationshipState {
 
 export type CompilerRelationshipDirection = "incoming" | "outgoing" | "both";
 
+function symbolSupportsCallDirection(
+  node: Node | undefined,
+  direction: RelationshipCoverageDirection,
+): boolean {
+  if (!node) return true;
+  if (direction === "incoming") {
+    return (
+      Node.isFunctionDeclaration(node) ||
+      Node.isMethodDeclaration(node) ||
+      Node.isConstructorDeclaration(node) ||
+      Node.isClassDeclaration(node) ||
+      Node.isVariableDeclaration(node)
+    );
+  }
+  return (
+    Node.isFunctionDeclaration(node) ||
+    Node.isMethodDeclaration(node) ||
+    Node.isConstructorDeclaration(node) ||
+    Node.isGetAccessorDeclaration(node) ||
+    Node.isSetAccessorDeclaration(node)
+  );
+}
+
+export function relationshipCoverageApplicability(
+  kind: RelationshipEdgeKind,
+  direction: RelationshipCoverageDirection,
+  endpointClass: RelationshipEndpointClass,
+  node?: Node,
+): boolean {
+  if (kind === "contains") return true;
+  if (endpointClass === "module") return kind === "import" || kind === "export";
+  if (kind === "reference") return true;
+  if (kind === "import" || kind === "export") return direction === "incoming";
+  if (kind === "call") return symbolSupportsCallDirection(node, direction);
+  if (kind === "extends") {
+    return !node || Node.isClassDeclaration(node) || Node.isInterfaceDeclaration(node);
+  }
+  return (
+    kind === "implements" &&
+    (!node ||
+      Node.isClassDeclaration(node) ||
+      (direction === "incoming" && Node.isInterfaceDeclaration(node)))
+  );
+}
+
 export interface CompilerRelationshipQuery {
   readonly direction: CompilerRelationshipDirection;
   readonly relationship_kinds: readonly RelationshipEdgeKind[];
@@ -451,6 +565,8 @@ export interface CompilerRelationshipQuery {
 
 export interface CompilerRelationshipResolution {
   readonly edges: readonly RelationshipEdge[];
+  readonly coverage: readonly RelationshipCoverageEntry[];
+  readonly work: RelationshipWork;
   readonly incomplete: boolean;
   readonly work_items: number;
   readonly work_limit_reached: boolean;
@@ -1461,6 +1577,64 @@ function addScopedIncomingModuleEdges(
   }
 }
 
+function requestedCoverageDirections(
+  direction: CompilerRelationshipDirection,
+): readonly RelationshipCoverageDirection[] {
+  return direction === "both" ? ["incoming", "outgoing"] : [direction];
+}
+
+function initialRelationshipCoverage(
+  kinds: ReadonlySet<RelationshipEdgeKind>,
+  direction: CompilerRelationshipDirection,
+  endpointClass: RelationshipEndpointClass,
+  node?: Node,
+): readonly RelationshipCoverageEntry[] {
+  return canonicalRelationshipCoverage(
+    [...kinds].flatMap((kind) =>
+      requestedCoverageDirections(direction).map((coverageDirection) => ({
+        kind,
+        direction: coverageDirection,
+        endpoint_class: endpointClass,
+        status: relationshipCoverageApplicability(kind, coverageDirection, endpointClass, node)
+          ? "unsupported"
+          : "not_applicable",
+      })),
+    ),
+  );
+}
+
+function relationshipWork(
+  budget: ScopedRelationshipWorkBudget,
+  maxWorkItems: number,
+): RelationshipWork {
+  return {
+    work_items: budget.consumed,
+    max_work_items: maxWorkItems,
+    work_limit_reached: budget.limitReached,
+  };
+}
+
+function hasScopedRelationshipProducer(entry: RelationshipCoverageEntry): boolean {
+  if (entry.kind === "call" || entry.kind === "contains") return false;
+  if (entry.endpoint_class === "module") {
+    return entry.kind === "import" || entry.kind === "export";
+  }
+  if (entry.kind === "reference") return true;
+  if (entry.kind === "import" || entry.kind === "export") return entry.direction === "incoming";
+  return entry.kind === "extends" || entry.kind === "implements";
+}
+
+function resolveProducerCoverage(
+  coverage: readonly RelationshipCoverageEntry[],
+  interrupted: boolean,
+): readonly RelationshipCoverageEntry[] {
+  return coverage.map((entry) =>
+    entry.status === "unsupported" && hasScopedRelationshipProducer(entry)
+      ? { ...entry, status: interrupted ? "unfinished" : "completed" }
+      : entry,
+  );
+}
+
 export function createCompilerRelationshipResolver(
   project: Project,
   projectRoot: string,
@@ -1496,6 +1670,13 @@ export function createCompilerRelationshipResolver(
           assertEnum(kind, RELATIONSHIP_EDGE_KINDS, "edge kind"),
         ),
       );
+      const endpointClass: RelationshipEndpointClass =
+        endpoint.symbol_path === "<module>" ? "module" : "symbol";
+      const initialCoverage = initialRelationshipCoverage(
+        relationshipKinds,
+        direction,
+        endpointClass,
+      );
       const workBudget: ScopedRelationshipWorkBudget = {
         remaining: maxWorkItems,
         consumed: 0,
@@ -1516,6 +1697,8 @@ export function createCompilerRelationshipResolver(
         if (!(error instanceof ScopedRelationshipWorkLimitReached)) throw error;
         return {
           edges: [],
+          coverage: resolveProducerCoverage(initialCoverage, true),
+          work: relationshipWork(workBudget, maxWorkItems),
           incomplete: true,
           work_items: workBudget.consumed,
           work_limit_reached: true,
@@ -1545,12 +1728,20 @@ export function createCompilerRelationshipResolver(
         if (!(error instanceof ScopedRelationshipWorkLimitReached)) throw error;
         return {
           edges: [],
+          coverage: resolveProducerCoverage(initialCoverage, true),
+          work: relationshipWork(workBudget, maxWorkItems),
           incomplete: true,
           work_items: workBudget.consumed,
           work_limit_reached: true,
           excluded_neighbors: false,
         };
       }
+      const coverage = initialRelationshipCoverage(
+        relationshipKinds,
+        direction,
+        endpointClass,
+        located.symbol?.node,
+      );
       const outgoing = direction === "outgoing" || direction === "both";
       const incoming = direction === "incoming" || direction === "both";
       const producers: Array<{
@@ -1660,10 +1851,13 @@ export function createCompilerRelationshipResolver(
       );
       if (ordered.length > query.max_edges) incomplete = true;
       const selected = ordered.slice(0, query.max_edges);
+      const producerInterrupted = incomplete || workBudget.limitReached;
       return {
         edges: selected.sort((left, right) =>
           left.relationship_id.localeCompare(right.relationship_id),
         ),
+        coverage: resolveProducerCoverage(coverage, producerInterrupted),
+        work: relationshipWork(workBudget, maxWorkItems),
         incomplete,
         work_items: workBudget.consumed,
         work_limit_reached: workBudget.limitReached,
