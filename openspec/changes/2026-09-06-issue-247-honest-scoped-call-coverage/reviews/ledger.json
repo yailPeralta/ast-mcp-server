@@ -4,23 +4,37 @@
   "target": {
     "head": "ec235b0",
     "frozen": true,
-    "scope": "complete immutable U5 candidate"
+    "scope": "complete immutable U5 candidate",
+    "correctedHead": "8666149bab9eaa935870dc14c0b779b98281c72b",
+    "correctionPullRequests": [261, 262, 263]
   },
   "round": 1,
-  "verdict": "ESCALATED",
-  "terminal": false,
-  "pendingDecision": "scoped-dual-rejudgment",
+  "verdict": "APPROVED",
+  "terminal": true,
+  "pendingDecision": null,
   "judges": {
     "A": {
-      "verdict": "ESCALATED",
-      "confirmedSevere": ["JD-C1", "JD-C2", "JD-C3"],
-      "suspectSevere": ["JD-S1"],
+      "verdict": "APPROVED",
+      "closedConfirmedSevere": ["JD-C1", "JD-C2", "JD-C3"],
+      "retainedUnconfirmedSuspect": ["JD-S1"],
+      "correctionCaused": {
+        "severe": [],
+        "suspect": [],
+        "info": [],
+        "contradictions": []
+      },
       "complete": true
     },
     "B": {
-      "verdict": "ESCALATED",
-      "confirmedSevere": ["JD-C1", "JD-C2", "JD-C3"],
-      "suspectSevere": ["JD-S2"],
+      "verdict": "APPROVED",
+      "closedConfirmedSevere": ["JD-C1", "JD-C2", "JD-C3"],
+      "retainedUnconfirmedSuspect": ["JD-S2"],
+      "correctionCaused": {
+        "severe": [],
+        "suspect": [],
+        "info": [],
+        "contradictions": []
+      },
       "complete": true
     }
   },
@@ -29,7 +43,7 @@
       {
         "id": "JD-C1",
         "severity": "SEVERE",
-        "status": "corrected-rejudgment-pending",
+        "status": "closed-by-scoped-dual-rejudgment",
         "confirmedBy": ["A", "B"],
         "location": "incoming scoped call resolution",
         "claim": "Deferred computed-key and external-alternative incoming references can be skipped while their coverage cell is completed, allowing proven_empty without complete semantic evidence.",
@@ -40,7 +54,7 @@
       {
         "id": "JD-C2",
         "severity": "SEVERE",
-        "status": "corrected-rejudgment-pending",
+        "status": "closed-by-scoped-dual-rejudgment",
         "confirmedBy": ["A", "B"],
         "location": "checked benchmark report",
         "claim": "The checked benchmark report is stale at five scenarios while the candidate corpus and gate execute eight scenarios.",
@@ -51,7 +65,7 @@
       {
         "id": "JD-C3",
         "severity": "SEVERE",
-        "status": "corrected-rejudgment-pending",
+        "status": "closed-by-scoped-dual-rejudgment",
         "confirmedBy": ["A", "B"],
         "location": "candidate-owned OpenSpec artifacts",
         "claim": "The format gate fails on seven candidate-owned OpenSpec files.",
@@ -64,18 +78,18 @@
       {
         "id": "JD-S1",
         "severity": "SEVERE",
-        "status": "judge-local",
+        "status": "retained-non-blocking-unconfirmed",
         "source": "A",
         "claim": "Zero-edge freshness may be accepted vacuously without positive evidence that the requested incoming work was performed.",
-        "disposition": "Do not auto-fix; reassess only in scoped re-judgment."
+        "disposition": "Scoped re-judgment did not confirm this judge-local suspect; retain as non-blocking history and do not auto-fix."
       },
       {
         "id": "JD-S2",
         "severity": "SEVERE",
-        "status": "judge-local",
+        "status": "retained-non-blocking-unconfirmed",
         "source": "B",
         "claim": "Semantic unfinished work may be mislabeled as edge_limit truncation.",
-        "disposition": "Do not auto-fix; reassess only in scoped re-judgment."
+        "disposition": "Scoped re-judgment did not confirm this judge-local suspect; retain as non-blocking history and do not auto-fix."
       }
     ],
     "contradictions": [],
@@ -96,14 +110,24 @@
   },
   "counts": {
     "confirmedSevere": 3,
+    "closedConfirmedSevere": 3,
     "suspectSevere": 2,
+    "retainedNonBlockingUnconfirmedSuspect": 2,
     "contradictions": 0,
     "info": 3,
     "openConfirmedSevere": 0,
-    "correctedRejudgmentPending": 3
+    "correctedRejudgmentPending": 0,
+    "correctionCausedSevere": 0,
+    "correctionCausedSuspect": 0,
+    "correctionCausedInfo": 0,
+    "correctionCausedContradictions": 0
+  },
+  "correctionRounds": {
+    "used": 1,
+    "maximum": 2
   },
   "correctionRound1": {
-    "status": "correction1-complete-rejudgment-pending",
+    "status": "complete-scoped-dual-rejudgment-approved",
     "budgetRule": "Each immediate-predecessor work unit must remain at or below 400 authored additions plus deletions.",
     "units": [
       {
@@ -116,7 +140,7 @@
         ],
         "forecastAuthoredLines": "180-320",
         "hardMax": 400,
-        "status": "corrected-rejudgment-pending",
+        "status": "closed-by-scoped-dual-rejudgment",
         "rollback": "Revert only incoming uncertainty accounting and its focused regression proof."
       },
       {
@@ -125,7 +149,7 @@
         "scope": "Regenerate the eight-scenario benchmark report and bind it to the corrected candidate and corpus projection.",
         "forecastAuthoredLines": "20-80",
         "hardMax": 400,
-        "status": "corrected-rejudgment-pending",
+        "status": "closed-by-scoped-dual-rejudgment",
         "evidence": "benchmark/results/self-agent-workflows.json sha256:d3fd705e82f556dc1b2a58a58b60e5936f58318e733affa4b907c4c4b8fde38c; 8/8 scenarios; repeated changed=false",
         "rollback": "Revert only the regenerated benchmark report and candidate binding."
       },
@@ -135,22 +159,33 @@
         "scope": "Format exactly the seven candidate-owned OpenSpec files reported by the format gate, plus the candidate-owned ledger/progress metadata updated by this correction.",
         "forecastAuthoredLines": "20-120",
         "hardMax": 400,
-        "status": "corrected-rejudgment-pending",
+        "status": "closed-by-scoped-dual-rejudgment",
         "evidence": "Focused Prettier RED reproduced unchanged twice on eight current artifacts; repository-configured formatting, focused/full format checks, JSON/YAML parsing, and ledger invariants pass.",
         "rollback": "Revert only formatting and R1C metadata changes in the issue #247 OpenSpec change directory."
       }
     ],
     "aggregateForecastAuthoredLines": "220-520 across three independently reviewed units; never aggregated into one over-budget unit",
-    "scopedRejudgment": "pending-on-corrected-candidate"
+    "scopedRejudgment": {
+      "head": "8666149bab9eaa935870dc14c0b779b98281c72b",
+      "judgeA": "APPROVED",
+      "judgeB": "APPROVED",
+      "closed": ["JD-C1", "JD-C2", "JD-C3"],
+      "correctionCausedCounts": {
+        "severe": 0,
+        "suspect": 0,
+        "info": 0,
+        "contradictions": 0
+      }
+    }
   },
   "validation": {
     "judgesComplete": true,
-    "bothEscalated": true,
+    "bothApproved": true,
     "corroborationMerged": true,
-    "correctionApplied": "R1A-R1C",
-    "scopedRejudgment": "pending-on-corrected-candidate",
-    "strictVerification": "pending-scoped-dual-rejudgment",
-    "archive": "blocked"
+    "correctionApplied": "R1A-R1C via PRs #261-#263",
+    "scopedRejudgment": "approved",
+    "strictVerification": "required-next-on-8666149bab9eaa935870dc14c0b779b98281c72b",
+    "archive": "blocked-pending-strict-verification"
   },
   "skillResolution": {
     "status": "paths-loaded",
@@ -163,5 +198,5 @@
       "/home/yail/.agents/skills/work-unit-commits/SKILL.md"
     ]
   },
-  "updatedAt": "2026-09-07T00:06:08Z"
+  "updatedAt": "2026-09-07T00:15:48Z"
 }
