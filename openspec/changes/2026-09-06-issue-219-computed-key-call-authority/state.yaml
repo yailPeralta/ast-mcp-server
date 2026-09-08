@@ -15,8 +15,10 @@ artifactPaths:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/scoped-compiler-impact/spec.md
   design:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/design.md
-  tasks: []
-  applyProgress: []
+  tasks:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/tasks.md
+  applyProgress:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/apply-progress.json
   verifyReport: []
   reviewPolicy: []
   reviewLedger: []
@@ -33,8 +35,10 @@ contextFiles:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/specs/scoped-compiler-impact/spec.md
   design:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/design.md
-  tasks: []
-  applyProgress: []
+  tasks:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/tasks.md
+  applyProgress:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/apply-progress.json
   verifyReport: []
   reviewPolicy: []
   reviewLedger: []
@@ -47,8 +51,8 @@ artifacts:
   proposal: done
   specs: done
   design: done
-  tasks: missing
-  applyProgress: missing
+  tasks: done
+  applyProgress: done
   verifyReport: missing
   reviewLedger: missing
   reviewReceipt: missing
@@ -56,27 +60,27 @@ artifacts:
   reviewContext: missing
   reviewState: missing
 taskProgress:
-  total: 0
+  total: 14
   completed: 0
-  pending: 0
+  pending: 14
   allComplete: false
 dependencies:
   proposal: all_done
   specs: all_done
   design: all_done
-  tasks: ready
-  apply: blocked
+  tasks: all_done
+  apply: ready
   verify: blocked
   archive: blocked
-applyState: blocked
+applyState: ready
 actionContext:
   mode: repo-local
   workspaceRoot: /home/yail/Documentos/proyects/ast-mcp-server
   allowedEditRoots:
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/design.md
-    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority/state.yaml
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-219-computed-key-call-authority
 relationships:
-  dependsOn: []
+  dependsOn:
+    - issue-247-honest-scoped-call-coverage
   resolvedDependencies:
     - issue-247-honest-scoped-call-coverage-merged-and-archived-on-main
   supersedes: []
@@ -97,29 +101,38 @@ remediationState:
   reason: ""
 phaseInstructions:
   apply:
-    - Do not apply during DESIGN; route next to tasks only.
-    - Keep issue 220, broad property or element dispatch, external or multiple-target edges, and DeepSeek Harness apply excluded.
-    - Preserve issue 186, issue 188, and F-01 as historical evidence without inherited Judgment, review, correction, or delivery authority.
-    - Keep authored changes at or below 400 lines per review unit; auto-chain only at independently testable boundaries if required.
+    - Before source or test edits, obtain explicit edit authority beyond the current planning-only allowed root and use acquire request issue219-u1-apply-v1.
+    - Run every new computed-key behavior test to the same stable RED twice before minimal GREEN; stop on fingerprint drift or unrelated failure.
+    - Keep U1 at or below 400 authored additions plus deletions and preserve one clean child diff targeting docs/219-design.
+    - Exclude issue 220, Harness/apply behavior, generalized dispatch, and inherited issue 186, issue 188, or F-01 authority.
   verify:
-    - No verify authority is created by this design.
+    - Verification is unavailable until all 14 tasks, dual blind Judgment, settlement, and immutable candidate evidence are complete.
+    - Admit only an exact report proving 3 requirements and 19 scenarios with current command hashes and Node 22.13.0/24 CI evidence.
   remediate: []
-  archive: []
-nextRecommended: tasks
+  archive:
+    - Archive only after strict verify passes, exact-head CI is green, review authority is valid when present, and no active RED remains.
+nextRecommended: apply
 blockedReasons: []
+risks:
+  - Future apply requires explicit source/test edit authority because this tasks phase is planning-root-only.
+  - The 300-390 authored-line forecast leaves limited headroom below the 400-line review boundary.
+  - Compiler-derived union-key and receiver-alternative enumeration can overclaim authority if any branch is missed.
+  - Scoped impact and whole-project call-spine producers can drift unless they share one bounded decision.
+  - Issue 220 adjacency creates scope-creep risk; external convergence must remain unfinished and edge-free.
 baseline:
-  branch: docs/219-spec
-  pullRequest: 248
-  head: d9e1cd01fedcd55522356095e56e4a3e4a489bc2
-  originMain: 7bb0c6800a9bfabddce11d26f61e00a90ed168b2
-  mergeBase: 7bb0c6800a9bfabddce11d26f61e00a90ed168b2
-  cleanAtStart: true
+  branch: docs/219-design
+  pullRequest: null
+  planningAncestorPullRequest: 248
+  originMainAtProposal: 7bb0c6800a9bfabddce11d26f61e00a90ed168b2
+  gitInspectionDuringTasks: forbidden
 authority:
   issue: 219
   issueState: OPEN
   labels:
     - status:approved
     - type:bug
+  prerequisiteIssue: 247
+  prerequisiteState: merged-and-archived
   independence: issue-219-only
   historicalEvidenceOnly:
     - issue-186
@@ -127,48 +140,29 @@ authority:
     - F-01
   excludedIssue:
     - issue-220
+  excludedSystems:
+    - DeepSeek-Harness
+    - Harness-apply
   rddMode: disabled/unmanaged
   reviewAuthority: false
   deliveryAuthority: false
-exploration:
+tasks:
   status: success
-  evidenceBaseline: 6173a39a73f1540c17335a330ea7f14f982387cb
-  reproduction: confirmed-on-main-public-mcp
-  runtimeDefect: true
-  missingCapabilityAtExploration: true
-  absentPrerequisiteAtExploration: true
-  readyForProposalAtExploration: false
-  changedLineBudgetRiskAtExploration: High
-  chainedPRsRecommendedAtExploration: true
-  decisionNeededBeforeApplyAtExploration: true
-currentReadiness:
-  prerequisiteIssue: 247
-  prerequisiteState: merged-and-archived
-  canonicalScopedImpactSpecPresent: true
-  scopedCallCoveragePresent: true
-  readyForSpec: true
-proposal:
-  status: success
-  detailLevel: high
+  detailLevel: deep/high
   deliveryStrategy: auto-chain
-  reviewBudgetChangedLines: 400
+  chainStrategy: feature-branch-chain
+  workUnitCount: 1
+  taskCount: 14
+  requirementCount: 3
+  scenarioCount: 19
+  traceabilityEntries: 19
+  forecastAuthoredChangedLines: 300-390
+  hardReviewBudget: 400
   changedLineBudgetRisk: Medium
+  chainedPRsRecommended: false
   decisionNeededBeforeApply: false
-spec:
-  status: success
-  detailLevel: high
-  requirementCount: 3
-  scenarioCount: 19
-  changedLineEstimate: 141
-  reviewBudgetChangedLines: 400
-  deliveryStrategy: auto-chain
-design:
-  status: success
-  detailLevel: high
-  requirementCount: 3
-  scenarioCount: 19
-  artifactWordCount: 798
-  artifactLineCount: 79
-  reviewBudgetChangedLines: 400
-  deliveryStrategy: auto-chain
-lastPhase: design
+  runtimeChild: U1
+  acquireRequestId: issue219-u1-apply-v1
+  settleRequestId: issue219-u1-settle-v1
+lastPhase: tasks
+updatedAt: 2026-09-08T06:27:22Z
