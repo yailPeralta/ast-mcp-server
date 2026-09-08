@@ -15,7 +15,7 @@
     {
       "id": "U1",
       "name": "Coverage contract",
-      "status": "candidate-ready-not-reviewed",
+      "status": "judgment-approved-awaiting-strict-verification",
       "branch": "feat/247-u1-coverage-contract",
       "base": "PR-254@c5309ec",
       "forecast": "300-380",
@@ -26,7 +26,7 @@
     {
       "id": "U2",
       "name": "Impact projection",
-      "status": "candidate-ready-not-reviewed",
+      "status": "judgment-approved-awaiting-strict-verification",
       "branch": "feat/247-u2-impact-authority",
       "base": "feat/247-u1-coverage-contract",
       "forecast": "320-395",
@@ -37,7 +37,7 @@
     {
       "id": "U3",
       "name": "Scoped direct calls",
-      "status": "candidate-ready-not-reviewed",
+      "status": "judgment-approved-awaiting-strict-verification",
       "branch": "feat/247-u3-scoped-direct-calls",
       "base": "feat/247-u2-impact-authority",
       "forecast": "330-395",
@@ -48,7 +48,7 @@
     {
       "id": "U4",
       "name": "Candidate gate",
-      "status": "candidate-ready-not-reviewed",
+      "status": "judgment-approved-awaiting-strict-verification",
       "branch": "feat/247-u4-candidate-completeness",
       "base": "feat/247-u3-scoped-direct-calls",
       "forecast": "320-395",
@@ -59,7 +59,7 @@
     {
       "id": "U5",
       "name": "Documentation and audit convergence",
-      "status": "candidate-ready-not-reviewed",
+      "status": "judgment-approved-awaiting-strict-verification",
       "branch": "docs/247-u5-contract-and-audit",
       "base": "feat/247-u4-candidate-completeness",
       "forecast": "180-300",
@@ -226,40 +226,51 @@
   },
   "judgmentDay": {
     "round": 1,
-    "targetHead": "ec235b0",
+    "originalTargetHead": "ec235b0",
+    "targetHead": "8666149bab9eaa935870dc14c0b779b98281c72b",
     "targetFrozen": true,
-    "judgeA": "ESCALATED",
-    "judgeB": "ESCALATED",
-    "verdict": "ESCALATED",
-    "terminal": false,
-    "confirmedSevere": ["JD-C1", "JD-C2", "JD-C3"],
-    "suspectSevere": ["JD-S1", "JD-S2"],
-    "contradictions": [],
+    "correctionPullRequests": [261, 262, 263],
+    "judgeA": "APPROVED",
+    "judgeB": "APPROVED",
+    "verdict": "APPROVED",
+    "terminal": true,
+    "closedConfirmedSevere": ["JD-C1", "JD-C2", "JD-C3"],
+    "retainedNonBlockingUnconfirmedSuspect": ["JD-S1", "JD-S2"],
+    "correctionCausedCounts": {
+      "severe": 0,
+      "suspect": 0,
+      "info": 0,
+      "contradictions": 0
+    },
     "infoPreserved": 3,
     "ledger": "reviews/ledger.json",
+    "correctionRounds": {
+      "used": 1,
+      "maximum": 2
+    },
     "correctionRound1": {
-      "status": "correction1-complete-rejudgment-pending",
+      "status": "complete-scoped-dual-rejudgment-approved",
       "units": [
         {
           "id": "R1A",
           "predecessor": "f72d40b",
           "forecast": "180-320",
           "hardMax": 400,
-          "status": "corrected-rejudgment-pending"
+          "status": "closed-by-scoped-dual-rejudgment"
         },
         {
           "id": "R1B",
           "predecessor": "5b827b3",
           "forecast": "20-80",
           "hardMax": 400,
-          "status": "corrected-rejudgment-pending"
+          "status": "closed-by-scoped-dual-rejudgment"
         },
         {
           "id": "R1C",
           "predecessor": "41f124f",
           "forecast": "20-120",
           "hardMax": 400,
-          "status": "corrected-rejudgment-pending"
+          "status": "closed-by-scoped-dual-rejudgment"
         }
       ]
     },
@@ -283,9 +294,9 @@
       "semanticPreservation": "JSON/YAML parse, ledger invariants, benchmark changed=false, key runtime gates, and diff hygiene pass without runtime edits",
       "rollback": "revert only R1C formatting and metadata changes under the issue #247 OpenSpec change directory"
     },
-    "scopedRejudgment": "pending-on-corrected-candidate",
-    "strictVerification": "pending-scoped-dual-rejudgment",
-    "archive": "blocked"
+    "scopedRejudgment": "approved",
+    "strictVerification": "required-next-on-8666149bab9eaa935870dc14c0b779b98281c72b",
+    "archive": "blocked-pending-strict-verification"
   },
-  "updatedAt": "2026-09-07T00:06:08Z"
+  "updatedAt": "2026-09-07T00:15:48Z"
 }

@@ -63,16 +63,16 @@ See `chain.md` for exact branches, symbols, commands, trace, IDs, rollback, and 
 ## Final Candidate Gate
 
 - [x] 6.1 Freeze `ec235b0`; record both complete round-1 judges as ESCALATED and merge three corroborated SEVERE, two judge-local SUSPECT severe, zero contradictions, and preserved INFO/baselines in `reviews/ledger.json`.
-- [ ] 6.2 **IN PROGRESS:** maintainer consent obtained; R1A and R1B are corrected with rejudgment pending. Complete only JD-C3 as R1C, then run blind scoped re-judgment over the frozen ledger plus immutable fix deltas.
-- [ ] 6.3 **BLOCKED:** after Judgment approval, run strict 14/25 verification and required CI on that candidate.
+- [x] 6.2 R1A–R1C corrected C1–C3 through PRs #261–#263; both scoped judges APPROVED the frozen ledger plus immutable correction deltas at `8666149` with no correction-caused findings or contradictions.
+- [ ] 6.3 **NEXT — STRICT VERIFY:** verify all 14 requirements and 25 scenarios, exact candidate `8666149`, current local gates, and required CI.
 - [ ] 6.4 **BLOCKED:** archive/deliver only after candidate-bound gates under ordinary policy; Judgment grants no receipt.
 
 ## Judgment Day Correction Round 1 Plan
 
-| Unit | Immediate predecessor   | Confirmed root                                                                                                                                        | Forecast | Hard max | Status                        |
-| ---- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------: | -------: | ----------------------------- |
-| R1A  | `f72d40b`               | Incoming uncertainty only: skipped deferred computed-key/external-alternative references cannot complete or prove empty; add no exact #219/#220 edges |  180–320 |      400 | Corrected; rejudgment pending |
-| R1B  | `5b827b3` R1A candidate | Regenerate the eight-scenario benchmark report and bind report, corpus projection, and corrected candidate                                            |    20–80 |      400 | Corrected; rejudgment pending |
-| R1C  | frozen R1B candidate    | Format exactly the seven candidate-owned OpenSpec files reported by the gate                                                                          |   20–120 |      400 | Pending after R1B             |
+| Unit | Immediate predecessor   | Confirmed root                                                                                                                                        | Forecast | Hard max | Status                      |
+| ---- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------: | -------: | --------------------------- |
+| R1A  | `f72d40b`               | Incoming uncertainty only: skipped deferred computed-key/external-alternative references cannot complete or prove empty; add no exact #219/#220 edges |  180–320 |      400 | Closed by scoped rejudgment |
+| R1B  | `5b827b3` R1A candidate | Regenerate the eight-scenario benchmark report and bind report, corpus projection, and corrected candidate                                            |    20–80 |      400 | Closed by scoped rejudgment |
+| R1C  | `41f124f` R1B candidate | Format the candidate-owned issue #247 OpenSpec artifacts reported by the gate                                                                         |   20–120 |      400 | Closed by scoped rejudgment |
 
-R1A and R1B are corrected with strict RED/GREEN evidence; R1B checked evidence is `sha256:d3fd705e82f556dc1b2a58a58b60e5936f58318e733affa4b907c4c4b8fde38c`, covers 8/8 scenarios, and is byte-idempotent. C3/R1C, both suspects, scoped rejudgment, settlement, and approval remain pending.
+Correction round 1 of 2 is complete. Both scoped judges APPROVED final HEAD `8666149`: C1–C3 are closed, neither judge found a correction-caused severe, suspect, INFO, or contradiction, and the two original judge-local suspects remain retained but unconfirmed and non-blocking. Strict verification is next; no receipt or delivery authority is granted.
