@@ -75,6 +75,21 @@ describe("canonical call spines", () => {
     expect(result.truncation_reasons).toContain(reason);
   });
 
+  it("computed-key call authority retains paths but denies relevant gap authority", () => {
+    const result = planCallSpines(endpoint("root"), [edge("root-target", "root", "target")], {
+      ...options,
+      unfinished_gaps: [{ source: endpoint("root"), alternatives: [endpoint("other")] }],
+    });
+
+    expect(result.paths.map((path) => path.endpoint.symbol_path)).toEqual(["target"]);
+    expect(result).toMatchObject({
+      authority_state: "incomplete",
+      incomplete: true,
+      empty_proven: false,
+      truncation_reasons: [],
+    });
+  });
+
   it.each([
     [true, fresh, "authoritative", true],
     [false, fresh, "incomplete", false],

@@ -504,6 +504,12 @@ interface ScopedCompilerRelationshipState {
   readonly projectRoot: string;
   readonly freshness: FreshnessMetadata;
   readonly requestContext: RequestContext;
+  computedCallSites?: readonly Node[];
+}
+
+export interface CallRelationshipGap {
+  readonly source: RelationshipEndpoint;
+  readonly alternatives: readonly RelationshipEndpoint[];
 }
 
 export type CompilerRelationshipDirection = "incoming" | "outgoing" | "both";
@@ -593,6 +599,7 @@ interface ScopedEdgeCollector {
   readonly workBudget: ScopedRelationshipWorkBudget;
   excludedNeighbors: boolean;
   unfinished: boolean;
+  semanticUnfinished?: boolean;
 }
 
 interface ScopedRelationshipWorkBudget {
@@ -1583,6 +1590,89 @@ function scopedLocatedCallTarget(
   return located;
 }
 
+type ComputedCallAuthority =
+  | { readonly state: "not_computed" | "single_key_eligible"; readonly workItems: number }
+  | {
+      readonly state: "unfinished";
+      readonly alternatives: readonly LocatedSymbol[];
+      readonly workItems: number;
+    };
+
+function computedCallAuthority(projectRoot: string, invocation: Node): ComputedCallAuthority {
+  const expression = callLikeExpression(invocation);
+  if (!expression) return { state: "not_computed", workItems: 0 };
+  const invoked = unwrapInvocationExpression(expression);
+  if (!Node.isElementAccessExpression(invoked)) return { state: "not_computed", workItems: 0 };
+  const argument = invoked.getArgumentExpression();
+  const keyTypes = argument
+    ? argument.getType().isUnion()
+      ? argument.getType().getUnionTypes()
+      : [argument.getType()]
+    : [];
+  const keys = keyTypes.flatMap((type) =>
+    type.isStringLiteral() && typeof type.getLiteralValue() === "string"
+      ? [type.getLiteralValue() as string]
+      : [],
+  );
+  const receiverType = invoked.getExpression().getType();
+  const receiverTypes = receiverType.isUnion() ? receiverType.getUnionTypes() : [receiverType];
+  const workItems = keyTypes.length + receiverTypes.length;
+  if (keys.length === 1 && keyTypes.length === 1 && receiverTypes.length === 1) {
+    return { state: "single_key_eligible", workItems };
+  }
+
+  const alternatives = new Map<string, LocatedSymbol>();
+  for (const receiver of receiverTypes) {
+    for (const key of keys) {
+      for (const declaration of declarationsForSymbol(receiver.getProperty(key))) {
+        const target = locatedCallTarget(projectRoot, declaration);
+        if (target) alternatives.set(symbolEndpoint(target, projectRoot).selector, target);
+      }
+    }
+  }
+  const signature = invocation
+    .getSourceFile()
+    .getProject()
+    .getTypeChecker()
+    .getResolvedSignature(invocation as never);
+  const selected = signature?.getDeclaration();
+  const selectedTarget = selected ? locatedCallTarget(projectRoot, selected) : undefined;
+  if (selectedTarget) {
+    alternatives.set(symbolEndpoint(selectedTarget, projectRoot).selector, selectedTarget);
+  }
+  return {
+    state: "unfinished",
+    alternatives: [...alternatives.values()].sort((left, right) =>
+      symbolEndpoint(left, projectRoot).selector.localeCompare(
+        symbolEndpoint(right, projectRoot).selector,
+      ),
+    ),
+    workItems: workItems + alternatives.size,
+  };
+}
+
+function scopedComputedCallSites(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+): readonly Node[] {
+  if (state.computedCallSites) {
+    reserveScopedWork(state, collector, state.computedCallSites.length);
+    return state.computedCallSites;
+  }
+  const sites: Node[] = [];
+  for (const sourceFile of scopedSourceFiles(state, collector)) {
+    sourceFile.forEachDescendant((node) => {
+      consumeScopedWork(state, collector);
+      const expression = callLikeExpression(node);
+      if (expression && Node.isElementAccessExpression(unwrapInvocationExpression(expression))) {
+        sites.push(node);
+      }
+    });
+  }
+  state.computedCallSites = sites;
+  return sites;
+}
+
 function scopedDirectCallTarget(
   state: ScopedCompilerRelationshipState,
   collector: ScopedEdgeCollector,
@@ -1632,6 +1722,16 @@ function addScopedIncomingCalls(
   target: LocatedSymbol,
 ): void {
   if (!Node.isReferenceFindable(target.node)) return;
+  for (const invocation of scopedComputedCallSites(state, collector)) {
+    const authority = computedCallAuthority(state.projectRoot, invocation);
+    reserveScopedWork(state, collector, authority.workItems);
+    if (
+      authority.state === "unfinished" &&
+      authority.alternatives.some((alternative) => alternative.node === target.node)
+    ) {
+      collector.semanticUnfinished = true;
+    }
+  }
   consumeScopedWork(state, collector);
   const references = target.node.findReferencesAsNodes();
   reserveScopedWork(state, collector, references.length);
@@ -1647,6 +1747,12 @@ function addScopedIncomingCalls(
       if (scopedReferenceFlowsToUncertainCall(state, collector, reference)) {
         collector.unfinished = true;
       }
+      continue;
+    }
+    const authority = computedCallAuthority(state.projectRoot, site.invocation);
+    reserveScopedWork(state, collector, authority.workItems);
+    if (authority.state === "unfinished") {
+      collector.semanticUnfinished = true;
       continue;
     }
     const source = scopedContainingSymbol(
@@ -1708,6 +1814,12 @@ function addScopedOutgoingCalls(
       return;
     }
     if (!callLikeExpression(node)) return;
+    const authority = computedCallAuthority(state.projectRoot, node);
+    reserveScopedWork(state, collector, authority.workItems);
+    if (authority.state === "unfinished") {
+      collector.semanticUnfinished = true;
+      return;
+    }
     const target = scopedDirectCallTarget(state, collector, node);
     if (!target) {
       collector.unfinished = true;
@@ -2057,7 +2169,12 @@ export function createCompilerRelationshipResolver(
           incomplete = true;
         }
         if (collector.unfinished) incomplete = true;
-        if (producer.callDirection && !interrupted && !collector.unfinished) {
+        if (
+          producer.callDirection &&
+          !interrupted &&
+          !collector.unfinished &&
+          !collector.semanticUnfinished
+        ) {
           callCoverage.set(producer.callDirection, "completed");
         }
         for (const edge of collector.edges.values()) merged.set(edge.relationship_id, edge);
@@ -2149,6 +2266,7 @@ export function collectCompilerCallRelationships(
   const normalizedFreshness = normalizeFreshness(freshness);
   const checker = project.getTypeChecker();
   const edges = new Map<string, RelationshipEdge>();
+  const unfinishedGaps: CallRelationshipGap[] = [];
   let workItems = 0;
   let workLimitReached = false;
   for (const sourceFile of project
@@ -2166,6 +2284,22 @@ export function collectCompilerCallRelationships(
       const invoked = unwrapInvocationExpression(expression);
       const caller = containingSymbol(sourceFile, node);
       if (!caller) return;
+      const computedAuthority = computedCallAuthority(projectRoot, node);
+      workItems += computedAuthority.workItems;
+      if (workItems > maxWorkItems) {
+        workLimitReached = true;
+        traversal.stop();
+        return;
+      }
+      if (computedAuthority.state === "unfinished") {
+        unfinishedGaps.push({
+          source: symbolEndpoint(caller, projectRoot),
+          alternatives: computedAuthority.alternatives.map((target) =>
+            symbolEndpoint(target, projectRoot),
+          ),
+        });
+        return;
+      }
       const signature = checker.getResolvedSignature(node as never);
       const implicitConstructSignatures = Node.isNewExpression(node)
         ? invoked.getType().getConstructSignatures()
@@ -2200,9 +2334,15 @@ export function collectCompilerCallRelationships(
   const ordered = [...edges.values()].sort((left, right) =>
     left.relationship_id.localeCompare(right.relationship_id),
   );
+  const boundedIncomplete = workLimitReached || ordered.length > maxEdges;
+  unfinishedGaps.sort((left, right) =>
+    endpointKey(left.source).localeCompare(endpointKey(right.source)),
+  );
   return Object.freeze({
     edges: Object.freeze(ordered.slice(0, maxEdges)),
-    incomplete: workLimitReached || ordered.length > maxEdges,
+    unfinished_gaps: Object.freeze(unfinishedGaps),
+    bounded_incomplete: boundedIncomplete,
+    incomplete: boundedIncomplete || unfinishedGaps.length > 0,
   });
 }
 

@@ -346,7 +346,8 @@ export async function buildExploreContext(
       max_depth: request.callSpines.maxDepth,
       max_nodes: request.callSpines.maxNodes,
       max_edges: request.callSpines.maxEdges,
-      discovery_complete: !projected.incomplete,
+      discovery_complete: !projected.bounded_incomplete,
+      unfinished_gaps: projected.unfinished_gaps,
       freshness,
     });
   }

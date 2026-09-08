@@ -1348,6 +1348,81 @@ export function formatValue(value: number): string { return String(value); }
     });
   });
 
+  it("computed-key call authority fails closed across public surfaces", async () => {
+    await fixture.write(
+      "src/computed.ts",
+      [
+        "export class Base { method(): void {} other(): void {} }",
+        "export function invoke(base: Base, key: 'method' | 'other'): void { base[key](); }",
+      ].join("\n"),
+    );
+    await fixture.write(
+      "src/computed.test.ts",
+      'import { Base, invoke } from "./computed.js"; export function exercise(): void { invoke(new Base(), "other"); }\n',
+    );
+    const input = {
+      project_root: fixture.root,
+      file_path: "src/computed.ts",
+      symbol_path: "Base.other",
+      direction: "incoming",
+      relationship_kinds: ["call"],
+      max_depth: 1,
+      max_nodes: 10,
+      max_edges: 10,
+    };
+    const impact = structured(await client.callTool({ name: "ast_get_impact", arguments: input }));
+    expect(impact).toMatchObject({
+      edges: [],
+      coverage: [{ kind: "call", direction: "incoming", status: "unfinished" }],
+      incomplete: true,
+      proven_empty: false,
+      truncation: { truncated: false },
+    });
+    const spines = structured(
+      await client.callTool({
+        name: "ast_explore",
+        arguments: {
+          project_root: fixture.root,
+          file_path: "src/computed.ts",
+          symbol_path: "Base.other",
+          call_spines: { direction: "incoming" },
+          max_bytes: 4096,
+        },
+      }),
+    );
+    expect(spines.call_spines).toMatchObject({
+      paths: [],
+      incomplete: true,
+      authority_state: "incomplete",
+      empty_proven: false,
+    });
+
+    expect(
+      publicFailure(
+        await callCandidates(client, fixture, {
+          file_path: "src/computed.ts",
+          symbol_path: "Base.other",
+        }),
+      ),
+    ).toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
+    const batch = parseBatchDocument({
+      version: 1,
+      project_root: fixture.root,
+      steps: [
+        {
+          id: "candidates",
+          tool: "ast_find_test_candidates",
+          input: { file_path: "src/computed.ts", symbol_path: "Base.other" },
+        },
+      ],
+    });
+    await expect(runBatchDocument(batch)).rejects.toMatchObject({
+      code: "TOOL_ERROR",
+      stepId: "candidates",
+      message: expect.stringContaining("INCOMPLETE_EVIDENCE"),
+    });
+  });
+
   it("atomically omits oversized call spines across direct MCP and batch", async () => {
     const caller = `call${"x".repeat(900)}`;
     await fixture.write(
