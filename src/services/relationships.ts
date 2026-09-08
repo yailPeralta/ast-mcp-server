@@ -592,6 +592,7 @@ interface ScopedEdgeCollector {
   readonly excludedRelationshipIds: ReadonlySet<string>;
   readonly workBudget: ScopedRelationshipWorkBudget;
   excludedNeighbors: boolean;
+  unfinished: boolean;
 }
 
 interface ScopedRelationshipWorkBudget {
@@ -1546,6 +1547,153 @@ function addScopedIncomingExports(
   }
 }
 
+function scopedInvocationForReference(
+  reference: Node,
+): { readonly invocation: Node; readonly direct: boolean } | undefined {
+  for (const ancestor of reference.getAncestors()) {
+    const expression = callLikeExpression(ancestor);
+    if (!expression) continue;
+    if (reference.getStart() < expression.getStart() || reference.getEnd() > expression.getEnd()) {
+      return undefined;
+    }
+    return { invocation: ancestor, direct: unwrapInvocationExpression(expression) === reference };
+  }
+  return undefined;
+}
+
+function scopedLocatedCallTarget(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  declaration: Node,
+): LocatedSymbol | undefined {
+  if (Node.isParameterDeclaration(declaration) || Node.isMethodSignature(declaration)) return;
+  const sourceFile = declaration.getSourceFile();
+  if (!isProjectScopedFile(state.projectRoot, sourceFile.getFilePath())) return;
+  const targetNode = Node.isConstructorDeclaration(declaration)
+    ? declaration.getFirstAncestorByKind(SyntaxKind.ClassDeclaration)
+    : declaration;
+  if (!targetNode) return;
+  let located: LocatedSymbol | undefined;
+  forEachLocatedSymbol(sourceFile, (candidate) => {
+    consumeScopedWork(state, collector);
+    if (candidate.node !== targetNode) return;
+    located = candidate;
+    return false;
+  });
+  return located;
+}
+
+function scopedDirectCallTarget(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  invocation: Node,
+): LocatedSymbol | undefined {
+  const expression = callLikeExpression(invocation);
+  if (!expression) return;
+  const invoked = unwrapInvocationExpression(expression);
+  if (!Node.isIdentifier(invoked)) return;
+  const targets = new Map<string, LocatedSymbol>();
+  for (const declaration of scopedDeclarationsForSymbol(state, collector, invoked.getSymbol())) {
+    const target = scopedLocatedCallTarget(state, collector, declaration);
+    if (target) targets.set(endpointKey(symbolEndpoint(target, state.projectRoot)), target);
+  }
+  return targets.size === 1 ? [...targets.values()][0] : undefined;
+}
+
+function addScopedIncomingCalls(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  target: LocatedSymbol,
+): void {
+  if (!Node.isReferenceFindable(target.node)) return;
+  consumeScopedWork(state, collector);
+  const references = target.node.findReferencesAsNodes();
+  reserveScopedWork(state, collector, references.length);
+  references.sort(
+    (left, right) =>
+      left.getSourceFile().getFilePath().localeCompare(right.getSourceFile().getFilePath()) ||
+      left.getStart() - right.getStart(),
+  );
+  const candidates = createScopedCandidateSet(collector);
+  for (const reference of references) {
+    const site = scopedInvocationForReference(reference);
+    if (!site) continue;
+    const source = scopedContainingSymbol(
+      state,
+      collector,
+      reference.getSourceFile(),
+      site.invocation,
+    );
+    const resolved = site.direct
+      ? scopedDirectCallTarget(state, collector, site.invocation)
+      : undefined;
+    if (!source || !resolved || resolved.node !== target.node) {
+      collector.unfinished = true;
+      continue;
+    }
+    candidates.push(
+      createScopedEdge(
+        state,
+        symbolEndpoint(source, state.projectRoot),
+        symbolEndpoint(target, state.projectRoot),
+        "call",
+      ),
+    );
+  }
+  addScopedCandidates(collector, candidates);
+}
+
+function isNestedNamedCallOwner(node: Node): boolean {
+  if (
+    Node.isFunctionDeclaration(node) ||
+    Node.isClassDeclaration(node) ||
+    Node.isMethodDeclaration(node) ||
+    Node.isConstructorDeclaration(node) ||
+    Node.isGetAccessorDeclaration(node) ||
+    Node.isSetAccessorDeclaration(node)
+  ) {
+    return true;
+  }
+  if (!Node.isArrowFunction(node) && !Node.isFunctionExpression(node)) return false;
+  const parent = node.getParent();
+  return Boolean(
+    parent &&
+    (Node.isVariableDeclaration(parent) ||
+      Node.isPropertyDeclaration(parent) ||
+      Node.isPropertyAssignment(parent)),
+  );
+}
+
+function addScopedOutgoingCalls(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  source: LocatedSymbol,
+): void {
+  const candidates = createScopedCandidateSet(collector);
+  source.node.forEachDescendant((node, traversal) => {
+    consumeScopedWork(state, collector);
+    if (isNestedNamedCallOwner(node)) {
+      traversal.skip();
+      return;
+    }
+    if (!callLikeExpression(node)) return;
+    const target = scopedDirectCallTarget(state, collector, node);
+    if (!target) {
+      collector.unfinished = true;
+      return;
+    }
+    candidates.push(
+      createScopedEdge(
+        state,
+        symbolEndpoint(source, state.projectRoot),
+        symbolEndpoint(target, state.projectRoot),
+        "call",
+      ),
+    );
+  });
+  addScopedCandidates(collector, candidates);
+}
+
 function endpointKey(endpoint: RelationshipEndpoint): string {
   return `${endpoint.file}\u0000${endpoint.symbol_path}\u0000${endpoint.selector}`;
 }
@@ -1615,7 +1763,8 @@ function relationshipWork(
 }
 
 function hasScopedRelationshipProducer(entry: RelationshipCoverageEntry): boolean {
-  if (entry.kind === "call" || entry.kind === "contains") return false;
+  if (entry.kind === "contains") return false;
+  if (entry.kind === "call") return entry.endpoint_class === "symbol";
   if (entry.endpoint_class === "module") {
     return entry.kind === "import" || entry.kind === "export";
   }
@@ -1720,6 +1869,7 @@ export function createCompilerRelationshipResolver(
         excludedRelationshipIds,
         workBudget,
         excludedNeighbors: false,
+        unfinished: false,
       };
       let located: { readonly sourceFile: SourceFile; readonly symbol?: LocatedSymbol };
       try {
@@ -1746,9 +1896,32 @@ export function createCompilerRelationshipResolver(
       const incoming = direction === "incoming" || direction === "both";
       const producers: Array<{
         readonly kinds: readonly RelationshipEdgeKind[];
+        readonly callDirection?: RelationshipCoverageDirection;
         readonly collect: (collector: ScopedEdgeCollector) => void;
       }> = [];
       if (located.symbol) {
+        if (
+          incoming &&
+          relationshipKinds.has("call") &&
+          relationshipCoverageApplicability("call", "incoming", "symbol", located.symbol.node)
+        ) {
+          producers.push({
+            kinds: ["call"],
+            callDirection: "incoming",
+            collect: (collector) => addScopedIncomingCalls(state, collector, located.symbol!),
+          });
+        }
+        if (
+          outgoing &&
+          relationshipKinds.has("call") &&
+          relationshipCoverageApplicability("call", "outgoing", "symbol", located.symbol.node)
+        ) {
+          producers.push({
+            kinds: ["call"],
+            callDirection: "outgoing",
+            collect: (collector) => addScopedOutgoingCalls(state, collector, located.symbol!),
+          });
+        }
         if (outgoing && (relationshipKinds.has("extends") || relationshipKinds.has("implements"))) {
           producers.push({
             kinds: ["extends", "implements"],
@@ -1815,7 +1988,13 @@ export function createCompilerRelationshipResolver(
       }
 
       const merged = new Map<string, RelationshipEdge>();
+      const callCoverage = new Map<RelationshipCoverageDirection, RelationshipCoverageStatus>(
+        producers.flatMap((producer) =>
+          producer.callDirection ? [[producer.callDirection, "unfinished"]] : [],
+        ),
+      );
       let incomplete = false;
+      let boundedIncomplete = false;
       let excludedNeighbors = false;
       for (const producer of producers) {
         const collector: ScopedEdgeCollector = {
@@ -1830,7 +2009,9 @@ export function createCompilerRelationshipResolver(
           excludedRelationshipIds,
           workBudget,
           excludedNeighbors: false,
+          unfinished: false,
         };
+        let interrupted = false;
         try {
           producer.collect(collector);
         } catch (error) {
@@ -1840,7 +2021,13 @@ export function createCompilerRelationshipResolver(
           ) {
             throw error;
           }
+          interrupted = true;
+          boundedIncomplete = true;
           incomplete = true;
+        }
+        if (collector.unfinished) incomplete = true;
+        if (producer.callDirection && !interrupted && !collector.unfinished) {
+          callCoverage.set(producer.callDirection, "completed");
         }
         for (const edge of collector.edges.values()) merged.set(edge.relationship_id, edge);
         excludedNeighbors ||= collector.excludedNeighbors;
@@ -1849,14 +2036,24 @@ export function createCompilerRelationshipResolver(
       const ordered = [...merged.values()].sort((left, right) =>
         scopedNeighborOrder(key, left, right),
       );
-      if (ordered.length > query.max_edges) incomplete = true;
+      if (ordered.length > query.max_edges) {
+        incomplete = true;
+        boundedIncomplete = true;
+      }
       const selected = ordered.slice(0, query.max_edges);
-      const producerInterrupted = incomplete || workBudget.limitReached;
+      const resolvedCoverage = resolveProducerCoverage(
+        coverage,
+        boundedIncomplete || workBudget.limitReached,
+      ).map((entry) =>
+        entry.kind === "call" && callCoverage.has(entry.direction)
+          ? { ...entry, status: callCoverage.get(entry.direction)! }
+          : entry,
+      );
       return {
         edges: selected.sort((left, right) =>
           left.relationship_id.localeCompare(right.relationship_id),
         ),
-        coverage: resolveProducerCoverage(coverage, producerInterrupted),
+        coverage: resolvedCoverage,
         work: relationshipWork(workBudget, maxWorkItems),
         incomplete,
         work_items: workBudget.consumed,
