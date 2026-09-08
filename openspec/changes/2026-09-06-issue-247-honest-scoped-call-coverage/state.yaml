@@ -9,7 +9,9 @@ changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-
 artifactPaths:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/proposal.md
-  specs: []
+  specs:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/scoped-compiler-impact/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/affected-test-candidates/spec.md
   design: []
   tasks: []
   applyProgress: []
@@ -23,7 +25,9 @@ artifactPaths:
 contextFiles:
   proposal:
     - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/proposal.md
-  specs: []
+  specs:
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/scoped-compiler-impact/spec.md
+    - /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-09-06-issue-247-honest-scoped-call-coverage/specs/affected-test-candidates/spec.md
   design: []
   tasks: []
   applyProgress: []
@@ -37,7 +41,7 @@ contextFiles:
 artifacts:
   exploration: done
   proposal: done
-  specs: missing
+  specs: done
   design: missing
   tasks: missing
   applyProgress: missing
@@ -54,8 +58,8 @@ taskProgress:
   allComplete: false
 dependencies:
   proposal: all_done
-  specs: ready
-  design: blocked
+  specs: all_done
+  design: ready
   tasks: blocked
   apply: blocked
   verify: blocked
@@ -95,12 +99,13 @@ phaseInstructions:
     - Preserve exact baseline CI and dependency-audit failures as non-change evidence.
   remediate: []
   archive: []
-nextRecommended: spec
+nextRecommended: design
 blockedReasons: []
 planningBase:
-  pullRequest: 250
-  commit: d0a0fa2a37e78d350cd31d093263e63f27d45a3d
+  pullRequest: 251
+  commit: a0c8bc2e37954e58b870f1bc54eeca978912334a
   role: planning-only
+  supersedesArtifactReference: PR-250/d0a0fa2
 baseline:
   branch: main
   head: 6173a39a73f1540c17335a330ea7f14f982387cb
@@ -163,6 +168,48 @@ proposal:
   immediatePredecessorRequired: true
   maxAuthoredChangedLinesPerUnit: 400
   readyForSpecs: true
+spec:
+  status: success
+  detailLevel: high
+  readyForDesign: true
+  requirements:
+    total: 14
+    added: 9
+    modified: 5
+    removed: 0
+    renamed: 0
+  scenarios:
+    total: 25
+    scopedCompilerImpact: 15
+    affectedTestCandidates: 10
+  artifacts:
+    scopedCompilerImpact:
+      type: new-full
+      requirements: 9
+      scenarios: 15
+      words: 649
+    affectedTestCandidates:
+      type: modified-delta
+      requirements: 5
+      scenarios: 10
+      words: 631
+  traceability:
+    scopeCanonicalCells: scoped-compiler-impact/Record-canonical-coverage-cells
+    scopeConservativeCalls: scoped-compiler-impact/Complete-exact-scoped-direct-calls+Refuse-guessed-dispatch
+    scopeImpactAuthority: scoped-compiler-impact/Separate-semantic-and-bounded-incompleteness+Make-impact-claims-honest
+    scopeCandidateGate: affected-test-candidates/Traverse-incoming-compiler-relationships+Fail-closed-on-untrusted-evidence
+    outcomeKindsAndParity: scoped-compiler-impact/Report-unsupported-containment+Preserve-compatibility
+    outcomeContainsAndIncomplete: scoped-compiler-impact/Report-unsupported-containment+Separate-semantic-and-bounded-incompleteness
+    outcomeDirectionalCalls: scoped-compiler-impact/Preserve-applicability-and-direction+Complete-exact-scoped-direct-calls
+    outcomeImpactProvenEmpty: scoped-compiler-impact/Make-impact-claims-honest-and-compatible
+    outcomeCandidateProvenEmpty: affected-test-candidates/Fail-closed-on-untrusted-evidence
+    exclusionIssue219: scoped-compiler-impact/Preserve-deferred-classifier-scope+affected-test-candidates/Deferred-dispatch-is-not-certified
+    exclusionIssue220: scoped-compiler-impact/Preserve-deferred-classifier-scope+affected-test-candidates/Deferred-dispatch-is-not-certified
+    exclusionContainsProducer: scoped-compiler-impact/Report-unsupported-containment
+    exclusionHistoricalAuthority: state.authority+state.relationships.conflictsWith
+    exclusionWholeProjectCallSpine: design-boundary-no-authority-change
+    exclusionUniversalOutputSchema: compatibility-boundary-additive-fields-only
+    exclusionUIHarnessRuntimeMutation: action-context-and-design-boundary
 baselineEvidence:
   focusedTests:
     command: yarn vitest run test/relationships.test.ts test/impact.test.ts test/test-candidates.test.ts --reporter=dot
@@ -185,4 +232,4 @@ baselineEvidence:
     packages:
       - fast-uri@3.1.5
       - qs@6.15.3
-lastPhase: propose
+lastPhase: spec
