@@ -1,0 +1,317 @@
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
+index f509835eb1af13968577de6456d0d3ea7586015d..f301c38f468ba49da523b0e0939616bbec6df332 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+-2026-07-20-canonical-tool-output-contract.md: 52b56a44a747a07e13e05511d6d40a85fcd9696d
+-2026-07-20-canonical-tool-output-contract.zh.md: a78defb2b45143d46fed2bedf760df12744621a5
++2026-07-20-canonical-tool-output-contract.md: 9b776963f35fa0235de27e88a03997998c13c975
++2026-07-20-canonical-tool-output-contract.zh.md: b559ea797a2a00d0976e19c3f52f761c4b79cb8f
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+index 52b56a44a747a07e13e05511d6d40a85fcd9696d..9b776963f35fa0235de27e88a03997998c13c975 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+@@ -17,6 +17,7 @@ Every tool declares a mandatory canonical output and returns only the value desc
+ ```ts ignore-check
+ output: {
+   schema: OutputSchema
++  validate?(value): readonly string[]
+   render(args, value): ContentBlock[]
+   presentationMeta?(args, value): JsonValue
+ }
+@@ -24,7 +25,7 @@ output: {
+ 
+ `defineTool` infers the body return and both projectors from the unified `ValueSchemaSpec`. Raw and dynamic definitions provide the compiled `JsonSchemaNode` form. Registration rejects a missing declaration or unsupported raw schema; there is no content-return compatibility path.
+ 
+-For each successful dispatch the registry snapshots the returned value as lossless `JsonValue`, validates it against `output.schema`, deep-freezes it, then invokes the pure renderer and, for a direct surface call, the optional metadata projector. Renderer, projector, schema, or lossless-JSON failures are contained as ordinary `ToolOutputError` results. An around `tools/execute` wrapper receives and returns the canonical success/failure union; a wrapper-authored success is normalized again through the resolved tool's output declaration instead of trusting independently authored content. Each canonical result is tied to the immutable dispatch token that created it, so returning a cached result from another call or tool triggers normalization under the active declaration rather than bypassing it.
++For each successful dispatch the registry snapshots the returned value as lossless `JsonValue`, validates it against `output.schema`, deep-freezes it, then runs optional pure synchronous `output.validate` before either projector. Nonempty violations and renderer, projector, schema, or lossless-JSON failures become `ToolOutputError` results; validator exceptions expose only a fixed diagnostic. An around `tools/execute` wrapper receives and returns the canonical success/failure union; a wrapper-authored success is normalized again through the resolved tool's output declaration instead of trusting independently authored content. Each canonical result is tied to the immutable dispatch token that created it, so returning a cached result from another call or tool triggers normalization under the active declaration rather than bypassing it.
+ 
+ ```ts ignore-check
+ type ToolExecutionResult =
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
+index a78defb2b45143d46fed2bedf760df12744621a5..b559ea797a2a00d0976e19c3f52f761c4b79cb8f 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
+@@ -17,6 +17,7 @@ Status: implemented
+ ```ts ignore-check
+ output: {
+   schema: OutputSchema
++  validate?(value): readonly string[]
+   render(args, value): ContentBlock[]
+   presentationMeta?(args, value): JsonValue
+ }
+@@ -24,7 +25,7 @@ output: {
+ 
+ `defineTool` 从统一的 `ValueSchemaSpec` 推导工具主体返回值和两个投影器的类型。原始定义和动态定义则提供编译后的 `JsonSchemaNode` 形式。注册时会拒绝缺失输出声明或采用不受支持的原始 schema 的定义，不提供兼容旧式内容返回值的路径。
+ 
+-每次成功分发时，注册表会将返回值快照为无损 `JsonValue`，依据 `output.schema` 校验并深度冻结，然后调用纯渲染器；对于直接的外层调用，还会调用可选的元数据投影器。渲染器、投影器、schema 或无损 JSON 处理失败都会被收敛为普通 `ToolOutputError` 结果。围绕 `tools/execute` 的包装层接收并返回规范的成功／失败联合；包装层自行产生的成功结果会再次通过已解析工具的输出声明完成归一化，而不会信任其独立编写的内容。每个规范结果都与创建它的不可变分发 token 绑定；因此，如果包装层返回来自其他调用或工具的缓存结果，系统会依据当前生效的输出声明重新执行归一化，而不会绕过这一步。
++每次成功分发时，注册表会将返回值快照为无损 `JsonValue`，依据 `output.schema` 校验并深度冻结，然后在两个投影器之前运行可选的纯同步 `output.validate`。非空违规列表以及渲染器、投影器、schema 或无损 JSON 处理失败都会产生 `ToolOutputError` 结果；校验器异常仅暴露固定诊断。围绕 `tools/execute` 的包装层接收并返回规范的成功／失败联合；包装层自行产生的成功结果会再次通过已解析工具的输出声明完成归一化，而不会信任其独立编写的内容。每个规范结果都与创建它的不可变分发 token 绑定；因此，如果包装层返回来自其他调用或工具的缓存结果，系统会依据当前生效的输出声明重新执行归一化，而不会绕过这一步。
+ 
+ ```ts ignore-check
+ type ToolExecutionResult =
+diff --git a/docs/subsystems/tools.i18n.yaml b/docs/subsystems/tools.i18n.yaml
+index d448297059c54a4368e868a518714ff7642b3a2c..2d1f89c735d9f73141a3893a4cc6570093cccc8b 100644
+--- a/docs/subsystems/tools.i18n.yaml
++++ b/docs/subsystems/tools.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write docs/subsystems/tools.md
+-tools.md: 9939e8ab9fff9fa5bd23fd370e07f6296a608824
+-tools.zh.md: 52e812a35d6932a5ed00a86a3d3fe71460b26cd4
++tools.md: b4490235998c3aacf0cde400d7b5a5e0b5d88aca
++tools.zh.md: cba5df42d3e9fe71a3ba394b082fd8a619c7383f
+diff --git a/docs/subsystems/tools.md b/docs/subsystems/tools.md
+index 9939e8ab9fff9fa5bd23fd370e07f6296a608824..b4490235998c3aacf0cde400d7b5a5e0b5d88aca 100644
+--- a/docs/subsystems/tools.md
++++ b/docs/subsystems/tools.md
+@@ -15,6 +15,13 @@ A `ToolSchema` (the model-facing fields) plus a mandatory canonical output decla
+ interface ToolOutputDefinition {
+   /** Raw supported JSON Schema enforced against every successful canonical value. */
+   readonly schema: JsonSchemaNode
++  /**
++   * Pure synchronous additional validation after schema validation and freezing.
++   * Runs for body, wrapper, and post-policy values, including nested calls.
++   * @param value - detached, deeply frozen canonical value; never mutate it.
++   * @returns bounded, non-sensitive violations; empty means valid.
++   */
++  validate?(value: JsonValue): readonly string[]
+   /** Pure projection from validated arguments and value to Native/model content. */
+   render(args: unknown, value: JsonValue): ContentBlock[]
+   /** Pure replayable presentation projection, computed only for top-level calls. */
+@@ -95,6 +102,8 @@ interface ToolDefinition extends ToolSchema {
+ 
+ `execute` receives `args: unknown` — a raw `ToolDefinition` validates its own input. First-party tools don't write that by hand; they use `defineTool`, which validates and narrows the arguments, infers the body return from `output.schema`, and types both output projectors. `finalizeContent` deliberately receives the immutable execution instead of typed arguments because invalid-input and outer pipeline failures reach it too; it may enforce a tool-owned content bound while preserving `isError`, canonical value, structured error identity, deferred contexts, and presentation metadata.
+ 
++`output.validate(value)` runs after lossless snapshotting, schema validation, and deep freezing, before either output projector. Its nonempty violation list becomes `ToolOutputError` (`INVALID_TOOL_OUTPUT`); an exception becomes the fixed violation `output.validate failed`, without exception details. Validators are synchronous, pure, and cannot replace the value. Tools own any additional schema compilation and bounded, non-sensitive diagnostics. Generated SDK types describe `output.schema`, not additional callback constraints.
++
+ ## The unified JSON-value schema DSL
+ 
+ Plugin authors use one vocabulary for typed parameters and typed output values. `ValueSchemaSpec` supports `string`, `number`, `integer`, `boolean`, `null`, `array`, `object`, author-only `json`, and exact-one `oneOf`; scalar `enum` and `const` values must match their node type. An explicit object node always declares `additionalProperties: true | false`. Parameter definitions remain an implicit open object property map, with `required: true` attached to each required property.
+diff --git a/docs/subsystems/tools.zh.md b/docs/subsystems/tools.zh.md
+index 52e812a35d6932a5ed00a86a3d3fe71460b26cd4..cba5df42d3e9fe71a3ba394b082fd8a619c7383f 100644
+--- a/docs/subsystems/tools.zh.md
++++ b/docs/subsystems/tools.zh.md
+@@ -15,6 +15,13 @@
+ interface ToolOutputDefinition {
+   /** Raw supported JSON Schema enforced against every successful canonical value. */
+   readonly schema: JsonSchemaNode
++  /**
++   * Pure synchronous additional validation after schema validation and freezing.
++   * Runs for body, wrapper, and post-policy values, including nested calls.
++   * @param value - detached, deeply frozen canonical value; never mutate it.
++   * @returns bounded, non-sensitive violations; empty means valid.
++   */
++  validate?(value: JsonValue): readonly string[]
+   /** Pure projection from validated arguments and value to Native/model content. */
+   render(args: unknown, value: JsonValue): ContentBlock[]
+   /** Pure replayable presentation projection, computed only for top-level calls. */
+@@ -95,6 +102,8 @@ interface ToolDefinition extends ToolSchema {
+ 
+ `execute` 接收 `args: unknown`——原始的 `ToolDefinition` 自行校验输入。第一方工具不需要手写校验；它们使用 `defineTool`，由后者代为校验并收窄参数类型、根据 `output.schema` 推导函数体返回类型，并为两个输出投影器提供类型约束。`finalizeContent` 特意接收不可变的执行对象而非类型化参数，因为无效输入和外层流水线失败也会到达该回调；它可以施加工具自有的内容限制，同时保留 `isError`、规范值、结构化错误身份、延迟上下文与展示元数据。
+ 
++`output.validate(value)` 在无损快照、schema 校验与深度冻结之后、两个输出投影器之前运行。非空违规列表产生 `ToolOutputError`（`INVALID_TOOL_OUTPUT`）；异常产生固定违规信息 `output.validate failed`，不附带异常详情。校验器必须同步且纯粹，不能替换值。附加 schema 的编译以及有界且不含敏感信息的诊断由工具拥有。生成的 SDK 类型描述 `output.schema`，不描述附加回调约束。
++
+ ## 统一的 JSON 值 schema DSL
+ 
+ 插件作者使用同一套词汇描述类型化参数和类型化输出值。`ValueSchemaSpec` 支持 `string`、`number`、`integer`、`boolean`、`null`、`array`、`object`、仅作者侧可用的 `json`，以及要求恰好命中一个分支的 `oneOf`；标量 `enum` 和 `const` 值必须与节点类型匹配。显式对象节点始终声明 `additionalProperties: true | false`。参数定义仍是隐式的开放对象属性映射，每个必填属性都附带 `required: true`。
+diff --git a/packages/core/tools/README.i18n.yaml b/packages/core/tools/README.i18n.yaml
+index feacbdc2e44a6733f8fe62e3b529d020cbf0b264..85cb5825bc7dbc40b7ef2667635884ad3bca594a 100644
+--- a/packages/core/tools/README.i18n.yaml
++++ b/packages/core/tools/README.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write packages/core/tools/README.md
+-README.md: f586b926ec9a8e426f48b62e4d03b1661201a76a
+-README.zh.md: 5f422dd848ee9a6e8e0afe96d3dd03238ecc3857
++README.md: cc2463eaf35585b2c1e7632a07a525e1f86d4083
++README.zh.md: 73580f0ea7b5f24af89f458f0ee5cbc161c6d39c
+diff --git a/packages/core/tools/README.md b/packages/core/tools/README.md
+index f586b926ec9a8e426f48b62e4d03b1661201a76a..cc2463eaf35585b2c1e7632a07a525e1f86d4083 100644
+--- a/packages/core/tools/README.md
++++ b/packages/core/tools/README.md
+@@ -59,6 +59,8 @@ ctx.tools.register(defineTool({
+ 
+ The unified schema DSL supports `string`, `number`, `integer`, `boolean`, `null`, `array`, `object`, author-only `json`, and exact-one `oneOf`; `InferValue` preserves exact types through 16 container levels before widening to `JsonValue`. A raw JSON Schema (`JsonSchemaNode`) is the wire-level counterpart shared with subagents, workflows, and MCP.
+ 
++Raw `ToolDefinition` outputs may add a pure synchronous `output.validate(value)` that returns bounded, non-sensitive violations for constraints beyond `output.schema`. Validation runs before presentation, including nested calls; it does not change generated SDK types. See the [output declaration](../../../docs/subsystems/tools.md#tooldefinition--a-registered-tool) for admission semantics.
++
+ ### Configure the presentation mode
+ 
+ The `mode` config decides what the model sees: `native` (every visible schema), `ptc` (only `run_code` plus a generated SDK), or `both`.
+diff --git a/packages/core/tools/README.zh.md b/packages/core/tools/README.zh.md
+index 5f422dd848ee9a6e8e0afe96d3dd03238ecc3857..73580f0ea7b5f24af89f458f0ee5cbc161c6d39c 100644
+--- a/packages/core/tools/README.zh.md
++++ b/packages/core/tools/README.zh.md
+@@ -59,6 +59,8 @@ ctx.tools.register(defineTool({
+ 
+ 统一 schema DSL 支持 `string`、`number`、`integer`、`boolean`、`null`、`array`、`object`、仅供作者使用的 `json` 与恰好匹配一个分支的 `oneOf`；`InferValue` 在 16 层容器内保留精确类型，之后加宽为 `JsonValue`。原始 JSON Schema（`JsonSchemaNode`）是与 subagent、工作流和 MCP 共享的协议级对应类型。
+ 
++原始 `ToolDefinition` 的输出可添加纯同步的 `output.validate(value)`，为超出 `output.schema` 的约束返回有界且不含敏感信息的违规列表。校验在展示之前运行，包括嵌套调用；它不会改变生成的 SDK 类型。接纳语义见[输出声明](../../../docs/subsystems/tools.zh.md#tooldefinition--a-registered-tool)。
++
+ ### 配置呈现模式
+ 
+ `mode` 配置决定模型看到什么：`native`（每个可见 schema）、`ptc`（只有 `run_code` 加一份生成 SDK）或 `both`。
+diff --git a/packages/core/tools/src/index.ts b/packages/core/tools/src/index.ts
+index 9513fe0a3c4ac1099b42514c9d4ed4ef2042a631..b13884e14a2e42893110ebd0e5c4972ae5557ee3 100644
+--- a/packages/core/tools/src/index.ts
++++ b/packages/core/tools/src/index.ts
+@@ -212,6 +212,13 @@ declare module '@deepseek-ai/cordis' {
+ export interface ToolOutputDefinition {
+   /** Raw supported JSON Schema enforced against every successful canonical value. */
+   readonly schema: JsonSchemaNode
++  /**
++   * Pure synchronous additional validation after schema validation and freezing.
++   * Runs for body, wrapper, and post-policy values, including nested calls.
++   * @param value - detached, deeply frozen canonical value; never mutate it.
++   * @returns bounded, non-sensitive violations; empty means valid.
++   */
++  validate?(value: JsonValue): readonly string[]
+   /** Pure projection from validated arguments and value to Native/model content. */
+   render(args: unknown, value: JsonValue): ContentBlock[]
+   /** Pure replayable presentation projection, computed only for top-level calls. */
+@@ -1041,6 +1048,9 @@ export class ToolRuntime extends Service {
+       || (output.presentationMeta !== undefined && typeof output.presentationMeta !== 'function')) {
+       throw new TypeError(`tool "${name}" must declare output { schema, render, presentationMeta? }`)
+     }
++    if (output.validate !== undefined && typeof output.validate !== 'function') {
++      throw new TypeError(`tool "${name}" output.validate must be a function`)
++    }
+     assertSupportedJsonSchema(output.schema)
+     const timeoutMs = definition.timeoutMs
+     if (timeoutMs !== undefined
+@@ -1794,6 +1804,16 @@ export class ToolRuntime extends Service {
+     const violations = validateJsonSchemaValue(tool.output.schema, detached, 'value')
+     if (violations.length > 0) throw new ToolOutputError(tool.name, violations)
+     const value = deepFreeze(detached)
++    if (tool.output.validate !== undefined) {
++      let additional: readonly string[]
++      try {
++        additional = tool.output.validate(value)
++      } catch {
++        // Validator exceptions may contain remote schema or result data.
++        throw new ToolOutputError(tool.name, ['output.validate failed'])
++      }
++      if (additional.length > 0) throw new ToolOutputError(tool.name, [...additional])
++    }
+     let rendered: ContentBlock[]
+     try {
+       rendered = tool.output.render(exec.arguments, value)
+diff --git a/packages/core/tools/tests/output-validation.spec.ts b/packages/core/tools/tests/output-validation.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..975f47d490da53b6f526d56166618f3994c327a0
+--- /dev/null
++++ b/packages/core/tools/tests/output-validation.spec.ts
+@@ -0,0 +1,108 @@
++import { describe, expect, expectTypeOf, it } from 'vitest'
++import { Context } from '@deepseek-ai/cordis'
++import type { Agent } from '@deepseek-ai/dsh-agent'
++import { ToolCallId } from '@deepseek-ai/dsh-llm'
++import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
++import ToolRuntime, { type JsonValue, type ToolDefinition, type ToolExecutionToken } from '@deepseek-ai/dsh-tools'
++
++async function setup() {
++  const ctx = new Context()
++  await ctx.plugin(SystemPrompt)
++  await ctx.plugin(ToolRuntime)
++  return ctx
++}
++
++function definition(validate: (value: JsonValue) => readonly string[]): ToolDefinition {
++  return {
++    name: 'checked', description: 'checked output', parameters: {},
++    output: {
++      schema: {}, validate,
++      render: () => [{ type: 'text', text: 'validated' }],
++    },
++    async execute() { return { count: 1 } },
++  }
++}
++
++function call(ctx: Context, nested = false, agent?: Agent) {
++  return ctx.tools.execute({
++    name: 'checked', arguments: {}, callId: ToolCallId('checked'),
++    signal: new AbortController().signal,
++    ...agent ? { agent } : {},
++    ...nested ? { parent: Symbol('parent') as ToolExecutionToken } : {},
++  })
++}
++
++describe('canonical output validation', () => {
++  it('excludes asynchronous validators from the author API', () => {
++    expectTypeOf<() => Promise<string[]>>().not.toExtend<NonNullable<ToolDefinition['output']['validate']>>()
++  })
++
++  it('rejects a malformed output validator during registration', async () => {
++    const ctx = await setup()
++    const tool = definition(() => [])
++    // Registration accepts plugin declarations at the existing runtime parser.
++    const output = { ...tool.output, validate: true } as unknown as ToolDefinition['output']
++    expect(() => ctx.tools.register({ ...tool, output })).toThrow('output.validate must be a function')
++  })
++
++  it('validates a detached deeply frozen value before projection', async () => {
++    const ctx = await setup()
++    const candidate = { nested: { count: 1 } }
++    let validated: JsonValue | undefined
++    const tool = definition((value) => {
++      validated = value
++      expect(value).not.toBe(candidate)
++      expect(Object.isFrozen(value)).toBe(true)
++      expect(Object.isFrozen((value as typeof candidate).nested)).toBe(true)
++      candidate.nested.count = 99
++      return []
++    })
++    tool.execute = async () => candidate
++    tool.output.render = (_args, value) => {
++      expect(value).toBe(validated)
++      return []
++    }
++    ctx.tools.register(tool)
++    expect(await call(ctx)).toMatchObject({ isError: false, value: { nested: { count: 1 } } })
++  })
++
++  it.each(['mutation', 'exception'] as const)('contains validator %s without disclosing exception text', async (mode) => {
++    const ctx = await setup()
++    ctx.tools.register(definition((value) => {
++      if (mode === 'mutation') {
++        (value as { count: number }).count = 99
++        return []
++      }
++      throw new Error('SECRET remote schema/data')
++    }))
++    const result = await call(ctx)
++    expect(result).toMatchObject({
++      isError: true, error: { message: 'tool "checked" returned invalid output: output.validate failed' },
++    })
++    expect(JSON.stringify(result)).not.toContain('SECRET')
++  })
++
++  it('checks the envelope before the additional validator', async () => {
++    const ctx = await setup()
++    let validated = false
++    const tool = definition(() => { validated = true; return [] })
++    const checked = { ...tool, output: { ...tool.output, schema: { type: 'string' as const } } }
++    ctx.tools.register(checked)
++    expect(await call(ctx)).toMatchObject({ isError: true })
++    expect(validated).toBe(false)
++  })
++
++  it.each([false, true])('rejects body output before projections (nested=%s)', async (nested) => {
++    const ctx = await setup()
++    let projected = false
++    const tool = definition(() => ['count must exceed 1'])
++    tool.output.render = () => { projected = true; return [] }
++    const dispose = ctx.tools.register(tool)
++    try {
++      expect(await call(ctx, nested)).toMatchObject({
++        isError: true, error: { message: 'tool "checked" returned invalid output: count must exceed 1' },
++      })
++      expect(projected).toBe(false)
++    } finally { dispose() }
++  })
++})
