@@ -40,3 +40,37 @@ it("locks patched transitives within every admitted parent range", async () => {
   expect.soft(lock["express@npm:^5.2.1"]?.dependencies?.qs).toBe("npm:^6.14.0");
   expect.soft(lock["body-parser@npm:^2.2.1"]?.dependencies?.qs).toBe("npm:^6.15.2");
 });
+
+it("admits the patched Hono and Vitest family without installation-policy exceptions", async () => {
+  const [manifestBytes, lockBytes, configBytes] = await Promise.all(
+    ["package.json", "yarn.lock", ".yarnrc.yml"].map((file) =>
+      readFile(path.join(repositoryRoot, file), "utf8"),
+    ),
+  );
+  const manifest = JSON.parse(manifestBytes!);
+  const lock = yaml.parse(lockBytes!) as Record<string, { version: string; resolution: string }>;
+  const config = yaml.parse(configBytes!);
+  expect.soft(manifest.resolutions.hono).toBe("4.13.5");
+  expect.soft(manifest.devDependencies.vitest).toBe("^4.1.11");
+  expect.soft(config.enableScripts).toBe(false);
+  expect.soft(config.npmPreapprovedPackages ?? []).toEqual([]);
+  expect.soft(config.npmMinimalAgeGate).toBeUndefined();
+
+  const packages = [
+    "hono",
+    "vitest",
+    ...["expect", "mocker", "pretty-format", "runner", "snapshot", "spy", "utils"].map(
+      (name) => `@vitest/${name}`,
+    ),
+  ];
+  for (const name of packages) {
+    const entries = Object.entries(lock).filter(([key]) =>
+      key.split(", ").some((selector) => selector.startsWith(`${name}@npm:`)),
+    );
+    const version = name === "hono" ? "4.13.5" : "4.1.11";
+    expect.soft(entries, name).toHaveLength(1);
+    expect
+      .soft(entries[0]?.[1], name)
+      .toMatchObject({ version, resolution: `${name}@npm:${version}` });
+  }
+});
