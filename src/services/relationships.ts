@@ -2308,15 +2308,24 @@ export function collectCompilerCallRelationships(
       const signatureDeclaration = signature?.getDeclaration();
       const declarations = declarationsForSymbol(invoked.getSymbol());
       const targets = new Map<string, LocatedSymbol>();
+      let unfinished = false;
       for (const declaration of declarations.length > 0
         ? declarations
         : signatureDeclaration
           ? [signatureDeclaration]
           : []) {
         const target = locatedCallTarget(projectRoot, declaration);
-        if (target) targets.set(symbolEndpoint(target, projectRoot).selector, target);
+        if (target) targets.set(endpointKey(symbolEndpoint(target, projectRoot)), target);
+        else unfinished = true;
       }
-      if (targets.size !== 1) return;
+      // Dropping an unlocatable alternative does not establish a single exact target.
+      if (unfinished || targets.size !== 1) {
+        unfinishedGaps.push({
+          source: symbolEndpoint(caller, projectRoot),
+          alternatives: [...targets.values()].map((target) => symbolEndpoint(target, projectRoot)),
+        });
+        return;
+      }
       const target = [...targets.values()][0];
       const edge = createRelationshipEdge({
         source: symbolEndpoint(caller, projectRoot),
