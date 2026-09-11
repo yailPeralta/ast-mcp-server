@@ -11,6 +11,10 @@
     {
       "file": "0002-core-dispatch-output-owner.patch",
       "sha256": "e4ec899ef6e657f4a27150a5da282680a415c6cc0c5cfea999fbd0798ebcffc5"
+    },
+    {
+      "file": "0003-core-output-compatibility-matrix.patch",
+      "sha256": "52acb434198064272db4913e756e39f695afeac0c07db97a7ba2b8cb8bbf5442"
     }
   ]
 }
