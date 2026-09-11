@@ -1,0 +1,12 @@
+{
+  "upstream": "https://github.com/deepseek-ai/deepseek-harness.git",
+  "baseRevision": "cd5ef8148158c3a752a658978873241fdf8e2bbc",
+  "baseTree": "a712eec535b48badc4fefb4df5176a7002e4280b",
+  "scope": "incomplete-development-prefix-not-mcp-compatibility",
+  "patches": [
+    {
+      "file": "0001-core-canonical-validator.patch",
+      "sha256": "30f8011a1a6cbb040c92d018110d6725e7a42d80be5fa6f564e457770a281f76"
+    }
+  ]
+}
