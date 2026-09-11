@@ -1,0 +1,390 @@
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
+index f301c38f468ba49da523b0e0939616bbec6df332..31b9ff70c1e90e8d4d78c2749f648ec74b30ef67 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+-2026-07-20-canonical-tool-output-contract.md: 9b776963f35fa0235de27e88a03997998c13c975
+-2026-07-20-canonical-tool-output-contract.zh.md: b559ea797a2a00d0976e19c3f52f761c4b79cb8f
++2026-07-20-canonical-tool-output-contract.md: 72768708e296a6dc8e890faceed238c42601c159
++2026-07-20-canonical-tool-output-contract.zh.md: 1586ff413df22a85991b3910c5567b02a3ea8dac
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+index 9b776963f35fa0235de27e88a03997998c13c975..72768708e296a6dc8e890faceed238c42601c159 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+@@ -25,7 +25,7 @@ output: {
+ 
+ `defineTool` infers the body return and both projectors from the unified `ValueSchemaSpec`. Raw and dynamic definitions provide the compiled `JsonSchemaNode` form. Registration rejects a missing declaration or unsupported raw schema; there is no content-return compatibility path.
+ 
+-For each successful dispatch the registry snapshots the returned value as lossless `JsonValue`, validates it against `output.schema`, deep-freezes it, then runs optional pure synchronous `output.validate` before either projector. Nonempty violations and renderer, projector, schema, or lossless-JSON failures become `ToolOutputError` results; validator exceptions expose only a fixed diagnostic. An around `tools/execute` wrapper receives and returns the canonical success/failure union; a wrapper-authored success is normalized again through the resolved tool's output declaration instead of trusting independently authored content. Each canonical result is tied to the immutable dispatch token that created it, so returning a cached result from another call or tool triggers normalization under the active declaration rather than bypassing it.
++For each successful dispatch the registry snapshots the returned value as lossless `JsonValue`, validates it against `output.schema`, deep-freezes it, then runs optional pure synchronous `output.validate` before either projector. Nonempty violations and renderer, projector, schema, or lossless-JSON failures become `ToolOutputError` results; validator exceptions expose only a fixed diagnostic. The selected registration owns output callbacks through body, wrapper, and post-policy admission, while live visibility checks remain independent and can still reject removal or restriction. A replacement registration cannot substitute its schema for a running body's declaration. Each canonical result is tied to the immutable dispatch token that created it, so returning a cached result from another call or tool triggers normalization instead of bypassing validation.
+ 
+ ```ts ignore-check
+ type ToolExecutionResult =
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
+index b559ea797a2a00d0976e19c3f52f761c4b79cb8f..1586ff413df22a85991b3910c5567b02a3ea8dac 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
+@@ -25,7 +25,7 @@ output: {
+ 
+ `defineTool` 从统一的 `ValueSchemaSpec` 推导工具主体返回值和两个投影器的类型。原始定义和动态定义则提供编译后的 `JsonSchemaNode` 形式。注册时会拒绝缺失输出声明或采用不受支持的原始 schema 的定义，不提供兼容旧式内容返回值的路径。
+ 
+-每次成功分发时，注册表会将返回值快照为无损 `JsonValue`，依据 `output.schema` 校验并深度冻结，然后在两个投影器之前运行可选的纯同步 `output.validate`。非空违规列表以及渲染器、投影器、schema 或无损 JSON 处理失败都会产生 `ToolOutputError` 结果；校验器异常仅暴露固定诊断。围绕 `tools/execute` 的包装层接收并返回规范的成功／失败联合；包装层自行产生的成功结果会再次通过已解析工具的输出声明完成归一化，而不会信任其独立编写的内容。每个规范结果都与创建它的不可变分发 token 绑定；因此，如果包装层返回来自其他调用或工具的缓存结果，系统会依据当前生效的输出声明重新执行归一化，而不会绕过这一步。
++每次成功分发时，注册表会将返回值快照为无损 `JsonValue`，依据 `output.schema` 校验并深度冻结，然后在任一投影器之前运行可选的纯同步 `output.validate`。非空违规列表以及渲染器、投影器、schema 或无损 JSON 处理失败都会产生 `ToolOutputError` 结果；校验器异常仅暴露固定诊断。选定注册定义拥有函数体、包装器和后置策略接纳所用的输出回调，而实时可见性检查保持独立，仍可拒绝移除或限制。替换后的注册定义不能用其 schema 取代运行中函数体的声明。每个规范结果都与创建它的不可变分发 token 绑定，因此返回来自其他调用或工具的缓存结果会触发归一化，而不会绕过校验。
+ 
+ ```ts ignore-check
+ type ToolExecutionResult =
+diff --git a/docs/subsystems/tools.i18n.yaml b/docs/subsystems/tools.i18n.yaml
+index 2d1f89c735d9f73141a3893a4cc6570093cccc8b..d8a391940192e160eaafc68615543bd37529ee1a 100644
+--- a/docs/subsystems/tools.i18n.yaml
++++ b/docs/subsystems/tools.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write docs/subsystems/tools.md
+-tools.md: b4490235998c3aacf0cde400d7b5a5e0b5d88aca
+-tools.zh.md: cba5df42d3e9fe71a3ba394b082fd8a619c7383f
++tools.md: fe9d3b179c426d299117b4b3057948eb490d7405
++tools.zh.md: e9561ba41f4fcfac9bbfccac39b1d570ecc62c25
+diff --git a/docs/subsystems/tools.md b/docs/subsystems/tools.md
+index b4490235998c3aacf0cde400d7b5a5e0b5d88aca..fe9d3b179c426d299117b4b3057948eb490d7405 100644
+--- a/docs/subsystems/tools.md
++++ b/docs/subsystems/tools.md
+@@ -49,7 +49,9 @@ interface ToolDefinition extends ToolSchema {
+    * Synchronous last-mile transform for model-facing content. The registry
+    * snapshots this callback when execution starts and invokes it exactly once
+    * for every normalized outcome, including pipeline failures that bypass
+-   * `tools/post-execute`, immediately before lossless materialization.
++   * `tools/post-execute`, immediately before lossless materialization. If a
++   * different registration is selected before the body starts, its callback
++   * replaces the initial capture; result rewrites retain the selected callback.
+    * Returning `undefined` preserves the content; every other result field
+    * remains registry-owned. The callback must be total and must not throw.
+    * @param exec - immutable execution identity and arguments.
+@@ -102,7 +104,7 @@ interface ToolDefinition extends ToolSchema {
+ 
+ `execute` receives `args: unknown` — a raw `ToolDefinition` validates its own input. First-party tools don't write that by hand; they use `defineTool`, which validates and narrows the arguments, infers the body return from `output.schema`, and types both output projectors. `finalizeContent` deliberately receives the immutable execution instead of typed arguments because invalid-input and outer pipeline failures reach it too; it may enforce a tool-owned content bound while preserving `isError`, canonical value, structured error identity, deferred contexts, and presentation metadata.
+ 
+-`output.validate(value)` runs after lossless snapshotting, schema validation, and deep freezing, before either output projector. Its nonempty violation list becomes `ToolOutputError` (`INVALID_TOOL_OUTPUT`); an exception becomes the fixed violation `output.validate failed`, without exception details. Validators are synchronous, pure, and cannot replace the value. Tools own any additional schema compilation and bounded, non-sensitive diagnostics. Generated SDK types describe `output.schema`, not additional callback constraints.
++`output.validate(value)` runs after lossless snapshotting, schema validation, and deep freezing, before either output projector. Its nonempty violation list becomes `ToolOutputError` (`INVALID_TOOL_OUTPUT`); an exception becomes the fixed violation `output.validate failed`, without exception details. Validators are synchronous, pure, and cannot replace the value. Tools own any additional schema compilation and bounded, non-sensitive diagnostics. The selected registration owns output callbacks across body, wrapper, and post-policy admission, including nested calls; existing live visibility checks still reject removed or restricted tools. Generated SDK types describe `output.schema`, not additional callback constraints.
+ 
+ ## The unified JSON-value schema DSL
+ 
+diff --git a/docs/subsystems/tools.zh.md b/docs/subsystems/tools.zh.md
+index cba5df42d3e9fe71a3ba394b082fd8a619c7383f..e9561ba41f4fcfac9bbfccac39b1d570ecc62c25 100644
+--- a/docs/subsystems/tools.zh.md
++++ b/docs/subsystems/tools.zh.md
+@@ -49,7 +49,9 @@ interface ToolDefinition extends ToolSchema {
+    * Synchronous last-mile transform for model-facing content. The registry
+    * snapshots this callback when execution starts and invokes it exactly once
+    * for every normalized outcome, including pipeline failures that bypass
+-   * `tools/post-execute`, immediately before lossless materialization.
++   * `tools/post-execute`, immediately before lossless materialization. If a
++   * different registration is selected before the body starts, its callback
++   * replaces the initial capture; result rewrites retain the selected callback.
+    * Returning `undefined` preserves the content; every other result field
+    * remains registry-owned. The callback must be total and must not throw.
+    * @param exec - immutable execution identity and arguments.
+@@ -102,7 +104,7 @@ interface ToolDefinition extends ToolSchema {
+ 
+ `execute` 接收 `args: unknown`——原始的 `ToolDefinition` 自行校验输入。第一方工具不需要手写校验；它们使用 `defineTool`，由后者代为校验并收窄参数类型、根据 `output.schema` 推导函数体返回类型，并为两个输出投影器提供类型约束。`finalizeContent` 特意接收不可变的执行对象而非类型化参数，因为无效输入和外层流水线失败也会到达该回调；它可以施加工具自有的内容限制，同时保留 `isError`、规范值、结构化错误身份、延迟上下文与展示元数据。
+ 
+-`output.validate(value)` 在无损快照、schema 校验与深度冻结之后、两个输出投影器之前运行。非空违规列表产生 `ToolOutputError`（`INVALID_TOOL_OUTPUT`）；异常产生固定违规信息 `output.validate failed`，不附带异常详情。校验器必须同步且纯粹，不能替换值。附加 schema 的编译以及有界且不含敏感信息的诊断由工具拥有。生成的 SDK 类型描述 `output.schema`，不描述附加回调约束。
++`output.validate(value)` 在无损快照、schema 校验与深度冻结之后、两个输出投影器之前运行。非空违规列表产生 `ToolOutputError`（`INVALID_TOOL_OUTPUT`）；异常产生固定违规信息 `output.validate failed`，不附带异常详情。校验器必须同步且纯粹，不能替换值。附加 schema 的编译以及有界且不含敏感信息的诊断由工具拥有。选定注册定义拥有函数体、包装器和后置策略接纳所用的输出回调，包括嵌套调用；现有的实时可见性检查仍会拒绝已移除或受限的工具。生成的 SDK 类型描述 `output.schema`，不描述附加回调约束。
+ 
+ ## 统一的 JSON 值 schema DSL
+ 
+diff --git a/packages/core/tools/src/index.ts b/packages/core/tools/src/index.ts
+index b13884e14a2e42893110ebd0e5c4972ae5557ee3..14f88b5af1cb2869b91e5703ae35910b920eb414 100644
+--- a/packages/core/tools/src/index.ts
++++ b/packages/core/tools/src/index.ts
+@@ -244,7 +244,9 @@ export interface ToolDefinition extends ToolSchema {
+    * Synchronous last-mile transform for model-facing content. The registry
+    * snapshots this callback when execution starts and invokes it exactly once
+    * for every normalized outcome, including pipeline failures that bypass
+-   * `tools/post-execute`, immediately before lossless materialization.
++   * `tools/post-execute`, immediately before lossless materialization. If a
++   * different registration is selected before the body starts, its callback
++   * replaces the initial capture; result rewrites retain the selected callback.
+    * Returning `undefined` preserves the content; every other result field
+    * remains registry-owned. The callback must be total and must not throw.
+    * @param exec - immutable execution identity and arguments.
+@@ -814,8 +816,12 @@ export class ToolRuntime extends Service {
+   private concludingExecutions = new WeakSet<ToolExecution>()
+   /** Original caller cancellation, kept outside the wrapper-mutable execution object. */
+   private cancellationStates = new WeakMap<ToolRunContext, ToolCancellationState>()
+-  /** Definition-owned final content transform snapshotted before policy begins. */
+-  private contentFinalizers = new WeakMap<ToolRunContext, ToolDefinition['finalizeContent']>()
++  /** Definition-owned callbacks for one execution; binding never grants visibility. */
++  private executionBindings = new WeakMap<ToolExecution, {
++    source: ToolDefinition | undefined
++    tool?: Pick<ToolDefinition, 'name' | 'output'>
++    finalizeContent: ToolDefinition['finalizeContent']
++  }>()
+   private readonly layers = new ScopedLayers(
+     scope => new ToolLayer(scope),
+     () => { this.ctx.emit('tools/change') },
+@@ -1424,7 +1430,7 @@ export class ToolRuntime extends Service {
+       }
+       const execution: MutableToolRunContext = { ...base, arguments: deepFreeze(detached) }
+       this.deferredContexts.set(execution, deferredContexts)
+-      this.contentFinalizers.set(execution, finalizerFor())
++      this.executionBindings.set(execution, { source: visible, finalizeContent: finalizerFor() })
+       this.cancellationStates.set(execution, {
+         callerSignal: signal,
+         bodyInvoked: false,
+@@ -1454,7 +1460,7 @@ export class ToolRuntime extends Service {
+       return { kind: 'ready', exec: execution }
+     } catch (error: unknown) {
+       const execution: MutableToolRunContext = { ...base, arguments: undefined }
+-      this.contentFinalizers.set(execution, finalizerFor())
++      this.executionBindings.set(execution, { source: visible, finalizeContent: finalizerFor() })
+       return { kind: 'final-result', exec: execution, result: toolErrorResult(error) }
+     }
+   }
+@@ -1554,9 +1560,10 @@ export class ToolRuntime extends Service {
+     try {
+       const tool = this.resolveExecution(exec.name, exec.agent, exec.parent !== undefined)
+       if (!tool) throw new ToolNotFoundError(exec.name)
++      const bound = this.bindExecutionDefinition(exec, tool)
+       state.bodyInvoked = true
+       const returned = await tool.execute(exec.arguments, exec)
+-      const result = this.createSuccessResult(exec, tool, returned)
++      const result = this.createSuccessResult(exec, bound, returned)
+       return isAborted(signal)
+         ? toolAbortedResult(result)
+         : result
+@@ -1578,6 +1585,8 @@ export class ToolRuntime extends Service {
+   private async dispatchScheduledExecution(exec: ToolRunContext): Promise<ScheduledToolDispatch> {
+     try {
+       const mutableExec = exec as MutableToolRunContext
++      const tool = this.resolveExecution(exec.name, exec.agent, exec.parent !== undefined)
++      if (tool !== undefined) this.bindExecutionDefinition(exec, tool)
+       const carrier = scopeTarget(this, exec.agent)
+       const result = await this.ctx.waterfall(
+         carrier, 'tools/execute', mutableExec,
+@@ -1656,7 +1665,7 @@ export class ToolRuntime extends Service {
+ 
+   /** Apply the snapshotted tool-owned content transform without exposing other result fields. */
+   private applyFinalContent(exec: ToolRunContext, result: ToolExecutionResult): ToolExecutionResult {
+-    const finalizeContent = this.contentFinalizers.get(exec)
++    const finalizeContent = this.executionBindings.get(exec)?.finalizeContent
+     if (finalizeContent === undefined) return result
+     const content = finalizeContent(exec, result)
+     return content === undefined ? result : { ...result, content }
+@@ -1776,7 +1785,8 @@ export class ToolRuntime extends Service {
+       }
+       const tool = this.resolveExecution(exec.name, exec.agent, exec.parent !== undefined)
+       if (tool === undefined) throw new ToolNotFoundError(exec.name)
+-      const replaced = this.createSuccessResult(exec, tool, decision.value)
++      const owner = this.executionBindings.get(exec)?.tool ?? this.bindExecutionDefinition(exec, tool)
++      const replaced = this.createSuccessResult(exec, owner, decision.value)
+       return this.markCanonical(exec, {
+         ...replaced,
+         ...additionalContexts.length > 0 ? { additionalContexts } : {},
+@@ -1798,8 +1808,26 @@ export class ToolRuntime extends Service {
+     return result
+   }
+ 
++  /** Capture the selected registration's callbacks without replacing live permission checks. */
++  private bindExecutionDefinition(exec: ToolExecution, tool: ToolDefinition): Pick<ToolDefinition, 'name' | 'output'> {
++    const binding = this.executionBindings.get(exec)
++    /* v8 ignore next -- only registry-minted executions reach dispatch or normalization */
++    if (binding === undefined) throw new Error('tool registry invariant violated: missing execution binding')
++    if (binding.tool === undefined || binding.source !== tool) {
++      if (binding.source !== tool) binding.finalizeContent = tool.finalizeContent?.bind(tool)
++      binding.source = tool
++      const output = tool.output
++      binding.tool = { name: tool.name, output: {
++        schema: output.schema, render: output.render.bind(output),
++        ...output.validate !== undefined ? { validate: output.validate.bind(output) } : {},
++        ...output.presentationMeta !== undefined ? { presentationMeta: output.presentationMeta.bind(output) } : {},
++      } }
++    }
++    return binding.tool
++  }
++
+   /** Snapshot, validate, render, and optionally project one successful body value. */
+-  private createSuccessResult(exec: ToolExecution, tool: ToolDefinition, candidate: unknown): ToolExecutionSuccess {
++  private createSuccessResult(exec: ToolExecution, tool: Pick<ToolDefinition, 'name' | 'output'>, candidate: unknown): ToolExecutionSuccess {
+     const detached = snapshotToolValue(tool.name, candidate)
+     const violations = validateJsonSchemaValue(tool.output.schema, detached, 'value')
+     if (violations.length > 0) throw new ToolOutputError(tool.name, violations)
+@@ -1855,7 +1883,8 @@ export class ToolRuntime extends Service {
+     }
+     const tool = this.resolveExecution(exec.name, exec.agent, exec.parent !== undefined)
+     if (tool === undefined) throw new ToolNotFoundError(exec.name)
+-    const normalized = this.createSuccessResult(exec, tool, result.value)
++    const owner = this.executionBindings.get(exec)?.tool ?? this.bindExecutionDefinition(exec, tool)
++    const normalized = this.createSuccessResult(exec, owner, result.value)
+     return this.markCanonical(exec, {
+       ...normalized,
+       ...result.additionalContexts !== undefined ? { additionalContexts: result.additionalContexts } : {},
+diff --git a/packages/core/tools/tests/output-validation.spec.ts b/packages/core/tools/tests/output-validation.spec.ts
+index 975f47d490da53b6f526d56166618f3994c327a0..da81815ef1e756e3d3e34e9ecfd6cfc8b09d6cd8 100644
+--- a/packages/core/tools/tests/output-validation.spec.ts
++++ b/packages/core/tools/tests/output-validation.spec.ts
+@@ -12,13 +12,17 @@ async function setup() {
+   return ctx
+ }
+ 
+-function definition(validate: (value: JsonValue) => readonly string[]): ToolDefinition {
++function definition(validate: (value: JsonValue) => readonly string[], schema: ToolDefinition['output']['schema'] = {}): ToolDefinition {
+   return {
+     name: 'checked', description: 'checked output', parameters: {},
+-    output: {
+-      schema: {}, validate,
+-      render: () => [{ type: 'text', text: 'validated' }],
+-    },
++    output: new class {
++      schema = schema
++      #validator = validate
++      #label = 'validated'
++      validate(value: JsonValue) { return this.#validator(value) }
++      render(): ReturnType<ToolDefinition['output']['render']> { return [{ type: 'text', text: this.#label }] }
++      presentationMeta() { return this.#label }
++    }(),
+     async execute() { return { count: 1 } },
+   }
+ }
+@@ -37,11 +41,33 @@ describe('canonical output validation', () => {
+     expectTypeOf<() => Promise<string[]>>().not.toExtend<NonNullable<ToolDefinition['output']['validate']>>()
+   })
+ 
++  it.each([false, true])('retains body schema during an in-flight registration change (remove=%s)', async (remove) => {
++    const ctx = await setup()
++    const started = Promise.withResolvers<undefined>()
++    const release = Promise.withResolvers<undefined>()
++    const old: ToolDefinition = {
++      ...definition(() => []),
++      output: { schema: { type: 'string' }, render: () => [], presentationMeta: () => 'old' },
++      async execute() { started.resolve(undefined); await release.promise; return 'old value' },
++    }
++    const dispose = ctx.tools.register(old)
++    ctx.on('tools/post-execute', async () => ({ kind: 'accept', value: 'old replacement' }))
++    const pending = call(ctx)
++    await started.promise
++    dispose()
++    if (!remove) ctx.tools.register({ ...definition(() => []), output: { schema: { type: 'number' }, render: () => [] } })
++    release.resolve(undefined)
++    const result = await pending
++    expect(result).toMatchObject(remove
++      ? { isError: true, error: { message: 'unknown tool "checked"' } }
++      : { isError: false, value: 'old replacement', meta: 'old' })
++  })
++
+   it('rejects a malformed output validator during registration', async () => {
+     const ctx = await setup()
+     const tool = definition(() => [])
+     // Registration accepts plugin declarations at the existing runtime parser.
+-    const output = { ...tool.output, validate: true } as unknown as ToolDefinition['output']
++    const output = { schema: {}, render: () => [], validate: true } as unknown as ToolDefinition['output']
+     expect(() => ctx.tools.register({ ...tool, output })).toThrow('output.validate must be a function')
+   })
+ 
+@@ -85,9 +111,8 @@ describe('canonical output validation', () => {
+   it('checks the envelope before the additional validator', async () => {
+     const ctx = await setup()
+     let validated = false
+-    const tool = definition(() => { validated = true; return [] })
+-    const checked = { ...tool, output: { ...tool.output, schema: { type: 'string' as const } } }
+-    ctx.tools.register(checked)
++    const tool = definition(() => { validated = true; return [] }, { type: 'string' })
++    ctx.tools.register(tool)
+     expect(await call(ctx)).toMatchObject({ isError: true })
+     expect(validated).toBe(false)
+   })
+@@ -105,4 +130,91 @@ describe('canonical output validation', () => {
+       expect(projected).toBe(false)
+     } finally { dispose() }
+   })
++
++  it.each(['wrapper', 'post'] as const)('does not let a permissive new registration admit an invalid %s value', async (path) => {
++    const ctx = await setup()
++    const dispose = ctx.tools.register(definition(value => (value as { count: number }).count === 1 ? [] : ['old count required']))
++    const replace = () => { dispose(); ctx.tools.register(definition(() => [])) }
++    if (path === 'wrapper') {
++      ctx.on('tools/execute', async (_exec, next) => {
++        await next()
++        replace()
++        return { isError: false, value: { count: 2 }, content: [] }
++      })
++    } else {
++      ctx.on('tools/post-execute', async () => {
++        replace()
++        return { kind: 'accept', value: { count: 2 } }
++      })
++    }
++    expect(await call(ctx)).toMatchObject({ isError: true, error: {
++      message: 'tool "checked" returned invalid output: old count required',
++    } })
++  })
++
++  it('binds a fabricated wrapper success before registration replacement', async () => {
++    const ctx = await setup()
++    const dispose = ctx.tools.register(definition(() => ['old rejection']))
++    ctx.on('tools/execute', async () => {
++      dispose()
++      ctx.tools.register(definition(() => []))
++      return { isError: false, value: { count: 1 }, content: [] }
++    })
++    expect(await call(ctx)).toMatchObject({ isError: true, error: {
++      message: 'tool "checked" returned invalid output: old rejection',
++    } })
++  })
++
++  it('selects the current body and finalizer after pre-policy replacement', async () => {
++    const ctx = await setup()
++    let oldExecuted = false
++    const old = definition(() => ['old rejection'])
++    old.execute = async () => { oldExecuted = true; return {} }
++    old.finalizeContent = () => [{ type: 'text', text: 'old finalizer' }]
++    const dispose = ctx.tools.register(old)
++    ctx.on('tools/pre-execute', async (_exec, next) => {
++      dispose()
++      const current = definition(() => [])
++      current.finalizeContent = () => [{ type: 'text', text: 'current finalizer' }]
++      ctx.tools.register(current)
++      return next()
++    })
++    expect(await call(ctx)).toMatchObject({
++      isError: false, content: [{ type: 'text', text: 'current finalizer' }],
++    })
++    expect(oldExecuted).toBe(false)
++  })
++
++  it.each(['wrapper', 'post'] as const)('keeps the owning validator across replacement in %s', async (path) => {
++    const ctx = await setup()
++    const oldTool = definition(value => (value as { count: number }).count === 1 ? [] : ['old count required'])
++    let dispose = ctx.tools.register(oldTool)
++    const replace = () => {
++      oldTool.output.validate = () => ['mutated validator']
++      oldTool.output.render = () => []
++      oldTool.output.presentationMeta = () => 'mutated metadata'
++      dispose()
++      const next = definition(() => ['new schema rejects old count'])
++      next.output.presentationMeta = () => 'new'
++      dispose = ctx.tools.register(next)
++    }
++    if (path === 'wrapper') {
++      ctx.on('tools/execute', async (_exec, next) => {
++        const result = await next()
++        if (result.isError) throw new Error('expected the original tool to succeed')
++        replace()
++        return { ...result, value: { count: 1 } }
++      })
++    } else {
++      ctx.on('tools/post-execute', async () => {
++        replace()
++        return { kind: 'accept', value: { count: 1 } }
++      })
++    }
++    try {
++      expect(await call(ctx)).toMatchObject({
++        isError: false, value: { count: 1 }, meta: 'validated', content: [{ type: 'text', text: 'validated' }],
++      })
++    } finally { dispose() }
++  })
+ })
