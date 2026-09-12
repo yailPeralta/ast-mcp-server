@@ -1,0 +1,353 @@
+diff --git a/packages/mcp/mcp-client/README.i18n.yaml b/packages/mcp/mcp-client/README.i18n.yaml
+index b0e559c0630877f7aee759350f77677a86e7e366..3cb551624cf3df0bd9939c8aabb3f0ad34b23041 100644
+--- a/packages/mcp/mcp-client/README.i18n.yaml
++++ b/packages/mcp/mcp-client/README.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write packages/mcp/mcp-client/README.md
+-README.md: 5d5b5e573c722ce5ef9d742688803d2b6a0d341e
+-README.zh.md: 14fac94277d4d6ec44ab42a807123c2f0cdeaf1c
++README.md: 86159f6aaca8b143f83386aa15ec7660f7da7cb3
++README.zh.md: e2a450760d547d5734f1ef758dc46f6ff83b311d
+diff --git a/packages/mcp/mcp-client/README.md b/packages/mcp/mcp-client/README.md
+index 5d5b5e573c722ce5ef9d742688803d2b6a0d341e..86159f6aaca8b143f83386aa15ec7660f7da7cb3 100644
+--- a/packages/mcp/mcp-client/README.md
++++ b/packages/mcp/mcp-client/README.md
+@@ -82,6 +82,8 @@ The model sees each tool under a stable server-qualified name: `mcp__<serverName
+ 
+ When the model calls an MCP tool, the call runs against the remote server with a per-call timeout (default 60 seconds) and can be cancelled like any other tool call. The result comes back as ordinary text in block order; resource links appear as text with their name and URI. If the server reports an error, the call fails visibly — the model does not see a fake success.
+ 
++An advertised output schema requires matching `structuredContent` on every successful canonical result, including policy or wrapper replacements. Missing or invalid data becomes `INVALID_TOOL_OUTPUT`. Success metadata records `mcpOutputValidation` as `declared-schema-validated` with the original schema digest, or `not-advertised` when the server declares no output schema. That status describes canonical data, not presentation text or equivalence of generated SDK types.
++
+ Images are supported when the current model accepts image input and the harness attachment feature is enabled; they then appear in the conversation like other images. Otherwise — and for audio or embedded resources — the model sees a clear diagnostic message instead of nothing.
+ 
+ ### Startup, updates, and reconnection
+diff --git a/packages/mcp/mcp-client/README.zh.md b/packages/mcp/mcp-client/README.zh.md
+index 14fac94277d4d6ec44ab42a807123c2f0cdeaf1c..e2a450760d547d5734f1ef758dc46f6ff83b311d 100644
+--- a/packages/mcp/mcp-client/README.zh.md
++++ b/packages/mcp/mcp-client/README.zh.md
+@@ -82,6 +82,8 @@ kind: "package-reference"
+ 
+ 模型调用 MCP 工具时，调用会以每次调用超时（默认 60 秒）发往远程服务器，并像其他工具调用一样可以取消。结果按块顺序以普通文本返回；资源链接以文本形式显示名称与 URI。如果服务器报告错误，调用会明确失败——模型不会看到虚假的成功。
+ 
++声明了输出 schema 的工具，其每个成功规范结果都必须包含匹配的 `structuredContent`，策略或包装器替换后的值也不例外。缺失或无效的数据产生 `INVALID_TOOL_OUTPUT`。成功元数据中的 `mcpOutputValidation` 记录 `declared-schema-validated` 及原始 schema 摘要；服务器未声明输出 schema 时记录 `not-advertised`。该状态描述规范数据，不表示展示文本已经验证，也不表示生成的 SDK 类型与原始 schema 等价。
++
+ 当前模型接受图片输入且 harness 启用了附件功能时支持图片；图片会像其他图片一样出现在对话中。不支持图片时——以及服务器返回音频或嵌入资源时——模型会看到清晰的诊断消息，而不是什么都没有。
+ 
+ ### 启动、工具更新与重连
+diff --git a/packages/mcp/mcp-client/tests/output-contract.spec.ts b/packages/mcp/mcp-client/tests/output-contract.spec.ts
+index b6cce138901f6f6c84851ee8f3b1f640c97d97d0..f9d7a2cc18b5498f2a4d80add4c1086de3004739 100644
+--- a/packages/mcp/mcp-client/tests/output-contract.spec.ts
++++ b/packages/mcp/mcp-client/tests/output-contract.spec.ts
+@@ -1,3 +1,4 @@
++import { createHash } from 'node:crypto'
+ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+@@ -87,4 +88,305 @@ describe('advertised MCP output validation through ToolRuntime', () => {
+     expect(await execute()).toMatchObject({ isError: true })
+   })
+ 
++  it.each([
++    ['minimum', { type: 'integer', minimum: 2 }, 2, 1],
++    ['maximum', { type: 'integer', maximum: 2 }, 2, 3],
++    ['pattern', { type: 'string', pattern: '^ok$' }, 'ok', 'not-ok'],
++  ])('enforces %s at its acceptance boundary', async (_name, constraint, valid, invalid) => {
++    outputSchema = { type: 'object', properties: { n: constraint }, required: ['n'] }
++    await sync()
++    response = { content: textContent, structuredContent: { n: valid } }
++    expect(await execute()).toMatchObject({ isError: false, value: response })
++    response = { content: textContent, structuredContent: { n: invalid } }
++    expect(await execute()).toMatchObject({ isError: true })
++  })
++
++  it('resolves local references instead of dropping their constraints', async () => {
++    outputSchema = {
++      type: 'object', definitions: { count: { type: 'integer', minimum: 1 } },
++      properties: { n: { $ref: '#/definitions/count' } }, required: ['n'],
++    }
++    await sync()
++    expect(await execute()).toMatchObject({ isError: false, value: response })
++    response = { content: textContent, structuredContent: { n: 0 } }
++    expect(await execute()).toMatchObject({ isError: true })
++  })
++
++  it('keeps overlapping anyOf alternatives inclusive', async () => {
++    outputSchema = {
++      type: 'object', properties: { n: { anyOf: [{ type: 'number' }, { type: 'integer' }] } }, required: ['n'],
++    }
++    await sync()
++    for (const n of [1, 1.5]) {
++      response = { content: textContent, structuredContent: { n } }
++      expect(await execute()).toMatchObject({ isError: false, value: response })
++    }
++    response = { content: textContent, structuredContent: { n: '1' } }
++    expect(await execute()).toMatchObject({ isError: true })
++  })
++
++  it.each([
++    ['content', { content: textContent }],
++    ['legacy toolResult', { toolResult: { n: 1 } }],
++  ])('requires structuredContent on successful %s results', async (_name, result) => {
++    response = result
++    await sync()
++    expect(await execute()).toMatchObject({ isError: true })
++  })
++
++  it.each([
++    ['null', null],
++    ['array', []],
++    ['string', 'not an object'],
++  ])('rejects non-object structuredContent: %s', async (_name, structuredContent) => {
++    response = { content: textContent, structuredContent }
++    await sync()
++    expect(await execute()).toMatchObject({ isError: true })
++  })
++
++  it('validates structuredContent on the legacy result path', async () => {
++    await sync()
++    response = { toolResult: 'legacy', structuredContent: { n: 1 } }
++    expect(await execute()).toMatchObject({ isError: false, value: { structuredContent: { n: 1 } } })
++    response = { toolResult: 'legacy', structuredContent: { n: 'wrong' } }
++    expect(await execute()).toMatchObject({ isError: true })
++  })
++
++  it.each([
++    { content: [{ type: 'text', text: 'remote failure' }] },
++    { toolResult: 'remote failure', structuredContent: { n: 'wrong' } },
++  ])('preserves remote errors without success-schema validation: %j', async (result) => {
++    response = { ...result, isError: true }
++    await sync()
++    const failure = await execute()
++    expect(failure.isError).toBe(true)
++    expect(failure.error?.message).toContain('remote failure')
++    expect(failure.error?.message).not.toMatch(/structuredContent|schema|validation/i)
++  })
++
++  it('rejects an unresolvable advertised schema before registering a tool', async () => {
++    outputSchema = { type: 'object', properties: { n: { $ref: '#/definitions/missing' } } }
++    await expect(sync()).rejects.toThrow()
++    expect(ctx.tools.get('mcp__srv__probe')).toBeUndefined()
++  })
++
++  it.each(['compile', 'discovery'])('keeps previous validation after %s failure', async (failure) => {
++    await sync()
++    const previous = ctx.tools.get('mcp__srv__probe')
++    if (failure === 'compile') {
++      outputSchema = { type: 'object', properties: { n: { type: 'not-a-json-schema-type' } } }
++    } else {
++      discoveryError = true
++    }
++    await expect(sync()).rejects.toThrow()
++    expect(ctx.tools.get('mcp__srv__probe')).toBe(previous)
++    expect(await execute()).toMatchObject({ isError: false, value: response })
++    response = { content: textContent, structuredContent: { n: 'wrong' } }
++    expect(await execute()).toMatchObject({ isError: true })
++  })
++
++  it.each([undefined, 'https://example.invalid/output-schema'])('uses new constraints despite SDK cache and $id %s', async ($id) => {
++    const identity = $id === undefined ? {} : { $id }
++    outputSchema = { ...draft7Schema, ...identity, properties: { n: { type: 'integer', maximum: 2 } } }
++    await client.listTools()
++    await sync()
++    expect(await execute()).toMatchObject({ isError: false })
++    outputSchema = { ...draft7Schema, ...identity, properties: { n: { type: 'integer', minimum: 3 } } }
++    await sync()
++    expect(await execute()).toMatchObject({ isError: true })
++    response = { content: textContent, structuredContent: { n: 3 } }
++    expect(await execute()).toMatchObject({ isError: false, value: response })
++  })
++
++  it.each([
++    { content: [{ type: 'text', text: '{"n":1}' }] },
++    { content: [{ type: 'text', text: 'n: 1' }] },
++    { content: textContent, structuredContent: ['intentionally', 'unconstrained'] },
++  ])('preserves intentionally absent-schema envelopes: %j', async (result) => {
++    outputSchema = undefined
++    response = result
++    await sync()
++    expect(await execute()).toMatchObject({ isError: false, value: result, content: result.content })
++  })
++
++  it.each([
++    ['unknown keyword', { type: 'object', inventedValidation: true }],
++    ['prototype constructor keyword', { type: 'object', constructor: true }],
++    ['prototype toString keyword', { type: 'object', toString: true }],
++    ['unknown dialect', { type: 'object', $schema: 'https://example.invalid/dialect' }],
++    ['unknown format', { type: 'object', properties: { n: { type: 'string', format: 'invented-format' } } }],
++    ['external reference', { type: 'object', properties: { n: { $ref: 'https://example.invalid/missing' } } }],
++    ['async validator', { ...integerSchema, $async: true }],
++    ['vocabulary declaration', { ...integerSchema, $vocabulary: { 'https://example.invalid/vocab': false } }],
++    ['nested different dialect', { type: 'object', properties: { n: { type: 'integer', $schema: draft7Schema.$schema } } }],
++    ['nested vocabulary', { type: 'object', properties: { n: { type: 'integer', $vocabulary: {} } } }],
++    ['nested async validator', { type: 'object', properties: { n: { type: 'integer', $async: true } } }],
++    ['embedded resource', { type: 'object', properties: { n: { type: 'integer', $id: 'urn:embedded' } } }],
++    ['dynamic reference', { type: 'object', properties: { n: { $dynamicRef: '#' } } }],
++    ['anchor declaration', { type: 'object', $anchor: 'result' }],
++    ['reference into annotation data', { type: 'object', properties: {
++      n: { $ref: '#/properties/metadata/default' },
++      metadata: { default: { type: 'integer', $vocabulary: { 'https://example.invalid/vocab': true } } },
++    } }],
++  ])('rejects unsupported schema policy: %s', async (_name, schema) => {
++    outputSchema = schema
++    await expect(sync()).rejects.toThrow()
++    expect(ctx.tools.get('mcp__srv__probe')).toBeUndefined()
++  })
++
++  it.each([
++    ['default', true], ['default', false], ['enum', true], ['enum', false],
++  ])('rejects a reference into %s boolean data %s', async (keyword, value) => {
++    outputSchema = {
++      type: 'object', properties: {
++        n: { $ref: `#/properties/metadata/${keyword}${keyword === 'enum' ? '/0' : ''}` },
++        metadata: { [keyword]: keyword === 'enum' ? [value] : value },
++      },
++    }
++    await expect(sync()).rejects.toThrow()
++    expect(ctx.tools.get('mcp__srv__probe')).toBeUndefined()
++  })
++
++  it.each([true, false])('accepts a reference to boolean schema %s at an escaped location', async (allowed) => {
++    outputSchema = {
++      type: 'object', $defs: { 'a/b~c': allowed },
++      properties: { n: { $ref: '#/$defs/a~1b~0c' } }, required: ['n'],
++    }
++    await sync()
++    expect(await execute()).toMatchObject({ isError: !allowed })
++  })
++
++  it.each([true, false])('recognizes contentSchema as a boolean schema location: %s', async (allowed) => {
++    outputSchema = {
++      type: 'object', properties: {
++        n: { $ref: '#/properties/metadata/contentSchema' },
++        metadata: { type: 'string', contentSchema: allowed },
++      }, required: ['n'],
++    }
++    await sync()
++    expect(await execute()).toMatchObject({ isError: !allowed })
++  })
++
++  describe.each([
++    ['$defs', false], ['$defs', true], ['definitions', false], ['definitions', true],
++  ])('schema declarations in %s (referenced=%s)', (keyword, referenced) => {
++    it.each([
++      ['unknown keyword', { inventedValidation: true }],
++      ['constructor keyword', { constructor: true }],
++      ['toString keyword', { toString: true }],
++      ['unknown format', { type: 'string', format: 'invented-format' }],
++      ['constructor format', { type: 'string', format: 'constructor' }],
++      ['toString format', { type: 'string', format: 'toString' }],
++    ])('rejects %s before registration', async (_name, declaration) => {
++      outputSchema = {
++        type: 'object', [keyword]: { checked: declaration },
++        properties: { n: referenced ? { $ref: `#/${keyword}/checked` } : { type: 'integer' } },
++      }
++      await expect(sync()).rejects.toThrow()
++      expect(ctx.tools.get('mcp__srv__probe')).toBeUndefined()
++    })
++
++    it('accepts recognized assertions and formats without validating unused definitions', async () => {
++      outputSchema = {
++        type: 'object', [keyword]: { checked: { type: 'string', format: 'email' } },
++        properties: { n: referenced ? { $ref: `#/${keyword}/checked` } : { type: 'integer' } }, required: ['n'],
++      }
++      response = { content: textContent, structuredContent: { n: referenced ? 'reader@example.com' : 1 } }
++      await sync()
++      expect(await execute()).toMatchObject({ isError: false, value: response })
++      response = { content: textContent, structuredContent: { n: referenced ? 'not-an-email' : 'wrong' } }
++      expect(await execute()).toMatchObject({ isError: true })
++    })
++  })
++
++  it('uses 2020-12 tuple validation when no dialect is advertised', async () => {
++    outputSchema = {
++      type: 'object', properties: { n: { type: 'array', prefixItems: [{ type: 'integer' }], items: false, minItems: 1 } },
++      required: ['n'],
++    }
++    await sync()
++    response = { content: textContent, structuredContent: { n: [1] } }
++    expect(await execute()).toMatchObject({ isError: false, value: response })
++    response = { content: textContent, structuredContent: { n: ['wrong'] } }
++    expect(await execute()).toMatchObject({ isError: true })
++  })
++
++  it('treats reserved-looking property names as data fields', async () => {
++    outputSchema = {
++      type: 'object', properties: {
++        $schema: { type: 'string' }, $vocabulary: { type: 'integer' }, $async: { type: 'boolean' },
++      }, required: ['$schema', '$vocabulary', '$async'], additionalProperties: false,
++    }
++    response = { content: textContent, structuredContent: { $schema: 'data', $vocabulary: 1, $async: true } }
++    await sync()
++    expect(await execute()).toMatchObject({ isError: false, value: response })
++    response = { content: textContent, structuredContent: { $schema: 'data', $vocabulary: 'wrong', $async: true } }
++    expect(await execute()).toMatchObject({ isError: true })
++  })
++
++  it.each(['default', 'enum'])('does not traverse %s data as schema declarations', async (keyword) => {
++    const data = { $schema: 'data-not-a-dialect', $vocabulary: { custom: true }, $async: true }
++    outputSchema = {
++      type: 'object', properties: { n: { type: 'object', [keyword]: keyword === 'enum' ? [data] : data } },
++      required: ['n'],
++    }
++    response = { content: textContent, structuredContent: { n: data } }
++    await sync()
++    expect(await execute()).toMatchObject({ isError: false, value: response })
++  })
++
++  it('accepts standard declarations and annotations without standalone Ajv keyword rules', async () => {
++    outputSchema = {
++      ...integerSchema, $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 'urn:test:annotations',
++      $defs: { unused: true }, definitions: { unused: false }, title: 'Count', description: 'A count',
++      default: { n: 1 }, deprecated: false, readOnly: true, writeOnly: false, examples: [{ n: 1 }],
++      contentMediaType: 'application/json', contentEncoding: 'base64', contentSchema: { type: 'object' },
++    }
++    await sync()
++    expect(await execute()).toMatchObject({ isError: false, value: response })
++    response = { content: textContent, structuredContent: { n: 'wrong' } }
++    expect(await execute()).toMatchObject({ isError: true })
++  })
++
++  it('identifies the original enforced schema in successful output metadata', async () => {
++    const schemaSha256 = createHash('sha256').update(JSON.stringify(outputSchema)).digest('hex')
++    await sync()
++    const result = await execute()
++    expect(result.isError).toBe(false)
++    expect(result.meta).toEqual({
++      mcpOutputValidation: { status: 'declared-schema-validated', schemaSha256 },
++    })
++  })
++
++  it('identifies absence of an advertised schema without a schema digest', async () => {
++    outputSchema = undefined
++    await sync()
++    const result = await execute()
++    expect(result.isError).toBe(false)
++    expect(result.meta).toEqual({ mcpOutputValidation: { status: 'not-advertised' } })
++  })
++
++  it('retains precise registry schemas when the existing subset can represent them', async () => {
++    outputSchema = integerSchema
++    await sync()
++    expect(ctx.tools.get('mcp__srv__probe')?.output.schema.properties?.structuredContent).toEqual(integerSchema)
++  })
++
++  it('rejects post-execution substitutions before emitting validation metadata', async () => {
++    await sync()
++    ctx.on('tools/post-execute', async () => ({
++      kind: 'accept' as const, value: { content: textContent, structuredContent: { n: 'invalid replacement' } },
++    }))
++    const result = await execute()
++    expect(result).toMatchObject({ isError: true, error: { info: { code: 'INVALID_TOOL_OUTPUT' } } })
++    expect(result.meta).toBeUndefined()
++  })
++
++  it('disposes the registered generation', async () => {
++    await sync()
++    expect(ctx.tools.get('mcp__srv__probe')).toBeDefined()
++    for (const dispose of registrations.values()) dispose()
++    registrations.clear()
++    expect(ctx.tools.get('mcp__srv__probe')).toBeUndefined()
++  })
+ })
