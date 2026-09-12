@@ -8,6 +8,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  readlink,
   realpath,
   rm,
   rmdir,
@@ -201,6 +202,158 @@ export async function prepare(requestedWork, provision = provisionPrivatePnpm, r
         ],
       ]);
   }
+}
+
+async function inspectOwnedPath(file, directory = false) {
+  const stat = await lstat(file);
+  assert.ok(
+    (directory ? stat.isDirectory() : stat.isFile() && stat.nlink === 1) &&
+      stat.uid === process.getuid() &&
+      !(stat.mode & 0o022) &&
+      (await realpath(file)) === file,
+    `unsafe prepared path: ${file}`,
+  );
+  return stat;
+}
+
+async function inspectGitControls(directory) {
+  await inspectOwnedPath(directory, true);
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    assert.ok(
+      !["alternates", "http-alternates", "commondir", "gitdir"].includes(entry.name),
+      "Git indirection",
+    );
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory()) await inspectGitControls(file);
+    else await inspectOwnedPath(file);
+  }
+}
+
+async function inspectTrackedSource(cwd, listing) {
+  const observations = {};
+  for (const entry of listing.split("\0").filter(Boolean)) {
+    const match = /^(100644|100755|120000) blob ([a-f0-9]{40})\t(.+)$/su.exec(entry);
+    assert.ok(match, "unsupported tracked type");
+    const [, mode, blob, relative] = match;
+    const components = relative.split("/");
+    assert.ok(
+      components.every((part) => part && ![".", "..", ".git"].includes(part)),
+      "tracked path",
+    );
+    let directory = cwd;
+    for (const part of components.slice(0, -1)) {
+      directory = path.join(directory, part);
+      await inspectOwnedPath(directory, true);
+    }
+    const file = path.join(cwd, relative);
+    let bytes;
+    if (mode === "120000") {
+      const stat = await lstat(file);
+      assert.ok(stat.isSymbolicLink() && stat.uid === process.getuid(), "tracked link type");
+      assert.ok((await realpath(file)).startsWith(`${cwd}/`), "escaping tracked link");
+      bytes = await readlink(file, { encoding: "buffer" });
+    } else {
+      const stat = await inspectOwnedPath(file);
+      assert.equal(stat.mode & 0o100, mode === "100755" ? 0o100 : 0, "tracked mode");
+      bytes = await readFile(file);
+    }
+    assert.equal(
+      createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex"),
+      blob,
+      `source blob: ${relative}`,
+    );
+    if (
+      [
+        "packages/core/tools/src/index.ts",
+        "packages/mcp/mcp-client/src/tools.ts",
+        "packages/mcp/mcp-client/src/output-validation.ts",
+      ].includes(relative)
+    )
+      observations[relative] = sha256(bytes);
+  }
+  return observations;
+}
+
+/** Read-only source inspection; executable admission belongs to the future runner. */
+export async function inspectPreparedSource(work) {
+  await inspectOwnedPath(work, true);
+  const ast = await realpath(root);
+  assert.ok(
+    work !== path.parse(work).root &&
+      work !== ast &&
+      !work.startsWith(`${ast}/`) &&
+      !ast.startsWith(`${work}/`),
+    "work ancestry",
+  );
+  assert.ok(!(await readdir(work)).includes(".preparing"), "preparation in progress");
+  const receipt = path.join(work, "identity.json");
+  await inspectOwnedPath(receipt);
+  const identity = JSON.parse(await readFile(receipt));
+  const controls = [];
+  for (const variant of ["baseline", "candidate"]) {
+    const cwd = path.join(work, variant);
+    await inspectOwnedPath(cwd, true);
+    const git = path.join(cwd, ".git");
+    await inspectGitControls(git);
+    for (const file of ["HEAD", "config", "index"]) await inspectOwnedPath(path.join(git, file));
+    for (const file of ["objects", "refs"]) await inspectOwnedPath(path.join(git, file), true);
+    const stat = await lstat(git);
+    controls.push(`${stat.dev}:${stat.ino}`);
+  }
+  assert.notEqual(...controls, "aliased Git directories");
+  await inspectOwnedPath(path.join(work, "patches"), true);
+  const { series, seriesSha256, inputRevision, patches } = await readSeries();
+  assert.equal(seriesSha256, "a845fb6fdfbdf7a45802881b854dd7a28454c1503e5fb39c649a61743e392aba");
+  const trees = {
+    baseline: series.baseTree,
+    candidate: "e3258a342b4c2fbbe250baa86369de6a8c6fc2ac",
+  };
+  assert.equal(identity.work, work, "recorded work");
+  assert.equal(identity.inputRevision, inputRevision, "stale preparation");
+  assert.equal(identity.seriesSha256, seriesSha256, "recorded series digest");
+  assert.deepEqual(identity.series, series, "recorded series");
+  assert.deepEqual(identity.trees, trees, "recorded trees");
+  for (const patch of patches) {
+    const file = path.join(work, "patches", patch.file);
+    await inspectOwnedPath(file);
+    assert.deepEqual(await readFile(file), patch.content, "retained patch bytes");
+  }
+  for (const [variant, tree] of Object.entries(trees)) {
+    const cwd = path.join(work, variant);
+    const git = (args) =>
+      trustedGit(
+        ["--no-optional-locks", "--no-replace-objects", "-c", `core.worktree=${cwd}`, ...args],
+        cwd,
+      );
+    assert.equal(
+      await readFile(path.join(cwd, ".git/HEAD"), "utf8"),
+      `${series.baseRevision}\n`,
+      "detached HEAD",
+    );
+    assert.equal(
+      (await git(["rev-parse", "HEAD", "HEAD^{tree}"])).trim(),
+      `${series.baseRevision}\n${series.baseTree}`,
+      "base identity",
+    );
+    assert.equal(
+      (await git(["remote", "get-url", "--all", "origin"])).trim(),
+      series.upstream,
+      "origin",
+    );
+    await git(["diff", "--cached", "--exit-code", "--no-ext-diff", "--no-textconv", tree, "--"]);
+    const sources = await inspectTrackedSource(
+      cwd,
+      await git(["ls-tree", "-r", "-z", "--full-tree", tree]),
+    );
+    if (variant === "candidate")
+      assert.deepEqual(identity.sources, sources, "recorded source hashes");
+    assert.equal(
+      await git(["ls-files", "--others", "--exclude-standard", "-z"]),
+      "",
+      "untracked source",
+    );
+  }
+  return { work, identity };
 }
 
 if (import.meta.main) {
