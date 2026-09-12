@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
+import { spawnSync } from "node:child_process";
 import {
   chmod,
   cp,
@@ -13,6 +14,8 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import fs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -52,15 +55,69 @@ async function fixture(t) {
   return directory;
 }
 
-test("boundary module exposes no preparation orchestrator or CLI", async () => {
+test("preparation module exposes its complete owner and CLI", async () => {
   const boundary = await setup();
-  assert.equal(boundary.prepare, undefined);
-  assert.equal(boundary.privateEnvironment, undefined);
-  assert.doesNotMatch(
+  assert.equal(typeof boundary.prepare, "function");
+  assert.equal(typeof boundary.privateEnvironment, "function");
+  assert.match(
     await readFile(new URL("./prepare-harness.mjs", import.meta.url), "utf8"),
     /import\.meta\.main/u,
   );
 });
+
+test("CLI rejects invalid arguments and preserves occupied explicit work", async (t) => {
+  const work = await temporary(t);
+  await writeFile(path.join(work, "sentinel"), "preserve");
+  for (const args of [["--unknown"], ["--work"], ["--work", work]]) {
+    const result = spawnSync(process.execPath, ["scripts/issue-103/prepare-harness.mjs", ...args], {
+      cwd: root,
+      env: { ...process.env, NODE_OPTIONS: "" },
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, args.length === 2 ? /work must be empty/ : /usage:/);
+  }
+  assert.deepEqual(await readdir(work), ["sentinel"]);
+  assert.equal(await readFile(path.join(work, "sentinel"), "utf8"), "preserve");
+});
+
+for (const automatic of [true, false]) {
+  test(`marker acquisition preserves ownership (${automatic ? "automatic" : "explicit"})`, async (t) => {
+    const { prepare } = await setup();
+    let work = automatic ? undefined : await temporary(t);
+    const original = fs.mkdir;
+    fs.mkdir = async (directory, ...args) => {
+      if (path.basename(directory) !== ".preparing") return original(directory, ...args);
+      work = path.dirname(directory);
+      if (automatic) await chmod(work, 0o500);
+      else {
+        await original(directory);
+        await writeFile(path.join(directory, "sentinel"), "other owner");
+      }
+      try {
+        return await original(directory, ...args);
+      } finally {
+        if (automatic) await chmod(work, 0o700);
+      }
+    };
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(prepare(work), { code: automatic ? "EACCES" : "EEXIST" });
+      if (automatic) await assert.rejects(lstat(work), /ENOENT/);
+      else {
+        assert.deepEqual(await readdir(work), [".preparing"]);
+        assert.equal(await readFile(path.join(work, ".preparing/sentinel"), "utf8"), "other owner");
+      }
+    } finally {
+      fs.mkdir = original;
+      syncBuiltinESMExports();
+      if (work) await rm(work, { recursive: true, force: true });
+    }
+  });
+}
 
 for (const [name, mutate, boundary] of [
   ["malformed", () => "{", /JSON/],
@@ -103,6 +160,96 @@ for (const missing of [false, true]) {
     if (missing) await rm(file);
     else await writeFile(file, "changed");
     await assert.rejects((await setup()).readSeries(directory), missing ? /ENOENT/ : /hash/);
+  });
+}
+
+test("missing series fails before provisioning", async (t) => {
+  const directory = await fixture(t);
+  await rm(path.join(directory, relative, "series.json"));
+  await assert.rejects(
+    (await setup()).prepare(
+      undefined,
+      async () => {
+        throw new Error("unexpected provisioning");
+      },
+      directory,
+    ),
+    /ENOENT/,
+  );
+});
+
+test("failed automatic work removes its root", async (t) => {
+  let owned;
+  t.after(async () => {
+    if (owned) await rm(owned, { recursive: true, force: true });
+  });
+  await assert.rejects(
+    (await setup()).prepare(undefined, async ({ cwd }) => {
+      owned = cwd;
+      throw new Error("provision failed");
+    }),
+    /provision failed/,
+  );
+  await assert.rejects(readdir(owned), /ENOENT/);
+});
+
+test("failed provisioning removes failure-owned work", async (t) => {
+  const directory = await temporary(t);
+  const { prepare } = await setup();
+  await assert.rejects(
+    prepare(directory, async () => {
+      throw new Error("provision failed");
+    }),
+    /provision failed/,
+  );
+  assert.deepEqual(await readdir(directory), []);
+});
+
+for (const failure of ["clone", "nonapplicable", "unsafe"]) {
+  test(`real ${failure} failure cleans all partial preparation`, async (t) => {
+    const repository = await fixture(t);
+    const work = await temporary(t);
+    const { prepare, sha256 } = await setup();
+    if (failure !== "clone") {
+      const manifest = path.join(repository, relative, "series.json");
+      const series = JSON.parse(await readFile(manifest, "utf8"));
+      const target =
+        failure === "unsafe" ? `../../${path.basename(repository)}/escaped` : "missing-ast103-file";
+      await writeFile(path.join(repository, "escape"), "preserve");
+      const content =
+        failure === "unsafe"
+          ? `diff --git a/${target} b/${target}\nnew file mode 100644\n--- /dev/null\n+++ b/${target}\n@@ -0,0 +1 @@\n+after\n`
+          : `diff --git a/${target} b/${target}\n--- a/${target}\n+++ b/${target}\n@@ -1 +1 @@\n-before\n+after\n`;
+      const patch = series.patches.at(-1);
+      patch.sha256 = sha256(content);
+      await writeFile(path.join(repository, relative, patch.file), content);
+      await writeFile(manifest, JSON.stringify(series));
+      await commit(repository);
+    }
+    await assert.rejects(
+      prepare(
+        work,
+        async () => {
+          if (failure === "clone") await writeFile(path.join(work, "baseline"), "occupied");
+        },
+        repository,
+      ),
+      (error) => {
+        assert.match(
+          error.stderr,
+          failure === "clone"
+            ? /already exists/
+            : failure === "unsafe"
+              ? /invalid path/
+              : /does not exist in index/,
+        );
+        return true;
+      },
+    );
+    assert.deepEqual(await readdir(work), []);
+    await assert.rejects(readFile(path.join(repository, "escaped")), /ENOENT/);
+    if (failure !== "clone")
+      assert.equal(await readFile(path.join(repository, "escape"), "utf8"), "preserve");
   });
 }
 
