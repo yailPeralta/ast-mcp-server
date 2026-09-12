@@ -1,0 +1,336 @@
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
+index 79bcd6a2229bbaf06801bb2f16ab934991847ecc..8e806265dcad4b145186a4a99adc96cabebceb03 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+-2026-07-20-canonical-tool-output-contract.md: 88fccd6febcaec58f5aa762dc9fe53538146409f
+-2026-07-20-canonical-tool-output-contract.zh.md: 0d861f504a51e61230ec68b52b4d3786285d6e9a
++2026-07-20-canonical-tool-output-contract.md: 0acbbc802f2c9900cc781d0b9b1f767662b2ff30
++2026-07-20-canonical-tool-output-contract.zh.md: 12fd4a10b1156b26f753f0bf133774ed0a6e24d5
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+index 88fccd6febcaec58f5aa762dc9fe53538146409f..0acbbc802f2c9900cc781d0b9b1f767662b2ff30 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+@@ -63,7 +63,7 @@ The first-party tools preserve their existing Native text while returning domain
+ 
+ Provider and executor acquisition limits remain real limits on the canonical value. Formatting-only limits belong in `render`; `glob` and `grep`, for example, keep every acquired item in `value` while their Native projection retains and best-effort spills the configured first page. Generic spill prepends and delegates its post-execute listener so an ordinary tool-owned asynchronous projection completes before generic byte bounding regardless of plugin load order. Filesystem mutations derive replayable diff metadata from `args` and the canonical before/after value rather than returning UI state from the body.
+ 
+-MCP bridges preserve protocol blocks through `McpResult<{...}> = { content: JsonValue[]; structuredContent? }`. An advertised `outputSchema` is enforced when it belongs to the supported raw subset; unsupported schemas fall back to `JsonValue` rather than pretending to validate them. Native rendering still uses the existing MCP-to-`ContentBlock` projection, and MCP `isError` becomes a failed tool result.
++MCP bridges preserve protocol blocks through `McpResult<{...}> = { content: JsonValue[]; structuredContent? }`. An advertised `outputSchema` is enforced when it belongs to the supported raw subset; unsupported schemas fall back to `JsonValue` rather than pretending to validate them. Native rendering still uses the existing MCP-to-`ContentBlock` projection, and MCP `isError` becomes a failed tool result. A standalone MCP-owned compiler provides pure synchronous validation over a cloned schema, keeping external dialect policy out of the shared schema language. Bridge registration does not invoke it yet; the fallback above remains in effect.
+ 
+ ## Alternatives considered
+ 
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
+index 0d861f504a51e61230ec68b52b4d3786285d6e9a..12fd4a10b1156b26f753f0bf133774ed0a6e24d5 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
+@@ -63,7 +63,7 @@ type ToolExecutionResult =
+ 
+ 提供方和执行器的采集上限仍会实际限制规范值。仅用于格式化的限制归 `render` 所有；例如，`glob` 和 `grep` 会在 `value` 中保留所有已采集项，而其 Native 投影会保留配置指定的第一页，并尽力将其写入 spill 文件。通用 spill 会前置注册其 post-execute 监听器，并让该监听器先向后委托，因此无论插件加载顺序如何，普通工具自有的异步投影都会在通用字节数上限处理之前完成。文件系统变更工具根据 `args` 和规范的变更前／后值推导可回放的 diff 元数据，不再由工具主体返回 UI 状态。
+ 
+-MCP 桥接层通过 `McpResult<{...}> = { content: JsonValue[]; structuredContent? }` 保留协议内容块。当公布的 `outputSchema` 属于受支持的原始子集时，系统会强制校验；不受支持的 schema 则回退为 `JsonValue`，而不会假装已完成校验。Native 渲染仍使用现有的 MCP 到 `ContentBlock` 投影，MCP `isError` 则会变为失败的工具结果。
++MCP 桥接层通过 `McpResult<{...}> = { content: JsonValue[]; structuredContent? }` 保留协议内容块。当公布的 `outputSchema` 属于受支持的原始子集时，系统会强制校验；不受支持的 schema 则回退为 `JsonValue`，而不会假装已完成校验。Native 渲染仍使用现有的 MCP 到 `ContentBlock` 投影，MCP `isError` 则会变为失败的工具结果。MCP 拥有的独立编译器基于克隆的 schema 提供纯同步校验，将外部方言策略与共享 schema 语言分离。桥接注册尚未调用它；上述回退行为仍然有效。
+ 
+ ## 备选方案
+ 
+diff --git a/packages/mcp/mcp-client/README.i18n.yaml b/packages/mcp/mcp-client/README.i18n.yaml
+index 5466123182a36820468e2ae7e2b52da960dfede0..d950d4c1459e2d936f3f8d10d25d8d5572bba69f 100644
+--- a/packages/mcp/mcp-client/README.i18n.yaml
++++ b/packages/mcp/mcp-client/README.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write packages/mcp/mcp-client/README.md
+-README.md: 929577e886b9f4a438739191191a1f0ee86c6343
+-README.zh.md: ca07fd2b5d3547b09524a4097ce10bfb20251563
++README.md: 716db2874d6daf457b8600c5e9930e0c2aef12e0
++README.zh.md: c6949b091a39ffcf8eb3551aefd90b9d394e063f
+diff --git a/packages/mcp/mcp-client/README.md b/packages/mcp/mcp-client/README.md
+index 929577e886b9f4a438739191191a1f0ee86c6343..716db2874d6daf457b8600c5e9930e0c2aef12e0 100644
+--- a/packages/mcp/mcp-client/README.md
++++ b/packages/mcp/mcp-client/README.md
+@@ -115,6 +115,7 @@ This section explains the design decisions behind the bridge and points at the c
+ | [`src/index.ts`](src/index.ts) | Plugin entry: `Config` schema, `serverName` reservation, activation await |
+ | [`src/connection.ts`](src/connection.ts) | Connection supervisor: client generations, reconnect policy, attempt budget, disposal |
+ | [`src/tools.ts`](src/tools.ts) | Tool bridge: discovery, naming, registration swap, execution, image projection |
++| [`src/output-validation.ts`](src/output-validation.ts) | Registration-owned output-schema compilation and validation status |
+ | [`src/transport.ts`](src/transport.ts) | Transport factory: stdio spawn with scrubbed env, Streamable HTTP |
+ | [`src/invariant.ts`](src/invariant.ts) | Invariant companion (no runtime invariant; generations are observable only through the tool registry) |
+ 
+@@ -126,7 +127,7 @@ The supervisor listens for `notifications/tools/list_changed` and queues a re-sy
+ 
+ ### Tool execution internals
+ 
+-A tool call sends an uncached `tools/call` request carrying the raw MCP name, the JSON arguments, the abort signal, and the configured timeout; the public name is never sent to the server and never parsed back. Canonical success is `{ content: JsonValue[], structuredContent? }`, preserving the complete MCP JSON blocks for programmatic and PTC mode callers. A supported advertised `outputSchema` validates `structuredContent`; unsupported schema vocabulary falls back to unconstrained `JsonValue`. An MCP `isError` result throws before any image persistence, so the registry produces a failed tool result. Image batches are decoded and validated as a whole before any member is saved; any refusal projects every image as diagnostic text.
++A tool call sends an uncached `tools/call` request carrying the raw MCP name, the JSON arguments, the abort signal, and the configured timeout; the public name is never sent to the server and never parsed back. Canonical success is `{ content: JsonValue[], structuredContent? }`, preserving the complete MCP JSON blocks for programmatic and PTC mode callers. A supported advertised `outputSchema` validates `structuredContent`; unsupported schema vocabulary falls back to unconstrained `JsonValue`. An MCP `isError` result throws before any image persistence, so the registry produces a failed tool result. Image batches are decoded and validated as a whole before any member is saved; any refusal projects every image as diagnostic text. The standalone strict compiler in [`src/output-validation.ts`](src/output-validation.ts) is not invoked by bridge registration; the existing unsupported-schema fallback remains.
+ 
+ ### Environment scrubbing (stdio)
+ 
+diff --git a/packages/mcp/mcp-client/README.zh.md b/packages/mcp/mcp-client/README.zh.md
+index ca07fd2b5d3547b09524a4097ce10bfb20251563..c6949b091a39ffcf8eb3551aefd90b9d394e063f 100644
+--- a/packages/mcp/mcp-client/README.zh.md
++++ b/packages/mcp/mcp-client/README.zh.md
+@@ -115,6 +115,7 @@ kind: "package-reference"
+ | [`src/index.ts`](src/index.ts) | 插件入口：`Config` schema、`serverName` 预留、激活等待 |
+ | [`src/connection.ts`](src/connection.ts) | 连接监督器：客户端世代、重连策略、尝试预算、dispose |
+ | [`src/tools.ts`](src/tools.ts) | 工具桥接：发现、命名、注册交换、执行、图片投影 |
++| [`src/output-validation.ts`](src/output-validation.ts) | 由注册拥有的输出 schema 编译与验证状态 |
+ | [`src/transport.ts`](src/transport.ts) | 传输工厂：带清洗环境的 stdio spawn、Streamable HTTP |
+ | [`src/invariant.ts`](src/invariant.ts) | 不变式伴生插件（无运行时不变式；世代只能通过工具注册表观察） |
+ 
+@@ -126,7 +127,7 @@ kind: "package-reference"
+ 
+ ### 工具执行内部细节
+ 
+-工具调用会发送一次未缓存的 `tools/call` 请求，携带原始 MCP 名称、JSON 参数、中止信号与配置的超时；公开名称绝不会发给服务器，也绝不会被解析还原。规范成功值是 `{ content: JsonValue[], structuredContent? }`，为程序化调用方与 PTC mode 调用方保留完整的 MCP JSON 块。受支持且已声明的 `outputSchema` 会验证 `structuredContent`；不受支持的 schema 词汇回退为不受约束的 `JsonValue`。MCP 的 `isError` 结果会在任何图片持久化之前抛出，使注册表产生失败的工具结果。图片批次会先整体解码并校验，再保存任一成员；任何拒绝都会把每张图片投影为诊断文本。
++工具调用会发送一次未缓存的 `tools/call` 请求，携带原始 MCP 名称、JSON 参数、中止信号与配置的超时；公开名称绝不会发给服务器，也绝不会被解析还原。规范成功值是 `{ content: JsonValue[], structuredContent? }`，为程序化调用方与 PTC mode 调用方保留完整的 MCP JSON 块。受支持且已声明的 `outputSchema` 会验证 `structuredContent`；不受支持的 schema 词汇回退为不受约束的 `JsonValue`。MCP 的 `isError` 结果会在任何图片持久化之前抛出，使注册表产生失败的工具结果。图片批次会先整体解码并校验，再保存任一成员；任何拒绝都会把每张图片投影为诊断文本。桥接注册尚未调用 [`src/output-validation.ts`](src/output-validation.ts) 中的独立严格编译器；现有的不受支持 schema 回退行为保持不变。
+ 
+ ### 环境清洗（stdio）
+ 
+diff --git a/packages/mcp/mcp-client/package.json b/packages/mcp/mcp-client/package.json
+index fed592a4732b6a2edd0c8a48c196e0e7571a8135..82e1e9153c844538ccb7dcb5a86f0d2dcb67773f 100644
+--- a/packages/mcp/mcp-client/package.json
++++ b/packages/mcp/mcp-client/package.json
+@@ -44,6 +44,8 @@
+   "dependencies": {
+     "@modelcontextprotocol/sdk": "^1.12.0",
+     "@deepseek-ai/schemastery": "workspace:^",
++    "ajv": "8.20.0",
++    "ajv-formats": "3.0.1",
+     "zod": "^4.4.3"
+   },
+   "devDependencies": {
+diff --git a/packages/mcp/mcp-client/src/output-validation.ts b/packages/mcp/mcp-client/src/output-validation.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..9b4b8b7f23670a018cddc914eeecd889b9ccdfc3
+--- /dev/null
++++ b/packages/mcp/mcp-client/src/output-validation.ts
+@@ -0,0 +1,122 @@
++/** Strict, registration-owned validation of advertised MCP structured results. */
++import { createHash } from 'node:crypto'
++import { Ajv } from 'ajv'
++import { Ajv2020 } from 'ajv/dist/2020.js'
++import addFormats, { type FormatName } from 'ajv-formats'
++import type { JsonValue, ToolOutputDefinition } from '@deepseek-ai/dsh-tools'
++
++const DRAFT7 = 'http://json-schema.org/draft-07/schema'
++const DRAFT2020 = 'https://json-schema.org/draft/2020-12/schema'
++// Ajv.getKeyword omits these standard declarations and annotations, which have no compiled rule.
++const DECLARATIONS_AND_ANNOTATIONS = new Set([
++  '$schema', '$id', '$defs', 'definitions', 'title', 'description', 'default', 'deprecated',
++  'readOnly', 'writeOnly', 'examples', 'contentMediaType', 'contentEncoding', 'contentSchema',
++])
++const SCHEMA_MAPS = new Set(['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas', 'dependencies'])
++const SCHEMA_CHILDREN = new Set([
++  'items', 'additionalItems', 'additionalProperties', 'unevaluatedItems', 'unevaluatedProperties',
++  'contains', 'propertyNames', 'contentSchema', 'not', 'if', 'then', 'else', 'allOf', 'anyOf', 'oneOf', 'prefixItems',
++])
++
++function dialect(value: unknown): string {
++  const uri = value === undefined ? DRAFT2020 : typeof value === 'string' ? value.replace(/#$/, '') : ''
++  if (uri !== DRAFT7 && uri !== DRAFT2020) throw new Error('Unsupported MCP output schema dialect')
++  return uri
++}
++
++/** Visit schema positions only: property names, defaults and enum literals are data. */
++function assertSchemaPolicy(root: Record<string, unknown>, rootDialect: string, compiler: Ajv): void {
++  const pending: { value: unknown; path: string[] }[] = [{ value: root, path: [] }]
++  const locations = new Set<string>()
++  const references: string[] = []
++  for (let entry = pending.pop(); entry !== undefined; entry = pending.pop()) {
++    const { value, path } = entry
++    if (typeof value === 'boolean') {
++      locations.add(JSON.stringify(path))
++      continue
++    }
++    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue
++    locations.add(JSON.stringify(path))
++    const schema = value as Record<string, unknown>
++    if (['$async', '$vocabulary', '$anchor', '$dynamicRef', '$dynamicAnchor', '$recursiveRef', '$recursiveAnchor'].some(key => key in schema)
++      || (schema !== root && '$id' in schema)
++      || ('$schema' in schema && dialect(schema.$schema) !== rootDialect)) {
++      throw new Error('Unsupported MCP output schema declaration')
++    }
++    if (typeof schema.$ref === 'string') references.push(schema.$ref)
++    for (const [keyword, child] of Object.entries(schema)) {
++      // The public Ajv lookup also admits inherited Object.prototype names.
++      if (Object.hasOwn(Object.prototype, keyword)
++        || (!DECLARATIONS_AND_ANNOTATIONS.has(keyword) && !compiler.getKeyword(keyword))) {
++        throw new Error('Unsupported MCP output schema keyword')
++      }
++      if (keyword === 'format' && typeof child === 'string') {
++        if (Object.hasOwn(Object.prototype, child)) throw new Error('Unsupported MCP output schema format')
++        // The public lookup throws for unknown names; the wire supplies an arbitrary string.
++        addFormats.get(child as FormatName)
++      }
++      if (SCHEMA_MAPS.has(keyword) && typeof child === 'object' && child !== null && !Array.isArray(child)) {
++        for (const [key, nested] of Object.entries(child as Record<string, unknown>)) {
++          pending.push({ value: nested, path: [...path, keyword, key] })
++        }
++      } else if (SCHEMA_CHILDREN.has(keyword)) {
++        if (Array.isArray(child)) {
++          for (const [index, nested] of (child as unknown[]).entries()) {
++            pending.push({ value: nested, path: [...path, keyword, String(index)] })
++          }
++        } else pending.push({ value: child, path: [...path, keyword] })
++      }
++    }
++  }
++  for (const reference of references) {
++    if (!reference.startsWith('#')) throw new Error('Only local MCP output schema references are supported')
++    const pointer = decodeURIComponent(reference.slice(1))
++    if (pointer !== '' && !pointer.startsWith('/')) throw new Error('Unsupported MCP output schema anchor')
++    const path = (pointer === '' ? [] : pointer.slice(1).split('/')).map((token) => {
++      if (/~(?:[^01]|$)/.test(token)) throw new Error('Invalid MCP output schema pointer')
++      return token.replace(/~1/g, '/').replace(/~0/g, '~')
++    })
++    if (!locations.has(JSON.stringify(path))) {
++      throw new Error('MCP output schema reference targets an unsupported schema location')
++    }
++  }
++}
++
++/**
++ * Compile one immutable original schema without a cross-tool or cross-generation cache.
++ * Draft 2020-12 is the MCP default; explicit draft-07 is also supported. Compilation
++ * rejects other dialects, declarations and unknown assertions instead of downgrading.
++ * @param advertised - original MCP output schema, or absence for multi-format tools.
++ * @returns pure additional canonical-value validation and replayable status metadata.
++ */
++export function createOutputValidation(
++  advertised: Record<string, unknown> | undefined,
++): Pick<ToolOutputDefinition, 'validate' | 'presentationMeta'> {
++  if (advertised === undefined) {
++    return { presentationMeta: () => ({ mcpOutputValidation: { status: 'not-advertised' } }) }
++  }
++  try {
++    const schema = structuredClone(advertised)
++    const schemaDialect = dialect(schema.$schema)
++    const options = {
++      strict: true, validateSchema: true, validateFormats: true, allowUnionTypes: true,
++      allErrors: false, coerceTypes: false, useDefaults: false, removeAdditional: false,
++      ownProperties: true,
++    } as const
++    const compiler = schemaDialect === DRAFT7 ? new Ajv(options) : new Ajv2020(options)
++    addFormats(compiler)
++    assertSchemaPolicy(schema, schemaDialect, compiler)
++    const validate = compiler.compile(schema)
++    const schemaSha256 = createHash('sha256').update(JSON.stringify(schema)).digest('hex')
++    return {
++      validate(value: JsonValue) {
++        const structuredContent = (value as { structuredContent: JsonValue }).structuredContent
++        return validate(structuredContent) ? [] : ['structuredContent does not match the advertised MCP output schema']
++      },
++      presentationMeta: () => ({ mcpOutputValidation: { status: 'declared-schema-validated', schemaSha256 } }),
++    }
++  } catch {
++    // Compilation diagnostics can contain private schema data or reference URLs.
++    throw new Error('MCP output schema is invalid or unsupported')
++  }
++}
+diff --git a/packages/mcp/mcp-client/tests/output-validation.spec.ts b/packages/mcp/mcp-client/tests/output-validation.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..6ecf9bed85e7a30d591f80cb1b9f1ef9ff89315d
+--- /dev/null
++++ b/packages/mcp/mcp-client/tests/output-validation.spec.ts
+@@ -0,0 +1,80 @@
++import { createHash } from 'node:crypto'
++import { describe, expect, it } from 'vitest'
++import { createOutputValidation } from '../src/output-validation.ts'
++
++const mismatch = ['structuredContent does not match the advertised MCP output schema']
++const objectSchema = {
++  type: 'object',
++  properties: { count: { type: 'integer', minimum: 1 } },
++  required: ['count'],
++  additionalProperties: false,
++}
++
++describe('standalone MCP output schema compiler', () => {
++  it.each([undefined, 'http://json-schema.org/draft-07/schema#'])(
++    'validates objects with dialect %s',
++    ($schema) => {
++      const schema = { ...objectSchema, ...($schema === undefined ? {} : { $schema }) }
++      const output = createOutputValidation(schema)
++      expect(output.validate!({ structuredContent: { count: 2 } })).toEqual([])
++      expect(output.validate!({ structuredContent: { count: 0 } })).toEqual(mismatch)
++      expect(output.validate!({ structuredContent: { count: '2' } })).toEqual(mismatch)
++      // Outer presence enforcement belongs to the bridge; this schema requires an object.
++      expect(output.validate!({ content: [] })).toEqual(mismatch)
++    },
++  )
++
++  it('uses draft 2020-12 assertions when no dialect is advertised', () => {
++    const output = createOutputValidation({
++      type: 'array', prefixItems: [{ type: 'integer' }], minItems: 1, items: false,
++    })
++    expect(output.validate!({ structuredContent: [1] })).toEqual([])
++    expect(output.validate!({ structuredContent: ['1'] })).toEqual(mismatch)
++    expect(output.validate!({ structuredContent: [1, 2] })).toEqual(mismatch)
++  })
++
++  it.each([
++    { type: 'object', privateKeyword: 'secret' },
++    { type: 'string', format: 'private-format' },
++    { $ref: 'https://private.example/schema' },
++  ])('sanitizes unsupported schema diagnostics: %j', (schema) => {
++    expect(() => createOutputValidation(schema)).toThrow(
++      new Error('MCP output schema is invalid or unsupported'),
++    )
++  })
++
++  it('reports absence without installing a validator', () => {
++    const output = createOutputValidation(undefined)
++    expect(output.validate).toBeUndefined()
++    expect(output.presentationMeta!({}, { content: [] })).toEqual({
++      mcpOutputValidation: { status: 'not-advertised' },
++    })
++  })
++
++  it('captures a schema clone and a digest immune to caller mutation', () => {
++    const schema = structuredClone(objectSchema)
++    const schemaSha256 = createHash('sha256').update(JSON.stringify(schema)).digest('hex')
++    const output = createOutputValidation(schema)
++    schema.properties.count.minimum = 100
++    schema.required.length = 0
++    expect(output.validate!({ structuredContent: { count: 2 } })).toEqual([])
++    expect(output.validate!({ structuredContent: {} })).toEqual(mismatch)
++    expect(output.presentationMeta!({}, { structuredContent: { count: 2 } })).toEqual({
++      mcpOutputValidation: { status: 'declared-schema-validated', schemaSha256 },
++    })
++  })
++
++  it('does not coerce values, insert defaults, or remove additional properties', () => {
++    const output = createOutputValidation({
++      ...objectSchema,
++      properties: { count: { type: 'integer', default: 1 } },
++    })
++    for (const structuredContent of [{ count: '2' }, {}, { count: 2, extra: true }]) {
++      const value = { structuredContent }
++      const before = structuredClone(value)
++      expect(output.validate!(value)).toEqual(mismatch)
++      expect(value).toEqual(before)
++    }
++    expect(output.validate!({ structuredContent: { count: 2 } })).toEqual([])
++  })
++})
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 06d5d75a109ab21a16a98f6fcfdb7bbda4e33f7d..178ff0e942761e135e4f4543334d84f89f590897 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -6593,6 +6593,12 @@ importers:
+       '@modelcontextprotocol/sdk':
+         specifier: ^1.12.0
+         version: 1.29.0(zod@4.4.3)
++      ajv:
++        specifier: 8.20.0
++        version: 8.20.0
++      ajv-formats:
++        specifier: 3.0.1
++        version: 3.0.1(ajv@8.20.0)
+       zod:
+         specifier: ^4.4.3
+         version: 4.4.3
