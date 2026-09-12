@@ -1,12 +1,24 @@
 import assert from "node:assert/strict";
 import { isUtf8 } from "node:buffer";
+import console from "node:console";
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, readFile, readdir, realpath } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  rmdir,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { createGitEnvironment, inspectTrustedGitFile } from "../git-evidence-authority.mjs";
-import { runBoundedCommand } from "../runtime-process.mjs";
+import { createPrivatePnpmEnvironment, provisionPrivatePnpm } from "../private-pnpm.mjs";
+import { runBoundedCommand, runOrderedCleanup } from "../runtime-process.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const relative = "patches/deepseek-harness/issue-103";
@@ -87,4 +99,120 @@ export async function claimWork(work) {
   );
   assert.equal((await readdir(directory)).length, 0, "work must be empty");
   return directory;
+}
+
+export async function privateEnvironment(work) {
+  assert.equal(process.version, "v24.16.0", "Node version");
+  const nodeBin = await realpath(process.execPath);
+  const temporaryRoot = path.join(work, "private");
+  await mkdir(path.join(temporaryRoot, "tmp"), { recursive: true });
+  return createPrivatePnpmEnvironment({
+    temporaryRoot,
+    nodeBin,
+    baseEnvironment: {
+      PATH: "/usr/bin:/bin",
+      LANG: "C.UTF-8",
+      TMPDIR: path.join(temporaryRoot, "tmp"),
+      TMP: path.join(temporaryRoot, "tmp"),
+      TEMP: path.join(temporaryRoot, "tmp"),
+    },
+  });
+}
+
+/** Source preparation only: success transfers cleanup responsibility to the caller. */
+export async function prepare(requestedWork, provision = provisionPrivatePnpm, repository = root) {
+  const { series, seriesSha256, inputRevision, patches } = await readSeries(repository);
+  const work = await claimWork(requestedWork);
+  const owned = ["private", "baseline", "candidate", "patches", "identity.json", ".preparing"];
+  let acquired = false;
+  let complete = false;
+  try {
+    await mkdir(path.join(work, ".preparing"));
+    acquired = true;
+    const manager = await privateEnvironment(work);
+    const pnpm = await provision({ ...manager, cwd: work });
+    await mkdir(path.join(work, "patches"));
+    for (const patch of patches)
+      await writeFile(path.join(work, "patches", patch.file), patch.content, { flag: "wx" });
+    const trees = {};
+    for (const variant of ["baseline", "candidate"]) {
+      const cwd = path.join(work, variant);
+      await trustedGit(["clone", "--no-checkout", "--", series.upstream, cwd], work);
+      await trustedGit(["checkout", "--detach", series.baseRevision], cwd);
+      assert.equal(
+        (await trustedGit(["rev-parse", "HEAD^{tree}"], cwd)).trim(),
+        series.baseTree,
+        "clone base tree",
+      );
+      if (variant === "candidate") {
+        for (const patch of patches) {
+          const file = path.join(work, "patches", patch.file);
+          await trustedGit(["apply", "--check", "--index", file], cwd);
+          await trustedGit(["apply", "--index", file], cwd);
+        }
+      }
+      trees[variant] = (await trustedGit(["write-tree"], cwd)).trim();
+      await trustedGit(["diff", "--exit-code"], cwd);
+    }
+    const sources = {};
+    for (const file of [
+      "packages/core/tools/src/index.ts",
+      "packages/mcp/mcp-client/src/tools.ts",
+      "packages/mcp/mcp-client/src/output-validation.ts",
+    ])
+      sources[file] = sha256(await readFile(path.join(work, "candidate", file)));
+    const identity = {
+      work,
+      sources,
+      series,
+      seriesSha256,
+      inputRevision,
+      trees,
+      pnpm,
+      node: {
+        path: manager.nodeBin,
+        version: process.version,
+        sha256: sha256(await readFile(manager.nodeBin)),
+      },
+      git: await inspectTrustedGitFile(),
+      launcher: {
+        path: await realpath(path.join(manager.binDirectory, "pnpm")),
+        sha256: sha256(await readFile(path.join(manager.binDirectory, "pnpm"))),
+      },
+    };
+    await writeFile(path.join(work, "identity.json"), `${JSON.stringify(identity, null, 2)}\n`, {
+      flag: "wx",
+    });
+    await rmdir(path.join(work, ".preparing"));
+    complete = true;
+    return identity;
+  } finally {
+    if (!complete)
+      await runOrderedCleanup("failed preparation", [
+        ...(acquired ? owned : []).map((name) => [
+          name,
+          () => rm(path.join(work, name), { recursive: true, force: true }),
+        ]),
+        [
+          "automatic root",
+          async () => {
+            if (requestedWork === undefined) await rmdir(work);
+          },
+        ],
+      ]);
+  }
+}
+
+if (import.meta.main) {
+  try {
+    const args = process.argv.slice(2);
+    assert.ok(
+      args.length === 0 || (args.length === 2 && args[0] === "--work"),
+      "usage: prepare-harness.mjs [--work <empty-root>]",
+    );
+    console.log(JSON.stringify(await prepare(args[1]), null, 2));
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
 }
