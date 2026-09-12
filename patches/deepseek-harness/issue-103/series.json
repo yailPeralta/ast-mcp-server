@@ -31,6 +31,10 @@
     {
       "file": "0007-mcp-output-wire-matrix.patch",
       "sha256": "cb79942c64c493fbb7797cdf361809f7de4a74feacc31eb050420a2f501f4ab6"
+    },
+    {
+      "file": "0008-mcp-output-session-snapshot.patch",
+      "sha256": "2175ed7255ad2d857a47641b04c3e964ac58e8ac732a02126f947b28e6d2e4f7"
     }
   ]
 }
