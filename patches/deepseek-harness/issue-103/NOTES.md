@@ -12,7 +12,7 @@ The default baseline and active GUI are not modified. These files do not authori
 
 ## Source preparation and CLI
 
-Run `NODE_OPTIONS='' node scripts/issue-103/prepare-harness.mjs` with Node 24.16.0 and the existing trusted Git/private-manager prerequisites. Optional `--work <empty-root>` uses an explicit root. This provisions private pnpm 11.7.0, independently clones the official baseline and candidate, and applies all tracked patches in order with `--check --index` then `--index`. **It does not install Harness dependencies, build or execute Harness.**
+Run `NODE_OPTIONS='' node scripts/issue-103/prepare-harness.mjs` with Node 24.16.0 and the existing trusted Git/private-manager prerequisites. Optional `--work <empty-root>` uses an explicit root. This provisions private pnpm 11.7.0, independently initializes SHA-1 baseline and candidate repositories, records the exact official origin, fetches only the admitted base SHA at depth one with complete blobs, checks out that SHA detached, and applies all tracked patches in order with `--check --index` then `--index`. **It does not install Harness dependencies, build or execute Harness.**
 
 `readSeries()` reads the AST repository by default. It binds exact UTF-8 manifest bytes to the actual Git HEAD blob, verifies the pinned upstream/base/tree/scope and safe unique patch filenames, and returns ordered, hash-checked in-memory patch bytes. Explicit repository paths must be canonical. The existing trusted Git configuration requires SHA-1 repositories; other object formats, symlinked inputs and changed or missing inputs reject.
 
@@ -20,7 +20,15 @@ Run `NODE_OPTIONS='' node scripts/issue-103/prepare-harness.mjs` with Node 24.16
 
 `prepare()` validates inputs before work/provisioning, then acquires `.preparing` inside its cleanup lifecycle. Failure removes preparation children only after marker acquisition; failed automatic claims roll back their empty root, while explicit other-owner collisions preserve content. Success returns and writes `identity.json` with actual input HEAD, series/ordered patch hashes, source hashes, trees and Node/Git/private-manager identities; the CLI prints that receipt. **Success transfers root cleanup to the caller:** retain needed evidence, then remove only that verified owned root. `privateEnvironment()` reuses the existing isolated package-manager owner; its files/caches remain below the external work root.
 
-Run `NODE_OPTIONS='' node --test scripts/issue-103/setup.test.mjs`. The complete suite requires official Git network access for real clone/patch failures; it does not install Harness. Native marker-permission tests require an ordinary non-root POSIX user. Temporary fixtures resolve aliases before use; leaf symlinks remain rejected.
+Run `NODE_OPTIONS='' node --test scripts/issue-103/setup.test.mjs`. The complete suite requires official Git network access for real patch failures; it does not install Harness. Native marker-permission tests require an ordinary non-root POSIX user. Temporary fixtures resolve aliases before use; leaf symlinks remain rejected.
+
+### Pinned acquisition boundary
+
+`acquirePinnedSource(upstream, baseRevision, cwd)` exclusively creates the destination; existing directories (even empty ones) and files reject without adoption. Its caller owns cleanup after creation, including failure; `prepare()` retains its existing marker-based cleanup authority. Only `readSeries()`-admitted official inputs reach this helper from full preparation. Baseline and candidate have independent `.git` directories, without alternates, shared caches, partial-clone filters, mutable ref targets, retries or fallback. Git retains its existing 120-second command bound; depth one is not a latency guarantee.
+
+Failed trusted Git commands add at most 1024 characters of request context and 256 of the original message, using the existing diagnostic redactor and omitting native URL userinfo arguments. The original cause and enumerable fields remain available; absent timeout streams are not fabricated. This is bounded attribution, not universal redaction of arbitrary arguments or retained error fields.
+
+`NODE_OPTIONS='' node --test scripts/issue-103/acquisition.test.mjs` uses only a native local `file://` three-commit graph: exact middle HEAD/tree/bytes/modes, shallow boundary, independent repositories, exact origins, occupied destinations and unavailable pins. It does not provision Node or a package manager. Official source preparation, patch failures and all readmission assertions still require separately authorized fresh gates; these local checks do not establish official source identities or runtime compatibility.
 
 ## Read-only source readmission
 
