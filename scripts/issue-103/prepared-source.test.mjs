@@ -5,6 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import test from "node:test";
 import * as owner from "./prepare-harness.mjs";
+import { createNodeFixture } from "./node-fixture.mjs";
 
 const source = path.join(import.meta.dirname, "prepare-harness.mjs");
 
@@ -33,13 +34,37 @@ test("fresh official sources readmit without writes", async (t) => {
   const umask = process.umask(0o077);
   t.after(() => process.umask(umask));
   const before = owner.sha256(await fs.readFile(source));
-  const identity = await owner.prepare();
-  const work = identity.work;
+  const fixture = await createNodeFixture();
+  t.after(() => fixture.dispose());
+  const work = await owner.claimWork();
   t.after(async () => {
+    await fixture.dispose();
+    await assert.rejects(fs.lstat(fixture.prefix), { code: "ENOENT" });
     await fs.rm(work, { recursive: true });
     await assert.rejects(fs.lstat(work), { code: "ENOENT" });
     assert.equal(owner.sha256(await fs.readFile(source)), before);
   });
+  const identity = JSON.parse((await fixture.run([source, "--work", work])).stdout);
+  assert.deepEqual(identity.node, {
+    path: fixture.nodeBin,
+    version: "v24.16.0",
+    sha256: owner.sha256(await fs.readFile(fixture.nodeBin)),
+  });
+  assert.equal(
+    identity.launcher.path,
+    path.join(fixture.prefix, "lib/node_modules/corepack/dist/pnpm.js"),
+  );
+  assert.equal(identity.launcher.sha256, owner.sha256(await fs.readFile(identity.launcher.path)));
+  assert.equal(identity.pnpm.version, "11.7.0");
+  assert.equal(identity.pnpm.source, "corepack");
+  const privateRoot = path.join(work, "private/package-manager");
+  assert.equal((await fs.lstat(privateRoot)).uid, process.getuid());
+  assert.equal(await fs.realpath(privateRoot), privateRoot);
+  const pnpm = path.join(privateRoot, "corepack/v1/pnpm/11.7.0/bin/pnpm.cjs");
+  assert.equal((await fs.lstat(pnpm)).uid, process.getuid());
+  assert.equal(await fs.realpath(pnpm), pnpm);
+  assert.equal((await fixture.run([pnpm, "--version"], { cwd: work })).stdout.trim(), "11.7.0");
+  t.diagnostic(JSON.stringify(identity));
   const outside = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "ast103-sentinel-")));
   t.after(() => fs.rm(outside, { recursive: true }));
   const sentinel = path.join(outside, "sentinel");
