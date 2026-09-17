@@ -17,9 +17,14 @@ import {
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { URL } from "node:url";
 import { createGitEnvironment, inspectTrustedGitFile } from "../git-evidence-authority.mjs";
 import { createPrivatePnpmEnvironment, provisionPrivatePnpm } from "../private-pnpm.mjs";
-import { runBoundedCommand, runOrderedCleanup } from "../runtime-process.mjs";
+import {
+  runBoundedCommand,
+  runOrderedCleanup,
+  sanitizeDiagnosticText,
+} from "../runtime-process.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const relative = "patches/deepseek-harness/issue-103";
@@ -28,8 +33,29 @@ export const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex"
 export async function trustedGit(args, cwd) {
   const { binary } = await inspectTrustedGitFile();
   return (
-    await runBoundedCommand(binary, args, { cwd, env: createGitEnvironment(), timeout: 120_000 })
+    await runBoundedCommand(binary, args, {
+      cwd,
+      env: createGitEnvironment(),
+      timeout: 120_000,
+    }).catch((cause) => {
+      const request = args.map((arg) => {
+        const url = URL.canParse(arg) ? new URL(arg) : undefined;
+        return url?.username || url?.password ? "[REDACTED URL]" : sanitizeDiagnosticText(arg);
+      });
+      const context = JSON.stringify(request).slice(0, 1024);
+      const message = `Git request ${context}: ${sanitizeDiagnosticText(cause.message).slice(0, 256)}`;
+      throw Object.assign(new Error(message, { cause }), cause, { message, cause });
+    })
   ).stdout;
+}
+
+/** Caller owns the destination's cleanup, including partial acquisition on failure. */
+export async function acquirePinnedSource(upstream, baseRevision, cwd) {
+  await mkdir(cwd);
+  await trustedGit(["init", "--object-format=sha1", cwd], path.dirname(cwd));
+  await trustedGit(["remote", "add", "origin", upstream], cwd);
+  await trustedGit(["fetch", "--depth=1", "--no-tags", "origin", baseRevision], cwd);
+  await trustedGit(["checkout", "--detach", baseRevision], cwd);
 }
 
 async function readInput(file) {
@@ -138,8 +164,7 @@ export async function prepare(requestedWork, provision = provisionPrivatePnpm, r
     const trees = {};
     for (const variant of ["baseline", "candidate"]) {
       const cwd = path.join(work, variant);
-      await trustedGit(["clone", "--no-checkout", "--", series.upstream, cwd], work);
-      await trustedGit(["checkout", "--detach", series.baseRevision], cwd);
+      await acquirePinnedSource(series.upstream, series.baseRevision, cwd);
       assert.equal(
         (await trustedGit(["rev-parse", "HEAD^{tree}"], cwd)).trim(),
         series.baseTree,
