@@ -205,12 +205,12 @@ test("failed provisioning removes failure-owned work", async (t) => {
   assert.deepEqual(await readdir(directory), []);
 });
 
-for (const failure of ["clone", "nonapplicable", "unsafe"]) {
+for (const failure of ["destination", "nonapplicable", "unsafe"]) {
   test(`real ${failure} failure cleans all partial preparation`, async (t) => {
     const repository = await fixture(t);
     const work = await temporary(t);
     const { prepare, sha256 } = await setup();
-    if (failure !== "clone") {
+    if (failure !== "destination") {
       const manifest = path.join(repository, relative, "series.json");
       const series = JSON.parse(await readFile(manifest, "utf8"));
       const target =
@@ -230,25 +230,26 @@ for (const failure of ["clone", "nonapplicable", "unsafe"]) {
       prepare(
         work,
         async () => {
-          if (failure === "clone") await writeFile(path.join(work, "baseline"), "occupied");
+          if (failure === "destination") await writeFile(path.join(work, "baseline"), "occupied");
         },
         repository,
       ),
       (error) => {
-        assert.match(
-          error.stderr,
-          failure === "clone"
-            ? /already exists/
-            : failure === "unsafe"
-              ? /invalid path/
-              : /does not exist in index/,
-        );
+        if (failure === "destination") {
+          assert.equal(error.code, "EEXIST");
+          assert.equal(error.syscall, "mkdir");
+          assert.equal(error.path, path.join(work, "baseline"));
+        } else
+          assert.match(
+            error.stderr,
+            failure === "unsafe" ? /invalid path/ : /does not exist in index/,
+          );
         return true;
       },
     );
     assert.deepEqual(await readdir(work), []);
     await assert.rejects(readFile(path.join(repository, "escaped")), /ENOENT/);
-    if (failure !== "clone")
+    if (failure !== "destination")
       assert.equal(await readFile(path.join(repository, "escape"), "utf8"), "preserve");
   });
 }
