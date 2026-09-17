@@ -30,6 +30,16 @@ Failed trusted Git commands add at most 1024 characters of request context and 2
 
 `NODE_OPTIONS='' node --test scripts/issue-103/acquisition.test.mjs` uses only a native local `file://` three-commit graph: exact middle HEAD/tree/bytes/modes, shallow boundary, independent repositories, exact origins, occupied destinations and unavailable pins. It does not provision Node or a package manager. Official source preparation, patch failures and all readmission assertions still require separately authorized fresh gates; these local checks do not establish official source identities or runtime compatibility.
 
+## Read-only private environment inspection
+
+`await inspectPrivatePnpmEnvironment(options)` in `scripts/private-pnpm.mjs` reconstructs the creator's `{ binDirectory, nodeBin, environment }` from already-created fixed state, without creating, repairing, provisioning or executing anything. It checks canonical caller-owned temporaryRoot, package-manager root, every fixed directory and an empty regular single-link npmrc; missing, wrong-type, linked or group/world-writable fixed paths reject, parents first. Any private `bin/node` entry rejects. Links below cache directories remain allowed; their payloads are not authenticated.
+
+This assumes ordinary POSIX ownership, trusted caller configuration and stable filesystem state, not concurrent attackers or a sandbox. Creation still inherits the caller's umask; use restrictive state (e.g. umask 077). Inspection does not guarantee writability or executability. `nodeBin`, explicit `nodeBinDir`, inherited PATH and other environment values remain caller configuration, **not executable or ambient-authority admission**. Never log the returned ambient environment. Private Node-shadow refusal is inspection-only; existing creation/provisioning callers are unchanged.
+
+Chain: #309 → **📍 environment inspection** → installed Node/Corepack observation → complete Corepack runtime → real fallback → runner. Work/private/tmp, receipts, source/Git identities, pnpm profiles/launchers and runtime authorization remain later owners. This operation grants no Harness compatibility or full-runtime acceptance. Rollback removes this operation, its tests/docs and private recipe extraction only.
+
+Native filesystem gate: `NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 yarn exec vitest run test/private-pnpm-inspection.test.ts test/private-pnpm.test.ts`. Tests use Vitest's default forks pool, scope and restore umask 077, compare controlled configuration only, verify pre-restoration state on success/rejection and await owned-root cleanup.
+
 ## Read-only source readmission
 
 `await inspectPreparedSource(work)` (exported by `prepare-harness.mjs`) returns `{ work, identity }` only after admitting both complete sources against current HEAD-bound inputs. It never prepares, provisions, repairs or writes the work/index. The closed current-prefix manifest SHA256 `a845fb6fdfbdf7a45802881b854dd7a28454c1503e5fb39c649a61743e392aba` is paired with candidate tree `e3258a342b4c2fbbe250baa86369de6a8c6fc2ac`; mismatches reject, never auto-update. The mutable receipt is an observation, not source authority.
