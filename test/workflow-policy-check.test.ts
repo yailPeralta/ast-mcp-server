@@ -34,7 +34,7 @@ const fixtureSetup =
   "        with:\n" +
   '          node-version: "24.16.0"\n';
 const fixtureCommand =
-  "NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs";
+  "NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-concurrency=1 --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs scripts/issue-103/prepared-source.test.mjs scripts/issue-103/private-runtime.test.mjs";
 const fixtureGate = `      - run: ${fixtureCommand}\n`;
 
 describe("workflow policy check", () => {
@@ -62,6 +62,11 @@ describe("workflow policy check", () => {
     ["ambient options", "NODE_OPTIONS='' ", "", /command chain/u],
     ["compile cache enabled", "NODE_DISABLE_COMPILE_CACHE=1 ", "", /command chain/u],
     ["missing TAP", "--test-reporter=tap ", "", /command chain/u],
+    ["omitted source suite", " scripts/issue-103/prepared-source.test.mjs", "", /command chain/u],
+    ["omitted runtime suite", " scripts/issue-103/private-runtime.test.mjs", "", /command chain/u],
+    ["omitted fixture suite", " scripts/issue-103/node-fixture.test.mjs", "", /command chain/u],
+    ["missing serialization", "--test-concurrency=1 ", "", /command chain/u],
+    ["parallel suites", "--test-concurrency=1", "--test-concurrency=2", /command chain/u],
     ["unbounded test", "--test-timeout=300000 ", "", /command chain/u],
     ["wrong timeout", "--test-timeout=300000", "--test-timeout=0", /command chain/u],
     ["masked failure", fixtureCommand, `${fixtureCommand} || true`, /command chain/u],

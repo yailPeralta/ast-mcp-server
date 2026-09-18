@@ -33,7 +33,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.16.0"
-      - run: NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs
+      - run: NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-concurrency=1 --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs scripts/issue-103/prepared-source.test.mjs scripts/issue-103/private-runtime.test.mjs
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node }}
