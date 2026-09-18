@@ -40,6 +40,14 @@ Chain: #309 → **📍 environment inspection** → installed Node/Corepack obse
 
 Native filesystem gate: `NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 yarn exec vitest run test/private-pnpm-inspection.test.ts test/private-pnpm.test.ts`. Tests use Vitest's default forks pool, scope and restore umask 077, compare controlled configuration only, verify pre-restoration state on success/rejection and await owned-root cleanup.
 
+## Mandatory exact-Node fixture CI prerequisite
+
+The existing `quality` job runs `node-fixture.test.mjs` natively on exact Node 24.16.0 after immutable Yarn installation and before restoring `${{ matrix.node }}`. Vitest does not discover this standalone `.mjs` suite. The matrix remains 22.13.0/24 on Ubuntu 24.04; no jobs or existing gates are removed.
+
+Local equivalent, with Node 24.16.0 active: `NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs`. TAP is explicit, compile caching is disabled and the native test timeout is 300 seconds (inside the existing 60-minute CI job bound). The strict workflow policy binds the command, reviewed action SHA, exact Node input and action/command interleaving; omitted, conditional, reordered or failure-masked gates reject.
+
+This adds Linux fixture-native coverage only, not installed-runtime admission, source/Harness compatibility or macOS evidence. Cumulative macOS verification remains pending. Chain: #310 environment inspection → **📍 exact-Node fixture CI** → installed Node/Corepack observation → complete runtime admission. Rollback removes only this CI insertion and its policy/tests/docs delta; the completed fixture is unchanged.
+
 ## Read-only source readmission
 
 `await inspectPreparedSource(work)` (exported by `prepare-harness.mjs`) returns `{ work, identity }` only after admitting both complete sources against current HEAD-bound inputs. It never prepares, provisions, repairs or writes the work/index. The closed current-prefix manifest SHA256 `a845fb6fdfbdf7a45802881b854dd7a28454c1503e5fb39c649a61743e392aba` is paired with candidate tree `e3258a342b4c2fbbe250baa86369de6a8c6fc2ac`; mismatches reject, never auto-update. The mutable receipt is an observation, not source authority.
