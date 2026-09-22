@@ -17,9 +17,14 @@ import {
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { URL } from "node:url";
 import { createGitEnvironment, inspectTrustedGitFile } from "../git-evidence-authority.mjs";
 import { createPrivatePnpmEnvironment, provisionPrivatePnpm } from "../private-pnpm.mjs";
-import { runBoundedCommand, runOrderedCleanup } from "../runtime-process.mjs";
+import {
+  runBoundedCommand,
+  runOrderedCleanup,
+  sanitizeDiagnosticText,
+} from "../runtime-process.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const relative = "patches/deepseek-harness/issue-103";
@@ -28,7 +33,19 @@ export const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex"
 export async function trustedGit(args, cwd) {
   const { binary } = await inspectTrustedGitFile();
   return (
-    await runBoundedCommand(binary, args, { cwd, env: createGitEnvironment(), timeout: 120_000 })
+    await runBoundedCommand(binary, args, {
+      cwd,
+      env: createGitEnvironment(),
+      timeout: 120_000,
+    }).catch((cause) => {
+      const request = args.map((arg) => {
+        const url = URL.canParse(arg) ? new URL(arg) : undefined;
+        return url?.username || url?.password ? "[REDACTED URL]" : sanitizeDiagnosticText(arg);
+      });
+      const context = JSON.stringify(request).slice(0, 1024);
+      const message = `Git request ${context}: ${sanitizeDiagnosticText(cause.message).slice(0, 256)}`;
+      throw Object.assign(new Error(message, { cause }), cause, { message, cause });
+    })
   ).stdout;
 }
 
