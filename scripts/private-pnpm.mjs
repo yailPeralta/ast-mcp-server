@@ -47,6 +47,7 @@ function privatePnpmConfiguration(
     XDG_STATE_HOME: path.join(stateRoot, "xdg-state"),
     npm_config_cache: path.join(stateRoot, "npm-cache"),
     npm_config_userconfig: path.join(stateRoot, "npmrc"),
+    pnpm_config_store_dir: path.join(stateRoot, "pnpm-store"),
   };
   return {
     stateRoot,
