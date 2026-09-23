@@ -1,0 +1,192 @@
+import assert from "node:assert/strict";
+import * as fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import process from "node:process";
+import test from "node:test";
+import { createNodeFixture } from "./node-fixture.mjs";
+import { createSourceGate } from "./source-gate-lifecycle.mjs";
+import { claimWork, sha256 } from "./prepare-harness.mjs";
+
+const prepareSource = path.join(import.meta.dirname, "prepare-harness.mjs");
+const admissionScript = `
+  import { inspectPrivateRuntime } from ${JSON.stringify(prepareSource)};
+  try {
+    console.log(JSON.stringify({ ok: true, value: await inspectPrivateRuntime(process.argv[1]) }));
+  } catch (error) {
+    console.log(JSON.stringify({ ok: false, code: error.code, message: error.message }));
+  }
+`;
+
+async function footprint(directory) {
+  const result = [];
+  for (const name of (await fs.readdir(directory)).sort()) {
+    const file = path.join(directory, name);
+    const stat = await fs.lstat(file);
+    result.push([
+      path.relative(directory, file),
+      stat.ino,
+      stat.mode,
+      stat.size,
+      stat.mtimeMs,
+      stat.ctimeMs,
+    ]);
+    if (stat.isDirectory()) result.push(...(await footprint(file)));
+  }
+  return result;
+}
+
+async function changed(file, bytes, action) {
+  const original = await fs.readFile(file);
+  try {
+    await fs.writeFile(file, bytes);
+    await action();
+  } finally {
+    await fs.writeFile(file, original);
+  }
+}
+
+async function runAdmissionResult(fixture, work) {
+  const result = await fixture.run(["--input-type=module", "-e", admissionScript, work], {
+    cwd: work,
+  });
+  return JSON.parse(result.stdout);
+}
+
+async function runAdmission(fixture, work) {
+  const result = await runAdmissionResult(fixture, work);
+  assert.equal(result.ok, true, result.message);
+  return result.value;
+}
+
+async function assertRejectedReadOnly(work, action, match = {}) {
+  const before = await footprint(work);
+  const result = await action();
+  assert.equal(result.ok, false, "admission should reject");
+  if (match.code) assert.equal(result.code, match.code);
+  if (match.message) assert.match(result.message, match.message);
+  assert.deepEqual(await footprint(work), before, "rejected admission must not write");
+}
+
+await test("private Corepack runtime admission is read-only and rejects unsafe prepared runtime state", async () => {
+  assert.equal(process.version, "v24.16.0");
+  const owned = { umask: process.umask(0o077) };
+  const gate = createSourceGate(test, test.after, [
+    ["fixture", () => owned.fixture?.dispose()],
+    [
+      "fixture absence",
+      () =>
+        owned.fixture?.prefix && assert.rejects(fs.lstat(owned.fixture.prefix), { code: "ENOENT" }),
+    ],
+    ["work", () => owned.work && fs.rm(owned.work, { recursive: true })],
+    ["work absence", () => owned.work && assert.rejects(fs.lstat(owned.work), { code: "ENOENT" })],
+    ["umask", () => process.umask(owned.umask)],
+    ["umask restoration", () => assert.equal(process.umask(), owned.umask)],
+  ]);
+
+  await gate.run(async () => {
+    owned.fixture = await createNodeFixture();
+    owned.work = await claimWork();
+    const identity = JSON.parse(
+      (await owned.fixture.run([prepareSource, "--work", owned.work], { cwd: owned.work })).stdout,
+    );
+    const receiptFile = path.join(owned.work, "identity.json");
+    const receipt = await fs.readFile(receiptFile);
+    const launcher = path.join(owned.work, "private/package-manager/bin/pnpm");
+
+    await gate.test("admits exact prepared private Corepack runtime without writes", async () => {
+      const before = await footprint(owned.work);
+      const admitted = await runAdmission(owned.fixture, owned.work);
+      assert.deepEqual(admitted.identity, identity);
+      assert.deepEqual(admitted, { work: owned.work, identity, launcher });
+      assert.deepEqual(await footprint(owned.work), before);
+      assert.deepEqual(await fs.readFile(receiptFile), receipt);
+    });
+
+    await gate.test("rejects unsupported pnpm source with typed code", async () => {
+      const forged = {
+        ...identity,
+        pnpm: { ...identity.pnpm, source: "verified-archive-launcher" },
+      };
+      await changed(receiptFile, `${JSON.stringify(forged)}\n`, async () => {
+        await assertRejectedReadOnly(
+          owned.work,
+          () => runAdmissionResult(owned.fixture, owned.work),
+          { code: "ERR_UNSUPPORTED_PNPM_PROFILE" },
+        );
+      });
+    });
+
+    for (const [name, mutate] of [
+      ["missing pnpm metadata", (copy) => delete copy.pnpm],
+      ["wrong pnpm version", (copy) => (copy.pnpm = { ...copy.pnpm, version: "0.0.0" })],
+      ["wrong pnpm descriptor", (copy) => (copy.pnpm = { ...copy.pnpm, descriptor: "pnpm@0.0.0" })],
+      ["wrong pnpm sha512", (copy) => (copy.pnpm = { ...copy.pnpm, sha512: "0".repeat(128) })],
+    ])
+      await gate.test(`rejects malformed metadata: ${name}`, async () => {
+        const forged = globalThis.structuredClone(identity);
+        mutate(forged);
+        await changed(receiptFile, `${JSON.stringify(forged)}\n`, () =>
+          assertRejectedReadOnly(owned.work, () => runAdmissionResult(owned.fixture, owned.work)),
+        );
+      });
+
+    await gate.test("rejects source tamper before runtime success", async () => {
+      await changed(path.join(owned.work, "candidate/package.json"), "{}\n", () =>
+        assertRejectedReadOnly(owned.work, () => runAdmissionResult(owned.fixture, owned.work)),
+      );
+    });
+
+    await gate.test("rejects wrong launcher type and target", async () => {
+      const parked = path.join(owned.work, "private/package-manager/bin/pnpm.parked");
+      await fs.rename(launcher, parked);
+      try {
+        await fs.writeFile(launcher, "not a symlink");
+        await assertRejectedReadOnly(owned.work, () =>
+          runAdmissionResult(owned.fixture, owned.work),
+        );
+        await fs.rm(launcher);
+        await fs.symlink(path.join(os.tmpdir(), "not-corepack.js"), launcher);
+        await assertRejectedReadOnly(owned.work, () =>
+          runAdmissionResult(owned.fixture, owned.work),
+        );
+        await fs.rm(launcher);
+      } finally {
+        await fs.rm(launcher, { force: true });
+        await fs.rename(parked, launcher);
+      }
+    });
+
+    await gate.test("rejects private bin/node shadow", async () => {
+      const shadow = path.join(owned.work, "private/package-manager/bin/node");
+      try {
+        await fs.writeFile(shadow, "shadow");
+        await assertRejectedReadOnly(owned.work, () =>
+          runAdmissionResult(owned.fixture, owned.work),
+        );
+      } finally {
+        await fs.rm(shadow, { force: true });
+      }
+    });
+
+    await gate.test("rejects runtime receipt changes during admission", async () => {
+      const original = globalThis.structuredClone(identity);
+      const forged = { ...identity, sources: { ...identity.sources } };
+      const file = "packages/core/tools/src/index.ts";
+      const source = path.join(owned.work, "candidate", file);
+      await changed(source, "// changed\n", async () => {
+        try {
+          forged.sources[file] = sha256(await fs.readFile(source));
+          await fs.writeFile(receiptFile, `${JSON.stringify(forged)}\n`);
+          await assertRejectedReadOnly(
+            owned.work,
+            () => runAdmissionResult(owned.fixture, owned.work),
+            { message: /runtime identity changed|runtime receipt changed|source blob/ },
+          );
+        } finally {
+          await fs.writeFile(receiptFile, `${JSON.stringify(original, null, 2)}\n`);
+        }
+      });
+    });
+  });
+});
