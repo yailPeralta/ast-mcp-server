@@ -61,6 +61,7 @@ async function validatePrivateEnvironment(manager, privateRoot) {
         "XDG_STATE_HOME",
         "npm_config_cache",
         "npm_config_userconfig",
+        "pnpm_config_store_dir",
         "TMPDIR",
         "TMP",
         "TEMP",
@@ -162,4 +163,21 @@ export async function runPreparedVariantPnpm(
   const variantRoot = path.join(admitted.work, variant);
   const cwdPath = await resolveCwd(variantRoot, cwd, "cwd must stay under prepared source variant");
   return runAdmittedPnpm(admitted, args, cwdPath, timeout);
+}
+
+export async function runPreparedCandidateInstall(
+  work,
+  { timeout = 300_000, afterInstallCommandForTest } = {},
+) {
+  await inspectPreparedSource(work);
+  const result = await runPreparedVariantPnpm(work, "candidate", ["install", "--frozen-lockfile"], {
+    cwd: ".",
+    timeout,
+  });
+  if (afterInstallCommandForTest !== undefined) {
+    assert.equal(typeof afterInstallCommandForTest, "function", "post-install test hook");
+    await afterInstallCommandForTest();
+  }
+  await inspectPreparedSource(work);
+  return result;
 }

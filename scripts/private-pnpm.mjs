@@ -43,6 +43,7 @@ export async function createPrivatePnpmEnvironment({
     XDG_STATE_HOME: path.join(stateRoot, "xdg-state"),
     npm_config_cache: path.join(stateRoot, "npm-cache"),
     npm_config_userconfig: path.join(stateRoot, "npmrc"),
+    pnpm_config_store_dir: path.join(stateRoot, "pnpm-store"),
   };
   await Promise.all([
     mkdir(binDirectory, { recursive: true }),
