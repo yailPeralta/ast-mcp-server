@@ -94,6 +94,27 @@ test("readmitted prepared work runs only the recorded private pnpm launcher", as
     },
   );
 
+  await changed(
+    receiptFile,
+    JSON.stringify({
+      ...identity,
+      node: { ...identity.node, sha256: "0".repeat(64) },
+    }),
+    async () => {
+      await assert.rejects(runPreparedPnpm(work, ["--version"]), /Node digest/);
+    },
+  );
+
+  const shadowNode = path.join(work, "private/package-manager/bin/node");
+  await fs.writeFile(shadowNode, "#!/bin/sh\necho shadowed-node\n", { mode: 0o700 });
+  try {
+    const observedVersion = await runPreparedPnpm(work, ["--version"]);
+    assert.equal(observedVersion.stdout.trim(), "11.7.0");
+    assert.equal(observedVersion.stderr, "");
+  } finally {
+    await fs.rm(shadowNode, { force: true });
+  }
+
   const outside = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), "ast103-runner-escape-")),
   );

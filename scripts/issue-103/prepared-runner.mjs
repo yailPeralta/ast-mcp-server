@@ -71,6 +71,40 @@ async function validatePrivateEnvironment(manager, privateRoot) {
   }
 }
 
+async function validateRecordedNode(identity) {
+  const node = identity.node;
+  assert.equal(typeof node?.path, "string", "Node path");
+  assert.equal(node.path, path.resolve(node.path), "Node path must be absolute");
+  assert.equal(await realpath(node.path), node.path, "Node path changed");
+  const stat = await lstat(node.path);
+  assert.ok(
+    stat.isFile() && stat.uid === process.getuid() && !(stat.mode & 0o022),
+    "Node path unsafe",
+  );
+  assert.equal(sha256(await readFile(node.path)), node.sha256, "Node digest changed");
+  assert.equal(node.version, "v24.16.0", "Node version observation changed");
+  const observed = await runBoundedCommand(node.path, ["--version"], {
+    cwd: path.dirname(node.path),
+    env: { PATH: "/usr/bin:/bin", NODE_OPTIONS: "" },
+    timeout: 30_000,
+    maxBuffer: 1024 * 1024,
+  });
+  assert.equal(observed.stdout.trim(), node.version, "Node version changed");
+  assert.equal(observed.stderr, "", "Node version stderr");
+  return node.path;
+}
+
+function bindRecordedNodeEnvironment(manager, nodePath) {
+  const nodeDirectory = path.dirname(nodePath);
+  const rest = (manager.environment.PATH ?? "")
+    .split(path.delimiter)
+    .filter((entry) => entry && entry !== nodeDirectory && entry !== manager.binDirectory);
+  return {
+    ...manager.environment,
+    PATH: [nodeDirectory, manager.binDirectory, ...rest].join(path.delimiter),
+  };
+}
+
 async function validateLauncher(manager, identity) {
   const launcher = path.join(
     manager.binDirectory,
@@ -98,13 +132,14 @@ async function resolveCwd(root, cwd, containmentMessage) {
 async function runAdmittedPnpm(admitted, args, cwdPath, timeout) {
   assert.ok(Array.isArray(args) && args.every((arg) => typeof arg === "string"), "pnpm args");
   assert.ok(Number.isFinite(timeout) && timeout > 0 && timeout <= 300_000, "bounded timeout");
+  const nodePath = await validateRecordedNode(admitted.identity);
   const privateRoot = await inspectExistingPrivateRoot(admitted.work);
   const manager = await privateEnvironment(admitted.work);
   await validatePrivateEnvironment(manager, privateRoot);
   const launcher = await validateLauncher(manager, admitted.identity);
   return runBoundedCommand(launcher, args, {
     cwd: cwdPath,
-    env: manager.environment,
+    env: bindRecordedNodeEnvironment(manager, nodePath),
     timeout,
     maxBuffer: 1024 * 1024,
   });
