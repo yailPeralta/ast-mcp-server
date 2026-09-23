@@ -87,20 +87,44 @@ async function validateLauncher(manager, identity) {
   return launcher;
 }
 
-export async function runPreparedPnpm(work, args, { cwd = work, timeout = 30_000 } = {}) {
+async function resolveCwd(root, cwd, containmentMessage) {
+  const requested = path.resolve(root, cwd);
+  const canonical = await realpath(requested);
+  assert.ok(contained(root, canonical), containmentMessage);
+  assert.ok((await lstat(canonical)).isDirectory(), "cwd must be directory");
+  return canonical;
+}
+
+async function runAdmittedPnpm(admitted, args, cwdPath, timeout) {
   assert.ok(Array.isArray(args) && args.every((arg) => typeof arg === "string"), "pnpm args");
   assert.ok(Number.isFinite(timeout) && timeout > 0 && timeout <= 300_000, "bounded timeout");
-  const admitted = await inspectPreparedSource(work);
   const privateRoot = await inspectExistingPrivateRoot(admitted.work);
   const manager = await privateEnvironment(admitted.work);
   await validatePrivateEnvironment(manager, privateRoot);
   const launcher = await validateLauncher(manager, admitted.identity);
-  const cwdPath = path.resolve(cwd);
-  assert.ok(contained(admitted.work, cwdPath), "cwd must stay under admitted work");
   return runBoundedCommand(launcher, args, {
     cwd: cwdPath,
     env: manager.environment,
     timeout,
     maxBuffer: 1024 * 1024,
   });
+}
+
+export async function runPreparedPnpm(work, args, { cwd = work, timeout = 30_000 } = {}) {
+  const admitted = await inspectPreparedSource(work);
+  const cwdPath = await resolveCwd(admitted.work, cwd, "cwd must stay under admitted work");
+  return runAdmittedPnpm(admitted, args, cwdPath, timeout);
+}
+
+export async function runPreparedVariantPnpm(
+  work,
+  variant,
+  args,
+  { cwd = ".", timeout = 30_000 } = {},
+) {
+  assert.ok(["baseline", "candidate"].includes(variant), "prepared source variant");
+  const admitted = await inspectPreparedSource(work);
+  const variantRoot = path.join(admitted.work, variant);
+  const cwdPath = await resolveCwd(variantRoot, cwd, "cwd must stay under prepared source variant");
+  return runAdmittedPnpm(admitted, args, cwdPath, timeout);
 }
