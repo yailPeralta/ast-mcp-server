@@ -155,7 +155,21 @@ export async function prepare(requestedWork, provision = provisionPrivatePnpm, r
     const trees = {};
     for (const variant of ["baseline", "candidate"]) {
       const cwd = path.join(work, variant);
-      await trustedGit(["clone", "--no-checkout", "--", series.upstream, cwd], work);
+      await trustedGit(
+        [
+          "clone",
+          "--no-checkout",
+          "--filter=blob:none",
+          "--branch",
+          "dsh-v0.1.2-alpha.1",
+          "--depth",
+          "1",
+          "--",
+          series.upstream,
+          cwd,
+        ],
+        work,
+      );
       await trustedGit(["checkout", "--detach", series.baseRevision], cwd);
       assert.equal(
         (await trustedGit(["rev-parse", "HEAD^{tree}"], cwd)).trim(),

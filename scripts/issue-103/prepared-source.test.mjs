@@ -6,6 +6,7 @@ import process from "node:process";
 import test from "node:test";
 import * as owner from "./prepare-harness.mjs";
 import { createNodeFixture } from "./node-fixture.mjs";
+import { withOfficialPreparationLock } from "./test-lock.mjs";
 
 const source = path.join(import.meta.dirname, "prepare-harness.mjs");
 
@@ -44,7 +45,9 @@ test("fresh official sources readmit without writes", async (t) => {
     await assert.rejects(fs.lstat(work), { code: "ENOENT" });
     assert.equal(owner.sha256(await fs.readFile(source)), before);
   });
-  const identity = JSON.parse((await fixture.run([source, "--work", work])).stdout);
+  const identity = JSON.parse(
+    (await withOfficialPreparationLock(() => fixture.run([source, "--work", work]))).stdout,
+  );
   assert.deepEqual(identity.node, {
     path: fixture.nodeBin,
     version: "v24.16.0",
