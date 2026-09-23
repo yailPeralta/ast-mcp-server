@@ -7,6 +7,7 @@ import test from "node:test";
 import { createSourceGate } from "./source-gate-lifecycle.mjs";
 import * as owner from "./prepare-harness.mjs";
 import { createNodeFixture } from "./node-fixture.mjs";
+import { withOfficialPreparationLock } from "./test-lock.mjs";
 
 const source = path.join(import.meta.dirname, "prepare-harness.mjs");
 
@@ -36,7 +37,9 @@ async function prepareSource(t, owned, createFixture, claimWork, inspectSource, 
   owned.before = await sourceHash();
   const fixture = (owned.fixture = await createFixture());
   const work = (owned.work = await claimWork());
-  const identity = JSON.parse((await fixture.run([source, "--work", work])).stdout);
+  const identity = JSON.parse(
+    (await withOfficialPreparationLock(() => fixture.run([source, "--work", work]))).stdout,
+  );
   assert.deepEqual(identity.node, {
     path: fixture.nodeBin,
     version: "v24.16.0",
