@@ -34,7 +34,7 @@ const fixtureSetup =
   "        with:\n" +
   '          node-version: "24.16.0"\n';
 const fixtureCommand =
-  "NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-concurrency=1 --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs scripts/issue-103/prepared-source.test.mjs scripts/issue-103/source-gate-lifecycle.test.mjs";
+  "NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-concurrency=1 --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs scripts/issue-103/prepared-source.test.mjs scripts/issue-103/source-gate-lifecycle.test.mjs scripts/issue-103/private-runtime-admission.test.mjs";
 const fixtureGate = `      - run: ${fixtureCommand}\n`;
 
 describe("workflow policy check", () => {
@@ -59,7 +59,12 @@ describe("workflow policy check", () => {
     ["floating Node", 'node-version: "24.16.0"', 'node-version: "24"', /setup-node inputs/u],
     ["wrong patch", 'node-version: "24.16.0"', 'node-version: "24.15.0"', /setup-node inputs/u],
     ["missing command", fixtureGate, "", /command chain/u],
-    ...["node-fixture", "prepared-source", "source-gate-lifecycle"].map(
+    ...[
+      "node-fixture",
+      "prepared-source",
+      "source-gate-lifecycle",
+      "private-runtime-admission",
+    ].map(
       (suite) =>
         [`missing ${suite}`, ` scripts/issue-103/${suite}.test.mjs`, "", /command chain/u] as const,
     ),
