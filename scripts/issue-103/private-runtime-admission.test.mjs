@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import test from "node:test";
@@ -169,31 +168,176 @@ await test("private Corepack runtime admission is read-only and rejects unsafe p
         );
       });
 
+    for (const [record, field, value] of [
+      ["node", "path", path.join(owned.work, "private/tmp/not-node")],
+      ["node", "version", "recorded-version-binding-mismatch"],
+      ["node", "sha256", "0".repeat(64)],
+      ["git", "binary", path.join(owned.work, "private/tmp/not-git")],
+      ["git", "realpath", path.join(owned.work, "private/tmp/not-git-real")],
+      ["git", "sha256", "0".repeat(64)],
+      ["launcher", "path", path.join(owned.work, "private/tmp/not-corepack")],
+      ["launcher", "sha256", "0".repeat(64)],
+    ])
+      await gate.test(`rejects recorded ${record}.${field} binding mismatch`, async () => {
+        const forged = globalThis.structuredClone(identity);
+        forged[record][field] = value;
+        await changed(receiptFile, `${JSON.stringify(forged)}\n`, () =>
+          assertRejectedReadOnly(
+            owned.work,
+            () => runAdmissionResult(owned.fixture, owned.work),
+            { message: new RegExp(`recorded ${record}\\.${field}`) },
+            [outsideSentinel],
+          ),
+        );
+      });
+
+    for (const [record, value] of [
+      ["node", []],
+      ["git", "not a record"],
+      ["launcher", null],
+    ])
+      await gate.test(`rejects malformed recorded ${record} shape`, async () => {
+        const forged = globalThis.structuredClone(identity);
+        forged[record] = value;
+        await changed(receiptFile, `${JSON.stringify(forged)}\n`, () =>
+          assertRejectedReadOnly(
+            owned.work,
+            () => runAdmissionResult(owned.fixture, owned.work),
+            { message: new RegExp(`recorded ${record}`) },
+            [outsideSentinel],
+          ),
+        );
+      });
+
+    for (const [record, field] of [
+      ["node", "path"],
+      ["node", "version"],
+      ["node", "sha256"],
+      ["git", "binary"],
+      ["git", "realpath"],
+      ["git", "sha256"],
+      ["launcher", "path"],
+      ["launcher", "sha256"],
+    ])
+      await gate.test(`rejects missing recorded ${record}.${field}`, async () => {
+        const forged = globalThis.structuredClone(identity);
+        delete forged[record][field];
+        await changed(receiptFile, `${JSON.stringify(forged)}\n`, () =>
+          assertRejectedReadOnly(
+            owned.work,
+            () => runAdmissionResult(owned.fixture, owned.work),
+            { message: new RegExp(`recorded ${record}\\.${field}`) },
+            [outsideSentinel],
+          ),
+        );
+      });
+
+    await gate.test("rejects forged recorded Git binary without executing it", async () => {
+      const forgedGit = path.join(owned.work, "private/tmp/forged-git");
+      const marker = path.join(owned.work, "private/tmp/forged-git-executed");
+      await fs.writeFile(forgedGit, `#!/bin/sh\necho executed >${JSON.stringify(marker)}\n`);
+      await fs.chmod(forgedGit, 0o700);
+      try {
+        const forged = globalThis.structuredClone(identity);
+        forged.git.binary = forgedGit;
+        await changed(receiptFile, `${JSON.stringify(forged)}\n`, async () => {
+          await assertRejectedReadOnly(
+            owned.work,
+            () => runAdmissionResult(owned.fixture, owned.work),
+            { message: /recorded git\.binary/ },
+            [outsideSentinel],
+          );
+          await assert.rejects(fs.lstat(marker), { code: "ENOENT" });
+        });
+      } finally {
+        await fs.rm(forgedGit, { force: true });
+        await fs.rm(marker, { force: true });
+      }
+    });
+
     await gate.test("rejects source tamper before runtime success", async () => {
       await changed(path.join(owned.work, "candidate/package.json"), "{}\n", () =>
         assertRejectedReadOnly(owned.work, () => runAdmissionResult(owned.fixture, owned.work)),
       );
     });
 
-    await gate.test("rejects wrong launcher type and target", async () => {
-      const parked = path.join(owned.work, "private/package-manager/bin/pnpm.parked");
-      await fs.rename(launcher, parked);
-      try {
-        await fs.writeFile(launcher, "not a symlink");
-        await assertRejectedReadOnly(owned.work, () =>
-          runAdmissionResult(owned.fixture, owned.work),
-        );
-        await fs.rm(launcher);
-        await fs.symlink(path.join(os.tmpdir(), "not-corepack.js"), launcher);
-        await assertRejectedReadOnly(owned.work, () =>
-          runAdmissionResult(owned.fixture, owned.work),
-        );
-        await fs.rm(launcher);
-      } finally {
-        await fs.rm(launcher, { force: true });
-        await fs.rename(parked, launcher);
-      }
-    });
+    for (const [name, setup, match] of [
+      ["missing", async () => {}, { message: /ENOENT|no such file|private Corepack launcher/ }],
+      [
+        "regular file",
+        () => fs.writeFile(launcher, "not a symlink"),
+        { message: /private Corepack launcher/ },
+      ],
+      [
+        "explicit dangling symlink",
+        () => fs.symlink(path.join(owned.work, "private/missing-corepack.js"), launcher),
+        { message: /private Corepack launcher text/ },
+      ],
+      [
+        "indirect symlink to valid Corepack",
+        async () => {
+          const alias = path.join(owned.work, "private/tmp/corepack-alias.js");
+          await fs.symlink(identity.launcher.path, alias);
+          await fs.symlink(alias, launcher);
+        },
+        { message: /private Corepack launcher text/ },
+      ],
+      [
+        "same-byte copied target at wrong path",
+        async () => {
+          const copy = path.join(owned.work, "private/tmp/corepack-copy.js");
+          await fs.copyFile(identity.launcher.path, copy);
+          await fs.symlink(copy, launcher);
+        },
+        { message: /private Corepack launcher text/ },
+      ],
+    ])
+      await gate.test(`rejects unsafe private launcher: ${name}`, async () => {
+        const parked = path.join(owned.work, "private/package-manager/bin/pnpm.parked");
+        await fs.rename(launcher, parked);
+        try {
+          await setup();
+          await assertRejectedReadOnly(
+            owned.work,
+            () => runAdmissionResult(owned.fixture, owned.work),
+            match,
+            [outsideSentinel],
+          );
+        } finally {
+          await fs.rm(launcher, { recursive: true, force: true });
+          await fs.rm(path.join(owned.work, "private/tmp/corepack-alias.js"), { force: true });
+          await fs.rm(path.join(owned.work, "private/tmp/corepack-copy.js"), { force: true });
+          await fs.rename(parked, launcher);
+        }
+      });
+
+    await gate.test(
+      "rejects coordinated forged launcher receipt and same-byte target",
+      async () => {
+        const parked = path.join(owned.work, "private/package-manager/bin/pnpm.parked");
+        const copy = path.join(owned.work, "private/tmp/corepack-forged-copy.js");
+        await fs.rename(launcher, parked);
+        try {
+          await fs.copyFile(identity.launcher.path, copy);
+          await fs.symlink(copy, launcher);
+          const forged = globalThis.structuredClone(identity);
+          forged.launcher.path = copy;
+          forged.launcher.sha256 = sha256(await fs.readFile(copy));
+          await changed(receiptFile, `${JSON.stringify(forged)}\n`, () =>
+            assertRejectedReadOnly(
+              owned.work,
+              () => runAdmissionResult(owned.fixture, owned.work),
+              { message: /recorded launcher\.path/ },
+              [outsideSentinel],
+            ),
+          );
+        } finally {
+          await fs.rm(launcher, { force: true });
+          await fs.rm(copy, { force: true });
+          await fs.rename(parked, launcher);
+        }
+      },
+    );
 
     await gate.test("rejects private bin/node shadow", async () => {
       const shadow = path.join(owned.work, "private/package-manager/bin/node");
