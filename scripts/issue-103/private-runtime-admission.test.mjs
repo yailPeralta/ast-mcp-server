@@ -59,13 +59,49 @@ async function runAdmission(fixture, work) {
   return result.value;
 }
 
-async function assertRejectedReadOnly(work, action, match = {}) {
+async function sentinelSnapshot(file) {
+  const stat = await fs.lstat(file);
+  return [stat.ino, stat.mode, stat.size, stat.mtimeMs, stat.ctimeMs, await fs.readFile(file)];
+}
+
+async function assertRejectedReadOnly(work, action, match = {}, sentinels = []) {
   const before = await footprint(work);
+  const sentinelBefore = await Promise.all(sentinels.map(sentinelSnapshot));
   const result = await action();
   assert.equal(result.ok, false, "admission should reject");
   if (match.code) assert.equal(result.code, match.code);
   if (match.message) assert.match(result.message, match.message);
-  assert.deepEqual(await footprint(work), before, "rejected admission must not write");
+  assert.deepEqual(await footprint(work), before, "rejected admission must not write owned work");
+  assert.deepEqual(
+    await Promise.all(sentinels.map(sentinelSnapshot)),
+    sentinelBefore,
+    "rejected admission must not write outside sentinels",
+  );
+}
+
+async function withPathFault(target, fault, escapeTarget, action) {
+  const original = await fs.lstat(target);
+  const saved = `${target}.admission-saved`;
+  const modeFault = fault.endsWith("write");
+  if (!modeFault) await fs.rename(target, saved);
+  try {
+    if (modeFault)
+      await fs.chmod(target, original.mode | (fault === "group-write" ? 0o020 : 0o002));
+    else if (fault === "missing") {
+      // The rename is the fault.
+    } else if (fault === "wrong-type") {
+      if (original.isDirectory()) await fs.writeFile(target, "not a directory");
+      else await fs.mkdir(target);
+    } else if (fault === "symlink-escape") await fs.symlink(escapeTarget, target);
+    else throw new Error(`unknown path fault: ${fault}`);
+    await action();
+  } finally {
+    if (modeFault) await fs.chmod(target, original.mode);
+    else {
+      await fs.rm(target, { recursive: true, force: true });
+      await fs.rename(saved, target);
+    }
+  }
 }
 
 await test("private Corepack runtime admission is read-only and rejects unsafe prepared runtime state", async () => {
@@ -93,6 +129,8 @@ await test("private Corepack runtime admission is read-only and rejects unsafe p
     const receiptFile = path.join(owned.work, "identity.json");
     const receipt = await fs.readFile(receiptFile);
     const launcher = path.join(owned.work, "private/package-manager/bin/pnpm");
+    const outsideSentinel = path.join(owned.fixture.prefix, "runtime-admission-outside-sentinel");
+    await fs.writeFile(outsideSentinel, "outside state must stay untouched\n");
 
     await gate.test("admits exact prepared private Corepack runtime without writes", async () => {
       const before = await footprint(owned.work);
@@ -168,6 +206,81 @@ await test("private Corepack runtime admission is read-only and rejects unsafe p
         await fs.rm(shadow, { force: true });
       }
     });
+
+    for (const [form, create] of [
+      [
+        "dangling symlink",
+        () =>
+          fs.symlink(
+            path.join(owned.work, "private/missing-node"),
+            path.join(owned.work, "private/package-manager/bin/node"),
+          ),
+      ],
+      [
+        "real-node symlink",
+        () =>
+          fs.symlink(process.execPath, path.join(owned.work, "private/package-manager/bin/node")),
+      ],
+      ["directory", () => fs.mkdir(path.join(owned.work, "private/package-manager/bin/node"))],
+    ])
+      await gate.test(`rejects private bin/node shadow: ${form}`, async () => {
+        const shadow = path.join(owned.work, "private/package-manager/bin/node");
+        try {
+          await create();
+          await assertRejectedReadOnly(
+            owned.work,
+            () => runAdmissionResult(owned.fixture, owned.work),
+            {},
+            [outsideSentinel],
+          );
+        } finally {
+          await fs.rm(shadow, { recursive: true, force: true });
+        }
+      });
+
+    for (const [relative, fault] of [
+      ["private", "symlink-escape"],
+      ["private/tmp", "wrong-type"],
+      ["private/package-manager", "missing"],
+      ["private/package-manager/bin", "world-write"],
+      ["private/package-manager/corepack", "group-write"],
+      ["private/package-manager/pnpm", "symlink-escape"],
+      ["private/package-manager/home", "wrong-type"],
+      ["private/package-manager/xdg-cache", "missing"],
+      ["private/package-manager/xdg-config", "world-write"],
+      ["private/package-manager/xdg-data", "group-write"],
+      ["private/package-manager/xdg-state", "symlink-escape"],
+      ["private/package-manager/npm-cache", "wrong-type"],
+    ])
+      await gate.test(`rejects unsafe private runtime path: ${relative} ${fault}`, async () => {
+        await withPathFault(path.join(owned.work, relative), fault, outsideSentinel, () =>
+          assertRejectedReadOnly(
+            owned.work,
+            () => runAdmissionResult(owned.fixture, owned.work),
+            {},
+            [outsideSentinel],
+          ),
+        );
+      });
+
+    for (const fault of ["nonempty", "hardlink"])
+      await gate.test(`rejects unsafe private npmrc: ${fault}`, async () => {
+        const npmrc = path.join(owned.work, "private/package-manager/npmrc");
+        const alias = path.join(owned.work, "private/package-manager/npmrc.alias");
+        try {
+          if (fault === "nonempty") await fs.writeFile(npmrc, "registry=https://invalid.example\n");
+          else await fs.link(npmrc, alias);
+          await assertRejectedReadOnly(
+            owned.work,
+            () => runAdmissionResult(owned.fixture, owned.work),
+            {},
+            [outsideSentinel],
+          );
+        } finally {
+          await fs.rm(alias, { force: true });
+          await fs.writeFile(npmrc, "");
+        }
+      });
 
     await gate.test("rejects runtime receipt changes during admission", async () => {
       const original = globalThis.structuredClone(identity);
