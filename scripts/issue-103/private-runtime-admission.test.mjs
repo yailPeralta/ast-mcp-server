@@ -140,6 +140,22 @@ await test("private Corepack runtime admission is read-only and rejects unsafe p
       assert.deepEqual(await fs.readFile(receiptFile), receipt);
     });
 
+    await gate.test("admits reformatted receipt JSON repeatedly without writes", async () => {
+      const formattedReceipt = `${JSON.stringify(identity, null, 4)}\n`;
+      await changed(receiptFile, formattedReceipt, async () => {
+        const before = await footprint(owned.work);
+        for (const admitted of [
+          await runAdmission(owned.fixture, owned.work),
+          await runAdmission(owned.fixture, owned.work),
+        ]) {
+          assert.deepEqual(admitted.identity, identity);
+          assert.deepEqual(admitted, { work: owned.work, identity, launcher });
+        }
+        assert.deepEqual(await footprint(owned.work), before);
+        assert.equal(await fs.readFile(receiptFile, "utf8"), formattedReceipt);
+      });
+    });
+
     await gate.test("rejects unsupported pnpm source with typed code", async () => {
       const forged = {
         ...identity,
@@ -150,6 +166,22 @@ await test("private Corepack runtime admission is read-only and rejects unsafe p
           owned.work,
           () => runAdmissionResult(owned.fixture, owned.work),
           { code: "ERR_UNSUPPORTED_PNPM_PROFILE" },
+        );
+      });
+    });
+
+    await gate.test("rejects unknown pnpm profile before stale source", async () => {
+      const forged = {
+        ...identity,
+        inputRevision: "stale",
+        pnpm: { ...identity.pnpm, source: "unknown" },
+      };
+      await changed(receiptFile, `${JSON.stringify(forged)}\n`, async () => {
+        await assertRejectedReadOnly(
+          owned.work,
+          () => runAdmissionResult(owned.fixture, owned.work),
+          { code: "ERR_UNSUPPORTED_PNPM_PROFILE", message: /unsupported pnpm profile/ },
+          [outsideSentinel],
         );
       });
     });
