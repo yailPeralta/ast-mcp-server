@@ -505,8 +505,8 @@ function validateCiWorkflow(lines, jobs, actions) {
   ) {
     policyFailure("ci.yml trigger blocks cannot add branch, path, type or event filters.");
   }
-  if (lines.filter((line) => line === '        node: ["22.13.0", "24"]').length !== 1) {
-    policyFailure("ci.yml must retain the exact Node matrix 22.13.0 and 24.");
+  if (lines.filter((line) => line === '        node: ["22.22.2", "24"]').length !== 1) {
+    policyFailure("ci.yml must retain the exact Node matrix 22.22.2 and 24.");
   }
   if (lines.filter((line) => line === "      fail-fast: false").length !== 1) {
     policyFailure("ci.yml must keep fail-fast disabled for complete matrix evidence.");

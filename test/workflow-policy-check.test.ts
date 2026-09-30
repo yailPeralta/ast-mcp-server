@@ -825,7 +825,7 @@ describe("workflow policy check", () => {
     expect(documents["ci.yml"]).not.toMatch(/^ {4}env:/mu);
     const matrixDrift = {
       ...documents,
-      "ci.yml": replaceRequired(documents["ci.yml"], 'node: ["22.13.0", "24"]', 'node: ["24"]'),
+      "ci.yml": replaceRequired(documents["ci.yml"], 'node: ["22.22.2", "24"]', 'node: ["24"]'),
     };
     expect(() => validateWorkflowPolicyDocuments(matrixDrift)).toThrow(/Node matrix/u);
 
@@ -833,8 +833,8 @@ describe("workflow policy check", () => {
       ...documents,
       "ci.yml": replaceRequired(
         documents["ci.yml"],
-        '        node: ["22.13.0", "24"]',
-        '        # node: ["22.13.0", "24"]\n        node: ["24"]',
+        '        node: ["22.22.2", "24"]',
+        '        # node: ["22.22.2", "24"]\n        node: ["24"]',
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(commentedMatrixDecoy)).toThrow(/Node matrix/u);
@@ -914,8 +914,8 @@ describe("workflow policy check", () => {
       ...documents,
       "ci.yml": replaceRequired(
         documents["ci.yml"],
-        '        node: ["22.13.0", "24"]\n',
-        '        node: ["22.13.0", "24"]\n        exclude:\n          - node: "22.13.0"\n',
+        '        node: ["22.22.2", "24"]\n',
+        '        node: ["22.22.2", "24"]\n        exclude:\n          - node: "22.22.2"\n',
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(excludedFloor)).toThrow(/gate-bypass control/u);

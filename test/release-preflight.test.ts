@@ -70,7 +70,7 @@ function registryReadback(overrides: Record<string, unknown> = {}): Record<strin
     name: "ast-mcp-server",
     version: RELEASE_VERSION,
     gitHead: RELEASE_SHA,
-    engines: { node: ">=22.13.0" },
+    engines: { node: "^22.22.2 || ^24.15.0 || >=26.0.0" },
     dist: {
       integrity: INTEGRITY,
       tarball: `https://registry.npmjs.org/ast-mcp-server/-/ast-mcp-server-${RELEASE_VERSION}.tgz`,
@@ -843,7 +843,7 @@ describe("release preflight", () => {
       package_name: "ast-mcp-server",
       version: RELEASE_VERSION,
       git_head: RELEASE_SHA,
-      engines_node: ">=22.13.0",
+      engines_node: "^22.22.2 || ^24.15.0 || >=26.0.0",
       integrity: INTEGRITY,
       tarball: `https://registry.npmjs.org/ast-mcp-server/-/ast-mcp-server-${RELEASE_VERSION}.tgz`,
       attestation_url: `https://registry.npmjs.org/-/npm/v1/attestations/ast-mcp-server@${RELEASE_VERSION}`,
@@ -855,7 +855,7 @@ describe("release preflight", () => {
     const invalidReadbacks = [
       registryReadback({ version: "0.7.1" }),
       registryReadback({ gitHead: OTHER_SHA }),
-      registryReadback({ engines: { node: ">=22.5.0" } }),
+      registryReadback({ engines: { node: ">=22.13.0" } }),
       registryReadback({ engines: { node: ">=24" } }),
       registryReadback({ dist_tags: { next: "0.6.0", latest: "0.6.0" } }),
       registryReadback({ dist: { ...(registryReadback().dist as object), integrity: "" } }),

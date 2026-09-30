@@ -130,16 +130,19 @@ export function validateRuntimeVersion(runtimeId, rawVersion) {
     minor: Number(match[2]),
     patch: Number(match[3]),
   };
-  if (runtimeId === "node22.13") {
+  if (runtimeId === "node22.22") {
     if (version.major !== 22) {
-      fail(`node22.13 requires Node major 22; received ${rawVersion.trim()}.`);
+      fail(`node22.22 requires Node major 22; received ${rawVersion.trim()}.`);
     }
-    if (version.minor !== 13 || version.patch !== 0) {
-      fail(`node22.13 requires exact Node 22.13.0; received ${rawVersion.trim()}.`);
+    if (version.minor !== 22 || version.patch !== 2) {
+      fail(`node22.22 requires exact Node 22.22.2; received ${rawVersion.trim()}.`);
     }
   } else if (runtimeId === "node24") {
     if (version.major !== 24) {
       fail(`node24 requires Node major 24; received ${rawVersion.trim()}.`);
+    }
+    if (version.minor < 15) {
+      fail(`node24 requires Node 24.15.0 or newer; received ${rawVersion.trim()}.`);
     }
   } else {
     fail(`Unknown runtime identity: ${runtimeId}`);
@@ -153,7 +156,7 @@ export function createRuntimeEnvironment(runtimeId, nodeBinary, ambientEnvironme
   if (!path.isAbsolute(home ?? "") || !path.isAbsolute(temporaryDirectory)) {
     fail("runtime HOME and TMPDIR must be absolute paths.");
   }
-  if (runtimeId !== "node22.13" && runtimeId !== "node24") {
+  if (runtimeId !== "node22.22" && runtimeId !== "node24") {
     fail(`Unknown runtime identity: ${runtimeId}`);
   }
   return Object.freeze({
@@ -646,7 +649,7 @@ async function prepareLocalRegistryCommand(runtime, materialization) {
   await chmod(transitiveNodeBin, 0o700);
   return Object.freeze({
     output: path.join(materialization.temporaryRoot, `${runtime.id}-local-registry.json`),
-    expectedNode: runtime.id === "node22.13" ? "22.13.0" : "24",
+    expectedNode: runtime.id === "node22.22" ? "22.22.2" : "24",
     npmEntry: runtime.npmEntry,
     transitiveNodeBin,
     expectedNodeSha256: runtime.nodeSha256,
@@ -835,7 +838,7 @@ async function publishReportSet(outputDir, runtimeReports, summary) {
   const entries = [];
   for (const report of runtimeReports) {
     if (
-      (report.runtime !== "node22.13" && report.runtime !== "node24") ||
+      (report.runtime !== "node22.22" && report.runtime !== "node24") ||
       runtimeIds.has(report.runtime)
     ) {
       fail("runtime report publication set is invalid.");
@@ -1237,10 +1240,10 @@ async function main() {
     outputDir: options.outputDir,
     candidateTree: options.candidateTree ?? null,
   });
-  const node22Binary = process.env.AST_NODE_22_13_BIN;
+  const node22Binary = process.env.AST_NODE_22_22_BIN;
   const node24Binary = process.env.AST_NODE_24_BIN;
   if (node22Binary === undefined || node24Binary === undefined) {
-    fail("AST_NODE_22_13_BIN and AST_NODE_24_BIN are required.");
+    fail("AST_NODE_22_22_BIN and AST_NODE_24_BIN are required.");
   }
   assertNoAmbientGitControls();
   await mkdir(path.dirname(options.outputDir), { recursive: true });
@@ -1263,7 +1266,7 @@ async function main() {
   });
 
   const runtimes = [
-    await inspectRuntime("node22.13", node22Binary),
+    await inspectRuntime("node22.22", node22Binary),
     await inspectRuntime("node24", node24Binary),
   ];
   const packageManager = runtimes.find(({ id }) => id === "node24");
