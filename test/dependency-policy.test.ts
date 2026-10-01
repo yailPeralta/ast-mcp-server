@@ -74,7 +74,7 @@ it("admits the patched Hono and Vitest family without installation-policy except
   const manifest = JSON.parse(manifestBytes!);
   const lock = yaml.parse(lockBytes!) as Record<string, { version: string; resolution: string }>;
   const config = yaml.parse(configBytes!);
-  expect.soft(manifest.resolutions.hono).toBe("4.13.5");
+  expect.soft(manifest.resolutions.hono).toBe("4.13.7");
   expect.soft(manifest.devDependencies.vitest).toBe("^4.1.11");
   expect.soft(config.enableScripts).toBe(false);
   expect.soft(config.npmPreapprovedPackages ?? []).toEqual([]);
@@ -87,11 +87,13 @@ it("admits the patched Hono and Vitest family without installation-policy except
       (name) => `@vitest/${name}`,
     ),
   ];
+  expect.soft(lockBytes).not.toMatch(/hono@npm:4\.13\.5/u);
+
   for (const name of packages) {
     const entries = Object.entries(lock).filter(([key]) =>
       key.split(", ").some((selector) => selector.startsWith(`${name}@npm:`)),
     );
-    const version = name === "hono" ? "4.13.5" : "4.1.11";
+    const version = name === "hono" ? "4.13.7" : "4.1.11";
     expect.soft(entries, name).toHaveLength(1);
     expect
       .soft(entries[0]?.[1], name)
