@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { isUtf8 } from "node:buffer";
+import { Buffer, isUtf8 } from "node:buffer";
 import console from "node:console";
 import { createHash } from "node:crypto";
 import {
@@ -33,6 +33,7 @@ import {
   PNPM_DESCRIPTOR,
   PNPM_SHA512_HEX,
 } from "../private-pnpm.mjs";
+import { proveRetainedPnpmArchive } from "../retained-pnpm-archive.mjs";
 import {
   runBoundedCommand,
   runOrderedCleanup,
@@ -254,6 +255,46 @@ async function inspectOwnedPath(file, directory = false) {
   return stat;
 }
 
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", `'"'"'`)}'`;
+}
+
+function expectedFallbackLauncherBytes(nodeBin, entrypoint) {
+  return Buffer.from(
+    `#!/bin/sh\nexec ${shellQuote(nodeBin)} ${shellQuote(entrypoint)} "$@"\n`,
+    "utf8",
+  );
+}
+
+async function assertRecordedIdentity(name, record, actual) {
+  assert.ok(record && typeof record === "object" && !Array.isArray(record), `recorded ${name}`);
+  for (const [field, value] of Object.entries(actual))
+    assert.equal(record[field], value, `recorded ${name}.${field}`);
+}
+
+async function inspectVerifiedArchiveLauncher({ temporaryRoot, nodeBin, identity }) {
+  const fallbackRoot = path.join(temporaryRoot, "package-manager/corepack/fallback");
+  const archive = path.join(fallbackRoot, `pnpm-${PNPM_VERSION}.tgz`);
+  const extracted = path.join(fallbackRoot, "extracted");
+  const entrypoint = path.join(extracted, "package/bin/pnpm.cjs");
+  const proof = await proveRetainedPnpmArchive({
+    archivePath: archive,
+    extractedRoot: extracted,
+    expectedSha512Hex: PNPM_SHA512_HEX,
+  });
+  await inspectOwnedPath(entrypoint);
+  const launcher = path.join(temporaryRoot, "package-manager/bin/pnpm");
+  await inspectOwnedPath(launcher);
+  const expected = expectedFallbackLauncherBytes(nodeBin, entrypoint);
+  const actual = await readFile(launcher);
+  assert.ok(actual.equals(expected), "fallback launcher bytes");
+  await assertRecordedIdentity("launcher", identity.launcher, {
+    path: await realpath(launcher),
+    sha256: sha256(actual),
+  });
+  return { launcher, proof };
+}
+
 async function inspectGitControls(directory) {
   await inspectOwnedPath(directory, true);
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -413,7 +454,7 @@ export async function inspectPrivateRuntime(work) {
       pnpm.source.length > 0,
     "pnpm metadata",
   );
-  if (pnpm.source !== "corepack")
+  if (!["corepack", "verified-archive-launcher"].includes(pnpm.source))
     throw Object.assign(new Error("unsupported pnpm profile"), {
       code: "ERR_UNSUPPORTED_PNPM_PROFILE",
     });
@@ -421,12 +462,8 @@ export async function inspectPrivateRuntime(work) {
   assert.equal(node.version, "v24.16.0", "Node pin");
   const git = await inspectTrustedGitFile();
   assertTrustedGitVersion(await trustedGit(["--version"], work));
-  for (const [name, actual] of Object.entries({ node, git, launcher: corepack })) {
-    const record = identity[name];
-    assert.ok(record && typeof record === "object" && !Array.isArray(record), `recorded ${name}`);
-    for (const [field, value] of Object.entries(actual))
-      assert.equal(record[field], value, `recorded ${name}.${field}`);
-  }
+  await assertRecordedIdentity("node", identity.node, node);
+  await assertRecordedIdentity("git", identity.git, git);
   const temporaryRoot = path.join(work, "private");
   const tmp = path.join(temporaryRoot, "tmp");
   await inspectPrivatePnpmEnvironment({
@@ -436,23 +473,30 @@ export async function inspectPrivateRuntime(work) {
   });
   await inspectOwnedPath(tmp, true);
   const launcher = path.join(temporaryRoot, "package-manager/bin/pnpm");
-  const stat = await lstat(launcher);
-  assert.ok(stat.isSymbolicLink() && stat.uid === process.getuid(), "private Corepack launcher");
-  assert.equal(
-    path.resolve(path.dirname(launcher), await readlink(launcher)),
-    corepack.path,
-    "private Corepack launcher text",
-  );
-  assert.equal(await realpath(launcher), corepack.path, "private Corepack launcher target");
-  assert.equal(
-    sha256(await readFile(launcher)),
-    corepack.sha256,
-    "private Corepack launcher bytes",
-  );
+  let admittedLauncher = launcher;
+  if (pnpm.source === "corepack") {
+    await assertRecordedIdentity("launcher", identity.launcher, corepack);
+    const stat = await lstat(launcher);
+    assert.ok(stat.isSymbolicLink() && stat.uid === process.getuid(), "private Corepack launcher");
+    assert.equal(
+      path.resolve(path.dirname(launcher), await readlink(launcher)),
+      corepack.path,
+      "private Corepack launcher text",
+    );
+    assert.equal(await realpath(launcher), corepack.path, "private Corepack launcher target");
+    const launcherBytes = await readFile(launcher);
+    assert.equal(sha256(launcherBytes), corepack.sha256, "private Corepack launcher bytes");
+  } else {
+    ({ launcher: admittedLauncher } = await inspectVerifiedArchiveLauncher({
+      temporaryRoot,
+      nodeBin: node.path,
+      identity,
+    }));
+  }
   const admitted = await inspectPreparedSource(work);
   assert.ok(isDeepStrictEqual(identity, admitted.identity), "runtime identity changed");
   assert.ok(raw.equals((await readOwnedReceipt(work)).raw), "runtime receipt changed");
-  return { work, identity, launcher };
+  return { work, identity, launcher: admittedLauncher };
 }
 
 if (import.meta.main) {
