@@ -802,13 +802,13 @@ export function parseCanaryArguments(argv, { allowHistoricalRuntime = false } = 
     fail("--node-bin must be an absolute executable path.");
   }
   const allowedExpectedNodes = allowHistoricalRuntime
-    ? new Set(["22.5.0", "22.13.0", "24"])
-    : new Set(["22.13.0", "24"]);
+    ? new Set(["22.5.0", "22.13.0", "22.22.2", "24"])
+    : new Set(["22.22.2", "24"]);
   if (!allowedExpectedNodes.has(options.expectedNode)) {
     fail(
       allowHistoricalRuntime
-        ? "--expected-node must be historical 22.5.0, active 22.13.0, or 24."
-        : "--expected-node must be active 22.13.0 or 24.",
+        ? "--expected-node must be historical 22.5.0 or 22.13.0, active 22.22.2, or 24."
+        : "--expected-node must be active 22.22.2 or 24.",
     );
   }
   if (!options.projectRoot || !path.isAbsolute(options.projectRoot)) {
@@ -841,7 +841,7 @@ export function parseCanaryArguments(argv, { allowHistoricalRuntime = false } = 
       fail("Historical Node 22.5.0 report verification requires --experimental-sqlite.");
     }
   } else if (options.nodeOptions.length !== 0) {
-    fail("Active Node 22.13.0 and 24 canary runs forbid Node options.");
+    fail("Active Node 22.22.2 and 24 canary runs forbid Node options.");
   }
   const resolvedOutput = path.resolve(options.outputPath);
   if (path.dirname(resolvedOutput) !== PHYSICAL_TMP_ROOT) {
@@ -864,8 +864,8 @@ export function parseCanaryArguments(argv, { allowHistoricalRuntime = false } = 
 }
 
 export function assertExpectedNodeVersion(expected, observed) {
-  if (expected !== "22.5.0" && expected !== "22.13.0" && expected !== "24") {
-    fail("Expected Node contract must be historical 22.5.0, active 22.13.0, or 24.");
+  if (!["22.5.0", "22.13.0", "22.22.2", "24"].includes(expected)) {
+    fail("Expected Node contract must be historical 22.5.0 or 22.13.0, active 22.22.2, or 24.");
   }
   if (expected === "22.5.0" && observed !== "v22.5.0") {
     fail(`Expected exact Node v22.5.0, observed ${String(observed)}.`);
@@ -873,8 +873,16 @@ export function assertExpectedNodeVersion(expected, observed) {
   if (expected === "22.13.0" && observed !== "v22.13.0") {
     fail(`Expected exact Node v22.13.0, observed ${String(observed)}.`);
   }
-  if (expected === "24" && !/^v24\./.test(String(observed))) {
-    fail(`Expected a v24 Node runtime, observed ${String(observed)}.`);
+  if (expected === "22.22.2" && observed !== "v22.22.2") {
+    fail(`Expected exact Node v22.22.2, observed ${String(observed)}.`);
+  }
+  const observedText = String(observed);
+  const node24 = /^v24\.(\d+)\.(\d+)$/.exec(observedText);
+  if (expected === "24" && node24 === null) {
+    fail(`Expected a v24 Node runtime, observed ${observedText}.`);
+  }
+  if (expected === "24" && Number(node24?.[1]) < 15) {
+    fail(`Expected Node v24.15.0 or newer, observed ${observedText}.`);
   }
 }
 
@@ -4191,7 +4199,9 @@ async function validateRuntimeBinary(options) {
       ? "AST_NODE_22_BIN"
       : options.expectedNode === "22.13.0"
         ? "AST_NODE_22_13_BIN"
-        : "AST_NODE_24_BIN";
+        : options.expectedNode === "22.22.2"
+          ? "AST_NODE_22_22_BIN"
+          : "AST_NODE_24_BIN";
   const authorityValue = process.env[authorityName];
   if (!authorityValue || !path.isAbsolute(authorityValue)) {
     fail(`${authorityName} must identify the selected release-evidence runtime.`);

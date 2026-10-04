@@ -233,7 +233,7 @@ function normalizedRegistryMetadata(versionDocument, packageDocument, version, s
     versionObject.name !== PACKAGE_NAME ||
     versionObject.version !== version ||
     versionObject.gitHead !== sha ||
-    engines.node !== ">=22.13.0" ||
+    engines.node !== "^22.22.2 || ^24.15.0 || >=26.0.0" ||
     typeof dist.integrity !== "string" ||
     !SRI_PATTERN.test(dist.integrity) ||
     dist.tarball !== expectedTarball ||
@@ -250,7 +250,7 @@ function normalizedRegistryMetadata(versionDocument, packageDocument, version, s
     name: PACKAGE_NAME,
     version,
     gitHead: sha,
-    engines: { node: ">=22.13.0" },
+    engines: { node: "^22.22.2 || ^24.15.0 || >=26.0.0" },
     dist: {
       integrity: dist.integrity,
       tarball: expectedTarball,
@@ -1243,7 +1243,7 @@ async function runOuter(options) {
     if (
       installedMetadata.name !== PACKAGE_NAME ||
       installedMetadata.version !== options.version ||
-      installedMetadata.engines?.node !== ">=22.13.0"
+      installedMetadata.engines?.node !== "^22.22.2 || ^24.15.0 || >=26.0.0"
     ) {
       fail("clean consumer did not install the exact package version.");
     }

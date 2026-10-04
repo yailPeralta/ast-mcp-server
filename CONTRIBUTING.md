@@ -19,7 +19,7 @@ issue, leave a comment first so work is not duplicated.
 ### Prerequisites
 
 - Linux x64, the supported development and release environment
-- Node.js 22.13.0 or newer; CI verifies exact Node.js 22.13.0 and the Node.js 24 line
+- Node.js `^22.22.2 || ^24.15.0 || >=26.0.0`; CI verifies exact Node.js 22.22.2 and the Node.js 24 line
 - Corepack with Yarn 4.15.0, pinned by `packageManager` in `package.json`
 - Git
 
@@ -213,7 +213,7 @@ the current slice, and anything intentionally deferred.
 
 ## Automated checks
 
-CI runs on pushes and pull requests for Node.js 22.13.0 and Node.js 24. It verifies formatting,
+CI runs on pushes and pull requests for exact Node.js 22.22.2 and the Node.js 24 line. It verifies formatting,
 linting, types, tests, build output, MCP/CLI/package boundaries, dependency audit, package shape,
 workflow policy, and whitespace.
 
