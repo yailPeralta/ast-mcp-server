@@ -734,6 +734,7 @@ __metadata:
     gpt-tokenizer: "npm:3.4.0"
     jsonc-parser: "npm:^3.3.1"
     prettier: "npm:^3.9.6"
+    tar: "npm:7.5.22"
     ts-morph: "npm:24.0.0"
     typescript: "npm:^5.6.0"
     typescript-eslint: "npm:^8.65.0"
@@ -2349,7 +2350,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tar@npm:^7.5.4":
+"tar@npm:7.5.22, tar@npm:^7.5.4":
   version: 7.5.22
   resolution: "tar@npm:7.5.22"
   dependencies:
