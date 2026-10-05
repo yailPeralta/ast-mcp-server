@@ -34,6 +34,7 @@ import { URL, fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import yaml from "yaml";
 import { validateTimeoutBudget } from "./harness-timeout-budget.mjs";
+import { parseSingleNpmPackRecord } from "./npm-pack-json.mjs";
 import { createPrivatePnpmEnvironment, provisionPrivatePnpm } from "./private-pnpm.mjs";
 // prettier-ignore
 import { classifyExactHostToolError, createH03CleanupEvidence, parseProbeMarker, requireExactIdentity, runBoundedCommand, runOrderedCleanup, sanitizeDiagnosticText, terminateProcessTree } from "./runtime-process.mjs";
@@ -371,8 +372,11 @@ async function fetchPublicPackage() {
     ],
     { cwd: temporaryRoot },
   );
-  const records = JSON.parse(packed.stdout);
-  const record = records[0];
+  const record = parseSingleNpmPackRecord(packed.stdout, {
+    expectedName: "ast-mcp-server",
+    expectedVersion: PUBLIC_BASELINE_VERSION,
+    expectedFilename: `ast-mcp-server-${PUBLIC_BASELINE_VERSION}.tgz`,
+  });
   assert(record?.integrity === PUBLIC_PACKAGE_INTEGRITY, "public package integrity mismatch");
   assert(record?.shasum === PUBLIC_PACKAGE_SHASUM, "public package shasum mismatch");
   const archive = path.join(destination, record.filename);

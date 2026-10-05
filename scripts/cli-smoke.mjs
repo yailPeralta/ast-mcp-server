@@ -57,19 +57,43 @@ const cacheEnvironment = {
   AST_SYMBOL_INDEX_CACHE_ROOT: cacheRoot,
 };
 
-function isExpectedNode2213SQLiteWarning(stderr) {
+function knownSQLiteExperimentalWarning(pid = 12345) {
+  return `(node:${pid}) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use \`node --trace-warnings ...\` to show where the warning was created)`;
+}
+
+function isExpectedActiveNode22SQLiteWarning(stderr, nodeVersion = process.versions.node) {
   return (
-    process.versions.node === "22.13.0" &&
+    nodeVersion === "22.22.2" &&
     /^\(node:\d+\) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)$/u.test(
       stderr.trimEnd(),
     )
   );
 }
 
+function assertSQLiteWarningPolicy() {
+  const warning = knownSQLiteExperimentalWarning();
+  const cases = [
+    ["active Node 22 warning is accepted", warning, "22.22.2", true],
+    ["Node 24 warning is rejected", warning, "24.16.0", false],
+    ["wrong Node 22 warning is rejected", warning, "22.13.0", false],
+    ["unexpected warning is rejected", "Warning: unexpected\n", "22.22.2", false],
+    ["partial SQLite warning is rejected", warning.split("\n")[0], "22.22.2", false],
+    ["prepended garbage is rejected", `garbage\n${warning}`, "22.22.2", false],
+    ["appended garbage is rejected", `${warning}\ngarbage`, "22.22.2", false],
+    ["JSON error is rejected", '{"code":"CACHE_UNSAFE"}\n', "22.22.2", false],
+  ];
+  for (const [name, stderr, nodeVersion, expected] of cases) {
+    const actual = isExpectedActiveNode22SQLiteWarning(stderr, nodeVersion);
+    if (actual !== expected) {
+      throw new Error(`SQLite warning policy failed ${name}: expected ${expected}, got ${actual}`);
+    }
+  }
+}
+
 async function invoke(
   args,
   invocationEnvironment = environment,
-  allowNode2213SQLiteWarning = false,
+  allowActiveNode22SQLiteWarning = false,
   cwd = repositoryRoot,
 ) {
   const { stdout, stderr } = await executeFile(process.execPath, [cliPath, ...args], {
@@ -77,7 +101,10 @@ async function invoke(
     env: invocationEnvironment,
     maxBuffer: 12 * 1024 * 1024,
   });
-  if (stderr !== "" && !(allowNode2213SQLiteWarning && isExpectedNode2213SQLiteWarning(stderr))) {
+  if (
+    stderr !== "" &&
+    !(allowActiveNode22SQLiteWarning && isExpectedActiveNode22SQLiteWarning(stderr))
+  ) {
     throw new Error(`Expected empty stderr, received: ${stderr}`);
   }
   return JSON.parse(stdout);
@@ -192,6 +219,7 @@ async function installFakeAgents() {
 }
 
 try {
+  assertSQLiteWarningPolicy();
   await installFakeAgents();
   await mkdir(upgradeTemp);
   await mkdir(path.join(fixtureRoot, "src"), { recursive: true });
