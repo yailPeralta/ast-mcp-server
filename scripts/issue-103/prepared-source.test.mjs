@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import test from "node:test";
+import { createSourceGate } from "./source-gate-lifecycle.mjs";
 import * as owner from "./prepare-harness.mjs";
 import { createNodeFixture } from "./node-fixture.mjs";
 
@@ -30,20 +31,11 @@ async function changed(file, bytes, action) {
   }
 }
 
-test("fresh official sources readmit without writes", async (t) => {
-  const umask = process.umask(0o077);
-  t.after(() => process.umask(umask));
-  const before = owner.sha256(await fs.readFile(source));
-  const fixture = await createNodeFixture();
-  t.after(() => fixture.dispose());
-  const work = await owner.claimWork();
-  t.after(async () => {
-    await fixture.dispose();
-    await assert.rejects(fs.lstat(fixture.prefix), { code: "ENOENT" });
-    await fs.rm(work, { recursive: true });
-    await assert.rejects(fs.lstat(work), { code: "ENOENT" });
-    assert.equal(owner.sha256(await fs.readFile(source)), before);
-  });
+async function prepareSource(t, owned, createFixture, claimWork, inspectSource, sourceHash) {
+  process.umask(0o077);
+  owned.before = await sourceHash();
+  const fixture = (owned.fixture = await createFixture());
+  const work = (owned.work = await claimWork());
   const identity = JSON.parse((await fixture.run([source, "--work", work])).stdout);
   assert.deepEqual(identity.node, {
     path: fixture.nodeBin,
@@ -65,14 +57,14 @@ test("fresh official sources readmit without writes", async (t) => {
   assert.equal(await fs.realpath(pnpm), pnpm);
   assert.equal((await fixture.run([pnpm, "--version"], { cwd: work })).stdout.trim(), "11.7.0");
   t.diagnostic(JSON.stringify(identity));
-  const outside = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "ast103-sentinel-")));
-  t.after(() => fs.rm(outside, { recursive: true }));
+  owned.outside = await fs.mkdtemp(path.join(os.tmpdir(), "ast103-sentinel-"));
+  const outside = (owned.outside = await fs.realpath(owned.outside));
   const sentinel = path.join(outside, "sentinel");
   await fs.writeFile(sentinel, "preserve");
   const sentinelBefore = await footprint(outside);
   const receiptFile = path.join(work, "identity.json");
   const receipt = await fs.readFile(receiptFile);
-  const inspect = () => owner.inspectPreparedSource(work);
+  const inspect = () => inspectSource(work);
   const reject = async () => {
     const state = await footprint(work);
     await assert.rejects(inspect());
@@ -80,6 +72,11 @@ test("fresh official sources readmit without writes", async (t) => {
     assert.deepEqual(await footprint(outside), sentinelBefore);
     assert.equal(await fs.readFile(sentinel, "utf8"), "preserve");
   };
+  return { work, identity, outside, receiptFile, receipt, inspect, reject };
+}
+
+export async function registerSourceCases(t, prepared) {
+  const { work, identity, outside, receiptFile, receipt, inspect, reject } = prepared;
   const mutation = (name, change, restore) =>
     t.test(name, async () => {
       try {
@@ -89,11 +86,13 @@ test("fresh official sources readmit without writes", async (t) => {
         await restore();
       }
     });
-  const state = await footprint(work);
-  assert.equal(typeof owner.inspectPreparedSource, "function");
-  assert.deepEqual(await inspect(), { work, identity });
-  assert.deepEqual(await footprint(work), state, "admission must not write");
-  assert.deepEqual(await fs.readFile(receiptFile), receipt);
+  await t.test("fresh official sources readmit without writes", async () => {
+    const state = await footprint(work);
+    assert.equal(typeof owner.inspectPreparedSource, "function");
+    assert.deepEqual(await inspect(), { work, identity });
+    assert.deepEqual(await footprint(work), state, "admission must not write");
+    assert.deepEqual(await fs.readFile(receiptFile), receipt);
+  });
   await t.test("rejects coordinated source/index/receipt tampering", async () => {
     const cwd = path.join(work, "candidate");
     const file = "packages/core/tools/src/index.ts";
@@ -150,11 +149,14 @@ test("fresh official sources readmit without writes", async (t) => {
         }
       });
     }
-    const mode = (await fs.lstat(file)).mode;
+    let mode;
     await mutation(
       `${variant} tracked executable mode rejects`,
-      () => fs.chmod(file, mode ^ 0o100),
-      () => fs.chmod(file, mode),
+      async () => {
+        mode = (await fs.lstat(file)).mode;
+        await fs.chmod(file, mode ^ 0o100);
+      },
+      () => (mode === undefined ? undefined : fs.chmod(file, mode)),
     );
     await mutation(
       `${variant} index differs from independent tree`,
@@ -256,4 +258,42 @@ test("fresh official sources readmit without writes", async (t) => {
     for (let i = 0; i < 2; i++) assert.deepEqual(await inspect(), { work, identity });
     assert.deepEqual(await footprint(work), state);
   });
-});
+}
+
+export async function runSourceGate({
+  register = test,
+  registerAfter = () => {},
+  createFixture = createNodeFixture,
+  claimWork = owner.claimWork,
+  inspectSource = owner.inspectPreparedSource,
+  registerCases = registerSourceCases,
+  sourceHash = async () => owner.sha256(await fs.readFile(source)),
+} = {}) {
+  const owned = { umask: process.umask() };
+  const absent = (file) => file && assert.rejects(fs.lstat(file), { code: "ENOENT" });
+  const remove = (file) => file && fs.rm(file, { recursive: true });
+  const gate = createSourceGate(register, registerAfter, [
+    ["fixture", () => owned.fixture?.dispose()],
+    ["fixture absence", () => absent(owned.fixture?.prefix)],
+    ["work", () => remove(owned.work)],
+    ["work absence", () => absent(owned.work)],
+    ["source hash", async () => owned.before && assert.equal(await sourceHash(), owned.before)],
+    ["outside", () => remove(owned.outside)],
+    ["outside absence", () => absent(owned.outside)],
+    ["umask", () => process.umask(owned.umask)],
+    ["umask restoration", () => assert.equal(process.umask(), owned.umask)],
+  ]);
+  return gate.run(async () => {
+    const prepared = await gate.test("prepare official sources", (t) =>
+      prepareSource(t, owned, createFixture, claimWork, inspectSource, sourceHash),
+    );
+    await registerCases(gate, prepared);
+  });
+}
+
+if (process.argv[1] === import.meta.filename)
+  await runSourceGate().catch((error) =>
+    test("source gate stopped", { timeout: 300_000 }, () => {
+      throw error;
+    }),
+  );

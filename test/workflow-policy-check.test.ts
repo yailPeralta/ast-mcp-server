@@ -34,7 +34,7 @@ const fixtureSetup =
   "        with:\n" +
   '          node-version: "24.16.0"\n';
 const fixtureCommand =
-  "NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs";
+  "NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-concurrency=1 --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs scripts/issue-103/prepared-source.test.mjs scripts/issue-103/source-gate-lifecycle.test.mjs scripts/issue-103/private-runtime-admission.test.mjs";
 const fixtureGate = `      - run: ${fixtureCommand}\n`;
 
 describe("workflow policy check", () => {
@@ -53,12 +53,29 @@ describe("workflow policy check", () => {
     expect(validateWorkflowPolicyDocuments({ ...documents, "ci.yml": ci }).status).toBe("pass");
   });
 
-  it.each([
+  it.each<readonly [string, string, string, RegExp]>([
     ["missing setup", fixtureSetup, "", /action chain/u],
     ["missing pin", '          node-version: "24.16.0"\n', "", /setup-node inputs/u],
     ["floating Node", 'node-version: "24.16.0"', 'node-version: "24"', /setup-node inputs/u],
     ["wrong patch", 'node-version: "24.16.0"', 'node-version: "24.15.0"', /setup-node inputs/u],
     ["missing command", fixtureGate, "", /command chain/u],
+    ...[
+      "node-fixture",
+      "prepared-source",
+      "source-gate-lifecycle",
+      "private-runtime-admission",
+    ].map(
+      (suite) =>
+        [`missing ${suite}`, ` scripts/issue-103/${suite}.test.mjs`, "", /command chain/u] as const,
+    ),
+    ["missing serialization", "--test-concurrency=1 ", "", /command chain/u],
+    ["parallel tests", "--test-concurrency=1", "--test-concurrency=2", /command chain/u],
+    [
+      "filtered tests",
+      "--test-reporter=tap",
+      "--test-reporter=tap --test-name-pattern=UNIT",
+      /command chain/u,
+    ],
     ["ambient options", "NODE_OPTIONS='' ", "", /command chain/u],
     ["compile cache enabled", "NODE_DISABLE_COMPILE_CACHE=1 ", "", /command chain/u],
     ["missing TAP", "--test-reporter=tap ", "", /command chain/u],
@@ -808,7 +825,7 @@ describe("workflow policy check", () => {
     expect(documents["ci.yml"]).not.toMatch(/^ {4}env:/mu);
     const matrixDrift = {
       ...documents,
-      "ci.yml": replaceRequired(documents["ci.yml"], 'node: ["22.13.0", "24"]', 'node: ["24"]'),
+      "ci.yml": replaceRequired(documents["ci.yml"], 'node: ["22.22.2", "24"]', 'node: ["24"]'),
     };
     expect(() => validateWorkflowPolicyDocuments(matrixDrift)).toThrow(/Node matrix/u);
 
@@ -816,8 +833,8 @@ describe("workflow policy check", () => {
       ...documents,
       "ci.yml": replaceRequired(
         documents["ci.yml"],
-        '        node: ["22.13.0", "24"]',
-        '        # node: ["22.13.0", "24"]\n        node: ["24"]',
+        '        node: ["22.22.2", "24"]',
+        '        # node: ["22.22.2", "24"]\n        node: ["24"]',
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(commentedMatrixDecoy)).toThrow(/Node matrix/u);
@@ -897,8 +914,8 @@ describe("workflow policy check", () => {
       ...documents,
       "ci.yml": replaceRequired(
         documents["ci.yml"],
-        '        node: ["22.13.0", "24"]\n',
-        '        node: ["22.13.0", "24"]\n        exclude:\n          - node: "22.13.0"\n',
+        '        node: ["22.22.2", "24"]\n',
+        '        node: ["22.22.2", "24"]\n        exclude:\n          - node: "22.22.2"\n',
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(excludedFloor)).toThrow(/gate-bypass control/u);
