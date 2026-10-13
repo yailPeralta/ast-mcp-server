@@ -37,7 +37,7 @@ const maxTarballBytes = 50 * 1024 * 1024;
 const commandTimeoutMs = 180_000;
 const proxyTimeoutMs = 30_000;
 const expectedYarnVersion = "4.15.0";
-const expectedNpmVersions = Object.freeze({ "22.13.0": "10.9.2", 24: "11.13.0" });
+const expectedNpmVersions = Object.freeze({ "22.22.2": "10.9.4", 24: "11.13.0" });
 const authenticatedAuthoritySets = new WeakSet();
 const versionPattern = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u;
 const sha256Pattern = /^[0-9a-f]{64}$/u;
@@ -125,8 +125,8 @@ export function parseLocalRegistryArguments(argv) {
     }
     fail(`Unknown or incomplete argument: ${argument}`);
   }
-  if (options.expectedNode !== "22.13.0" && options.expectedNode !== "24") {
-    fail("--expected-node must be exactly 22.13.0 or 24.");
+  if (options.expectedNode !== "22.22.2" && options.expectedNode !== "24") {
+    fail("--expected-node must be exactly 22.22.2 or 24.");
   }
   if (options.output === null) fail("--output must identify an absolute new JSON file.");
   if (options.yarnEntry === null) fail("--yarn-entry must identify an absolute normalized file.");
@@ -149,8 +149,13 @@ export function assertLocalRegistryRuntime(
   actual = process.versions.node,
   nodeOptions = process.env.NODE_OPTIONS ?? "",
 ) {
-  if (expectedNode === "22.13.0" ? actual !== expectedNode : actual.split(".")[0] !== "24") {
+  const actualParts = actual.split(".").map((part) => Number.parseInt(part, 10));
+  if (expectedNode === "22.22.2") {
+    if (actual !== expectedNode) fail(`Expected Node ${expectedNode}, received ${actual}.`);
+  } else if (actualParts[0] !== 24) {
     fail(`Expected Node ${expectedNode}, received ${actual}.`);
+  } else if ((actualParts[1] ?? 0) < 15) {
+    fail(`Expected Node 24.15.0 or newer, received ${actual}.`);
   }
   if (nodeOptions !== "") {
     fail("NODE_OPTIONS must be empty for local-registry release evidence.");
@@ -794,7 +799,7 @@ async function run(options) {
   if (
     packageMetadata.name !== packageName ||
     !versionPattern.test(packageMetadata.version) ||
-    packageMetadata.engines?.node !== ">=22.13.0"
+    packageMetadata.engines?.node !== "^22.22.2 || ^24.15.0 || >=26.0.0"
   ) {
     fail("Source package metadata does not match the release contract.");
   }
@@ -910,7 +915,7 @@ async function run(options) {
       if (
         installedMetadata.name !== packageName ||
         installedMetadata.version !== packageMetadata.version ||
-        installedMetadata.engines?.node !== ">=22.13.0"
+        installedMetadata.engines?.node !== "^22.22.2 || ^24.15.0 || >=26.0.0"
       ) {
         fail("Installed package metadata does not match the packed candidate.");
       }
