@@ -29,7 +29,120 @@ function replaceRequired(source: string, oldValue: string, newValue: string): st
   return source.replace(oldValue, newValue);
 }
 
+const fixtureSetup =
+  "      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0\n" +
+  "        with:\n" +
+  '          node-version: "24.16.0"\n';
+const fixtureCommand =
+  "NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-concurrency=1 --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs scripts/issue-103/prepared-source.test.mjs scripts/issue-103/source-gate-lifecycle.test.mjs scripts/issue-103/private-runtime-admission.test.mjs";
+const fixtureGate = `      - run: ${fixtureCommand}\n`;
+
 describe("workflow policy check", () => {
+  it("requires the exact-Node native fixture prerequisite even when both steps are absent", async () => {
+    const documents = await loadWorkflowDocuments();
+    const withoutFixture = documents["ci.yml"].replace(fixtureSetup, "").replace(fixtureGate, "");
+    expect(() =>
+      validateWorkflowPolicyDocuments({ ...documents, "ci.yml": withoutFixture }),
+    ).toThrow(/command chain/u);
+  });
+  it("accepts the fixture only between immutable install and matrix restoration", async () => {
+    const documents = await loadWorkflowDocuments();
+    const install = "      - run: NODE_OPTIONS= yarn install --immutable\n";
+    const withoutFixture = documents["ci.yml"].replace(fixtureSetup, "").replace(fixtureGate, "");
+    const ci = replaceRequired(withoutFixture, install, `${install}${fixtureSetup}${fixtureGate}`);
+    expect(validateWorkflowPolicyDocuments({ ...documents, "ci.yml": ci }).status).toBe("pass");
+  });
+
+  it.each<readonly [string, string, string, RegExp]>([
+    ["missing setup", fixtureSetup, "", /action chain/u],
+    ["missing pin", '          node-version: "24.16.0"\n', "", /setup-node inputs/u],
+    ["floating Node", 'node-version: "24.16.0"', 'node-version: "24"', /setup-node inputs/u],
+    ["wrong patch", 'node-version: "24.16.0"', 'node-version: "24.15.0"', /setup-node inputs/u],
+    ["missing command", fixtureGate, "", /command chain/u],
+    ...[
+      "node-fixture",
+      "prepared-source",
+      "source-gate-lifecycle",
+      "private-runtime-admission",
+    ].map(
+      (suite) =>
+        [`missing ${suite}`, ` scripts/issue-103/${suite}.test.mjs`, "", /command chain/u] as const,
+    ),
+    ["missing serialization", "--test-concurrency=1 ", "", /command chain/u],
+    ["parallel tests", "--test-concurrency=1", "--test-concurrency=2", /command chain/u],
+    [
+      "filtered tests",
+      "--test-reporter=tap",
+      "--test-reporter=tap --test-name-pattern=UNIT",
+      /command chain/u,
+    ],
+    ["ambient options", "NODE_OPTIONS='' ", "", /command chain/u],
+    ["compile cache enabled", "NODE_DISABLE_COMPILE_CACHE=1 ", "", /command chain/u],
+    ["missing TAP", "--test-reporter=tap ", "", /command chain/u],
+    ["unbounded test", "--test-timeout=300000 ", "", /command chain/u],
+    ["wrong timeout", "--test-timeout=300000", "--test-timeout=0", /command chain/u],
+    ["masked failure", fixtureCommand, `${fixtureCommand} || true`, /command chain/u],
+    [
+      "conditional setup",
+      fixtureSetup,
+      `${fixtureSetup}        if: false\n`,
+      /conditionally skip/u,
+    ],
+    ["conditional fixture", fixtureGate, `${fixtureGate}        if: false\n`, /single-line/u],
+    [
+      "optional fixture",
+      fixtureGate,
+      `${fixtureGate}        continue-on-error: true\n`,
+      /gate-bypass control/u,
+    ],
+    [
+      "floating setup revision",
+      fixtureSetup,
+      fixtureSetup.replace(/@[0-9a-f]{40}/u, "@v7"),
+      /immutable 40-character SHA/u,
+    ],
+    [
+      "unreviewed setup revision",
+      fixtureSetup,
+      fixtureSetup.replace(/@[0-9a-f]{40}/u, `@${"a".repeat(40)}`),
+      /reviewed revision/u,
+    ],
+  ])("rejects exact-Node fixture drift: %s", async (_label, before, after, error) => {
+    const documents = await loadWorkflowDocuments();
+    const ci = replaceRequired(documents["ci.yml"], before, after);
+    expect(() => validateWorkflowPolicyDocuments({ ...documents, "ci.yml": ci })).toThrow(error);
+  });
+
+  it.each(["setup before install", "fixture before setup", "fixture after matrix"])(
+    "rejects interleaving drift: %s",
+    async (order) => {
+      const documents = await loadWorkflowDocuments();
+      const install = "      - run: NODE_OPTIONS= yarn install --immutable\n";
+      const matrixSetup = fixtureSetup.replace('"24.16.0"', "${{ matrix.node }}");
+      const ci =
+        order === "setup before install"
+          ? replaceRequired(
+              documents["ci.yml"],
+              `${install}${fixtureSetup}`,
+              `${fixtureSetup}${install}`,
+            )
+          : order === "fixture before setup"
+            ? replaceRequired(
+                documents["ci.yml"],
+                `${fixtureSetup}${fixtureGate}`,
+                `${fixtureGate}${fixtureSetup}`,
+              )
+            : replaceRequired(
+                documents["ci.yml"],
+                `${fixtureGate}${matrixSetup}`,
+                `${matrixSetup}${fixtureGate}`,
+              );
+      expect(() => validateWorkflowPolicyDocuments({ ...documents, "ci.yml": ci })).toThrow(
+        /interleaved action and command step chain/u,
+      );
+    },
+  );
+
   it("accepts the complete pinned Linux CI, security, and release policy", async () => {
     const documents = await loadWorkflowDocuments();
 
@@ -37,7 +150,7 @@ describe("workflow policy check", () => {
       status: "pass",
       workflow_count: 3,
       job_count: 9,
-      action_count: 24,
+      action_count: 25,
       workflows: ["ci.yml", "release.yml", "security.yml"],
     });
     await expect(checkWorkflowPolicy(repositoryRoot)).resolves.toEqual(
@@ -141,7 +254,7 @@ describe("workflow policy check", () => {
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(runtimeActivatedBeforeColdInstall)).toThrow(
-      /step chain/u,
+      /setup-node inputs/u,
     );
 
     const runtimeActivatedAfterQualityGate = {
@@ -712,7 +825,7 @@ describe("workflow policy check", () => {
     expect(documents["ci.yml"]).not.toMatch(/^ {4}env:/mu);
     const matrixDrift = {
       ...documents,
-      "ci.yml": replaceRequired(documents["ci.yml"], 'node: ["22.13.0", "24"]', 'node: ["24"]'),
+      "ci.yml": replaceRequired(documents["ci.yml"], 'node: ["22.22.2", "24"]', 'node: ["24"]'),
     };
     expect(() => validateWorkflowPolicyDocuments(matrixDrift)).toThrow(/Node matrix/u);
 
@@ -720,8 +833,8 @@ describe("workflow policy check", () => {
       ...documents,
       "ci.yml": replaceRequired(
         documents["ci.yml"],
-        '        node: ["22.13.0", "24"]',
-        '        # node: ["22.13.0", "24"]\n        node: ["24"]',
+        '        node: ["22.22.2", "24"]',
+        '        # node: ["22.22.2", "24"]\n        node: ["24"]',
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(commentedMatrixDecoy)).toThrow(/Node matrix/u);
@@ -801,8 +914,8 @@ describe("workflow policy check", () => {
       ...documents,
       "ci.yml": replaceRequired(
         documents["ci.yml"],
-        '        node: ["22.13.0", "24"]\n',
-        '        node: ["22.13.0", "24"]\n        exclude:\n          - node: "22.13.0"\n',
+        '        node: ["22.22.2", "24"]\n',
+        '        node: ["22.22.2", "24"]\n        exclude:\n          - node: "22.22.2"\n',
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(excludedFloor)).toThrow(/gate-bypass control/u);
