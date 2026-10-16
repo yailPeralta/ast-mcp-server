@@ -1,6 +1,6 @@
 /// <reference types="node" />
 
-export type CanaryRuntimeSelector = "22.5.0" | "22.13.0" | "24";
+export type CanaryRuntimeSelector = "22.5.0" | "22.13.0" | "22.22.2" | "24";
 export type CanaryReportSetInputKey =
   "astNode24" | "astNode22_13" | "xScraperNode24" | "xScraperNode22_13";
 

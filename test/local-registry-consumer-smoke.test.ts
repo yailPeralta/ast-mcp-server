@@ -64,8 +64,8 @@ async function authorityFixture(root: string) {
   const transitiveNodeBin = path.join(trustedBin, "node");
   const yarnEntry = path.join(root, "yarn.js");
   const npmEntry = path.join(root, "npm-cli.js");
-  const expectedNode = process.versions.node === "22.13.0" ? "22.13.0" : "24";
-  const expectedNpm = expectedNode === "22.13.0" ? "10.9.2" : "11.13.0";
+  const expectedNode = process.versions.node === "22.22.2" ? "22.22.2" : "24";
+  const expectedNpm = expectedNode === "22.22.2" ? "10.9.4" : "11.13.0";
   await Promise.all([
     mkdir(authorityHome, { mode: 0o700 }),
     mkdir(authorityTemp, { mode: 0o700 }),
@@ -97,7 +97,7 @@ describe("local registry consumer smoke contract", () => {
   it("parses only the closed runtime, package-manager authority, and output arguments", () => {
     const args = [
       "--expected-node",
-      "22.13.0",
+      "22.22.2",
       "--yarn-entry",
       "/private/yarn.js",
       "--npm-entry",
@@ -114,7 +114,7 @@ describe("local registry consumer smoke contract", () => {
       "/tmp/local-registry.json",
     ];
     expect(parseLocalRegistryArguments(args)).toEqual({
-      expectedNode: "22.13.0",
+      expectedNode: "22.22.2",
       yarnEntry: "/private/yarn.js",
       npmEntry: "/private/npm-cli.js",
       transitiveNodeBin: "/private/bin/node",
@@ -143,11 +143,15 @@ describe("local registry consumer smoke contract", () => {
     ).toThrow(/absolute normalized file/u);
   });
 
-  it("requires exact Node 22.13.0 and the governed Node 24 major", () => {
-    expect(() => assertLocalRegistryRuntime("22.13.0", "22.13.0", "")).not.toThrow();
+  it("requires exact Node 22.22.2 and the governed Node 24 major", () => {
+    expect(() => assertLocalRegistryRuntime("22.22.2", "22.22.2", "")).not.toThrow();
+    expect(() => assertLocalRegistryRuntime("24", "24.15.0", "")).not.toThrow();
     expect(() => assertLocalRegistryRuntime("24", "24.16.0", "")).not.toThrow();
-    expect(() => assertLocalRegistryRuntime("22.13.0", "22.13.1", "")).toThrow(
-      /Expected Node 22\.13\.0/u,
+    expect(() => assertLocalRegistryRuntime("22.22.2", "22.22.1", "")).toThrow(
+      /Expected Node 22\.22\.2/u,
+    );
+    expect(() => assertLocalRegistryRuntime("24", "24.14.99", "")).toThrow(
+      /Expected Node 24\.15\.0 or newer/u,
     );
     expect(() => assertLocalRegistryRuntime("24", "25.0.0", "")).toThrow(/Expected Node 24/u);
     expect(() => assertLocalRegistryRuntime("24", "24.16.0", "--inspect")).toThrow(

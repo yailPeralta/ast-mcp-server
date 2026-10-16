@@ -1,6 +1,6 @@
 export interface LocalRegistryConsumerOptions {
   output: string;
-  expectedNode: "22.13.0" | "24";
+  expectedNode: "22.22.2" | "24";
   yarnEntry: string;
   npmEntry: string;
   transitiveNodeBin: string;

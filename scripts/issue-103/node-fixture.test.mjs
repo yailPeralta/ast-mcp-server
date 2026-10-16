@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import test from "node:test";
+import { URL } from "node:url";
+import { snapshot as installedSnapshot } from "./installed-node-footprint.mjs";
 import { sha256 } from "./prepare-harness.mjs";
 import { runBoundedCommand } from "../runtime-process.mjs";
 
@@ -11,6 +13,80 @@ test.beforeEach((t) => {
   const umask = process.umask(0o077);
   t.after(() => process.umask(umask));
 });
+
+for (const [role, count] of [
+  ["copy", 31],
+  ["parked", 5],
+  ["layout", 1],
+  ["original", 1],
+  ["multi", 1],
+  ["aliases", 4],
+  ["unreadable", 2],
+]) {
+  test(`installed Node/Corepack native observation cases: ${role}`, async (t) => {
+    const { createNodeFixture } = await load();
+    const originals = [
+      process.execPath,
+      path.join(installed, "bin/node"),
+      path.join(installed, "lib/node_modules/corepack/dist/pnpm.js"),
+    ];
+    const originalState = () => installedSnapshot(installed, { boundary: originals });
+    const before = await originalState();
+    const fixture = role === "original" ? null : await createNodeFixture();
+    try {
+      if (role === "parked") {
+        await fs.rename(fixture.nodeBin, `${fixture.nodeBin}-real`);
+        await fs.symlink("node-real", fixture.nodeBin);
+      }
+      if (role === "layout") {
+        await fs.rename(path.join(fixture.prefix, "bin"), path.join(fixture.prefix, "sbin"));
+        await fs.mkdir(path.join(fixture.prefix, "bin"));
+        await fs.symlink("../sbin/node", fixture.nodeBin);
+      }
+      const run = fixture
+        ? fixture.run
+        : (args) =>
+            runBoundedCommand(process.execPath, args, {
+              timeout: 300_000,
+              maxBuffer: 1024 * 1024,
+              env: { NODE_OPTIONS: "", NODE_DISABLE_COMPILE_CACHE: "1" },
+            });
+      if (role === "original")
+        await assert.rejects(
+          run([path.join(import.meta.dirname, "installed-node-corepack-cases.mjs")]),
+          (error) => /explicit fixture role required/.test(error.stderr),
+        );
+      const result = await run([
+        "--test-reporter=tap",
+        "--test-timeout=300000",
+        "--input-type=module",
+        "-e",
+        `process.argv.push(${JSON.stringify(role)}); await import(${JSON.stringify(new URL("./installed-node-corepack-cases.mjs", import.meta.url).href)});`,
+      ]);
+      t.diagnostic(result.stdout);
+      assert.match(
+        result.stdout,
+        new RegExp(
+          `# tests ${count}\\n# suites 0\\n# pass ${count}\\n# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0`,
+        ),
+      );
+    } catch (error) {
+      t.diagnostic(error.stdout ?? String(error));
+      if (error.stderr !== undefined) t.diagnostic(error.stderr);
+      throw error;
+    } finally {
+      if (fixture) {
+        await fixture.dispose();
+        await assert.rejects(fs.lstat(fixture.prefix), { code: "ENOENT" });
+      }
+      assert.deepEqual(
+        await originalState(),
+        before,
+        "shared original bytes and metadata unchanged",
+      );
+    }
+  });
+}
 
 const load = () => import("./node-fixture.mjs");
 const installed = path.dirname(path.dirname(process.execPath));
