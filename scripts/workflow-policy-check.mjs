@@ -41,6 +41,7 @@ const CI_RELEASE_GATES = Object.freeze([
   "node scripts/ci-prepare-gnu-mv.mjs prepare",
   "NODE_OPTIONS= corepack enable",
   "NODE_OPTIONS= yarn install --immutable",
+  "NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-concurrency=1 --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs scripts/issue-103/prepared-source.test.mjs scripts/issue-103/source-gate-lifecycle.test.mjs scripts/issue-103/private-runtime-admission.test.mjs",
   "NODE_OPTIONS= corepack enable",
   "yarn format:check",
   "yarn lint",
@@ -504,8 +505,8 @@ function validateCiWorkflow(lines, jobs, actions) {
   ) {
     policyFailure("ci.yml trigger blocks cannot add branch, path, type or event filters.");
   }
-  if (lines.filter((line) => line === '        node: ["22.13.0", "24"]').length !== 1) {
-    policyFailure("ci.yml must retain the exact Node matrix 22.13.0 and 24.");
+  if (lines.filter((line) => line === '        node: ["22.22.2", "24"]').length !== 1) {
+    policyFailure("ci.yml must retain the exact Node matrix 22.22.2 and 24.");
   }
   if (lines.filter((line) => line === "      fail-fast: false").length !== 1) {
     policyFailure("ci.yml must keep fail-fast disabled for complete matrix evidence.");
@@ -525,7 +526,12 @@ function validateCiWorkflow(lines, jobs, actions) {
   }
   if (
     JSON.stringify(actions.map(({ actionPath }) => actionPath)) !==
-    JSON.stringify(["actions/checkout", "actions/setup-node", "actions/setup-node"])
+    JSON.stringify([
+      "actions/checkout",
+      "actions/setup-node",
+      "actions/setup-node",
+      "actions/setup-node",
+    ])
   ) {
     policyFailure("ci.yml must preserve the exact reviewed action chain.");
   }
@@ -540,7 +546,11 @@ function validateCiWorkflow(lines, jobs, actions) {
     lines,
     actions,
     "actions/setup-node",
-    [{ "node-version": '"24"' }, { "node-version": "${{ matrix.node }}" }],
+    [
+      { "node-version": '"24"' },
+      { "node-version": '"24.16.0"' },
+      { "node-version": "${{ matrix.node }}" },
+    ],
     "ci.yml",
   );
   const expectedSteps = [
@@ -548,7 +558,9 @@ function validateCiWorkflow(lines, jobs, actions) {
     "uses:actions/setup-node",
     ...CI_RELEASE_GATES.slice(0, 3).map((command) => `run:${command}`),
     "uses:actions/setup-node",
-    ...CI_RELEASE_GATES.slice(3).map((command) => `run:${command}`),
+    `run:${CI_RELEASE_GATES[3]}`,
+    "uses:actions/setup-node",
+    ...CI_RELEASE_GATES.slice(4).map((command) => `run:${command}`),
   ];
   if (JSON.stringify(extractStepIdentities(jobs[0], "ci.yml")) !== JSON.stringify(expectedSteps)) {
     policyFailure("ci.yml must preserve the exact interleaved action and command step chain.");

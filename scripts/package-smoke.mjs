@@ -211,7 +211,7 @@ try {
     ),
   );
   if (
-    releaseMetadata.engines?.node !== ">=22.13.0" ||
+    releaseMetadata.engines?.node !== "^22.22.2 || ^24.15.0 || >=26.0.0" ||
     installedMetadata.name !== releaseMetadata.name ||
     installedMetadata.version !== releaseMetadata.version ||
     installedMetadata.engines?.node !== releaseMetadata.engines?.node ||
