@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { isUtf8 } from "node:buffer";
+import { Buffer, isUtf8 } from "node:buffer";
 import console from "node:console";
 import { createHash } from "node:crypto";
 import {
@@ -17,9 +17,28 @@ import {
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { createGitEnvironment, inspectTrustedGitFile } from "../git-evidence-authority.mjs";
-import { createPrivatePnpmEnvironment, provisionPrivatePnpm } from "../private-pnpm.mjs";
-import { runBoundedCommand, runOrderedCleanup } from "../runtime-process.mjs";
+import { URL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
+import {
+  createGitEnvironment,
+  inspectTrustedGitFile,
+  assertTrustedGitVersion,
+} from "../git-evidence-authority.mjs";
+import { inspectInstalledNodeCorepack } from "./installed-node-corepack.mjs";
+import {
+  createPrivatePnpmEnvironment,
+  inspectPrivatePnpmEnvironment,
+  provisionPrivatePnpm,
+  PNPM_VERSION,
+  PNPM_DESCRIPTOR,
+  PNPM_SHA512_HEX,
+} from "../private-pnpm.mjs";
+import { proveRetainedPnpmArchive } from "../retained-pnpm-archive.mjs";
+import {
+  runBoundedCommand,
+  runOrderedCleanup,
+  sanitizeDiagnosticText,
+} from "../runtime-process.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const relative = "patches/deepseek-harness/issue-103";
@@ -28,8 +47,29 @@ export const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex"
 export async function trustedGit(args, cwd) {
   const { binary } = await inspectTrustedGitFile();
   return (
-    await runBoundedCommand(binary, args, { cwd, env: createGitEnvironment(), timeout: 120_000 })
+    await runBoundedCommand(binary, args, {
+      cwd,
+      env: createGitEnvironment(),
+      timeout: 120_000,
+    }).catch((cause) => {
+      const request = args.map((arg) => {
+        const url = URL.canParse(arg) ? new URL(arg) : undefined;
+        return url?.username || url?.password ? "[REDACTED URL]" : sanitizeDiagnosticText(arg);
+      });
+      const context = JSON.stringify(request).slice(0, 1024);
+      const message = `Git request ${context}: ${sanitizeDiagnosticText(cause.message).slice(0, 256)}`;
+      throw Object.assign(new Error(message, { cause }), cause, { message, cause });
+    })
   ).stdout;
+}
+
+/** Caller owns the destination's cleanup, including partial acquisition on failure. */
+export async function acquirePinnedSource(upstream, baseRevision, cwd) {
+  await mkdir(cwd);
+  await trustedGit(["init", "--object-format=sha1", cwd], path.dirname(cwd));
+  await trustedGit(["remote", "add", "origin", upstream], cwd);
+  await trustedGit(["fetch", "--depth=1", "--no-tags", "origin", baseRevision], cwd);
+  await trustedGit(["checkout", "--detach", baseRevision], cwd);
 }
 
 async function readInput(file) {
@@ -138,8 +178,7 @@ export async function prepare(requestedWork, provision = provisionPrivatePnpm, r
     const trees = {};
     for (const variant of ["baseline", "candidate"]) {
       const cwd = path.join(work, variant);
-      await trustedGit(["clone", "--no-checkout", "--", series.upstream, cwd], work);
-      await trustedGit(["checkout", "--detach", series.baseRevision], cwd);
+      await acquirePinnedSource(series.upstream, series.baseRevision, cwd);
       assert.equal(
         (await trustedGit(["rev-parse", "HEAD^{tree}"], cwd)).trim(),
         series.baseTree,
@@ -216,6 +255,46 @@ async function inspectOwnedPath(file, directory = false) {
   return stat;
 }
 
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", `'"'"'`)}'`;
+}
+
+function expectedFallbackLauncherBytes(nodeBin, entrypoint) {
+  return Buffer.from(
+    `#!/bin/sh\nexec ${shellQuote(nodeBin)} ${shellQuote(entrypoint)} "$@"\n`,
+    "utf8",
+  );
+}
+
+async function assertRecordedIdentity(name, record, actual) {
+  assert.ok(record && typeof record === "object" && !Array.isArray(record), `recorded ${name}`);
+  for (const [field, value] of Object.entries(actual))
+    assert.equal(record[field], value, `recorded ${name}.${field}`);
+}
+
+async function inspectVerifiedArchiveLauncher({ temporaryRoot, nodeBin, identity }) {
+  const fallbackRoot = path.join(temporaryRoot, "package-manager/corepack/fallback");
+  const archive = path.join(fallbackRoot, `pnpm-${PNPM_VERSION}.tgz`);
+  const extracted = path.join(fallbackRoot, "extracted");
+  const entrypoint = path.join(extracted, "package/bin/pnpm.cjs");
+  const proof = await proveRetainedPnpmArchive({
+    archivePath: archive,
+    extractedRoot: extracted,
+    expectedSha512Hex: PNPM_SHA512_HEX,
+  });
+  await inspectOwnedPath(entrypoint);
+  const launcher = path.join(temporaryRoot, "package-manager/bin/pnpm");
+  await inspectOwnedPath(launcher);
+  const expected = expectedFallbackLauncherBytes(nodeBin, entrypoint);
+  const actual = await readFile(launcher);
+  assert.ok(actual.equals(expected), "fallback launcher bytes");
+  await assertRecordedIdentity("launcher", identity.launcher, {
+    path: await realpath(launcher),
+    sha256: sha256(actual),
+  });
+  return { launcher, proof };
+}
+
 async function inspectGitControls(directory) {
   await inspectOwnedPath(directory, true);
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -274,8 +353,7 @@ async function inspectTrackedSource(cwd, listing) {
   return observations;
 }
 
-/** Read-only source inspection; executable admission belongs to the future runner. */
-export async function inspectPreparedSource(work) {
+async function readOwnedReceipt(work) {
   await inspectOwnedPath(work, true);
   const ast = await realpath(root);
   assert.ok(
@@ -288,7 +366,13 @@ export async function inspectPreparedSource(work) {
   assert.ok(!(await readdir(work)).includes(".preparing"), "preparation in progress");
   const receipt = path.join(work, "identity.json");
   await inspectOwnedPath(receipt);
-  const identity = JSON.parse(await readFile(receipt));
+  const raw = await readFile(receipt);
+  return { identity: JSON.parse(raw), raw };
+}
+
+/** Read-only source inspection; executable admission belongs to the runtime inspector. */
+export async function inspectPreparedSource(work) {
+  const { identity } = await readOwnedReceipt(work);
   const controls = [];
   for (const variant of ["baseline", "candidate"]) {
     const cwd = path.join(work, variant);
@@ -354,6 +438,65 @@ export async function inspectPreparedSource(work) {
     );
   }
   return { work, identity };
+}
+
+/** Complete read-only Corepack admission; fallback and unknown profiles are unsupported. */
+export async function inspectPrivateRuntime(work) {
+  const { identity, raw } = await readOwnedReceipt(work);
+  const pnpm = identity?.pnpm;
+  assert.ok(
+    pnpm &&
+      !Array.isArray(pnpm) &&
+      pnpm.version === PNPM_VERSION &&
+      pnpm.descriptor === PNPM_DESCRIPTOR &&
+      pnpm.sha512 === PNPM_SHA512_HEX &&
+      typeof pnpm.source === "string" &&
+      pnpm.source.length > 0,
+    "pnpm metadata",
+  );
+  if (!["corepack", "verified-archive-launcher"].includes(pnpm.source))
+    throw Object.assign(new Error("unsupported pnpm profile"), {
+      code: "ERR_UNSUPPORTED_PNPM_PROFILE",
+    });
+  const { node, corepack } = await inspectInstalledNodeCorepack();
+  assert.equal(node.version, "v24.16.0", "Node pin");
+  const git = await inspectTrustedGitFile();
+  assertTrustedGitVersion(await trustedGit(["--version"], work));
+  await assertRecordedIdentity("node", identity.node, node);
+  await assertRecordedIdentity("git", identity.git, git);
+  const temporaryRoot = path.join(work, "private");
+  const tmp = path.join(temporaryRoot, "tmp");
+  await inspectPrivatePnpmEnvironment({
+    temporaryRoot,
+    nodeBin: node.path,
+    baseEnvironment: { PATH: "/usr/bin:/bin", LANG: "C.UTF-8", TMPDIR: tmp, TMP: tmp, TEMP: tmp },
+  });
+  await inspectOwnedPath(tmp, true);
+  const launcher = path.join(temporaryRoot, "package-manager/bin/pnpm");
+  let admittedLauncher = launcher;
+  if (pnpm.source === "corepack") {
+    await assertRecordedIdentity("launcher", identity.launcher, corepack);
+    const stat = await lstat(launcher);
+    assert.ok(stat.isSymbolicLink() && stat.uid === process.getuid(), "private Corepack launcher");
+    assert.equal(
+      path.resolve(path.dirname(launcher), await readlink(launcher)),
+      corepack.path,
+      "private Corepack launcher text",
+    );
+    assert.equal(await realpath(launcher), corepack.path, "private Corepack launcher target");
+    const launcherBytes = await readFile(launcher);
+    assert.equal(sha256(launcherBytes), corepack.sha256, "private Corepack launcher bytes");
+  } else {
+    ({ launcher: admittedLauncher } = await inspectVerifiedArchiveLauncher({
+      temporaryRoot,
+      nodeBin: node.path,
+      identity,
+    }));
+  }
+  const admitted = await inspectPreparedSource(work);
+  assert.ok(isDeepStrictEqual(identity, admitted.identity), "runtime identity changed");
+  assert.ok(raw.equals((await readOwnedReceipt(work)).raw), "runtime receipt changed");
+  return { work, identity, launcher: admittedLauncher };
 }
 
 if (import.meta.main) {

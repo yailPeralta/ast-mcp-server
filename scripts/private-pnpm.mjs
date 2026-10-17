@@ -25,12 +25,16 @@ function blocked(message) {
   throw new Error(`BLOCKED: private pnpm authority: ${message}`);
 }
 
-export async function createPrivatePnpmEnvironment({
-  temporaryRoot,
-  nodeBin = process.execPath,
-  nodeBinDir = path.dirname(nodeBin),
-  baseEnvironment = process.env,
-}) {
+function privatePnpmConfiguration(
+  defaultNode,
+  defaultEnvironment,
+  {
+    temporaryRoot,
+    nodeBin = defaultNode,
+    nodeBinDir = path.dirname(nodeBin),
+    baseEnvironment = defaultEnvironment,
+  },
+) {
   const stateRoot = path.join(temporaryRoot, "package-manager");
   const binDirectory = path.join(stateRoot, "bin");
   const paths = {
@@ -44,14 +48,9 @@ export async function createPrivatePnpmEnvironment({
     npm_config_cache: path.join(stateRoot, "npm-cache"),
     npm_config_userconfig: path.join(stateRoot, "npmrc"),
   };
-  await Promise.all([
-    mkdir(binDirectory, { recursive: true }),
-    ...Object.entries(paths)
-      .filter(([key]) => key !== "npm_config_userconfig")
-      .map(([, directory]) => mkdir(directory, { recursive: true })),
-  ]);
-  await writeFile(paths.npm_config_userconfig, "", { mode: 0o600 });
   return {
+    stateRoot,
+    paths,
     binDirectory,
     nodeBin,
     environment: {
@@ -69,6 +68,49 @@ export async function createPrivatePnpmEnvironment({
       CI: "true",
     },
   };
+}
+
+export async function createPrivatePnpmEnvironment(options) {
+  const { paths, binDirectory, nodeBin, environment } = privatePnpmConfiguration(
+    process.execPath,
+    process.env,
+    options,
+  );
+  await Promise.all([
+    mkdir(binDirectory, { recursive: true }),
+    ...Object.entries(paths)
+      .filter(([key]) => key !== "npm_config_userconfig")
+      .map(([, directory]) => mkdir(directory, { recursive: true })),
+  ]);
+  await writeFile(paths.npm_config_userconfig, "", { mode: 0o600 });
+  return { binDirectory, nodeBin, environment };
+}
+
+export async function inspectPrivatePnpmEnvironment(options) {
+  const { stateRoot, paths, binDirectory, nodeBin, environment } = privatePnpmConfiguration(
+    process.execPath,
+    process.env,
+    options,
+  );
+  for (const target of [options.temporaryRoot, stateRoot, binDirectory, ...Object.values(paths)]) {
+    const stat = await lstat(target);
+    if (
+      (target === paths.npm_config_userconfig
+        ? !stat.isFile() || stat.nlink !== 1 || stat.size !== 0
+        : !stat.isDirectory()) ||
+      stat.uid !== process.getuid() ||
+      (stat.mode & 0o022) !== 0 ||
+      (await realpath(target)) !== target
+    )
+      blocked(`unsafe environment path: ${target}`);
+  }
+  try {
+    await lstat(path.join(binDirectory, "node"));
+    blocked("private bin/node shadows caller configuration");
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  return { binDirectory, nodeBin, environment };
 }
 
 export function isCorepackCompatibilityFailure(error) {
