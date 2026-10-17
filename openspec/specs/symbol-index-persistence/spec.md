@@ -97,7 +97,7 @@ mutation data. Automatic pruning is not required.
 
 ### Requirement: Supported runtime and promotion evidence
 
-The package and CI MUST require Node `>=22.13.0`; exact Node 22.13.0 and the
+The package and CI MUST require Node `^22.22.2 || ^24.15.0 || >=26.0.0`; exact Node 22.22.2 and the
 current Node 24 line MUST pass the complete promotion matrix without an
 experimental SQLite flag. Evidence MUST bind the immutable candidate tree,
 workload, runtime identity, and external project identity; historical reports
