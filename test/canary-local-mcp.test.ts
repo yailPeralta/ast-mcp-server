@@ -702,7 +702,7 @@ describe("production-readiness-sqlite-default-v5 canary contract", () => {
       "--node-bin",
       path.join(root, "node"),
       "--expected-node",
-      "22.13.0",
+      "22.22.2",
       "--project",
       path.join(root, "project"),
       "--workload",
@@ -720,7 +720,7 @@ describe("production-readiness-sqlite-default-v5 canary contract", () => {
     if (parsed.mode !== "run") throw new Error("Expected parsed run arguments.");
     expect(parsed).toMatchObject({
       mode: "run",
-      expectedNode: "22.13.0",
+      expectedNode: "22.22.2",
       iterations: 20,
       restarts: 3,
       nodeOptions: [],
@@ -752,7 +752,20 @@ describe("production-readiness-sqlite-default-v5 canary contract", () => {
     ).toThrow(/node.*absolute|iterations.*20/i);
     const invalidExpectedNode = [...validArguments];
     invalidExpectedNode[invalidExpectedNode.indexOf("--expected-node") + 1] = "23";
-    expect(() => parseCanaryArguments(invalidExpectedNode)).toThrow(/22\.13\.0.*24/);
+    expect(() => parseCanaryArguments(invalidExpectedNode)).toThrow(/22\.22\.2.*24/);
+
+    const historicalNode22_13Arguments = [...validArguments];
+    historicalNode22_13Arguments[historicalNode22_13Arguments.indexOf("--expected-node") + 1] =
+      "22.13.0";
+    expect(() => parseCanaryArguments(historicalNode22_13Arguments)).toThrow(
+      /active 22\.22\.2 or 24/,
+    );
+    expect(
+      parseCanaryArguments(historicalNode22_13Arguments, { allowHistoricalRuntime: true }),
+    ).toMatchObject({
+      expectedNode: "22.13.0",
+      nodeOptions: [],
+    });
 
     const historicalArguments = [...validArguments];
     historicalArguments[historicalArguments.indexOf("--expected-node") + 1] = "22.5.0";
@@ -761,7 +774,7 @@ describe("production-readiness-sqlite-default-v5 canary contract", () => {
       0,
       "--node-option=--experimental-sqlite",
     );
-    expect(() => parseCanaryArguments(historicalArguments)).toThrow(/active 22\.13\.0 or 24/);
+    expect(() => parseCanaryArguments(historicalArguments)).toThrow(/active 22\.22\.2 or 24/);
     expect(
       parseCanaryArguments(historicalArguments, { allowHistoricalRuntime: true }),
     ).toMatchObject({
@@ -853,6 +866,14 @@ describe("production-readiness-sqlite-default-v5 canary contract", () => {
       "git-evidence-authority.d.mts",
       "git-evidence-authority.mjs",
     ]);
+    const productionSource = await readFile(
+      path.join(repositoryRoot, "scripts", "canary-local-mcp.mjs"),
+      "utf8",
+    );
+    expect(productionSource).toContain("AST_NODE_22_22_BIN");
+    expect(productionSource).toContain("AST_NODE_22_13_BIN");
+    expect(productionSource).toContain('options.expectedNode === "22.13.0"');
+
     expect(Object.keys(canaryModule).sort()).toEqual(
       [
         "assertExpectedNodeVersion",
@@ -931,8 +952,13 @@ describe("production-readiness-sqlite-default-v5 canary contract", () => {
 
   it("validates runtime identity instead of trusting a label or filename", () => {
     expect(() => assertExpectedNodeVersion("22.5.0", "v22.5.0")).not.toThrow();
+    expect(() => assertExpectedNodeVersion("22.13.0", "v22.13.0")).not.toThrow();
+    expect(() => assertExpectedNodeVersion("22.22.2", "v22.22.2")).not.toThrow();
+    expect(() => assertExpectedNodeVersion("24", "v24.15.0")).not.toThrow();
     expect(() => assertExpectedNodeVersion("24", "v24.16.0")).not.toThrow();
     expect(() => assertExpectedNodeVersion("22.5.0", "v22.5.1")).toThrow(/v22\.5\.0/);
+    expect(() => assertExpectedNodeVersion("22.22.2", "v22.22.1")).toThrow(/v22\.22\.2/);
+    expect(() => assertExpectedNodeVersion("24", "v24.14.99")).toThrow(/v24\.15\.0/);
     expect(() => assertExpectedNodeVersion("24", "v23.11.0")).toThrow(/v24/);
   });
 

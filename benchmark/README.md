@@ -208,11 +208,11 @@ The command fails unless all integration gates pass:
 - non-contention transaction-COMMIT failure with rollback/reopen preservation and same-operation memory/compiler fallback;
 - writer-contention and flush-checkpoint failures.
 
-The 2026-08-07 Node.js v22.5.0/24 runs remain historical evidence for the earlier canary-only tree. The current script exits non-zero unless its default-enabled matrix passes under exact Node.js v22.13.0 and Node.js 24 without `--experimental-sqlite`. Durations are local observations over a tiny synthetic fixture, not latency or capacity SLAs. Reports use placeholders for project/cache roots and contain no credentials or host paths.
+The 2026-08-07 Node.js v22.5.0/24 runs remain historical evidence for the earlier canary-only tree. The current script exits non-zero unless its default-enabled matrix passes under exact Node.js v22.22.2 and Node.js 24.15.0 or newer without `--experimental-sqlite`. Historical Node.js v22.13.0 reports remain evidence for their original candidate only. Durations are local observations over a tiny synthetic fixture, not latency or capacity SLAs. Reports use placeholders for project/cache roots and contain no credentials or host paths.
 
 ## Local production-readiness matrix
 
-`scripts/canary-local-mcp.mjs` exercises one immutable real-repository cohort and separate disposable failure/mutation fixtures under the exact selected Node binary. The active report schema uses default-enabled SQLite for the real cold/warm/restart cohort, explicit `disabled` baseline/rollback and explicit `canary` failure fixtures. Active runs accept exact Node.js v22.13.0 or major 24 with no SQLite flag; the freezer alone retains a historical parser for the older v22.5.0 report set.
+`scripts/canary-local-mcp.mjs` exercises one immutable real-repository cohort and separate disposable failure/mutation fixtures under the exact selected Node binary. The active report schema uses default-enabled SQLite for the real cold/warm/restart cohort, explicit `disabled` baseline/rollback and explicit `canary` failure fixtures. Active runs accept exact Node.js v22.22.2 or Node.js 24.15.0 and newer with no SQLite flag; the freezer retains historical parser support for the older v22.5.0 and v22.13.0 report sets only.
 
 The four checked reports under `benchmark/results/production-readiness/` are immutable historical package-0.6.0 evidence. They passed 40/40 retained gates each under Node.js v22.5.0/24 and establish for that tree:
 

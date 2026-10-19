@@ -37,7 +37,7 @@ The decision must preserve:
 - private same-user cache storage without changing external parent directories;
 - bounded, path-free observability and operator administration;
 - no cache side effect from mutation preparation alone;
-- exact Node.js `22.13.0` floor evidence and the governed Node.js 24 line;
+- exact Node.js `22.22.2` floor evidence and the governed Node.js 24 line;
 - compatibility with valid existing canary databases.
 
 ## Options considered
@@ -105,7 +105,7 @@ No MCP cache-management tool and no automatic garbage collection are introduced.
 
 ## Runtime and support
 
-The package engine floor is Node.js `>=22.13.0`. Release evidence executes exact `v22.13.0` and the governed Node.js 24 major. The active harness forbids `--experimental-sqlite`; Node `v22.13.0` loads `node:sqlite` without that flag, although the runtime may still emit its Stability 1.1 warning.
+The package engine floor is Node.js `^22.22.2 || ^24.15.0 || >=26.0.0`. Release evidence executes exact `v22.22.2` and the governed Node.js 24 major. The active harness forbids `--experimental-sqlite`; Node `v22.22.2` loads `node:sqlite` without that flag, although the runtime may still emit its Stability 1.1 warning.
 
 Historical Node `v22.5.0` reports and their experimental flag remain valid only for the older package/tree identities embedded in those reports. They are not evidence for this decision and are not rewritten.
 
@@ -127,7 +127,7 @@ Cache files may be inspected or cleared later with the CLI. Source and reviewed 
 - A process can continue fresh compiler-authoritative work when persistence fails, with explicit failed index observability.
 - Operators who require zero persistent index state must set `disabled` explicitly.
 - Existing valid canary databases remain usable; unsafe legacy artifacts fail closed.
-- Node versions below `22.13.0` are outside the current development-line package contract.
+- Node versions below `22.22.2` are outside the current development-line package contract.
 - Portable/WASM SQLite, remote/multi-tenant cache isolation and automatic GC remain out of scope.
 
 ## Evidence and release boundary

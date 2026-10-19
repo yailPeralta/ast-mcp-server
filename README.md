@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/yailPeralta/ast-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/yailPeralta/ast-mcp-server/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/ast-mcp-server.svg)](https://www.npmjs.com/package/ast-mcp-server)
-[![Node.js 22.13+](https://img.shields.io/badge/Node.js-22.13%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node.js 22.22+](https://img.shields.io/badge/Node.js-22.22%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 
 `ast-mcp-server` gives coding agents compact, type-aware access to TypeScript and JavaScript projects. It uses the real compiler project model through `ts-morph`, so declarations, references, rename locations, and diagnostics come from the AST instead of text-search guesses.
@@ -91,13 +91,13 @@ The included batch benchmark records a 50% reduction in model round-trips and a 
 
 ## Requirements
 
-- Node.js 22.13.0 or newer
+- Node.js `^22.22.2 || ^24.15.0 || >=26.0.0`
 - Corepack with Yarn 4.15.0 (pinned by `packageManager`)
 - A target project with a `tsconfig.json`
 
 ## Supported environment and trust boundary
 
-Published v0.12.0 requires Node.js `>=22.13.0`; its immutable evidence matrix targets exact Node.js 22.13.0 and the current Node.js 24 line. Structural apply and managed setup-file publication are verified only on Linux x64 with GNU coreutils 9.7 `mv` supporting `--update=none-fail`, `--exchange`, `--no-copy`, and `--no-target-directory`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, `O_DIRECTORY`/`O_NOFOLLOW`, and a destination filesystem that passes the owned link/exchange identity probe. A failed or denied primitive blocks mutation before source effects; there is no rename, copy/delete, or pathname-only fallback. Other Linux architectures or systems without this complete matrix, macOS, and Windows remain unverified.
+The current development line requires Node.js `^22.22.2 || ^24.15.0 || >=26.0.0`; published v0.12.0 remains bound to its historical Node.js `>=22.13.0` and exact Node.js 22.13.0/24 evidence. Structural apply and managed setup-file publication are verified only on Linux x64 with GNU coreutils 9.7 `mv` supporting `--update=none-fail`, `--exchange`, `--no-copy`, and `--no-target-directory`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, `O_DIRECTORY`/`O_NOFOLLOW`, and a destination filesystem that passes the owned link/exchange identity probe. A failed or denied primitive blocks mutation before source effects; there is no rename, copy/delete, or pathname-only fallback. Other Linux architectures or systems without this complete matrix, macOS, and Windows remain unverified.
 
 This is a local stdio server. It runs with the invoking user's filesystem permissions, and clients may request any `project_root` that user can access. It does not provide HTTP authentication, sandboxing, tenant isolation, or a remote-service security boundary. Remote, untrusted, and multi-tenant operation is unsupported.
 
