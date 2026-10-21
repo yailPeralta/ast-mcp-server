@@ -1942,8 +1942,8 @@ try {
         .waitFor({ timeout: 30_000 })
         .catch(() => blockUiDrift("Trajectory timeline"));
       const requests = page.getByRole("button", { name: /Request #/u });
-      await requests
-        .last()
+      await page
+        .getByRole("button", { name: new RegExp(`^Request #${index + 1}$`, "u") })
         .waitFor({ timeout: 30_000 })
         .catch(() => blockUiDrift("request boundary"));
       const requestLabel = await requests.last().getAttribute("aria-label"),
