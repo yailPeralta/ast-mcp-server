@@ -21,12 +21,12 @@ it("locks patched transitives within every admitted parent range", async () => {
   >;
 
   expect.soft(manifest.packageManager).toBe("yarn@4.15.0");
-  expect.soft(manifest.resolutions?.["fast-uri"]).toBe("3.1.6");
+  expect.soft(manifest.resolutions?.["fast-uri"]).toBe("3.1.9");
   expect.soft(manifest.resolutions?.qs).toBe("6.16.0");
 
-  expect.soft(lock["fast-uri@npm:3.1.6"]).toMatchObject({
-    version: "3.1.6",
-    resolution: "fast-uri@npm:3.1.6",
+  expect.soft(lock["fast-uri@npm:3.1.9"]).toMatchObject({
+    version: "3.1.9",
+    resolution: "fast-uri@npm:3.1.9",
   });
   expect.soft(lock["qs@npm:6.16.0"]).toMatchObject({
     version: "6.16.0",
@@ -50,8 +50,8 @@ it("admits the patched Hono and Vitest family without installation-policy except
   const manifest = JSON.parse(manifestBytes!);
   const lock = yaml.parse(lockBytes!) as Record<string, { version: string; resolution: string }>;
   const config = yaml.parse(configBytes!);
-  expect.soft(manifest.resolutions.hono).toBe("4.13.5");
-  expect.soft(manifest.devDependencies.vitest).toBe("^4.1.11");
+  expect.soft(manifest.resolutions.hono).toBe("4.13.13");
+  expect.soft(manifest.devDependencies.vitest).toBe("^4.1.12");
   expect.soft(config.enableScripts).toBe(false);
   expect.soft(config.npmPreapprovedPackages ?? []).toEqual([]);
   expect.soft(config.npmMinimalAgeGate).toBeUndefined();
@@ -67,7 +67,7 @@ it("admits the patched Hono and Vitest family without installation-policy except
     const entries = Object.entries(lock).filter(([key]) =>
       key.split(", ").some((selector) => selector.startsWith(`${name}@npm:`)),
     );
-    const version = name === "hono" ? "4.13.5" : "4.1.11";
+    const version = name === "hono" ? "4.13.13" : "4.1.12";
     expect.soft(entries, name).toHaveLength(1);
     expect
       .soft(entries[0]?.[1], name)
