@@ -1,0 +1,119 @@
+diff --git a/packages/core/tools/README.i18n.yaml b/packages/core/tools/README.i18n.yaml
+index 85cb5825bc7dbc40b7ef2667635884ad3bca594a..e65ddbd23cd9eb9f3c5b03ba7e1006d9cf4954a4 100644
+--- a/packages/core/tools/README.i18n.yaml
++++ b/packages/core/tools/README.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write packages/core/tools/README.md
+-README.md: cc2463eaf35585b2c1e7632a07a525e1f86d4083
+-README.zh.md: 73580f0ea7b5f24af89f458f0ee5cbc161c6d39c
++README.md: 39e71148aef06af9855ecf98fb3a2aba8d10d478
++README.zh.md: dd9788e92989a2e08d82aa912134cafc551e204d
+diff --git a/packages/core/tools/README.md b/packages/core/tools/README.md
+index cc2463eaf35585b2c1e7632a07a525e1f86d4083..39e71148aef06af9855ecf98fb3a2aba8d10d478 100644
+--- a/packages/core/tools/README.md
++++ b/packages/core/tools/README.md
+@@ -59,7 +59,7 @@ ctx.tools.register(defineTool({
+ 
+ The unified schema DSL supports `string`, `number`, `integer`, `boolean`, `null`, `array`, `object`, author-only `json`, and exact-one `oneOf`; `InferValue` preserves exact types through 16 container levels before widening to `JsonValue`. A raw JSON Schema (`JsonSchemaNode`) is the wire-level counterpart shared with subagents, workflows, and MCP.
+ 
+-Raw `ToolDefinition` outputs may add a pure synchronous `output.validate(value)` that returns bounded, non-sensitive violations for constraints beyond `output.schema`. Validation runs before presentation, including nested calls; it does not change generated SDK types. See the [output declaration](../../../docs/subsystems/tools.md#tooldefinition--a-registered-tool) for admission semantics.
++Raw `ToolDefinition` outputs may add a pure synchronous `output.validate(value)` that returns bounded, non-sensitive violations for constraints beyond `output.schema`. The registry checks every successful body, wrapper, or post-policy value after freezing and before rendering, including nested calls. A violation produces `INVALID_TOOL_OUTPUT`; thrown exceptions expose only `output.validate failed`. Additional validators do not change generated SDK types. See the [output declaration](../../../docs/subsystems/tools.md#tooldefinition--a-registered-tool) for registration ownership and admission semantics.
+ 
+ ### Configure the presentation mode
+ 
+diff --git a/packages/core/tools/README.zh.md b/packages/core/tools/README.zh.md
+index 73580f0ea7b5f24af89f458f0ee5cbc161c6d39c..dd9788e92989a2e08d82aa912134cafc551e204d 100644
+--- a/packages/core/tools/README.zh.md
++++ b/packages/core/tools/README.zh.md
+@@ -59,7 +59,7 @@ ctx.tools.register(defineTool({
+ 
+ 统一 schema DSL 支持 `string`、`number`、`integer`、`boolean`、`null`、`array`、`object`、仅供作者使用的 `json` 与恰好匹配一个分支的 `oneOf`；`InferValue` 在 16 层容器内保留精确类型，之后加宽为 `JsonValue`。原始 JSON Schema（`JsonSchemaNode`）是与 subagent、工作流和 MCP 共享的协议级对应类型。
+ 
+-原始 `ToolDefinition` 的输出可添加纯同步的 `output.validate(value)`，为超出 `output.schema` 的约束返回有界且不含敏感信息的违规列表。校验在展示之前运行，包括嵌套调用；它不会改变生成的 SDK 类型。接纳语义见[输出声明](../../../docs/subsystems/tools.zh.md#tooldefinition--a-registered-tool)。
++原始 `ToolDefinition` 的输出可添加纯同步的 `output.validate(value)`，为超出 `output.schema` 的约束返回有界且不含敏感信息的违规列表。注册表在冻结后、渲染前检查每个成功的工具函数体值、包装器值或后置策略值，包括嵌套调用。违规产生 `INVALID_TOOL_OUTPUT`；抛出的异常仅暴露 `output.validate failed`。附加校验器不会改变生成的 SDK 类型。注册定义的归属与接纳语义见[输出声明](../../../docs/subsystems/tools.zh.md#tooldefinition--a-registered-tool)。
+ 
+ ### 配置呈现模式
+ 
+diff --git a/packages/core/tools/tests/output-validation.spec.ts b/packages/core/tools/tests/output-validation.spec.ts
+index da81815ef1e756e3d3e34e9ecfd6cfc8b09d6cd8..9e55279716fc2eb4e51810704567f5d4120e41d3 100644
+--- a/packages/core/tools/tests/output-validation.spec.ts
++++ b/packages/core/tools/tests/output-validation.spec.ts
+@@ -1,5 +1,6 @@
+ import { describe, expect, expectTypeOf, it } from 'vitest'
+ import { Context } from '@deepseek-ai/cordis'
++import { createScope, type Scope } from '@deepseek-ai/dsh-scope'
+ import type { Agent } from '@deepseek-ai/dsh-agent'
+ import { ToolCallId } from '@deepseek-ai/dsh-llm'
+ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+@@ -37,6 +38,31 @@ function call(ctx: Context, nested = false, agent?: Agent) {
+ }
+ 
+ describe('canonical output validation', () => {
++  it.each(['before-body', 'wrapper', 'post'] as const)('preserves live restrictions during %s', async (path) => {
++    const ctx = await setup()
++    const agent = {} as Agent
++    let scope!: Scope
++    await ctx.plugin(Object.assign((inner: Context) => { scope = createScope(inner, agent) },
++      { inject: ['tools', 'systemPrompt'] }))
++    let invoked = false
++    const tool = definition(() => [])
++    tool.execute = async () => { invoked = true; return { count: 1 } }
++    ctx.tools.register(tool)
++    const restrict = () => scope.ctx.tools.restrict({ deny: ['checked'] })
++    if (path === 'post') {
++      ctx.on('tools/post-execute', async () => { restrict(); return { kind: 'accept', value: { count: 1 } } })
++    } else {
++      ctx.on('tools/execute', async (_exec, next) => {
++        if (path === 'before-body') { restrict(); return next() }
++        const result = await next()
++        restrict()
++        return { ...result }
++      })
++    }
++    expect(await call(ctx, false, agent)).toMatchObject({ isError: true, error: { message: 'unknown tool "checked"' } })
++    expect(invoked).toBe(path !== 'before-body')
++  })
++
+   it('excludes asynchronous validators from the author API', () => {
+     expectTypeOf<() => Promise<string[]>>().not.toExtend<NonNullable<ToolDefinition['output']['validate']>>()
+   })
+@@ -117,6 +143,19 @@ describe('canonical output validation', () => {
+     expect(validated).toBe(false)
+   })
+ 
++  it.each(['wrapper', 'post'] as const)('rejects an invalid canonical %s replacement', async (path) => {
++    const ctx = await setup()
++    ctx.tools.register(definition(value => (value as { count: number }).count === 1 ? [] : ['invalid count']))
++    if (path === 'wrapper') {
++      ctx.on('tools/execute', async () => ({ isError: false, value: { count: 2 }, content: [] }))
++    } else {
++      ctx.on('tools/post-execute', async () => ({ kind: 'accept', value: { count: 2 } }))
++    }
++    expect(await call(ctx)).toMatchObject({ isError: true, error: {
++      message: 'tool "checked" returned invalid output: invalid count',
++    } })
++  })
++
+   it.each([false, true])('rejects body output before projections (nested=%s)', async (nested) => {
+     const ctx = await setup()
+     let projected = false
+@@ -185,6 +224,17 @@ describe('canonical output validation', () => {
+     expect(oldExecuted).toBe(false)
+   })
+ 
++  it('never executes a registration removed during the wrapper', async () => {
++    const ctx = await setup()
++    let executed = false
++    const tool = definition(() => [])
++    tool.execute = async () => { executed = true; return {} }
++    const dispose = ctx.tools.register(tool)
++    ctx.on('tools/execute', async (_exec, next) => { dispose(); return next() })
++    expect(await call(ctx)).toMatchObject({ isError: true })
++    expect(executed).toBe(false)
++  })
++
+   it.each(['wrapper', 'post'] as const)('keeps the owning validator across replacement in %s', async (path) => {
+     const ctx = await setup()
+     const oldTool = definition(value => (value as { count: number }).count === 1 ? [] : ['old count required'])
