@@ -44,7 +44,7 @@ const BatchStepSchema = z
   .object({
     id: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
     tool: BatchToolSchema,
-    input: z.record(z.unknown()).default({}),
+    input: z.record(z.string(), z.unknown()).default({}),
     foreach: z
       .object({ $ref: z.string().min(1) })
       .strict()
