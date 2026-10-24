@@ -40,7 +40,7 @@ export interface RegistryReadback {
   package_name: "ast-mcp-server";
   version: string;
   git_head: string;
-  engines_node: ">=22.13.0";
+  engines_node: "^22.22.2 || ^24.15.0 || >=26.0.0";
   integrity: string;
   tarball: string;
   attestation_url: string;

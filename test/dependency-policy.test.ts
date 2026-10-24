@@ -21,18 +21,42 @@ it("locks patched transitives within every admitted parent range", async () => {
   >;
 
   expect.soft(manifest.packageManager).toBe("yarn@4.15.0");
+  expect.soft(manifest.resolutions?.["brace-expansion@npm:^2.0.2"]).toBe("2.1.7");
+  expect.soft(manifest.resolutions?.["brace-expansion@npm:^5.0.8"]).toBe("5.0.12");
   expect.soft(manifest.resolutions?.["fast-uri"]).toBe("3.1.9");
+  expect.soft(manifest.resolutions?.["ip-address"]).toBe("10.7.4");
+  expect.soft(manifest.resolutions?.undici).toBe("8.12.3");
   expect.soft(manifest.resolutions?.qs).toBe("6.16.0");
 
+  expect.soft(lock["brace-expansion@npm:2.1.7"]).toMatchObject({
+    version: "2.1.7",
+    resolution: "brace-expansion@npm:2.1.7",
+  });
+  expect.soft(lock["brace-expansion@npm:5.0.12"]).toMatchObject({
+    version: "5.0.12",
+    resolution: "brace-expansion@npm:5.0.12",
+  });
   expect.soft(lock["fast-uri@npm:3.1.9"]).toMatchObject({
     version: "3.1.9",
     resolution: "fast-uri@npm:3.1.9",
+  });
+  expect.soft(lock["ip-address@npm:10.7.4"]).toMatchObject({
+    version: "10.7.4",
+    resolution: "ip-address@npm:10.7.4",
+  });
+  expect.soft(lock["undici@npm:8.12.3"]).toMatchObject({
+    version: "8.12.3",
+    resolution: "undici@npm:8.12.3",
   });
   expect.soft(lock["qs@npm:6.16.0"]).toMatchObject({
     version: "6.16.0",
     resolution: "qs@npm:6.16.0",
   });
-  expect.soft(lockBytes).not.toMatch(/fast-uri@npm:3\.1\.5|qs@npm:6\.15\.3/u);
+  expect
+    .soft(lockBytes)
+    .not.toMatch(
+      /brace-expansion@npm:(?:2\.1\.4|5\.0\.9)|fast-uri@npm:3\.1\.6|ip-address@npm:10\.4\.0|undici@npm:8\.9\.0|qs@npm:6\.15\.3/u,
+    );
 
   expect
     .soft(lock["ajv@npm:^8.0.0, ajv@npm:^8.17.1"]?.dependencies?.["fast-uri"])
@@ -63,6 +87,8 @@ it("admits the patched Hono and Vitest family without installation-policy except
       (name) => `@vitest/${name}`,
     ),
   ];
+  expect.soft(lockBytes).not.toMatch(/hono@npm:4\.13\.5/u);
+
   for (const name of packages) {
     const entries = Object.entries(lock).filter(([key]) =>
       key.split(", ").some((selector) => selector.startsWith(`${name}@npm:`)),

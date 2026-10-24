@@ -251,7 +251,7 @@ async function createMatrixFixture(
   const node22Binary = path.join(node22Directory, "node");
   const node24Binary = path.join(node24Directory, "node");
   await Promise.all([
-    writeFile(node22Binary, fakeNodeSource("v22.13.0"), { mode: 0o700 }),
+    writeFile(node22Binary, fakeNodeSource("v22.22.2"), { mode: 0o700 }),
     writeFile(
       node24Binary,
       fakeNodeSource("v24.16.0", {
@@ -282,7 +282,7 @@ async function createMatrixFixture(
     outputDir: path.join(root, "evidence"),
     node24StartedFile,
     environment: withoutAmbientGitControls({
-      AST_NODE_22_13_BIN: node22Binary,
+      AST_NODE_22_22_BIN: node22Binary,
       AST_NODE_24_BIN: node24Binary,
     }),
   };
@@ -364,7 +364,7 @@ describe("release candidate matrix", () => {
         "utf8",
       ),
     );
-    expect(packageMetadata.engines).toEqual({ node: ">=22.13.0" });
+    expect(packageMetadata.engines).toEqual({ node: "^22.22.2 || ^24.15.0 || >=26.0.0" });
   });
 
   it("keeps the independent release candidate pin synchronized with package.json", async () => {
@@ -375,36 +375,42 @@ describe("release candidate matrix", () => {
     expect(RELEASE_CANDIDATE_PACKAGE_VERSION).toBe(packageMetadata.version);
   });
 
-  it("requires exact Node 22.13.0 while retaining the governed Node 24 line", () => {
-    expect(validateRuntimeVersion("node22.13", "v22.13.0\n")).toMatchObject({
-      raw: "v22.13.0",
+  it("requires exact Node 22.22.2 while retaining the governed Node 24 line", () => {
+    expect(validateRuntimeVersion("node22.22", "v22.22.2\n")).toMatchObject({
+      raw: "v22.22.2",
       major: 22,
-      minor: 13,
+      minor: 22,
+    });
+    expect(validateRuntimeVersion("node24", "v24.15.0")).toMatchObject({
+      raw: "v24.15.0",
+      major: 24,
+      minor: 15,
     });
     expect(validateRuntimeVersion("node24", "v24.16.0")).toMatchObject({
       raw: "v24.16.0",
       major: 24,
       minor: 16,
     });
-    expect(() => validateRuntimeVersion("node22.13", "v22.12.99")).toThrow(/22\.13\.0/u);
-    expect(() => validateRuntimeVersion("node22.13", "v22.13.1")).toThrow(/exact Node 22\.13\.0/u);
-    expect(() => validateRuntimeVersion("node22.13", "v22.14.0")).toThrow(/exact Node 22\.13\.0/u);
-    expect(() => validateRuntimeVersion("node22.13", "v23.0.0")).toThrow(/major 22/u);
+    expect(() => validateRuntimeVersion("node22.22", "v22.22.1")).toThrow(/22\.22\.2/u);
+    expect(() => validateRuntimeVersion("node22.22", "v22.22.3")).toThrow(/exact Node 22\.22\.2/u);
+    expect(() => validateRuntimeVersion("node22.22", "v22.23.0")).toThrow(/exact Node 22\.22\.2/u);
+    expect(() => validateRuntimeVersion("node22.22", "v23.0.0")).toThrow(/major 22/u);
+    expect(() => validateRuntimeVersion("node24", "v24.14.99")).toThrow(/24\.15\.0/u);
     expect(() => validateRuntimeVersion("node24", "v25.0.0")).toThrow(/major 24/u);
     expect(() => validateRuntimeVersion("node24", "24.16.0")).toThrow(/invalid Node version/u);
   });
 
   it("builds the closed command order without a shell", () => {
-    const runtime = { nodeBinary: "/opt/node-22.13/bin/node" };
+    const runtime = { nodeBinary: "/opt/node-22.22/bin/node" };
     const packageManager = {
       nodeBinary: "/opt/node-24/bin/node",
       yarnEntry: "/opt/node-24/lib/corepack/yarn.js",
     };
-    const yarnEntry = "/opt/node-22.13/lib/corepack/yarn.js";
+    const yarnEntry = "/opt/node-22.22/lib/corepack/yarn.js";
     const localRegistry = {
       output: "/private/local-registry.json",
-      expectedNode: "22.13.0",
-      npmEntry: "/opt/node-22.13/lib/npm/npm-cli.js",
+      expectedNode: "22.22.2",
+      npmEntry: "/opt/node-22.22/lib/npm/npm-cli.js",
       transitiveNodeBin: "/private/node/node",
       expectedNodeSha256: "a".repeat(64),
       expectedYarnSha256: "b".repeat(64),
@@ -555,7 +561,7 @@ describe("release candidate matrix", () => {
         {
           cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
           env: withoutAmbientGitControls({
-            AST_NODE_22_13_BIN: process.execPath,
+            AST_NODE_22_22_BIN: process.execPath,
             AST_NODE_24_BIN: process.execPath,
             PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
           }),
@@ -597,7 +603,7 @@ describe("release candidate matrix", () => {
         {
           cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
           env: withoutAmbientGitControls({
-            AST_NODE_22_13_BIN: process.execPath,
+            AST_NODE_22_22_BIN: process.execPath,
             AST_NODE_24_BIN: process.execPath,
             GIT_DIR: "/tmp/forged-git-dir",
           }),
@@ -620,7 +626,7 @@ describe("release candidate matrix", () => {
     }
   });
 
-  it("removes ambient controls and creates no-flag Node 22.13 and Node 24 environments", () => {
+  it("removes ambient controls and creates no-flag Node 22.22 and Node 24 environments", () => {
     const ambient = {
       PATH: "/usr/bin",
       NODE_OPTIONS: "--inspect",
@@ -632,7 +638,7 @@ describe("release candidate matrix", () => {
       NPM_TOKEN: "must-not-leak",
       HTTPS_PROXY: "http://ambient.invalid",
     };
-    const node22 = createRuntimeEnvironment("node22.13", "/opt/node22/bin/node", ambient);
+    const node22 = createRuntimeEnvironment("node22.22", "/opt/node22/bin/node", ambient);
     expect(node22).toMatchObject({
       NODE_OPTIONS: "",
       HOME: "/tmp/home",
@@ -700,7 +706,7 @@ describe("release candidate matrix", () => {
   });
 
   it("moves runtime gates into the materialization-private home and temporary directory", () => {
-    const runtimeEnvironment = createRuntimeEnvironment("node22.13", "/opt/node22/bin/node", {
+    const runtimeEnvironment = createRuntimeEnvironment("node22.22", "/opt/node22/bin/node", {
       HOME: "/ambient/home",
       TMPDIR: "/ambient/tmp",
       NPM_TOKEN: "must-not-leak",
@@ -1035,7 +1041,7 @@ describe("release candidate matrix", () => {
       expect(result).toMatchObject({ exitCode: 0, signal: null, timedOut: false });
       expect((await lstat(fixture.outputDir)).mode & 0o777).toBe(0o700);
       expect((await readdir(fixture.outputDir)).sort()).toEqual([
-        "node22.13.json",
+        "node22.22.json",
         "node24.json",
         "summary.json",
       ]);
@@ -1052,9 +1058,9 @@ describe("release candidate matrix", () => {
       });
       expect(summary.runtimes).toEqual([
         {
-          id: "node22.13",
-          node_version: "v22.13.0",
-          report: "node22.13.json",
+          id: "node22.22",
+          node_version: "v22.22.2",
+          report: "node22.22.json",
           status: "pass",
           command_count: 17,
         },
@@ -1067,7 +1073,7 @@ describe("release candidate matrix", () => {
         },
       ]);
 
-      for (const runtimeId of ["node22.13", "node24"]) {
+      for (const runtimeId of ["node22.22", "node24"]) {
         const reportPath = path.join(fixture.outputDir, `${runtimeId}.json`);
         const metadata = await lstat(reportPath);
         expect(metadata.isFile()).toBe(true);
@@ -1110,7 +1116,7 @@ describe("release candidate matrix", () => {
       const result = await completion;
       expect(result.exitCode).not.toBe(0);
       expect((await readdir(fixture.outputDir)).sort()).toEqual([
-        "node22.13.json",
+        "node22.22.json",
         "node24.json",
         "summary.json",
       ]);
@@ -1128,7 +1134,7 @@ describe("release candidate matrix", () => {
         cleanup_failure_code: null,
       });
       const passingReport = JSON.parse(
-        await readFile(path.join(fixture.outputDir, "node22.13.json"), "utf8"),
+        await readFile(path.join(fixture.outputDir, "node22.22.json"), "utf8"),
       );
       const failedReport = JSON.parse(
         await readFile(path.join(fixture.outputDir, "node24.json"), "utf8"),
@@ -1145,7 +1151,7 @@ describe("release candidate matrix", () => {
 
       const durableBytes = (
         await Promise.all(
-          ["node22.13.json", "node24.json", "summary.json"].map((fileName) =>
+          ["node22.22.json", "node24.json", "summary.json"].map((fileName) =>
             readFile(path.join(fixture.outputDir, fileName), "utf8"),
           ),
         )
@@ -1179,13 +1185,13 @@ describe("release candidate matrix", () => {
       );
       expect(summary).toMatchObject({
         status: "fail",
-        failed_runtime: "node22.13",
+        failed_runtime: "node22.22",
         failed_phase: "dsh-adapter",
         runtime_failure_code: "command-failed",
       });
 
       const failedReport = JSON.parse(
-        await readFile(path.join(fixture.outputDir, "node22.13.json"), "utf8"),
+        await readFile(path.join(fixture.outputDir, "node22.22.json"), "utf8"),
       );
       expect(failedReport.commands.at(-1)).toMatchObject({
         id: "dsh-adapter",
@@ -1280,7 +1286,7 @@ describe("release candidate matrix", () => {
         {
           cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
           env: withoutAmbientGitControls({
-            AST_NODE_22_13_BIN: process.execPath,
+            AST_NODE_22_22_BIN: process.execPath,
             AST_NODE_24_BIN: process.execPath,
           }),
           timeoutMs: 5000,
