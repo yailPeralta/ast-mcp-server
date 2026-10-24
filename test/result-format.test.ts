@@ -85,14 +85,20 @@ describe("tool result formatting", () => {
 
   it("validates the canonical logical value before presentation", () => {
     expect(() => formattedResult(FixtureSchema, { rows: [], total: -1 }, "toon")).toThrow(
-      /greater than or equal to 0/i,
+      /expected number to be >=0/i,
     );
   });
 
   it("rejects values that TOON cannot round-trip losslessly", () => {
+    expect(() => formattedResult(FixtureSchema, { ...fixture, duration_ms: -0 }, "toon")).toThrow(
+      /lossless/i,
+    );
+  });
+
+  it("rejects non-finite numbers during validation before TOON encoding", () => {
     expect(() =>
       formattedResult(FixtureSchema, { ...fixture, duration_ms: Number.POSITIVE_INFINITY }, "toon"),
-    ).toThrow(/lossless/i);
+    ).toThrow(/received Infinity/i);
   });
 
   it("rejects a TOON payload over the configured UTF-8 limit before returning content", () => {
