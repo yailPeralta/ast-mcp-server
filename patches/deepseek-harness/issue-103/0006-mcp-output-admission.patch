@@ -1,0 +1,388 @@
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
+index 8e806265dcad4b145186a4a99adc96cabebceb03..a790e09f2c58de574bbe71081a017872db7c6cb9 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+-2026-07-20-canonical-tool-output-contract.md: 0acbbc802f2c9900cc781d0b9b1f767662b2ff30
+-2026-07-20-canonical-tool-output-contract.zh.md: 12fd4a10b1156b26f753f0bf133774ed0a6e24d5
++2026-07-20-canonical-tool-output-contract.md: f8711b148d898200a87c0fb81fb648dc67fb60e1
++2026-07-20-canonical-tool-output-contract.zh.md: 54e255eafafb940ca6b409e98ccaba5dcfa62b08
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+index 0acbbc802f2c9900cc781d0b9b1f767662b2ff30..f8711b148d898200a87c0fb81fb648dc67fb60e1 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+@@ -63,7 +63,7 @@ The first-party tools preserve their existing Native text while returning domain
+ 
+ Provider and executor acquisition limits remain real limits on the canonical value. Formatting-only limits belong in `render`; `glob` and `grep`, for example, keep every acquired item in `value` while their Native projection retains and best-effort spills the configured first page. Generic spill prepends and delegates its post-execute listener so an ordinary tool-owned asynchronous projection completes before generic byte bounding regardless of plugin load order. Filesystem mutations derive replayable diff metadata from `args` and the canonical before/after value rather than returning UI state from the body.
+ 
+-MCP bridges preserve protocol blocks through `McpResult<{...}> = { content: JsonValue[]; structuredContent? }`. An advertised `outputSchema` is enforced when it belongs to the supported raw subset; unsupported schemas fall back to `JsonValue` rather than pretending to validate them. Native rendering still uses the existing MCP-to-`ContentBlock` projection, and MCP `isError` becomes a failed tool result. A standalone MCP-owned compiler provides pure synchronous validation over a cloned schema, keeping external dialect policy out of the shared schema language. Bridge registration does not invoke it yet; the fallback above remains in effect.
++MCP bridges preserve protocol blocks through `McpResult<{...}> = { content: JsonValue[]; structuredContent? }`. Additional advertised-schema validation belongs to the bridge through `output.validate`, independently of the registry's supported envelope schema. Native rendering uses the MCP-to-`ContentBlock` projection, and MCP `isError` becomes a failed tool result.
+ 
+ ## Alternatives considered
+ 
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
+index 12fd4a10b1156b26f753f0bf133774ed0a6e24d5..54e255eafafb940ca6b409e98ccaba5dcfa62b08 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
+@@ -63,7 +63,7 @@ type ToolExecutionResult =
+ 
+ 提供方和执行器的采集上限仍会实际限制规范值。仅用于格式化的限制归 `render` 所有；例如，`glob` 和 `grep` 会在 `value` 中保留所有已采集项，而其 Native 投影会保留配置指定的第一页，并尽力将其写入 spill 文件。通用 spill 会前置注册其 post-execute 监听器，并让该监听器先向后委托，因此无论插件加载顺序如何，普通工具自有的异步投影都会在通用字节数上限处理之前完成。文件系统变更工具根据 `args` 和规范的变更前／后值推导可回放的 diff 元数据，不再由工具主体返回 UI 状态。
+ 
+-MCP 桥接层通过 `McpResult<{...}> = { content: JsonValue[]; structuredContent? }` 保留协议内容块。当公布的 `outputSchema` 属于受支持的原始子集时，系统会强制校验；不受支持的 schema 则回退为 `JsonValue`，而不会假装已完成校验。Native 渲染仍使用现有的 MCP 到 `ContentBlock` 投影，MCP `isError` 则会变为失败的工具结果。MCP 拥有的独立编译器基于克隆的 schema 提供纯同步校验，将外部方言策略与共享 schema 语言分离。桥接注册尚未调用它；上述回退行为仍然有效。
++MCP 桥接层通过 `McpResult<{...}> = { content: JsonValue[]; structuredContent? }` 保留协议内容块。公布 schema 的附加校验通过 `output.validate` 归桥接层拥有，与注册表支持的封装 schema 相互独立。Native 渲染使用 MCP 到 `ContentBlock` 的投影，MCP `isError` 则变为失败的工具结果。
+ 
+ ## 备选方案
+ 
+diff --git a/.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.i18n.yaml b/.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.i18n.yaml
+index 8ef13a46387443cd23398508d3de7837a6d8cd5b..4e825bbdff62df072c8b37d00e8b81da583b736e 100644
+--- a/.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.i18n.yaml
++++ b/.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.md
+-2026-07-20-ptc-typed-tool-returns.md: a4651eef89d32cdc2330eb5a2562bd34d617a3df
+-2026-07-20-ptc-typed-tool-returns.zh.md: d8e68e273bd18fe60d8ba8e0bbf435dbb773a9c2
++2026-07-20-ptc-typed-tool-returns.md: e8cfd529aec46c872b8d6de77ec5004ac8d0ed58
++2026-07-20-ptc-typed-tool-returns.zh.md: 3cfa97ab68e4ef2cdf184a0af29a4fa315f66c71
+diff --git a/.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.md b/.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.md
+index a4651eef89d32cdc2330eb5a2562bd34d617a3df..e8cfd529aec46c872b8d6de77ec5004ac8d0ed58 100644
+--- a/.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.md
++++ b/.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.md
+@@ -111,6 +111,6 @@ The worker performs bounded-depth flat-wire transport and lossless validation bu
+ - Intermediate values have no byte cap and can exhaust process or worker memory through retention, flat-wire copies, or structured-clone cost.
+ - The 64 MiB hard cap applies only to the outer variable payloads, excluding fixed result-envelope syntax and presentation whitespace; spill cannot recover bytes rejected beyond that cap.
+ - Provider or executor acquisition limits may already have discarded source data before a canonical value reaches PTC mode.
+-- Unsupported MCP output schemas fall back to `JsonValue`; admitted MCP images use the generic deferred projection, while audio and embedded-resource payloads remain diagnostic-only.
++- MCP schemas outside the registry's type-generation subset expose `JsonValue` in generated types; the bridge's additional canonical-value validator still enforces the admitted declared schema. Admitted MCP images use the generic deferred projection, while audio and embedded-resource payloads remain diagnostic-only.
+ - There is one result card per outer `run_code`, never per nested call.
+ - Code failures expose `ToolCallError` message and tool name only, without a programmatic error-code union.
+diff --git a/.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.zh.md b/.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.zh.md
+index d8e68e273bd18fe60d8ba8e0bbf435dbb773a9c2..3cfa97ab68e4ef2cdf184a0af29a4fa315f66c71 100644
+--- a/.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.zh.md
++++ b/.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.zh.md
+@@ -111,6 +111,6 @@ worker 会以嵌套深度有界的扁平协议格式传输数据并执行无损
+ - 中间值没有字节上限，可能因值的保留、扁平协议格式副本或结构化克隆开销而耗尽进程或 worker 内存。
+ - 64 MiB 硬上限只适用于外层可变负载，不计固定的结果封装语法与展示空白；spill 无法恢复超出该上限后被拒绝的字节。
+ - 提供方或执行器的采集上限可能在规范值到达 PTC mode 前就已丢弃部分源数据。
+-- 不支持的 MCP 输出 schema 会回退为 `JsonValue`；已准入的 MCP 图片使用通用延后投影，而音频和嵌入资源载荷仍只提供诊断。
++- 超出注册表类型生成子集的 MCP schema 在生成类型中暴露 `JsonValue`；桥接的附加规范值验证器仍会强制执行已准入的声明 schema。已准入的 MCP 图片使用通用延后投影，而音频和嵌入资源载荷仍只提供诊断。
+ - 每个外层 `run_code` 只有一张结果卡片，嵌套调用不会各自生成卡片。
+ - PTC mode 失败只暴露 `ToolCallError` 的消息与工具名，不提供程序可用的错误代码联合。
+diff --git a/packages/mcp/mcp-client/README.i18n.yaml b/packages/mcp/mcp-client/README.i18n.yaml
+index d950d4c1459e2d936f3f8d10d25d8d5572bba69f..b0e559c0630877f7aee759350f77677a86e7e366 100644
+--- a/packages/mcp/mcp-client/README.i18n.yaml
++++ b/packages/mcp/mcp-client/README.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write packages/mcp/mcp-client/README.md
+-README.md: 716db2874d6daf457b8600c5e9930e0c2aef12e0
+-README.zh.md: c6949b091a39ffcf8eb3551aefd90b9d394e063f
++README.md: 5d5b5e573c722ce5ef9d742688803d2b6a0d341e
++README.zh.md: 14fac94277d4d6ec44ab42a807123c2f0cdeaf1c
+diff --git a/packages/mcp/mcp-client/README.md b/packages/mcp/mcp-client/README.md
+index 716db2874d6daf457b8600c5e9930e0c2aef12e0..5d5b5e573c722ce5ef9d742688803d2b6a0d341e 100644
+--- a/packages/mcp/mcp-client/README.md
++++ b/packages/mcp/mcp-client/README.md
+@@ -127,7 +127,7 @@ The supervisor listens for `notifications/tools/list_changed` and queues a re-sy
+ 
+ ### Tool execution internals
+ 
+-A tool call sends an uncached `tools/call` request carrying the raw MCP name, the JSON arguments, the abort signal, and the configured timeout; the public name is never sent to the server and never parsed back. Canonical success is `{ content: JsonValue[], structuredContent? }`, preserving the complete MCP JSON blocks for programmatic and PTC mode callers. A supported advertised `outputSchema` validates `structuredContent`; unsupported schema vocabulary falls back to unconstrained `JsonValue`. An MCP `isError` result throws before any image persistence, so the registry produces a failed tool result. Image batches are decoded and validated as a whole before any member is saved; any refusal projects every image as diagnostic text. The standalone strict compiler in [`src/output-validation.ts`](src/output-validation.ts) is not invoked by bridge registration; the existing unsupported-schema fallback remains.
++A tool call sends an uncached `tools/call` request carrying the raw MCP name, the JSON arguments, the abort signal, and the configured timeout; the public name is never sent to the server and never parsed back. Canonical success is `{ content: JsonValue[], structuredContent? }`, preserving the complete MCP JSON blocks for programmatic and PTC mode callers. Each registration compiles its original `outputSchema` with strict synchronous validation, independent of the SDK's cache. The registry invokes that predicate at canonical-success admission, including nested calls and replacement values. Registry schemas retain existing representable precision; otherwise they describe only the lossless JSON envelope, without weakening the additional validation. A schema-compilation failure rejects the next discovery generation and preserves the previous one. An MCP `isError` result throws before any image persistence, so the registry produces a failed tool result. Image batches are decoded and validated as a whole before any member is saved; any refusal projects every image as diagnostic text.
+ 
+ ### Environment scrubbing (stdio)
+ 
+@@ -193,7 +193,7 @@ These limits describe what you cannot do with this plugin and when it needs oper
+ - **Startup and discovery timeouts are inherited from the MCP SDK** — the plugin exposes no connection or discovery timeout; each `initialize` and paginated `tools/list` request uses the SDK's 60-second request default, so an unresponsive server or cursor chain can delay both activation and teardown while the initial synchronization settles.
+ - **Reconnect triggers on transport close** — a crashed stdio child fires it; Streamable HTTP failures surface per request through the SDK transport's own recovery, so an unreachable HTTP server is retried per call rather than respawned by the supervisor.
+ - **Image is the only durable rich-result bridge** — PNG, JPEG, WebP, and GIF enter Native context after exact capability proof. Audio and embedded-resource payloads remain execution-local with explicit diagnostics, while resource links preserve only their name and URI as text.
+-- **Unsupported MCP output schemas are not enforced** — `structuredContent` falls back to `JsonValue` when the advertised schema uses vocabulary outside the harness subset.
++- **Output-schema syntax is restricted** — the bridge accepts strict draft 2020-12 by default and explicit draft-07, with local JSON Pointer references to schema positions. Unknown keywords/formats, other dialects, vocabulary declarations, embedded resource IDs, anchors/dynamic references and asynchronous schemas reject registration. It never fetches remote schemas, coerces results, inserts defaults or removes properties. Tools without an advertised schema retain their lossless JSON envelope; no universal multi-format result schema is invented.
+ - **Task-required MCP tools are rejected at call time** — a tool that requires the task-based execution extension throws instead of bridging; the extension is not implemented.
+ 
+ <a id="dev-note"></a>
+diff --git a/packages/mcp/mcp-client/README.zh.md b/packages/mcp/mcp-client/README.zh.md
+index c6949b091a39ffcf8eb3551aefd90b9d394e063f..14fac94277d4d6ec44ab42a807123c2f0cdeaf1c 100644
+--- a/packages/mcp/mcp-client/README.zh.md
++++ b/packages/mcp/mcp-client/README.zh.md
+@@ -127,7 +127,7 @@ kind: "package-reference"
+ 
+ ### 工具执行内部细节
+ 
+-工具调用会发送一次未缓存的 `tools/call` 请求，携带原始 MCP 名称、JSON 参数、中止信号与配置的超时；公开名称绝不会发给服务器，也绝不会被解析还原。规范成功值是 `{ content: JsonValue[], structuredContent? }`，为程序化调用方与 PTC mode 调用方保留完整的 MCP JSON 块。受支持且已声明的 `outputSchema` 会验证 `structuredContent`；不受支持的 schema 词汇回退为不受约束的 `JsonValue`。MCP 的 `isError` 结果会在任何图片持久化之前抛出，使注册表产生失败的工具结果。图片批次会先整体解码并校验，再保存任一成员；任何拒绝都会把每张图片投影为诊断文本。桥接注册尚未调用 [`src/output-validation.ts`](src/output-validation.ts) 中的独立严格编译器；现有的不受支持 schema 回退行为保持不变。
++工具调用会发送一次未缓存的 `tools/call` 请求，携带原始 MCP 名称、JSON 参数、中止信号与配置的超时；公开名称绝不会发给服务器，也绝不会被解析还原。规范成功值是 `{ content: JsonValue[], structuredContent? }`，为程序化调用方与 PTC mode 调用方保留完整的 MCP JSON 块。每次注册都会以严格同步验证编译原始 `outputSchema`，不依赖 SDK 缓存。注册表在接受规范成功值时调用该谓词，嵌套调用和替换值也经过验证。注册表 schema 保留其已有的可表达精度；无法表达时只描述无损 JSON 封套，但不会削弱附加验证。schema 编译失败会拒绝下一次发现世代并保留上一世代。MCP 的 `isError` 结果会在任何图片持久化之前抛出，使注册表产生失败的工具结果。图片批次会先整体解码并校验，再保存任一成员；任何拒绝都会把每张图片投影为诊断文本。
+ 
+ ### 环境清洗（stdio）
+ 
+@@ -193,7 +193,7 @@ kind: "package-reference"
+ - **启动与发现超时继承自 MCP SDK**——插件不暴露连接或发现超时；每次 `initialize` 与分页 `tools/list` 请求都使用 SDK 默认的 60 秒请求超时，因此无响应的服务器或 cursor chain 在初始同步完成期间可能同时延迟激活与 teardown。
+ - **重连在传输关闭时触发**——崩溃的 stdio 子进程会触发重连；Streamable HTTP 失败按请求经 SDK 传输自身的恢复机制暴露，因此不可达的 HTTP 服务器会按调用重试，而非由 supervisor 重新 spawn。
+ - **图片是唯一的持久丰富结果桥接**——PNG、JPEG、WebP 与 GIF 在确切能力得到证明后进入 Native 上下文。音频与嵌入资源载荷仍只存在于执行局部并带明确诊断，资源链接只以文本保留名称与 URI。
+-- **不强制执行不受支持的 MCP 输出 schema**——已声明 schema 使用 harness 子集之外的词汇时，`structuredContent` 回退为 `JsonValue`。
++- **输出 schema 的语法受限**——桥接默认接受严格的 draft 2020-12，也接受显式声明的 draft-07，引用限于指向 schema 位置的本地 JSON Pointer。未知关键字或格式、其他方言、词汇声明、嵌入资源 ID、锚点或动态引用以及异步 schema 均会导致注册被拒绝。桥接不会获取远程 schema、强制转换结果、插入默认值或删除属性。未声明 schema 的工具保留无损 JSON 封套；不会臆造适用于所有多格式结果的通用 schema。
+ - **要求基于任务的 MCP 工具在调用时被拒绝**——要求使用基于任务的执行（task-based execution）扩展的工具会抛出异常而非被桥接；该扩展未实现。
+ 
+ <a id="dev-note"></a>
+diff --git a/packages/mcp/mcp-client/src/tools.ts b/packages/mcp/mcp-client/src/tools.ts
+index 4c6ab40fbd7bb4fae5443577337dcc8ac71c59c1..5b6c8834bd42d3e329564e782292c532979df71e 100644
+--- a/packages/mcp/mcp-client/src/tools.ts
++++ b/packages/mcp/mcp-client/src/tools.ts
+@@ -22,8 +22,9 @@ import { isImageAdmissionError } from '@deepseek-ai/dsh-attachment'
+ import type { AttachmentStore, ImageAttachmentRef, ImageMediaType, SaveImageAttachment } from '@deepseek-ai/dsh-attachment'
+ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+ import type { ToolDefinition, ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
+-import { assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
++import { assertSupportedJsonSchema, JsonSchemaError } from '@deepseek-ai/dsh-tools'
+ import type { JsonSchemaNode, JsonValue } from '@deepseek-ai/dsh-tools'
++import { createOutputValidation } from './output-validation.ts'
+ 
+ /** Resolved options relevant to tool bridging. */
+ export interface ToolBridgeOptions {
+@@ -76,7 +77,7 @@ function listToolsUncached(client: Client, cursor?: string) {
+   )
+ }
+ 
+-/** Call without the SDK pre-validating an output schema the bridge may not support. */
++/** Call without the SDK cache; the registered output validator owns success admission. */
+ function callToolUncached(
+   client: Client,
+   rawName: string,
+@@ -165,7 +166,7 @@ export async function syncTools(
+         tool.name,
+         tool.description ?? '',
+         tool.inputSchema,
+-        supportedOutputSchema(tool.outputSchema),
++        tool.outputSchema,
+         tool.execution?.taskSupport === 'required',
+         opts,
+       ))
+@@ -217,17 +218,6 @@ interface PreparedProjection {
+   content: ContentBlock[]
+ }
+ 
+-/** Keep a supported advertised schema; unsupported MCP vocabulary falls back to JsonValue. */
+-function supportedOutputSchema(candidate: unknown): JsonSchemaNode | undefined {
+-  if (candidate === undefined) return undefined
+-  try {
+-    assertSupportedJsonSchema(candidate)
+-    return candidate
+-  } catch {
+-    return undefined
+-  }
+-}
+-
+ /**
+  * Build one generation-local tool definition and its execution-local rich projections.
+  * @param client - connected MCP client used for calls.
+@@ -236,7 +226,7 @@ function supportedOutputSchema(candidate: unknown): JsonSchemaNode | undefined {
+  * @param rawName - MCP wire tool name.
+  * @param description - model-facing tool description.
+  * @param parameters - MCP input schema.
+- * @param structuredSchema - supported structured-output schema, when advertised.
++ * @param advertisedSchema - original structured-output schema, when advertised.
+  * @param taskRequired - whether this MCP tool requires unsupported task execution.
+  * @param opts - bridge timeout and namespace options.
+  * @returns a complete ToolRuntime definition.
+@@ -248,7 +238,7 @@ function createDefinition(
+   rawName: string,
+   description: string,
+   parameters: Record<string, unknown>,
+-  structuredSchema: JsonSchemaNode | undefined,
++  advertisedSchema: Record<string, unknown> | undefined,
+   taskRequired: boolean,
+   opts: ToolBridgeOptions,
+ ): ToolDefinition {
+@@ -257,7 +247,7 @@ function createDefinition(
+     name: publicName,
+     description,
+     parameters,
+-    output: createOutput(rawName, structuredSchema),
++    output: createOutput(rawName, advertisedSchema),
+     execute: createExecutor(client, ctx, rawName, taskRequired, opts, projections),
+     finalizeContent(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>) {
+       const projection = projections.get(exec)
+@@ -271,16 +261,30 @@ function createDefinition(
+   }
+ }
+ 
++/** Retain existing registry/SDK precision; full validation is independently mandatory. */
++function registryStructuredSchema(advertised: Record<string, unknown> | undefined): JsonSchemaNode {
++  if (advertised === undefined) return {}
++  const schema = structuredClone(advertised)
++  try {
++    assertSupportedJsonSchema(schema)
++    return schema
++  } catch (error) {
++    if (!(error instanceof JsonSchemaError)) throw error
++    return {}
++  }
++}
++
+ /** Build the canonical result schema and existing Native text projection. */
+-function createOutput(rawName: string, structuredSchema: JsonSchemaNode | undefined): ToolDefinition['output'] {
++function createOutput(rawName: string, advertisedSchema: Record<string, unknown> | undefined): ToolDefinition['output'] {
+   return {
++    ...createOutputValidation(advertisedSchema),
+     schema: {
+       type: 'object',
+       properties: {
+         content: { type: 'array', items: {} },
+-        structuredContent: structuredSchema ?? {},
++        structuredContent: registryStructuredSchema(advertisedSchema),
+       },
+-      required: structuredSchema === undefined ? ['content'] : ['content', 'structuredContent'],
++      required: advertisedSchema === undefined ? ['content'] : ['content', 'structuredContent'],
+       additionalProperties: false,
+     },
+     render(_args: unknown, value: JsonValue) {
+diff --git a/packages/mcp/mcp-client/tests/mcp-client.spec.ts b/packages/mcp/mcp-client/tests/mcp-client.spec.ts
+index fef1f48d0c2ce0737e634cbf337d446f01557318..a59f8190e23f00b9ba87c03358f8b1e8833552ab 100644
+--- a/packages/mcp/mcp-client/tests/mcp-client.spec.ts
++++ b/packages/mcp/mcp-client/tests/mcp-client.spec.ts
+@@ -370,15 +370,12 @@ describe('syncTools', () => {
+       expect(missing.error).toMatchObject({ info: { code: 'INVALID_TOOL_OUTPUT' } })
+       expect(missing.error?.message).toContain('structuredContent')
+ 
+-      const fallback = await ctx.tools.execute({
++      const invalid = await ctx.tools.execute({
+         signal: testToolSignal,
+-        callId: ToolCallId('fallback'), name: 'mcp__srv__future-schema', arguments: {},
+-      })
+-      if (fallback.isError) throw new Error('unsupported schema must use the bridge fallback')
+-      expect(fallback.value).toEqual({
+-        content: [42, null],
+-        structuredContent: ['kept', { nested: true }],
++        callId: ToolCallId('invalid'), name: 'mcp__srv__future-schema', arguments: {},
+       })
++      expect(invalid.isError).toBe(true)
++      expect(invalid.error).toMatchObject({ info: { code: 'INVALID_TOOL_OUTPUT' } })
+     } finally {
+       await client.close()
+     }
+@@ -815,7 +812,7 @@ describe('tool execution', () => {
+       .toContain('value.structuredContent.answer')
+   })
+ 
+-  it('falls back to JsonValue for unsupported advertised output schemas', async () => {
++  it('enforces patternProperties beyond the registry schema subset', async () => {
+     const client = createMockClient(
+       [{
+         name: 'future-schema',
+@@ -825,9 +822,13 @@ describe('tool execution', () => {
+       { content: [], structuredContent: ['kept', { nested: true }] },
+     )
+     await syncTools(client as never, ctx, defaultOpts, new Map())
+-    const result = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('fallback'), name: 'mcp__srv__future-schema', arguments: {} })
+-    if (result.isError) throw new Error('unsupported MCP output schemas must fall back')
+-    expect(result.value).toEqual({ content: [], structuredContent: ['kept', { nested: true }] })
++    const execute = () => ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('pattern'), name: 'mcp__srv__future-schema', arguments: {} })
++    expect(await execute()).toMatchObject({ isError: true, error: { info: { code: 'INVALID_TOOL_OUTPUT' } } })
++    client.callTool.mockResolvedValueOnce({ content: [], structuredContent: { 'x-label': 42 } })
++    expect(await execute()).toMatchObject({ isError: true })
++    const valid = { content: [], structuredContent: { 'x-label': 'kept' } }
++    client.callTool.mockResolvedValueOnce(valid)
++    expect(await execute()).toMatchObject({ isError: false, value: valid })
+   })
+ 
+   it('maps isError to an error result via throw', async () => {
+diff --git a/packages/mcp/mcp-client/tests/output-contract.spec.ts b/packages/mcp/mcp-client/tests/output-contract.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..b6cce138901f6f6c84851ee8f3b1f640c97d97d0
+--- /dev/null
++++ b/packages/mcp/mcp-client/tests/output-contract.spec.ts
+@@ -0,0 +1,90 @@
++import { afterEach, beforeEach, describe, expect, it } from 'vitest'
++import { Client } from '@modelcontextprotocol/sdk/client/index.js'
++import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
++import { Context } from '@deepseek-ai/cordis'
++import { ToolCallId } from '@deepseek-ai/dsh-llm'
++import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
++import ToolRuntime from '@deepseek-ai/dsh-tools'
++import { syncTools, type ToolDisposers } from '@deepseek-ai/dsh-mcp-client/src/tools.ts'
++
++const integerSchema = {
++  type: 'object', properties: { n: { type: 'integer' } }, required: ['n'], additionalProperties: false,
++}
++const draft7Schema = { ...integerSchema, $schema: 'http://json-schema.org/draft-07/schema#' }
++const textContent = [{ type: 'text', text: 'remote output' }]
++const options = { serverName: 'srv', toolCallTimeoutMs: 1000, registrationFailure: 'throw' } as const
++
++/** Real SDK transport and registry; only the remote server's wire responses are scripted. */
++describe('advertised MCP output validation through ToolRuntime', () => {
++  let ctx: Context
++  let client: Client
++  let serverTransport: InMemoryTransport
++  let registrations: ToolDisposers
++  let outputSchema: Record<string, unknown> | undefined
++  let response: Record<string, unknown>
++  let discoveryError: boolean
++
++  beforeEach(async () => {
++    registrations = new Map()
++    outputSchema = draft7Schema
++    response = { content: textContent, structuredContent: { n: 1 } }
++    discoveryError = false
++    ctx = new Context()
++    await ctx.plugin(SystemPrompt)
++    await ctx.plugin(ToolRuntime)
++    const pair = InMemoryTransport.createLinkedPair()
++    serverTransport = pair[1]
++    serverTransport.onmessage = (message) => {
++      if (!('id' in message) || !('method' in message)) return
++      const params = 'params' in message ? message.params : undefined
++      if (message.method === 'tools/list' && discoveryError) {
++        void serverTransport.send({ jsonrpc: '2.0', id: message.id, error: { code: -32603, message: 'discovery failed' } })
++        return
++      }
++      const result = message.method === 'initialize'
++        ? {
++          protocolVersion: params && 'protocolVersion' in params ? params.protocolVersion : '2025-11-25',
++          capabilities: { tools: {} }, serverInfo: { name: 'output-fixture', version: '1' },
++        }
++        : message.method === 'tools/list'
++          ? { tools: [{ name: 'probe', inputSchema: { type: 'object' }, ...outputSchema === undefined ? {} : { outputSchema } }] }
++          : response
++      void serverTransport.send({ jsonrpc: '2.0', id: message.id, result })
++    }
++    await serverTransport.start()
++    client = new Client({ name: 'output-contract-test', version: '1' })
++    await client.connect(pair[0])
++  })
++
++  afterEach(async () => {
++    for (const dispose of registrations.values()) dispose()
++    try {
++      await client?.close()
++    } finally {
++      await serverTransport?.close()
++    }
++  })
++
++  async function sync() {
++    registrations = await syncTools(client, ctx, options, registrations)
++  }
++
++  function execute() {
++    return ctx.tools.execute({
++      signal: new AbortController().signal,
++      callId: ToolCallId('output-probe'), name: 'mcp__srv__probe', arguments: {},
++    })
++  }
++
++  it.each([
++    ['supported integer', integerSchema],
++    ['same integer with draft-07 annotation', draft7Schema],
++  ])('enforces %s without changing valid output', async (_name, schema) => {
++    outputSchema = schema
++    await sync()
++    expect(await execute()).toMatchObject({ isError: false, value: response })
++    response = { content: textContent, structuredContent: { n: '1' } }
++    expect(await execute()).toMatchObject({ isError: true })
++  })
++
++})

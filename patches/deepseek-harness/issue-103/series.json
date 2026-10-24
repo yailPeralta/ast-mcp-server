@@ -23,6 +23,10 @@
     {
       "file": "0005-mcp-output-compiler.patch",
       "sha256": "247c40cebd88a93a020add3b75212af8d04be50f1babcd12533fb33a5023c709"
+    },
+    {
+      "file": "0006-mcp-output-admission.patch",
+      "sha256": "22d2f363085ffdc170c7203b755ab4d9648054deb82b4d17216c16f1b0398671"
     }
   ]
 }
