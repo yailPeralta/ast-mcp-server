@@ -1,0 +1,150 @@
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
+index 31b9ff70c1e90e8d4d78c2749f648ec74b30ef67..79bcd6a2229bbaf06801bb2f16ab934991847ecc 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+-2026-07-20-canonical-tool-output-contract.md: 72768708e296a6dc8e890faceed238c42601c159
+-2026-07-20-canonical-tool-output-contract.zh.md: 1586ff413df22a85991b3910c5567b02a3ea8dac
++2026-07-20-canonical-tool-output-contract.md: 88fccd6febcaec58f5aa762dc9fe53538146409f
++2026-07-20-canonical-tool-output-contract.zh.md: 0d861f504a51e61230ec68b52b4d3786285d6e9a
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+index 72768708e296a6dc8e890faceed238c42601c159..88fccd6febcaec58f5aa762dc9fe53538146409f 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.md
+@@ -73,6 +73,9 @@ MCP bridges preserve protocol blocks through `McpResult<{...}> = { content: Json
+ - **Treat content replacement as value redaction:** rejected because presentation and programmatic access are different consumers; hiding only the former would create a false security boundary.
+ - **Require object-rooted tool outputs:** rejected because scalar, array, and null results are legitimate JSON APIs. Object-rooting remains a consumer rule for caller-defined subagent/workflow structured output.
+ 
++- **Validate additional constraints only in the executor:** rejected because wrappers and post-policy replacement values bypass that check. The registry owns successful-value admission; external schema compilation remains tool-owned.
++- **Expand the shared schema language for one bridge:** rejected because the shared language also owns author inference and generated SDK types. An optional pure validator enforces additional constraints without changing those representations or adding a second lifecycle.
++
+ ## Consequences
+ 
+ Native and replay behavior remains content-first and byte-compatible, while execution-time callers can use a validated domain value without parsing that content. Failures have one required message plus optional internal class/code information, successful and failed outcomes are discriminated, and a failed result can never promise a value. Tool authors must design the value and Native projection together; the extra declaration is intentional because it prevents accidental programmatic contracts from being inferred from prose.
+diff --git a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
+index 1586ff413df22a85991b3910c5567b02a3ea8dac..0d861f504a51e61230ec68b52b4d3786285d6e9a 100644
+--- a/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
++++ b/.agents/notes/implemented/architecture/2026-07-20-canonical-tool-output-contract.zh.md
+@@ -73,6 +73,9 @@ MCP 桥接层通过 `McpResult<{...}> = { content: JsonValue[]; structuredConten
+ - **将内容替换视为值脱敏：**不予采纳。展示内容和程序化访问面向不同消费方；只隐藏前者会制造虚假的安全边界。
+ - **要求工具输出必须以对象为根：**不予采纳。标量、数组和 null 结果都是合理的 JSON API。只有由调用方定义的 subagent／工作流结构化输出仍受消费方的对象根规则约束。
+ 
++- **仅在执行器中校验附加约束：**不予采纳。包装器和后置策略替换值会绕过该检查。注册表拥有成功值的接纳，外部 schema 编译仍归工具拥有。
++- **为一个桥接层扩展共享 schema 语言：**不予采纳。共享语言还拥有作者侧类型推导与生成的 SDK 类型。可选的纯校验器可以强制执行附加约束，而不改变这些表示或增加第二个生命周期。
++
+ ## 影响
+ 
+ Native 和回放行为仍以内容为先，并保持逐字节兼容；执行期调用方则无需解析内容，即可使用经过校验的领域值。失败结果必须包含消息，并可选择附加内部类名／代码信息；成功与失败结果由判别字段区分，失败结果绝不会承诺存在值。工具作者必须一并设计值及其 Native 投影；增加这项声明是有意为之，因为它避免从自然语言内容意外推导出程序化约定。
+diff --git a/packages/core/tools/README.i18n.yaml b/packages/core/tools/README.i18n.yaml
+index e65ddbd23cd9eb9f3c5b03ba7e1006d9cf4954a4..78083602a3872bf81ccf9989ac8777794de44c9c 100644
+--- a/packages/core/tools/README.i18n.yaml
++++ b/packages/core/tools/README.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write packages/core/tools/README.md
+-README.md: 39e71148aef06af9855ecf98fb3a2aba8d10d478
+-README.zh.md: dd9788e92989a2e08d82aa912134cafc551e204d
++README.md: f8e24cef3f2f62aad90289b32e1b8978370d4d3d
++README.zh.md: d5cb939f77b7bc22dffafce6bf6765169c444a0b
+diff --git a/packages/core/tools/README.md b/packages/core/tools/README.md
+index 39e71148aef06af9855ecf98fb3a2aba8d10d478..f8e24cef3f2f62aad90289b32e1b8978370d4d3d 100644
+--- a/packages/core/tools/README.md
++++ b/packages/core/tools/README.md
+@@ -59,7 +59,7 @@ ctx.tools.register(defineTool({
+ 
+ The unified schema DSL supports `string`, `number`, `integer`, `boolean`, `null`, `array`, `object`, author-only `json`, and exact-one `oneOf`; `InferValue` preserves exact types through 16 container levels before widening to `JsonValue`. A raw JSON Schema (`JsonSchemaNode`) is the wire-level counterpart shared with subagents, workflows, and MCP.
+ 
+-Raw `ToolDefinition` outputs may add a pure synchronous `output.validate(value)` that returns bounded, non-sensitive violations for constraints beyond `output.schema`. The registry checks every successful body, wrapper, or post-policy value after freezing and before rendering, including nested calls. A violation produces `INVALID_TOOL_OUTPUT`; thrown exceptions expose only `output.validate failed`. Additional validators do not change generated SDK types. See the [output declaration](../../../docs/subsystems/tools.md#tooldefinition--a-registered-tool) for registration ownership and admission semantics.
++Raw `ToolDefinition` and typed `defineTool` outputs may add a pure synchronous `output.validate(value)` that returns bounded, non-sensitive violations for constraints beyond `output.schema`. The registry checks every successful body, wrapper, or post-policy value after freezing and before rendering, including nested calls. A violation produces `INVALID_TOOL_OUTPUT`; thrown exceptions expose only `output.validate failed`. Additional validators do not change generated SDK types. See the [output declaration](../../../docs/subsystems/tools.md) for registration ownership and admission semantics.
+ 
+ ### Configure the presentation mode
+ 
+diff --git a/packages/core/tools/README.zh.md b/packages/core/tools/README.zh.md
+index dd9788e92989a2e08d82aa912134cafc551e204d..d5cb939f77b7bc22dffafce6bf6765169c444a0b 100644
+--- a/packages/core/tools/README.zh.md
++++ b/packages/core/tools/README.zh.md
+@@ -59,7 +59,7 @@ ctx.tools.register(defineTool({
+ 
+ 统一 schema DSL 支持 `string`、`number`、`integer`、`boolean`、`null`、`array`、`object`、仅供作者使用的 `json` 与恰好匹配一个分支的 `oneOf`；`InferValue` 在 16 层容器内保留精确类型，之后加宽为 `JsonValue`。原始 JSON Schema（`JsonSchemaNode`）是与 subagent、工作流和 MCP 共享的协议级对应类型。
+ 
+-原始 `ToolDefinition` 的输出可添加纯同步的 `output.validate(value)`，为超出 `output.schema` 的约束返回有界且不含敏感信息的违规列表。注册表在冻结后、渲染前检查每个成功的工具函数体值、包装器值或后置策略值，包括嵌套调用。违规产生 `INVALID_TOOL_OUTPUT`；抛出的异常仅暴露 `output.validate failed`。附加校验器不会改变生成的 SDK 类型。注册定义的归属与接纳语义见[输出声明](../../../docs/subsystems/tools.zh.md#tooldefinition--a-registered-tool)。
++原始 `ToolDefinition` 和类型化 `defineTool` 的输出可添加纯同步的 `output.validate(value)`，为超出 `output.schema` 的约束返回有界且不含敏感信息的违规列表。注册表在冻结后、渲染前检查每个成功的工具函数体值、包装器值或后置策略值，包括嵌套调用。违规产生 `INVALID_TOOL_OUTPUT`；抛出的异常仅暴露 `output.validate failed`。附加校验器不会改变生成的 SDK 类型。注册定义的归属与接纳语义见[输出声明](../../../docs/subsystems/tools.zh.md)。
+ 
+ ### 配置呈现模式
+ 
+diff --git a/packages/core/tools/src/schema.ts b/packages/core/tools/src/schema.ts
+index 38f2f96229c0acf316fb29d050106759874f4221..4e60087e982456606768a828ebd34996651b88f1 100644
+--- a/packages/core/tools/src/schema.ts
++++ b/packages/core/tools/src/schema.ts
+@@ -491,6 +491,12 @@ export interface DefineToolOptions<S extends ParameterSchemaSpec, O extends Valu
+   readonly output: {
+     /** Schema enforced against every successful body or policy-replaced value. */
+     readonly schema: O
++    /**
++     * Pure synchronous additional validation after schema validation and freezing.
++     * @param value - frozen canonical value inferred from the output schema.
++     * @returns bounded, non-sensitive violations; empty means valid.
++     */
++    validate?(value: InferValue<NoInfer<O>>): readonly string[]
+     /** Pure Native/model rendering of one validated canonical value. */
+     render(args: InferArgs<S>, value: InferValue<NoInfer<O>>): ContentBlock[]
+     /** Pure replayable presentation metadata for direct top-level calls. */
+@@ -553,6 +559,8 @@ export function defineTool<const S extends ParameterSchemaSpec, const O extends
+   // oxlint-disable-next-line typescript/unbound-method
+   const userRender = options.output.render
+   // oxlint-disable-next-line typescript/unbound-method
++  const userValidate = options.output.validate
++  // oxlint-disable-next-line typescript/unbound-method
+   const userPresentationMeta = options.output.presentationMeta
+   // oxlint-disable-next-line typescript/unbound-method
+   const userPresentCall = options.presentCall
+@@ -572,6 +580,11 @@ export function defineTool<const S extends ParameterSchemaSpec, const O extends
+     parameters: parameters as unknown as Record<string, unknown>,
+     output: {
+       schema: outputSchema,
++      ...userValidate !== undefined ? {
++        validate(value: JsonValue): readonly string[] {
++          return userValidate(value as unknown as InferValue<NoInfer<O>>)
++        },
++      } : {},
+       render(args: unknown, value: JsonValue): ContentBlock[] {
+         return userRender(args as InferArgs<S>, value as unknown as InferValue<NoInfer<O>>)
+       },
+diff --git a/packages/core/tools/tests/output-validation.spec.ts b/packages/core/tools/tests/output-validation.spec.ts
+index 9e55279716fc2eb4e51810704567f5d4120e41d3..6fe37c0bfb8e43b546127babc9506bd6d973020e 100644
+--- a/packages/core/tools/tests/output-validation.spec.ts
++++ b/packages/core/tools/tests/output-validation.spec.ts
+@@ -4,7 +4,7 @@ import { createScope, type Scope } from '@deepseek-ai/dsh-scope'
+ import type { Agent } from '@deepseek-ai/dsh-agent'
+ import { ToolCallId } from '@deepseek-ai/dsh-llm'
+ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+-import ToolRuntime, { type JsonValue, type ToolDefinition, type ToolExecutionToken } from '@deepseek-ai/dsh-tools'
++import ToolRuntime, { defineTool, type JsonValue, type ToolDefinition, type ToolExecutionToken } from '@deepseek-ai/dsh-tools'
+ 
+ async function setup() {
+   const ctx = new Context()
+@@ -97,6 +97,20 @@ describe('canonical output validation', () => {
+     expect(() => ctx.tools.register({ ...tool, output })).toThrow('output.validate must be a function')
+   })
+ 
++  it('forwards typed authoring validators', async () => {
++    const ctx = await setup()
++    ctx.tools.register(defineTool({
++      name: 'checked', description: 'typed output', parameters: {},
++      output: {
++        schema: { type: 'number' },
++        validate: value => value > 1 ? [] : ['count must exceed 1'],
++        render: () => [],
++      },
++      async execute() { return 1 },
++    }))
++    expect(await call(ctx)).toMatchObject({ isError: true })
++  })
++
+   it('validates a detached deeply frozen value before projection', async () => {
+     const ctx = await setup()
+     const candidate = { nested: { count: 1 } }

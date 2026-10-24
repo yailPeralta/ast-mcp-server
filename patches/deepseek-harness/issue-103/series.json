@@ -15,6 +15,10 @@
     {
       "file": "0003-core-output-compatibility-matrix.patch",
       "sha256": "52acb434198064272db4913e756e39f695afeac0c07db97a7ba2b8cb8bbf5442"
+    },
+    {
+      "file": "0004-core-typed-output-validator.patch",
+      "sha256": "345490b53ec1777fe2f386e1f8a055943c027d8e32d5693b3b17fcc4a7042432"
     }
   ]
 }
