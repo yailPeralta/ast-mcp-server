@@ -38,7 +38,7 @@ it("locks patched transitives within every admitted parent range", async () => {
     .soft(lock["ajv@npm:^8.0.0, ajv@npm:^8.17.1"]?.dependencies?.["fast-uri"])
     .toBe("npm:^3.0.1");
   expect.soft(lock["express@npm:^5.2.1"]?.dependencies?.qs).toBe("npm:^6.14.0");
-  expect.soft(lock["body-parser@npm:^2.2.1"]?.dependencies?.qs).toBe("npm:^6.15.2");
+  expect.soft(lock["body-parser@npm:^2.2.1"]?.dependencies?.qs).toBe("npm:^6.16.1");
 });
 
 it("admits the patched Hono and Vitest family without installation-policy exceptions", async () => {
