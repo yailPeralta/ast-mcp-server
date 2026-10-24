@@ -139,6 +139,37 @@ function hashJson(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+/**
+ * Reduce a JSON Schema to its validation semantics. zod 3 and zod 4 serialize the same
+ * constraints differently ($ref versus inlined, safe-integer bounds, uuid patterns), so the
+ * public-baseline comparison must not depend on that serialization. Only `false` values of
+ * additionalProperties and additionalItems are dropped; callers compare strictness explicitly.
+ */
+function semanticSchema(node, root = node) {
+  if (Array.isArray(node)) return node.map((item) => semanticSchema(item, root));
+  if (node === null || typeof node !== "object") return node;
+  if (typeof node.$ref === "string" && node.$ref.startsWith("#/")) {
+    const target = node.$ref
+      .slice(2)
+      .split("/")
+      .reduce((value, key) => value?.[key], root);
+    const rest = Object.fromEntries(Object.entries(node).filter(([key]) => key !== "$ref"));
+    return semanticSchema({ ...target, ...rest }, root);
+  }
+  const result = {};
+  for (const key of Object.keys(node).sort()) {
+    const value = node[key];
+    if (["$schema", "$defs", "definitions"].includes(key)) continue;
+    if ((key === "additionalProperties" || key === "additionalItems") && value === false) continue;
+    if ((key === "minimum" || key === "maximum") && Math.abs(value) === Number.MAX_SAFE_INTEGER) {
+      continue;
+    }
+    if (key === "pattern" && node.format === "uuid") continue;
+    result[key] = semanticSchema(value, root);
+  }
+  return result;
+}
+
 // prettier-ignore
 function canonicalH05Profile(content, { controlDirectory, nonce, ownerToken, tempRoot, tempRoots }) { let canonical = content; for (const [value, marker, count] of [[controlDirectory, "<CONTROL>", 1], [nonce, "<NONCE>", 1], [ownerToken, "<OWNER>", 2], [tempRoot, "<TEMP>", tempRoots]]) { const observed = canonical.split(value).length - 1; assert(observed === count, `H-05 profile binding ${marker} diverged (${observed}/${count})`); canonical = canonical.replaceAll(value, marker); } return canonical; }
 
@@ -1102,6 +1133,22 @@ async function runNativeAgentJourney({
         unaffectedSha256: hashJson(
           astTools.filter((tool) => tool.function.name !== "mcp__ast__ast_explore"),
         ),
+        unaffectedSemanticSha256: hashJson(
+          astTools
+            .filter((tool) => tool.function.name !== "mcp__ast__ast_explore")
+            .map((tool) => ({
+              name: tool.function.name,
+              description: tool.function.description,
+              parameters: semanticSchema(tool.function.parameters),
+            })),
+        ),
+        unaffectedAdditionalProperties: [
+          ...new Set(
+            astTools
+              .filter((tool) => tool.function.name !== "mcp__ast__ast_explore")
+              .map((tool) => String(tool.function.parameters?.additionalProperties)),
+          ),
+        ].sort(),
         exploreSha256: hashJson(exploreParameters),
         exploreRequired: exploreParameters?.required ?? [],
         exploreProperties: Object.keys(exploreParameters?.properties ?? {}).sort(),
@@ -2075,9 +2122,18 @@ try {
   assert(
     isDeepStrictEqual(correctedCandidate.schemaEvidence.exploreRequired, ["project_root"]) &&
       correctedCandidate.schemaEvidence.exploreProperties.includes("call_spines") &&
-      correctedCandidate.schemaEvidence.unaffectedSha256 ===
-        publicBaseline.schemaEvidence.unaffectedSha256,
+      correctedCandidate.schemaEvidence.unaffectedSemanticSha256 ===
+        publicBaseline.schemaEvidence.unaffectedSemanticSha256,
     "candidate schema correction changed the wrong model contract",
+  );
+  // The semantic comparison drops `additionalProperties: false`, so strictness is checked here:
+  // zod 4 stops declaring it on non-strict objects, but the candidate must never loosen a tool
+  // to accept arbitrary properties.
+  assert(
+    correctedCandidate.schemaEvidence.unaffectedAdditionalProperties.every(
+      (value) => value === "false" || value === "undefined",
+    ),
+    "candidate loosened an unaffected tool to accept additional properties",
   );
   const directSpines = directExploreSchema?.properties?.call_spines;
   assert(
