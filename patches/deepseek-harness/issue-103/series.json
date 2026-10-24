@@ -7,6 +7,10 @@
     {
       "file": "0001-core-canonical-validator.patch",
       "sha256": "30f8011a1a6cbb040c92d018110d6725e7a42d80be5fa6f564e457770a281f76"
+    },
+    {
+      "file": "0002-core-dispatch-output-owner.patch",
+      "sha256": "e4ec899ef6e657f4a27150a5da282680a415c6cc0c5cfea999fbd0798ebcffc5"
     }
   ]
 }
