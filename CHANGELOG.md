@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.14.0] — not yet published (2026-10-25)
+
+### Changed
+
+- Migrated schema validation to Zod 4 (`^4.6.7`). The published `tools/list` contract changes shape and Zod's validation error messages differ: tool input schemas no longer all declare `additionalProperties: false` (16 of 16 before, 1 of 16 now), shared `$ref` definitions are inlined (27 before, 0 now), the serialized `tools/list` grows from 100,923 to 126,562 bytes, integer fields declare a maximum of 9007199254740991, and UUID fields gain a `pattern`. Clients that cache or diff the advertised schemas should refresh them.
+
+### Security
+
+- Upgraded `@modelcontextprotocol/sdk` to `^1.32.1` (GHSA-6qxp-vccf-f47h), `body-parser` to 2.4.0, and `zod` to 4.6.7 for the memory-exhaustion advisory, and raised the `hono` and `fast-uri` resolutions to 4.13.13 and 3.1.9. `yarn audit` reports no suggestions.
+
 ## [0.13.1] — published to `latest` and `next`, registry verified (2026-09-01)
 
 ### Fixed
