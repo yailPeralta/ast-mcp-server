@@ -353,7 +353,7 @@ For a local candidate, pack and install its tarball instead:
 
 ```bash
 yarn pack --out ast-mcp-server-%v.tgz
-dsh plugin --profile web add ./ast-mcp-server-0.13.1.tgz
+dsh plugin --profile web add ./ast-mcp-server-0.14.0.tgz
 ```
 
 The first supported surface is **reads + prepare + preview**. Every apply path is
