@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.14.0] — not yet published (2026-10-25)
+## [0.14.0] — published to `latest` and `next`, registry verified (2026-10-25)
 
 ### Changed
 
@@ -15,6 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Security
 
 - Upgraded `@modelcontextprotocol/sdk` to `^1.32.1` (GHSA-6qxp-vccf-f47h), `body-parser` to 2.4.0, and `zod` to 4.6.7 for the memory-exhaustion advisory, and raised the `hono` and `fast-uri` resolutions to 4.13.13 and 3.1.9. `yarn audit` reports no suggestions.
+
+### Release status
+
+- npm published immutable `0.14.0` bytes with integrity `sha512-+g1GpmB9ZMd4tB/z7o75AZ4LdnqEn+MQDiRh0LDBV2j4xb9iKB8XMoiME47tW0u2HgfxWsKtQBChGxfnrz3dVw==`. Public-registry verification passed; `latest` and `next` both resolve to `0.14.0`; and npm `gitHead`, the annotated `v0.14.0` tag, and the GitHub Release target exact commit `f6e64751398f69eb3f0f1abc808f4221f7d2bc52`.
+- Publish run `40232707904` reported its readback as ambiguous because of registry lag although npm had accepted the version; verification `40249874010` and promotion `40255528749` are green and authoritative.
 
 ## [0.13.1] — published to `latest` and `next`, registry verified (2026-09-01)
 
