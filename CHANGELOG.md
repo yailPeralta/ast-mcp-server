@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.14.1] — not yet published (2026-10-26)
+
+### Security
+
+- Deduplicated `zod` in the lockfile to the patched `4.6.7` (GHSA-mrhx-c7xc-m3w5). The `@modelcontextprotocol/sdk` range `^3.25 || ^4.0` had kept a second, vulnerable `4.4.3` copy beside the direct dependency; `yarn audit` did not report it. No runtime code or advertised tool contract changes.
+
 ## [0.14.0] — published to `latest` and `next`, registry verified (2026-10-25)
 
 ### Changed
