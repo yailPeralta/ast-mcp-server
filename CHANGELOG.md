@@ -6,11 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.14.1] — not yet published (2026-10-26)
+## [0.14.1] — published to `latest` and `next`, registry verified (2026-10-26)
 
 ### Security
 
 - Deduplicated `zod` in the lockfile to the patched `4.6.7` (GHSA-mrhx-c7xc-m3w5). The `@modelcontextprotocol/sdk` range `^3.25 || ^4.0` had kept a second, vulnerable `4.4.3` copy beside the direct dependency; `yarn audit` did not report it. No runtime code or advertised tool contract changes.
+
+### Release status
+
+- npm published immutable `0.14.1` bytes with integrity `sha512-Z9a0rXsYYf+Eef8XCoA6qrId1puqiq3nFjsb5FP165OsvRr666MdL9N66/RmHXb/Uu7ynoVZ9X2ZqGSHED4H5A==`. Public-registry verification passed; `latest` and `next` both resolve to `0.14.1`; and npm `gitHead`, the annotated `v0.14.1` tag, and the GitHub Release target exact commit `f37f398b083135f0f65a265c8aca26d9edc5c74d`.
+- Publish run `40377206195` reported its readback as ambiguous because of registry lag although npm accepted the version (it appeared about 40 seconds later); verification `40387042272` and promotion `40387852805` are green and authoritative.
 
 ## [0.14.0] — published to `latest` and `next`, registry verified (2026-10-25)
 
