@@ -42,6 +42,7 @@ import {
   validateTrustedPublishingNpmVersion,
   validateVerificationEvidence,
   waitForPromotedRegistryState,
+  waitForPublishedRegistryState,
 } from "../scripts/release-preflight.mjs";
 
 const RELEASE_SHA = "a".repeat(40);
@@ -1270,6 +1271,87 @@ describe("release preflight", () => {
     ).rejects.toThrow(/after 3 bounded promotion checks/u);
     expect(reads).toBe(3);
     expect(delays).toBe(2);
+  });
+
+  it("waits through post-publish registry lag until the published version appears", async () => {
+    const readbacks = [null, null, registryReadback()];
+    const delays: number[] = [];
+    let reads = 0;
+
+    await expect(
+      waitForPublishedRegistryState({
+        readRegistry: async () => readbacks[reads++],
+        expectedSha: RELEASE_SHA,
+        maxAttempts: 4,
+        delayMs: 17,
+        sleep: async (milliseconds: number) => {
+          delays.push(milliseconds);
+        },
+      }),
+    ).resolves.toEqual({ state: "already_published_needs_verification", publish: false });
+    expect(reads).toBe(3);
+    expect(delays).toEqual([17, 17]);
+  });
+
+  it("reports the version absent once the bounded post-publish readback budget is exhausted", async () => {
+    let reads = 0;
+    let delays = 0;
+
+    await expect(
+      waitForPublishedRegistryState({
+        readRegistry: async () => {
+          reads += 1;
+          return null;
+        },
+        expectedSha: RELEASE_SHA,
+        maxAttempts: 3,
+        delayMs: 0,
+        sleep: async () => {
+          delays += 1;
+        },
+      }),
+    ).resolves.toEqual({ state: "absent_requires_new_dispatch", publish: false });
+    expect(reads).toBe(3);
+    expect(delays).toBe(2);
+  });
+
+  it("fails closed on a published gitHead mismatch without retrying", async () => {
+    let reads = 0;
+
+    await expect(
+      waitForPublishedRegistryState({
+        readRegistry: async () => {
+          reads += 1;
+          return registryReadback({ gitHead: OTHER_SHA });
+        },
+        expectedSha: RELEASE_SHA,
+        maxAttempts: 3,
+        delayMs: 0,
+        sleep: async () => undefined,
+      }),
+    ).rejects.toThrow(/published gitHead does not match/u);
+    expect(reads).toBe(1);
+  });
+
+  it("rejects an invalid post-publish readback retry configuration", async () => {
+    const base = {
+      readRegistry: async () => null,
+      expectedSha: RELEASE_SHA,
+      maxAttempts: 3,
+      delayMs: 0,
+      sleep: async () => undefined,
+    };
+
+    for (const override of [
+      { maxAttempts: 0 },
+      { maxAttempts: 21 },
+      { delayMs: -1 },
+      { delayMs: 30_001 },
+    ]) {
+      await expect(waitForPublishedRegistryState({ ...base, ...override })).rejects.toThrow(
+        /post-publish readback retry configuration is invalid/u,
+      );
+    }
   });
 
   it("closes the composed promotion after a stale post-mutation dist-tag readback", async () => {

@@ -27,6 +27,8 @@ const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 const NETWORK_TIMEOUT_MS = 20_000;
 const PROMOTION_READBACK_MAX_ATTEMPTS = 6;
 const PROMOTION_READBACK_DELAY_MS = 2_000;
+const PUBLISH_READBACK_MAX_ATTEMPTS = 12;
+const PUBLISH_READBACK_DELAY_MS = 10_000;
 const API_VERSION = "2026-03-10";
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
 const STABLE_SEMVER_PATTERN = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u;
@@ -1006,6 +1008,37 @@ export async function waitForPromotedRegistryState({
   );
 }
 
+export async function waitForPublishedRegistryState({
+  readRegistry,
+  expectedSha,
+  maxAttempts = PUBLISH_READBACK_MAX_ATTEMPTS,
+  delayMs = PUBLISH_READBACK_DELAY_MS,
+  sleep = (milliseconds) =>
+    new Promise((resolve) => {
+      globalThis.setTimeout(resolve, milliseconds);
+    }),
+}) {
+  if (
+    typeof readRegistry !== "function" ||
+    typeof sleep !== "function" ||
+    !Number.isSafeInteger(maxAttempts) ||
+    maxAttempts < 1 ||
+    maxAttempts > 20 ||
+    !Number.isSafeInteger(delayMs) ||
+    delayMs < 0 ||
+    delayMs > 30_000
+  ) {
+    releaseFailure("post-publish readback retry configuration is invalid.");
+  }
+  let state;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    state = classifyPublishReadback(await readRegistry(), expectedSha, "ambiguous");
+    if (state.state !== "absent_requires_new_dispatch") return state;
+    if (attempt < maxAttempts) await sleep(delayMs);
+  }
+  return state;
+}
+
 async function assertExactEvidenceDirectory(evidenceRoot, expectedNames) {
   const rootMetadata = await lstat(evidenceRoot);
   if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink()) {
@@ -1556,8 +1589,13 @@ async function runPublishNext(dispatch) {
   } catch (error) {
     publishError = error;
   }
-  const finalReadback = await fetchRegistryReadback(dispatch.version, true);
-  const finalState = classifyPublishReadback(finalReadback, dispatch.sha, "ambiguous");
+  // The registry is eventually consistent: after a publish that did not throw, retry the
+  // readback before declaring the version absent. A failed publish keeps the single readback.
+  const finalState = await waitForPublishedRegistryState({
+    readRegistry: () => fetchRegistryReadback(dispatch.version, true),
+    expectedSha: dispatch.sha,
+    maxAttempts: publishError ? 1 : PUBLISH_READBACK_MAX_ATTEMPTS,
+  });
   if (finalState.state === "absent_requires_new_dispatch") {
     releaseFailure(
       `publish result is ambiguous and the version is absent; a new explicit dispatch is required${publishError ? "" : "."}`,
