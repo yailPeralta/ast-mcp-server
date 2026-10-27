@@ -267,6 +267,13 @@ export function validatePromotedRegistryState(
   expectedSha: string,
   expectedIntegrity: string,
 ): RegistryReadback;
+export function waitForPublishedRegistryState(options: {
+  readRegistry: () => Promise<unknown>;
+  expectedSha: string;
+  maxAttempts?: number;
+  delayMs?: number;
+  sleep?: (milliseconds: number) => Promise<void>;
+}): Promise<PublishReadbackState>;
 export function waitForPromotedRegistryState(options: {
   readRegistry: () => Promise<unknown>;
   expectedVersion: string;
