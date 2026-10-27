@@ -12,7 +12,7 @@ const REVIEWED_ACTION_REVISIONS = new Map([
   ["actions/checkout", { revision: "3d3c42e5aac5ba805825da76410c181273ba90b1", version: "v7.0.1" }],
   [
     "actions/setup-node",
-    { revision: "820762786026740c76f36085b0efc47a31fe5020", version: "v7.0.0" },
+    { revision: "949feb2413d6458794dcd2491c4babbbce0c15c1", version: "v7.1.0" },
   ],
   [
     "actions/dependency-review-action",
@@ -20,19 +20,19 @@ const REVIEWED_ACTION_REVISIONS = new Map([
   ],
   [
     "github/codeql-action/init",
-    { revision: "5595ccaf912efad79be6eef63a5619ff05969be3", version: "v4.37.6" },
+    { revision: "9b3254085494b55a0f7c4c2b3d2d52cc712ce370", version: "v4.39.1" },
   ],
   [
     "github/codeql-action/analyze",
-    { revision: "5595ccaf912efad79be6eef63a5619ff05969be3", version: "v4.37.6" },
+    { revision: "9b3254085494b55a0f7c4c2b3d2d52cc712ce370", version: "v4.39.1" },
   ],
   [
     "actions/upload-artifact",
-    { revision: "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", version: "v7.0.1" },
+    { revision: "cf430e030ddbb5b0abf93d22962f4752f3646cd9", version: "v7.0.2" },
   ],
   [
     "actions/download-artifact",
-    { revision: "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c", version: "v8.0.1" },
+    { revision: "9000827ccba6bdab643e8b6fd33ac0654aef8333", version: "v8.0.2" },
   ],
 ]);
 const MAX_WORKFLOW_BYTES = 256 * 1024;
