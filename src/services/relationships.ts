@@ -505,6 +505,7 @@ interface ScopedCompilerRelationshipState {
   readonly freshness: FreshnessMetadata;
   readonly requestContext: RequestContext;
   computedCallSites?: readonly Node[];
+  computedCallSitesComplete?: boolean;
 }
 
 export interface CallRelationshipGap {
@@ -1439,10 +1440,12 @@ function addScopedIncomingReferences(
   edges: ScopedEdgeCollector,
   target: LocatedSymbol,
 ): void {
-  for (const sourceFile of scopedSourceFiles(state, edges)) {
+  const sourceFiles = scopedSourceFiles(state, edges);
+  const candidateReferences = scopedReferenceCandidates(state, edges, target, sourceFiles);
+  for (const sourceFile of sourceFiles) {
     consumeScopedWork(state, edges);
     const candidates = createScopedCandidateSet(edges);
-    sourceFile.forEachDescendant((reference) => {
+    const visitReference = (reference: Node): void => {
       consumeScopedWork(state, edges);
       if (!isCompilerReferenceNode(reference)) return;
       const declarations = scopedDeclarationsForSymbol(
@@ -1476,9 +1479,42 @@ function addScopedIncomingReferences(
           ),
         );
       }
-    });
+    };
+    const known = candidateReferences?.get(sourceFile);
+    if (candidateReferences) {
+      for (const reference of known ?? []) visitReference(reference);
+    } else {
+      sourceFile.forEachDescendant(visitReference);
+    }
     addScopedCandidates(edges, candidates);
   }
+}
+
+// Asking the language service for the target's references costs work
+// proportional to the references found, not to the size of the project. Targets
+// it cannot answer for fall back to the exhaustive walk (undefined).
+function scopedReferenceCandidates(
+  state: ScopedCompilerRelationshipState,
+  collector: ScopedEdgeCollector,
+  target: LocatedSymbol,
+  sourceFiles: readonly SourceFile[],
+): ReadonlyMap<SourceFile, readonly Node[]> | undefined {
+  if (!Node.isReferenceFindable(target.node)) return undefined;
+  consumeScopedWork(state, collector);
+  const references = target.node.findReferencesAsNodes();
+  reserveScopedWork(state, collector, references.length);
+  const inScope = new Set(sourceFiles);
+  const byFile = new Map<SourceFile, Node[]>();
+  for (const reference of references) {
+    const sourceFile = reference.getSourceFile();
+    if (!inScope.has(sourceFile)) continue;
+    const bucket = byFile.get(sourceFile);
+    if (bucket) bucket.push(reference);
+    else byFile.set(sourceFile, [reference]);
+  }
+  for (const bucket of byFile.values())
+    bucket.sort((left, right) => left.getStart() - right.getStart());
+  return byFile;
 }
 
 function addScopedIncomingImports(
@@ -1651,26 +1687,45 @@ function computedCallAuthority(projectRoot: string, invocation: Node): ComputedC
   };
 }
 
+// The project-wide scan is independent of the endpoint being resolved, so it
+// runs on its own budget: spending the endpoint's budget here left large
+// projects with no work for the reference lookup. Exhausting it keeps the
+// sites found so far and reports the result as incomplete.
 function scopedComputedCallSites(
   state: ScopedCompilerRelationshipState,
   collector: ScopedEdgeCollector,
-): readonly Node[] {
+): { readonly sites: readonly Node[]; readonly complete: boolean } {
   if (state.computedCallSites) {
     reserveScopedWork(state, collector, state.computedCallSites.length);
-    return state.computedCallSites;
+    return { sites: state.computedCallSites, complete: state.computedCallSitesComplete === true };
   }
+  const scanCollector: ScopedEdgeCollector = {
+    ...collector,
+    workBudget: {
+      remaining: collector.workBudget.remaining + collector.workBudget.consumed,
+      consumed: 0,
+      limitReached: false,
+    },
+  };
   const sites: Node[] = [];
-  for (const sourceFile of scopedSourceFiles(state, collector)) {
-    sourceFile.forEachDescendant((node) => {
-      consumeScopedWork(state, collector);
-      const expression = callLikeExpression(node);
-      if (expression && Node.isElementAccessExpression(unwrapInvocationExpression(expression))) {
-        sites.push(node);
-      }
-    });
+  let complete = true;
+  try {
+    for (const sourceFile of scopedSourceFiles(state, scanCollector)) {
+      sourceFile.forEachDescendant((node) => {
+        consumeScopedWork(state, scanCollector);
+        const expression = callLikeExpression(node);
+        if (expression && Node.isElementAccessExpression(unwrapInvocationExpression(expression))) {
+          sites.push(node);
+        }
+      });
+    }
+  } catch (error) {
+    if (!(error instanceof ScopedRelationshipWorkLimitReached)) throw error;
+    complete = false;
   }
   state.computedCallSites = sites;
-  return sites;
+  state.computedCallSitesComplete = complete;
+  return { sites, complete };
 }
 
 function scopedDirectCallTarget(
@@ -1722,7 +1777,9 @@ function addScopedIncomingCalls(
   target: LocatedSymbol,
 ): void {
   if (!Node.isReferenceFindable(target.node)) return;
-  for (const invocation of scopedComputedCallSites(state, collector)) {
+  const computed = scopedComputedCallSites(state, collector);
+  if (!computed.complete) collector.semanticUnfinished = true;
+  for (const invocation of computed.sites) {
     const authority = computedCallAuthority(state.projectRoot, invocation);
     reserveScopedWork(state, collector, authority.workItems);
     if (
