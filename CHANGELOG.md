@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.14.2] — not yet published (2026-10-28)
+
+### Security
+
+- Updated `qs` to the patched `6.16.1` (GHSA-6pq8-jhm2-2vcw, `qs.stringify` with `arrayFormat: 'comma'` could throw an uncaught `TypeError`). `qs` reaches the server through `express` and `body-parser`, and the pinned resolution moved from `6.16.0`.
+
+### Changed
+
+- Updated runtime dependencies: `ts-morph` from `24.0.0` to `28.0.0`, `@toon-format/toon` from `4.1.0` to `4.4.0`, and `@modelcontextprotocol/sdk` from `1.32.1` to `1.32.2` in the lockfile.
+- Updated development tooling: Vitest 5 (now with an explicit `vite` development dependency), `@types/node` 26, `gpt-tokenizer` 4, and patch updates to ESLint, Prettier, `typescript-eslint` and `yaml`. `process.disconnect` is now called optionally in the compiler worker entry to match the stricter Node 26 typings.
+- Updated reviewed GitHub Actions pins (`actions/setup-node` 7.1.0, `actions/upload-artifact` 7.0.2, `actions/download-artifact` 8.0.2, `github/codeql-action` 4.39.1), including the release workflow.
+
 ## [0.14.1] — published to `latest` and `next`, registry verified (2026-10-26)
 
 ### Security
