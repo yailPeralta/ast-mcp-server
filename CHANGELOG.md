@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.14.2] — not yet published (2026-10-28)
+## [0.14.2] — published to `latest` and `next`, registry verified (2026-10-28)
 
 ### Security
 
@@ -17,6 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Updated runtime dependencies: `ts-morph` from `24.0.0` to `28.0.0`, `@toon-format/toon` from `4.1.0` to `4.4.0`, and `@modelcontextprotocol/sdk` from `1.32.1` to `1.32.2` in the lockfile.
 - Updated development tooling: Vitest 5 (now with an explicit `vite` development dependency), `@types/node` 26, `gpt-tokenizer` 4, and patch updates to ESLint, Prettier, `typescript-eslint` and `yaml`. `process.disconnect` is now called optionally in the compiler worker entry to match the stricter Node 26 typings.
 - Updated reviewed GitHub Actions pins (`actions/setup-node` 7.1.0, `actions/upload-artifact` 7.0.2, `actions/download-artifact` 8.0.2, `github/codeql-action` 4.39.1), including the release workflow.
+
+### Release status
+
+- npm published immutable `0.14.2` bytes with integrity `sha512-fUKylMtamBEIBdLcGz27udjRLLl1+OTRir+0vRegN8x7JzM13uIZZ5lGFNEc7/rkUiFqmEE9HrrxvTRw2cgnYg==`. Public-registry verification passed; `latest` and `next` both resolve to `0.14.2`; and npm `gitHead`, the annotated `v0.14.2` tag, and the GitHub Release target exact commit `425a967002178dde685cae1dcf0ec5fad533ff54`.
+- Publish run `40753973275` succeeded on its first attempt, with no ambiguous readback; verification `40755636111` and promotion `40756782907` are green and authoritative.
 
 ## [0.14.1] — published to `latest` and `next`, registry verified (2026-10-26)
 
