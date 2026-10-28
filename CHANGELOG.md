@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `ast_get_impact` with `direction: "incoming"` no longer returns an empty, incomplete result on larger projects. The compiler resolver now finds incoming references through the language service instead of walking every AST node, so its work scales with the number of references rather than the project size, and the project-wide computed-call scan runs on its own budget so it can no longer starve the reference lookup (#353).
+
 ## [0.14.2] — published to `latest` and `next`, registry verified (2026-10-28)
 
 ### Security

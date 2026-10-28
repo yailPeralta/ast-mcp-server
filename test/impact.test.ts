@@ -143,27 +143,20 @@ describe("bounded impact traversal", () => {
       });
       fixtures.push(fixture);
       const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
-      const lateSource = project.getSourceFileOrThrow(path.join(fixture.root, "src/z.ts"));
-      const lateScan = vi.spyOn(lateSource, "forEachDescendant");
       const root = resolveImpactRoot(project, fixture.root, rootRequest("target", "src/target.ts"));
 
-      try {
-        const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
-          direction: "incoming",
-          max_depth: 1,
-          ...budgets,
-          relationship_kinds: ["reference"],
-        });
+      const result = traverseCompilerImpact(project, fixture.root, root, freshness, {
+        direction: "incoming",
+        max_depth: 1,
+        ...budgets,
+        relationship_kinds: ["reference"],
+      });
 
-        expect(lateScan).toHaveBeenCalled();
-        expect(result).toMatchObject({
-          visited_edges: 1,
-          incomplete: true,
-          truncation: { truncated: true, reason },
-        });
-      } finally {
-        lateScan.mockRestore();
-      }
+      expect(result).toMatchObject({
+        visited_edges: 1,
+        incomplete: true,
+        truncation: { truncated: true, reason },
+      });
     },
   );
 
@@ -1274,6 +1267,49 @@ describe("bounded impact traversal", () => {
       lateScan.mockRestore();
       globalSourceFileScan.mockRestore();
     }
+  });
+
+  it("finds an incoming call without spending the work budget on unrelated project nodes", async () => {
+    const filler = Object.fromEntries(
+      Array.from({ length: 40 }, (_, file) => [
+        `src/filler-${file}.ts`,
+        Array.from(
+          { length: 30 },
+          (_, index) => `export function f${file}_${index}(): number { return ${index} + 1; }`,
+        ).join("\n"),
+      ]),
+    );
+    const fixture = await createProjectFixture({
+      ...filler,
+      "src/service.ts": [
+        "export class Service {",
+        "  private dispatch(): number { return 1; }",
+        "  handle(): number { return this.dispatch(); }",
+        "}",
+      ].join("\n"),
+    });
+    fixtures.push(fixture);
+    const project = new Project({ tsConfigFilePath: path.join(fixture.root, "tsconfig.json") });
+    const root = resolveImpactRoot(
+      project,
+      fixture.root,
+      rootRequest("Service.dispatch", "src/service.ts"),
+    );
+
+    const resolution = createCompilerRelationshipResolver(
+      project,
+      fixture.root,
+      freshness,
+    ).edgesFor(root, {
+      direction: "incoming",
+      relationship_kinds: ["call", "reference"],
+      max_edges: 10,
+      max_work_items: 25_000,
+    });
+
+    expect(resolution.work_limit_reached).toBe(false);
+    expect(resolution.edges.map((edge) => edge.source.symbol_path)).toEqual(["Service.handle"]);
+    expect(resolution.incomplete).toBe(true);
   });
 
   it("resolves an exact endpoint without materializing whole-file symbol arrays", async () => {
