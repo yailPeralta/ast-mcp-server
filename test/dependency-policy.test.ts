@@ -48,6 +48,45 @@ it("locks patched transitives within every admitted parent range", async () => {
   expect.soft(lock["body-parser@npm:^2.2.1"]?.dependencies?.qs).toBe("npm:^6.16.1");
 });
 
+it("pins minimatch above every admitted parent range as a documented advisory exception", async () => {
+  // GHSA-g3hv-75wg-m249 is only fixed in minimatch >=11.0.1, and no parent admits a
+  // 11.x range yet. The pin is admitted because every parent only calls
+  // `minimatch(path, pattern)` or `new Minimatch(pattern, { dot: true }).match()`,
+  // none of the API removed in 11 (makeRe, Minimatch#regexp, AST, maxExtglobRecursion).
+  // Drop the exception once the parents below declare a range that admits 11.
+  const [manifestBytes, lockBytes] = await Promise.all(
+    ["package.json", "yarn.lock"].map((file) => readFile(path.join(repositoryRoot, file), "utf8")),
+  );
+  const manifest = JSON.parse(manifestBytes!) as { resolutions?: Record<string, string> };
+  const lock = yaml.parse(lockBytes!) as Record<
+    string,
+    { version?: string; resolution?: string; dependencies?: Record<string, string> }
+  >;
+
+  expect.soft(manifest.resolutions?.minimatch).toBe("11.0.3");
+  expect.soft(lock["minimatch@npm:11.0.3"]).toMatchObject({
+    version: "11.0.3",
+    resolution: "minimatch@npm:11.0.3",
+  });
+  const minimatchEntries = Object.keys(lock).filter((key) =>
+    key.split(", ").some((selector) => selector.startsWith("minimatch@npm:")),
+  );
+  expect.soft(minimatchEntries).toEqual(["minimatch@npm:11.0.3"]);
+
+  const parents = {
+    "@eslint/config-array": "npm:^10.2.4",
+    "@ts-morph/common": "npm:^10.0.1",
+    "@typescript-eslint/typescript-estree": "npm:^10.2.2",
+    eslint: "npm:^10.2.5",
+  };
+  for (const [name, range] of Object.entries(parents)) {
+    const entry = Object.entries(lock).find(([key]) =>
+      key.split(", ").some((selector) => selector.startsWith(`${name}@npm:`)),
+    );
+    expect.soft(entry?.[1]?.dependencies?.minimatch, name).toBe(range);
+  }
+});
+
 it("admits the patched Hono and Vitest family without installation-policy exceptions", async () => {
   const [manifestBytes, lockBytes, configBytes] = await Promise.all(
     ["package.json", "yarn.lock", ".yarnrc.yml"].map((file) =>
