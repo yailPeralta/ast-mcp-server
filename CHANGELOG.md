@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Security
 
 - Updated `@hono/node-server` to the patched `2.1.5` (GHSA-rmxm-3fg6-px4f, `serveStatic` decoded the request path a second time and could bypass middleware on static paths). It reaches the server only through `@modelcontextprotocol/sdk`, and the pinned resolution moved from `2.0.12`.
+- Updated `minimatch` to the patched `11.0.3` (GHSA-g3hv-75wg-m249, potential denial of service through globparts amplification). The pin sits above the `^10.x` ranges still declared by `eslint`, `@eslint/config-array`, `@typescript-eslint/typescript-estree` and `@ts-morph/common`, a documented exception: those packages only call `minimatch()` and `Minimatch#match()`, none of the API removed in `11`, and the dependency-policy test records the exception so it can be dropped once the parents admit `11`.
 
 ### Fixed
 
