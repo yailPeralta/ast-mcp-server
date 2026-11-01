@@ -30,7 +30,7 @@ function replaceRequired(source: string, oldValue: string, newValue: string): st
 }
 
 const fixtureSetup =
-  "      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0\n" +
+  "      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0\n" +
   "        with:\n" +
   '          node-version: "24.16.0"\n';
 const fixtureCommand =
