@@ -1,0 +1,2 @@
+# Unified diffs need space-only context markers; check the applied source instead.
+*.patch -whitespace
