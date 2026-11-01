@@ -23,6 +23,7 @@ it("locks patched transitives within every admitted parent range", async () => {
   expect.soft(manifest.packageManager).toBe("yarn@4.15.0");
   expect.soft(manifest.resolutions?.["fast-uri"]).toBe("3.1.9");
   expect.soft(manifest.resolutions?.qs).toBe("6.16.1");
+  expect.soft(manifest.resolutions?.["@hono/node-server"]).toBe("2.1.5");
 
   expect.soft(lock["fast-uri@npm:3.1.9"]).toMatchObject({
     version: "3.1.9",
@@ -32,7 +33,13 @@ it("locks patched transitives within every admitted parent range", async () => {
     version: "6.16.1",
     resolution: "qs@npm:6.16.1",
   });
-  expect.soft(lockBytes).not.toMatch(/fast-uri@npm:3\.1\.5|qs@npm:6\.(?:15\.3|16\.0)/u);
+  expect.soft(lock["@hono/node-server@npm:2.1.5"]).toMatchObject({
+    version: "2.1.5",
+    resolution: "@hono/node-server@npm:2.1.5",
+  });
+  expect
+    .soft(lockBytes)
+    .not.toMatch(/fast-uri@npm:3\.1\.5|qs@npm:6\.(?:15\.3|16\.0)|@hono\/node-server@npm:2\.0\./u);
 
   expect
     .soft(lock["ajv@npm:^8.0.0, ajv@npm:^8.17.1"]?.dependencies?.["fast-uri"])
