@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [0.14.3] — not yet published (2026-10-28)
 
+### Security
+
+- Updated `@hono/node-server` to the patched `2.1.5` (GHSA-rmxm-3fg6-px4f, `serveStatic` decoded the request path a second time and could bypass middleware on static paths). It reaches the server only through `@modelcontextprotocol/sdk`, and the pinned resolution moved from `2.0.12`.
+
 ### Fixed
 
 - `ast_get_impact` with `direction: "incoming"` no longer returns an empty, incomplete result on larger projects. The compiler resolver now finds incoming references through the language service instead of walking every AST node, so its work scales with the number of references rather than the project size, and the project-wide computed-call scan runs on its own budget so it can no longer starve the reference lookup (#353).
