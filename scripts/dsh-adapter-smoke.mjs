@@ -37,7 +37,7 @@ import { validateTimeoutBudget } from "./harness-timeout-budget.mjs";
 import { parseSingleNpmPackRecord } from "./npm-pack-json.mjs";
 import { createPrivatePnpmEnvironment, provisionPrivatePnpm } from "./private-pnpm.mjs";
 // prettier-ignore
-import { classifyExactHostToolError, createH03CleanupEvidence, parseProbeMarker, requireExactIdentity, runBoundedCommand, runOrderedCleanup, sanitizeDiagnosticText, terminateProcessTree } from "./runtime-process.mjs";
+import { awaitProcessTreeExit, classifyExactHostToolError, createH03CleanupEvidence, formatProcessSurvivors, parseProbeMarker, requireExactIdentity, runBoundedCommand, runOrderedCleanup, sanitizeDiagnosticText, terminateProcessTree } from "./runtime-process.mjs";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const packageMetadata = JSON.parse(
@@ -544,9 +544,10 @@ async function bootWithProbe(
         child.exitCode === 0 || marker.error !== null,
         "Harness lifecycle probe did not shut down cleanly",
       );
+      const tree = await awaitProcessTreeExit(ownedPids, { timeoutMs: 10_000 });
       assert(
-        ownedPids.every((pid) => !pidExists(pid)),
-        "Harness lifecycle process tree survived shutdown",
+        tree.exited,
+        `Harness lifecycle process tree survived shutdown: ${formatProcessSurvivors(tree.survivors)}`,
       );
     }
     return { ...marker, rawMarkerSha256: createHash("sha256").update(rawMarker).digest("hex") };

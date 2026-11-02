@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { Buffer } from "node:buffer";
+import { readFile } from "node:fs/promises";
 import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
 
@@ -38,6 +39,82 @@ function processGroupExists(pid) {
   } catch {
     return false;
   }
+}
+
+function pidExists(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readProcFile(pid, name) {
+  return readFile(`/proc/${pid}/${name}`, "utf8").catch(() => "");
+}
+
+/** Read `{ command, parentPid }` for one pid from `/proc`; empty/null when unavailable. */
+async function describeProcess(pid) {
+  if (process.platform !== "linux") return { command: "", parentPid: null };
+  const [cmdline, stat] = await Promise.all([
+    readProcFile(pid, "cmdline"),
+    readProcFile(pid, "stat"),
+  ]);
+  const command = cmdline.split("\0").filter(Boolean).join(" ");
+  // `stat` is `pid (comm) state ppid ...`; comm may contain spaces or parentheses.
+  const afterComm = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+  const parentPid = Number(afterComm[1]);
+  return {
+    command,
+    parentPid: Number.isSafeInteger(parentPid) && parentPid > 0 ? parentPid : null,
+  };
+}
+
+/** Walk ppid links from `pid` up to init, bounded so a corrupt table cannot loop. */
+async function collectParentChain(pid) {
+  const chain = [];
+  let current = pid;
+  while (chain.length < 64) {
+    const { parentPid } = await describeProcess(current);
+    if (parentPid === null || parentPid === current || chain.includes(parentPid)) break;
+    chain.push(parentPid);
+    if (parentPid === 1) break;
+    current = parentPid;
+  }
+  return chain;
+}
+
+/**
+ * Poll `pids` until every one has exited or `timeoutMs` elapses. Survivors are
+ * described with their command line and parent chain so a real leak is
+ * distinguishable from a slow shutdown on a loaded runner.
+ */
+export async function awaitProcessTreeExit(pids, { timeoutMs = 10_000, pollMs = 25 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let remaining = [...new Set(pids)].filter(pidExists);
+  while (remaining.length > 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+    remaining = remaining.filter(pidExists);
+  }
+  const survivors = await Promise.all(
+    remaining.map(async (pid) => ({
+      pid,
+      command: (await describeProcess(pid)).command,
+      parentChain: await collectParentChain(pid),
+    })),
+  );
+  return { exited: survivors.length === 0, survivors };
+}
+
+/** Render survivors for an assertion message. */
+export function formatProcessSurvivors(survivors) {
+  return survivors
+    .map(
+      ({ pid, command, parentChain }) =>
+        `${pid}${command ? ` [${command.slice(0, 160)}]` : ""} <- ${parentChain.join(" <- ") || "?"}`,
+    )
+    .join("; ");
 }
 
 async function waitForProcessGroupExit(pid, timeoutMs) {
