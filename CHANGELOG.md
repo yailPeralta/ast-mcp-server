@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The issue #103 `node:test` suites now run once per CI run in a dedicated `fixture` job on pinned Node 24.16.0, in parallel with `quality`, instead of once per `quality` matrix entry; the workflow policy check pins both job chains (#368).
 - The CI `quality` job now runs every committed `node:test` suite from the issue #103 chain: `npm-pack-json`, `acquisition`, `setup`, `test-lock`, `prepared-runner` and `prepared-install-build` join the exact-Node fixture command after the four suites it already ran, and the workflow policy check pins the extended command (#364).
 
 ### Fixed
