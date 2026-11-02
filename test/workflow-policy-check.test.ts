@@ -34,7 +34,7 @@ const fixtureSetup =
   "        with:\n" +
   '          node-version: "24.16.0"\n';
 const fixtureCommand =
-  "NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-concurrency=1 --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs scripts/issue-103/prepared-source.test.mjs scripts/issue-103/source-gate-lifecycle.test.mjs scripts/issue-103/private-runtime-admission.test.mjs";
+  "NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-concurrency=1 --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs scripts/issue-103/prepared-source.test.mjs scripts/issue-103/source-gate-lifecycle.test.mjs scripts/issue-103/private-runtime-admission.test.mjs scripts/npm-pack-json.test.mjs scripts/issue-103/acquisition.test.mjs scripts/issue-103/setup.test.mjs scripts/issue-103/test-lock.test.mjs scripts/issue-103/prepared-runner.test.mjs scripts/issue-103/prepared-install-build.test.mjs";
 const fixtureGate = `      - run: ${fixtureCommand}\n`;
 
 describe("workflow policy check", () => {
@@ -60,14 +60,17 @@ describe("workflow policy check", () => {
     ["wrong patch", 'node-version: "24.16.0"', 'node-version: "24.15.0"', /setup-node inputs/u],
     ["missing command", fixtureGate, "", /command chain/u],
     ...[
-      "node-fixture",
-      "prepared-source",
-      "source-gate-lifecycle",
-      "private-runtime-admission",
-    ].map(
-      (suite) =>
-        [`missing ${suite}`, ` scripts/issue-103/${suite}.test.mjs`, "", /command chain/u] as const,
-    ),
+      "scripts/issue-103/node-fixture",
+      "scripts/issue-103/prepared-source",
+      "scripts/issue-103/source-gate-lifecycle",
+      "scripts/issue-103/private-runtime-admission",
+      "scripts/npm-pack-json",
+      "scripts/issue-103/acquisition",
+      "scripts/issue-103/setup",
+      "scripts/issue-103/test-lock",
+      "scripts/issue-103/prepared-runner",
+      "scripts/issue-103/prepared-install-build",
+    ].map((suite) => [`missing ${suite}`, ` ${suite}.test.mjs`, "", /command chain/u] as const),
     ["missing serialization", "--test-concurrency=1 ", "", /command chain/u],
     ["parallel tests", "--test-concurrency=1", "--test-concurrency=2", /command chain/u],
     [

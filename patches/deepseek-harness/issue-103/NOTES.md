@@ -40,6 +40,12 @@ Chain: #309 → **📍 environment inspection** → installed Node/Corepack obse
 
 Native filesystem gate: `NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 yarn exec vitest run test/private-pnpm-inspection.test.ts test/private-pnpm.test.ts`. Tests use Vitest's default forks pool, scope and restore umask 077, compare controlled configuration only, verify pre-restoration state on success/rejection and await owned-root cleanup.
 
+## CI-gated and maintainer-run suites (#364)
+
+Every committed `node:test` suite under `scripts/issue-103/` plus `scripts/npm-pack-json.test.mjs` runs in the CI `quality` job through the exact-Node fixture command below, in this serial order: `node-fixture`, `prepared-source`, `source-gate-lifecycle`, `private-runtime-admission`, `npm-pack-json`, `acquisition`, `setup`, `test-lock`, `prepared-runner`, `prepared-install-build`. `scripts/workflow-policy-check.mjs` pins that exact command and `test/workflow-policy-check.test.ts` rejects dropping any suite, so adding a suite means updating all three places.
+
+The four appended suites that prepare official sources (`setup`, `prepared-runner`, `prepared-install-build`, and the fallback path of `private-runtime-admission`) need official Git network access, the fixed official pnpm `11.7.0` tarball, and an ordinary non-root POSIX user; `prepared-install-build` also runs `pnpm install --frozen-lockfile` in the prepared candidate and takes about three minutes. On a machine without those prerequisites `prepared-install-build` reports `private/package-manager/bin/pnpm exited with 1`; that is the same prerequisite `yarn test:dsh-adapter` reports as `BLOCKED: pinned Harness identity`, not a regression. No suite is maintainer-only.
+
 ## Mandatory exact-Node fixture CI prerequisite
 
 The existing `quality` job runs `node-fixture.test.mjs`, `prepared-source.test.mjs`, `source-gate-lifecycle.test.mjs` and `private-runtime-admission.test.mjs` serially on exact Node 24.16.0 after immutable Yarn installation and before restoring `${{ matrix.node }}`. Vitest does not discover these standalone `.mjs` suites. The matrix remains 22.13.0/24 on Ubuntu 24.04; no jobs or existing gates are removed.
