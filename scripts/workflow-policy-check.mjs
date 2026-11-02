@@ -37,11 +37,17 @@ const REVIEWED_ACTION_REVISIONS = new Map([
 ]);
 const MAX_WORKFLOW_BYTES = 256 * 1024;
 const MAX_JOB_TIMEOUT_MINUTES = 60;
-const CI_RELEASE_GATES = Object.freeze([
+const CI_BOOTSTRAP_GATES = Object.freeze([
   "node scripts/ci-prepare-gnu-mv.mjs prepare",
   "NODE_OPTIONS= corepack enable",
   "NODE_OPTIONS= yarn install --immutable",
+]);
+const CI_FIXTURE_GATES = Object.freeze([
+  ...CI_BOOTSTRAP_GATES,
   "NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-concurrency=1 --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs scripts/issue-103/prepared-source.test.mjs scripts/issue-103/source-gate-lifecycle.test.mjs scripts/issue-103/private-runtime-admission.test.mjs scripts/npm-pack-json.test.mjs scripts/issue-103/acquisition.test.mjs scripts/issue-103/setup.test.mjs scripts/issue-103/test-lock.test.mjs scripts/issue-103/prepared-runner.test.mjs scripts/issue-103/prepared-install-build.test.mjs",
+]);
+const CI_QUALITY_GATES = Object.freeze([
+  ...CI_BOOTSTRAP_GATES,
   "NODE_OPTIONS= corepack enable",
   "yarn format:check",
   "yarn lint",
@@ -488,12 +494,14 @@ function extractStepIdentities(job, workflowName) {
 }
 
 function validateCiWorkflow(lines, jobs, actions) {
-  if (jobs.length !== 1 || jobs[0].name !== "quality") {
-    policyFailure("ci.yml must contain only the quality job.");
+  if (jobs.length !== 2 || jobs[0].name !== "quality" || jobs[1].name !== "fixture") {
+    policyFailure("ci.yml must declare exactly the quality job followed by the fixture job.");
   }
-  validateExactJobKeys(jobs[0], ["runs-on", "timeout-minutes", "strategy", "steps"], "ci.yml");
-  validateExactNestedKeys(jobs[0], "strategy", 4, ["fail-fast", "matrix"], "ci.yml");
-  validateExactNestedKeys(jobs[0], "matrix", 6, ["node"], "ci.yml");
+  const [qualityJob, fixtureJob] = jobs;
+  validateExactJobKeys(qualityJob, ["runs-on", "timeout-minutes", "strategy", "steps"], "ci.yml");
+  validateExactJobKeys(fixtureJob, ["runs-on", "timeout-minutes", "steps"], "ci.yml");
+  validateExactNestedKeys(qualityJob, "strategy", 4, ["fail-fast", "matrix"], "ci.yml");
+  validateExactNestedKeys(qualityJob, "matrix", 6, ["node"], "ci.yml");
   const onIndex = requireTopLevelKey(lines, "on", "ci.yml");
   const triggers = directBlockKeys(lines, onIndex, "ci.yml on");
   if (JSON.stringify(triggers) !== JSON.stringify(["pull_request", "push"])) {
@@ -515,20 +523,24 @@ function validateCiWorkflow(lines, jobs, actions) {
     policyFailure("ci.yml jobs cannot add write-capable permission blocks.");
   }
   if (lines.some((line) => line.trim().startsWith("if:"))) {
-    policyFailure("ci.yml cannot conditionally skip its quality job or gate steps.");
+    policyFailure("ci.yml cannot conditionally skip its quality or fixture jobs or gate steps.");
   }
   if (lines.some((line) => line.trim() === "env:")) {
     policyFailure("ci.yml cannot inject workflow, job or step environment values.");
   }
-  const commands = extractRunCommands(jobs[0]);
-  if (JSON.stringify(commands) !== JSON.stringify(CI_RELEASE_GATES)) {
+  if (JSON.stringify(extractRunCommands(qualityJob)) !== JSON.stringify(CI_QUALITY_GATES)) {
     policyFailure("ci.yml must preserve the complete ordered release gate command chain.");
+  }
+  if (JSON.stringify(extractRunCommands(fixtureJob)) !== JSON.stringify(CI_FIXTURE_GATES)) {
+    policyFailure("ci.yml fixture job must preserve the exact-Node fixture command chain.");
   }
   if (
     JSON.stringify(actions.map(({ actionPath }) => actionPath)) !==
     JSON.stringify([
       "actions/checkout",
       "actions/setup-node",
+      "actions/setup-node",
+      "actions/checkout",
       "actions/setup-node",
       "actions/setup-node",
     ])
@@ -541,6 +553,7 @@ function validateCiWorkflow(lines, jobs, actions) {
     "actions/checkout",
     { "fetch-depth": "2", "persist-credentials": "false" },
     "ci.yml",
+    2,
   );
   validateActionInputs(
     lines,
@@ -548,22 +561,43 @@ function validateCiWorkflow(lines, jobs, actions) {
     "actions/setup-node",
     [
       { "node-version": '"24"' },
-      { "node-version": '"24.16.0"' },
       { "node-version": "${{ matrix.node }}" },
+      { "node-version": '"24"' },
+      { "node-version": '"24.16.0"' },
     ],
     "ci.yml",
   );
-  const expectedSteps = [
+  const bootstrapSteps = [
     "uses:actions/checkout",
     "uses:actions/setup-node",
-    ...CI_RELEASE_GATES.slice(0, 3).map((command) => `run:${command}`),
+    ...CI_BOOTSTRAP_GATES.map((command) => `run:${command}`),
     "uses:actions/setup-node",
-    `run:${CI_RELEASE_GATES[3]}`,
-    "uses:actions/setup-node",
-    ...CI_RELEASE_GATES.slice(4).map((command) => `run:${command}`),
   ];
-  if (JSON.stringify(extractStepIdentities(jobs[0], "ci.yml")) !== JSON.stringify(expectedSteps)) {
-    policyFailure("ci.yml must preserve the exact interleaved action and command step chain.");
+  const expectedSteps = new Map([
+    [
+      "quality",
+      [
+        ...bootstrapSteps,
+        ...CI_QUALITY_GATES.slice(CI_BOOTSTRAP_GATES.length).map((command) => `run:${command}`),
+      ],
+    ],
+    [
+      "fixture",
+      [
+        ...bootstrapSteps,
+        ...CI_FIXTURE_GATES.slice(CI_BOOTSTRAP_GATES.length).map((command) => `run:${command}`),
+      ],
+    ],
+  ]);
+  for (const job of jobs) {
+    if (
+      JSON.stringify(extractStepIdentities(job, "ci.yml")) !==
+      JSON.stringify(expectedSteps.get(job.name))
+    ) {
+      policyFailure(
+        `ci.yml job ${job.name} must preserve the exact interleaved action and command step chain.`,
+      );
+    }
   }
 }
 

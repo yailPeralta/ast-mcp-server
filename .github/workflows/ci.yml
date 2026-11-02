@@ -32,10 +32,6 @@ jobs:
       - run: NODE_OPTIONS= yarn install --immutable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24.16.0"
-      - run: NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-concurrency=1 --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs scripts/issue-103/prepared-source.test.mjs scripts/issue-103/source-gate-lifecycle.test.mjs scripts/issue-103/private-runtime-admission.test.mjs scripts/npm-pack-json.test.mjs scripts/issue-103/acquisition.test.mjs scripts/issue-103/setup.test.mjs scripts/issue-103/test-lock.test.mjs scripts/issue-103/prepared-runner.test.mjs scripts/issue-103/prepared-install-build.test.mjs
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
           node-version: ${{ matrix.node }}
       - run: NODE_OPTIONS= corepack enable
       - run: yarn format:check
@@ -54,3 +50,21 @@ jobs:
       - run: yarn pack --dry-run --json
       - run: node scripts/workflow-policy-check.mjs
       - run: git diff --check HEAD^ HEAD
+  fixture:
+    timeout-minutes: 60
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - run: node scripts/ci-prepare-gnu-mv.mjs prepare
+      - run: NODE_OPTIONS= corepack enable
+      - run: NODE_OPTIONS= yarn install --immutable
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.16.0"
+      - run: NODE_OPTIONS='' NODE_DISABLE_COMPILE_CACHE=1 node --test --test-concurrency=1 --test-reporter=tap --test-timeout=300000 scripts/issue-103/node-fixture.test.mjs scripts/issue-103/prepared-source.test.mjs scripts/issue-103/source-gate-lifecycle.test.mjs scripts/issue-103/private-runtime-admission.test.mjs scripts/npm-pack-json.test.mjs scripts/issue-103/acquisition.test.mjs scripts/issue-103/setup.test.mjs scripts/issue-103/test-lock.test.mjs scripts/issue-103/prepared-runner.test.mjs scripts/issue-103/prepared-install-build.test.mjs
