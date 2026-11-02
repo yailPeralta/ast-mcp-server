@@ -7,6 +7,16 @@ export interface BoundedCommandOptions extends SpawnOptions {
 }
 
 export function terminateProcessTree(child: ChildProcess): Promise<void>;
+export interface ProcessSurvivor {
+  pid: number;
+  command: string;
+  parentChain: number[];
+}
+export function awaitProcessTreeExit(
+  pids: Iterable<number>,
+  options?: { timeoutMs?: number; pollMs?: number },
+): Promise<{ exited: boolean; survivors: ProcessSurvivor[] }>;
+export function formatProcessSurvivors(survivors: ReadonlyArray<ProcessSurvivor>): string;
 export function sanitizeDiagnosticText(value: unknown): string;
 // prettier-ignore
 export function runOrderedCleanup(label: string, steps: ReadonlyArray<readonly [string, () => unknown | Promise<unknown>]>): Promise<void>;

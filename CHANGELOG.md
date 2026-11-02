@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The dsh-adapter smoke no longer reports a surviving Harness process tree when descendants are still exiting after a clean shutdown on a loaded runner. The lifecycle assertion now polls the owned process tree with a bounded ten-second deadline, and when survivors remain it keeps failing but lists each PID with its command line and parent chain (#363).
+
 ## [0.14.3] — not yet published (2026-10-28)
 
 ### Security

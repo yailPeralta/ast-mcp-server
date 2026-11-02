@@ -214,6 +214,9 @@ describe("pinned Harness smoke contract", () => {
     expect(source).toContain("collectOwnedProcessTree(pid)");
     expect(source).toContain("terminateOwnedPids(ownedPids)");
     expect(source).toContain("exited.every(Boolean)");
+    expect(source).toContain("awaitProcessTreeExit(ownedPids, { timeoutMs: 10_000 })");
+    expect(source).toContain("formatProcessSurvivors(tree.survivors)");
+    expect(source).not.toContain("ownedPids.every((pid) => !pidExists(pid))");
     expect(source).toContain('rejected.error?.info?.code === "UNKNOWN_TOOL"');
     expect(source).toContain("supervisedNames.length === 15");
     expect(source).toContain("await rm(temporaryRoot, { recursive: true, force: true })");

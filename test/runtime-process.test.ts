@@ -4,8 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  awaitProcessTreeExit,
   classifyExactHostToolError,
   createH03CleanupEvidence,
+  formatProcessSurvivors,
   parseProbeMarker,
   requireExactIdentity,
   runBoundedCommand,
@@ -214,4 +216,66 @@ describe("bounded subprocess runtime", () => {
       expect(() => process.kill(pid, 0)).toThrow();
     },
   );
+});
+
+describe("awaitProcessTreeExit", () => {
+  it.skipIf(process.platform === "win32")(
+    "waits for a slow descendant to exit within the bounded deadline",
+    async () => {
+      const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 400)"], {
+        stdio: "ignore",
+      });
+      const pid = child.pid as number;
+      const started = Date.now();
+
+      const result = await awaitProcessTreeExit([pid], { timeoutMs: 5_000 });
+
+      expect(result).toEqual({ exited: true, survivors: [] });
+      expect(Date.now() - started).toBeGreaterThanOrEqual(300);
+      expect(Date.now() - started).toBeLessThan(5_000);
+    },
+  );
+
+  it.skipIf(process.platform !== "linux")(
+    "reports each survivor with its command line and parent chain after the deadline",
+    async () => {
+      const child = spawn(
+        process.execPath,
+        ["-e", "setInterval(() => {}, 1000)", "survivor-marker"],
+        {
+          stdio: "ignore",
+        },
+      );
+      const pid = child.pid as number;
+      try {
+        const result = await awaitProcessTreeExit([pid], { timeoutMs: 200 });
+
+        expect(result.exited).toBe(false);
+        expect(result.survivors).toHaveLength(1);
+        const [survivor] = result.survivors;
+        expect(survivor.pid).toBe(pid);
+        expect(survivor.command).toContain("survivor-marker");
+        expect(survivor.parentChain[0]).toBe(process.pid);
+      } finally {
+        child.kill("SIGKILL");
+        await new Promise((resolve) => child.once("exit", resolve));
+      }
+    },
+  );
+
+  it("formats survivors with pid, command and parent chain", () => {
+    expect(
+      formatProcessSurvivors([
+        { pid: 42, command: "node worker.mjs", parentChain: [7, 1] },
+        { pid: 43, command: "", parentChain: [] },
+      ]),
+    ).toBe("42 [node worker.mjs] <- 7 <- 1; 43 <- ?");
+  });
+
+  it("resolves immediately for pids that no longer exist", async () => {
+    const started = Date.now();
+    const result = await awaitProcessTreeExit([2 ** 22 - 1], { timeoutMs: 5_000 });
+    expect(result).toEqual({ exited: true, survivors: [] });
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
 });
