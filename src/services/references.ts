@@ -23,16 +23,21 @@ export interface SymbolReferences extends Omit<Page<SymbolReference>, "items"> {
   readonly references: readonly SymbolReference[];
 }
 
-export function collectSymbolReferences(
+interface TsLocations {
+  readonly declaration: SymbolReference;
+  readonly references: readonly SymbolReference[];
+  /** Declaration (when requested) plus references, in discovery order. */
+  readonly locations: SymbolReference[];
+}
+
+function collectTsLocations(
   node: Node,
   projectRoot: string,
   symbolPath: string,
   includeDeclaration: boolean,
   detail: ReferenceDetail,
-  offset: number,
-  limit: number,
-  requestContext: RequestContext = NO_REQUEST_CONTEXT,
-): SymbolReferences {
+  requestContext: RequestContext,
+): TsLocations {
   requestContext.checkpoint();
   if (!Node.isReferenceFindable(node)) {
     throw new Error(
@@ -66,15 +71,41 @@ export function collectSymbolReferences(
   requestContext.checkpoint();
   const references = node.findReferencesAsNodes().map((reference) => location(reference, false));
   const declaration = location(node, true);
-  const allLocations = includeDeclaration ? [declaration, ...references] : references;
-  requestContext.checkpoint();
-  allLocations.sort((left, right) =>
-    `${left.file}:${left.line}:${left.column}:${left.is_declaration ? 0 : 1}`.localeCompare(
-      `${right.file}:${right.line}:${right.column}:${right.is_declaration ? 0 : 1}`,
-    ),
+  return {
+    declaration,
+    references,
+    locations: includeDeclaration ? [declaration, ...references] : [...references],
+  };
+}
+
+function compareLocations(left: SymbolReference, right: SymbolReference): number {
+  const key = (item: SymbolReference) =>
+    `${item.file}:${item.line}:${item.column}:${item.is_declaration ? 0 : 1}`;
+  return key(left).localeCompare(key(right));
+}
+
+export function collectSymbolReferences(
+  node: Node,
+  projectRoot: string,
+  symbolPath: string,
+  includeDeclaration: boolean,
+  detail: ReferenceDetail,
+  offset: number,
+  limit: number,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): SymbolReferences {
+  const { declaration, references, locations } = collectTsLocations(
+    node,
+    projectRoot,
+    symbolPath,
+    includeDeclaration,
+    detail,
+    requestContext,
   );
+  requestContext.checkpoint();
+  locations.sort(compareLocations);
   const affectedFiles = [...new Set([declaration, ...references].map((item) => item.file))].sort();
-  const page = paginate(allLocations, offset, limit);
+  const page = paginate(locations, offset, limit);
 
   requestContext.checkpoint();
   return {
