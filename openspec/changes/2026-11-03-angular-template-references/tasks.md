@@ -86,7 +86,7 @@ Dependency order: 1.1 || 1.2 -> 1.3 -> 1.4 -> 1.5 -> 1.6 -> 1.7 -> 1.8.
 
 Dependency order: 2.1 -> 2.2 -> 2.3; 2.4 parallel with 2.3; 2.5 last.
 
-## Unit 3: Hash-bound `.html` rename (branch `feat/angular-template-references-u3-rename`, base U2, ~550 lines)
+## Unit 3: Hash-bound `.html` rename (split into U3a freshness 3.1-3.3, U3b rename 3.4-3.6, U3c apply guards 3.7/3.9/3.10; branches `feat/angular-template-references-u3{a-freshness,b-rename,c-apply-guards}`, 271/626/309 lines)
 
 - [x] 3.1 Golden first: record non-Angular workspace-digest golden hex from unmodified `main` code; include a project with `.html` and a fake `@Component` but no `@angular/core`.
   - RED: `test/workspace-hash.test.ts` > "non-Angular workspace digest is byte-identical (golden)" and > "html plus fake @Component without core is byte-identical". They pass at record time; they are the regression guard for 3.2.
@@ -108,7 +108,7 @@ Dependency order: 2.1 -> 2.2 -> 2.3; 2.4 parallel with 2.3; 2.5 last.
   - RED: "rename updates TS and external template (apply writes both)", "inline usage blocks rename", "unresolvable template blocks rename", "inherited member blocks rename", "compiler missing blocks rename", "new name colliding with a local blocks the whole plan", "new name $any blocks", "plain TS project rename unchanged", "pipe name not renamed".
   - Spec: ATN-R1 (updates), ATN-R3, ATN-R4 (3 S), ATN-R5 (2 S), ATN-R6, ATN-R7. Depends on 3.5.
 - [x] 3.7 Apply-path guarantees (no new production code expected; adjust only if red): stale html after prepare, rollback of html, sequential-not-atomic, replay.
-  - RED (using `setOperationTestHooksForTests`): "html edited after prepare yields CONFLICT", "TS commit failure after html restores html", "later target conflict leaves earlier html applied and reports AMBIGUOUS_APPLY/CONFLICT per contract", "rollback proof lost reports honestly", "template file earlier in sequence", "receipt persistence failure after commit", "replay and cancellation with html", "html in receipts and import/export replay", "plan prepared before upgrade conflicts (pre-upgrade plan)".
+  - RED (using `setOperationTestHooksForTests`): "html edited after prepare yields CONFLICT", "TS commit failure after html restores html", "later target conflict leaves the external TS and restores the owned html" (CONFLICT, EWS-R1 literal), "rollback proof lost with the template earlier in sequence reports AMBIGUOUS_APPLY" (covers the proof-lost and earlier-template items), "receipt persistence failure after commit", "replay and cancellation with html", "html in receipts and import/export replay", "plan prepared before upgrade conflicts (pre-upgrade plan)".
   - Spec: ATN-R1 (stale-html), ATN-R2, EWS-R1 (3 S), EWS-R2 (3 S), TWF-R5. Depends on 3.6.
 - [ ] 3.8 (blocked: dsh-adapter smoke freezes tool descriptions; maintainer decision pending) `rename_symbol.ts` description (template writes; TS-only diagnostics) + inventory re-baseline.
   - RED: `test/tools/rename_symbol.test.ts` > "description states template edits and TS-only diagnostics"; inventory golden.

@@ -291,9 +291,30 @@
   "risks": [
     "Split resolves the budget: u1a 356, u1b 619, u1c 494 lines.",
     "U2 landed at 879 changed lines (src/test/scripts) vs the ~350 forecast; split by commit into u2a (591) and u2b (288). u2a exceeds the 400-line repo budget and carries size:exception.",
-    "U3 landed at 1204 changed lines (src 193, test 1011) vs ~550 forecast; test code is 84%. Split by commit.",
-    "u3 branch was based on 8423a77; u2b branch has since advanced (c21f3e5) so U3 needs a rebase onto it."
+    "U3 landed at 1204 changed lines (src 193, test 1011) vs ~550 forecast; test code is 84%. Split by commit into u3a (3.1-3.3, 271), u3b (3.4-3.6, 626, size:exception) and u3c (3.7, 3.9, 309); rebased onto c21f3e5."
   ],
+  "u3_split": {
+    "reason": "auto-chain: U3 was 1204 lines vs 800 budget",
+    "u3a": {
+      "branch": "feat/angular-template-references-u3a-freshness",
+      "base": "feat/angular-template-references-u2b-tool",
+      "tasks": ["3.1", "3.2", "3.3"],
+      "changed_lines": 271
+    },
+    "u3b": {
+      "branch": "feat/angular-template-references-u3b-rename",
+      "base": "feat/angular-template-references-u3a-freshness",
+      "tasks": ["3.4", "3.5", "3.6"],
+      "changed_lines": 626
+    },
+    "u3c": {
+      "branch": "feat/angular-template-references-u3c-apply-guards",
+      "base": "feat/angular-template-references-u3b-rename",
+      "tasks": ["3.7", "3.9", "3.10"],
+      "changed_lines": 309
+    },
+    "task_3_7_test_mapping": "tasks.md item 'later target conflict leaves earlier html applied and reports AMBIGUOUS_APPLY/CONFLICT per contract' is implemented as 'later target conflict leaves the external TS and restores the owned html' (CONFLICT, EWS-R1 literal); 'rollback proof lost reports honestly' and 'template file earlier in sequence' are merged into one test asserting AMBIGUOUS_APPLY."
+  },
   "u2_split": {
     "reason": "auto-chain: U2 was 879 lines vs 800 budget",
     "u2a": {
