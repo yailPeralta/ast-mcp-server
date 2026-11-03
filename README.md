@@ -79,6 +79,24 @@ Impact has two independent completeness channels:
 
 These fields are additive: existing edge shapes, kind strings, defaults, and public errors remain stable. MCP `ast_get_impact` JSON and TOON represent the same logical coverage/work result; candidate MCP output remains canonical JSON, while read-only batch output may encode that same candidate result as TOON. Property, element, dynamic, computed-key, and external-alternative dispatch remains edge-free and unfinished—this contract does not certify the deferred #219 or #220 classifiers.
 
+### Angular templates
+
+In an Angular project, `ast_find_references` also reports usages of a component member in its template, and `ast_rename_symbol` rewrites external templates as part of the same reviewed plan. This needs the project's own `@angular/compiler`. The server does not bundle it: it is an optional peer dependency (`>=20.0.0 <23.0.0`, majors 20 to 22) that Angular projects already install next to `@angular/core`. Nothing changes for projects without `@angular/core`.
+
+Install or align it in the target project when the response reports `compiler_missing` or `compiler_unsupported`:
+
+```bash
+yarn add --dev @angular/compiler@^21   # or npm install --save-dev @angular/compiler@^21
+```
+
+Template evidence is explicit about what it proves:
+
+- Each item carries `origin` (`compiler`, `template_external`, `template_inline`); the response adds `template_coverage` and `template_reference_count`. Only `template_coverage.status: "completed"` supports a claim that no template usage exists.
+- Rename returns `INCOMPLETE_EVIDENCE` when coverage is `unfinished` or `unsupported`, and `MUTATION_BLOCKED` for inline templates, a new name that collides with a template local, or `$any`. Inline templates are never rewritten.
+- `ast_explore` stays TypeScript-only for references; template evidence there is tracked as a follow-up issue. Use `ast_find_references` for template usages.
+- Diagnostics stay TypeScript-only: template errors are not detected, so run the project's Angular build or tests after a rename.
+- Yarn PnP projects without a `node_modules` directory cannot resolve the compiler and report `unfinished`; use `nodeLinker: node-modules` for template coverage.
+
 ## Why this helps
 
 - **Less context:** the agent retrieves the smallest structural unit that answers the question instead of loading the complete file by default.
