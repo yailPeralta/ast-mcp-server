@@ -88,33 +88,33 @@ Dependency order: 2.1 -> 2.2 -> 2.3; 2.4 parallel with 2.3; 2.5 last.
 
 ## Unit 3: Hash-bound `.html` rename (branch `feat/angular-template-references-u3-rename`, base U2, ~550 lines)
 
-- [ ] 3.1 Golden first: record non-Angular workspace-digest golden hex from unmodified `main` code; include a project with `.html` and a fake `@Component` but no `@angular/core`.
+- [x] 3.1 Golden first: record non-Angular workspace-digest golden hex from unmodified `main` code; include a project with `.html` and a fake `@Component` but no `@angular/core`.
   - RED: `test/workspace-hash.test.ts` > "non-Angular workspace digest is byte-identical (golden)" and > "html plus fake @Component without core is byte-identical". They pass at record time; they are the regression guard for 3.2.
   - Spec: TWF-R2. Must precede 3.2.
-- [ ] 3.2 `createWorkspaceSnapshot` derives the template set via `listTemplateFiles`; `currentWorkspaceHash` uses the same function.
+- [x] 3.2 `createWorkspaceSnapshot` derives the template set via `listTemplateFiles`; `currentWorkspaceHash` uses the same function.
   - RED: `test/workspace-hash.test.ts` > "html edit changes the hash in an Angular project", "hash does not depend on compiler availability", "removed template fails closed".
   - GREEN: `workspace.ts` edit; 3.1 goldens stay green.
   - Spec: TWF-R1 (2 S), TWF-R4. Depends on 3.1.
-- [ ] 3.3 Watcher directories: both `selectProjectWatchDirectories` calls in `project.ts` pass `[...sourcePaths, ...listTemplateFiles(context)]`.
+- [x] 3.3 Watcher directories: both `selectProjectWatchDirectories` calls in `project.ts` pass `[...sourcePaths, ...listTemplateFiles(context)]`.
   - RED: `test/project-watch.test.ts` > "template edited between requests invalidates the session", "template in a directory without TypeScript is watched".
   - Spec: TWF-R3 (2 S). Parallel with 3.4 after 3.2 (disjoint files: `project.ts` vs `operations.ts`).
-- [ ] 3.4 Mechanical `mutate(context, rc)` async refactor of `createPlan` and its three callers (`prepareRename`, `prepareReplaceBody`, `prepareScaffoldClass`) with no behavior change.
+- [x] 3.4 Mechanical `mutate(context, rc)` async refactor of `createPlan` and its three callers (`prepareRename`, `prepareReplaceBody`, `prepareScaffoldClass`) with no behavior change.
   - RED: existing `test/operations*.test.ts` suites run first against a new test `test/operations.test.ts` > "createPlan mutate receives ProjectContext and RequestContext" (fails until signature changes); all existing suites stay green.
   - Spec: EWS-R2 (invariants preserved). Depends on 3.2.
-- [ ] 3.5 `auxiliaryEdits` channel in `createPlan`: safe-file check, `expectedHash` vs snapshot, overlap rejection, descending application, `PlannedFileInternal` with BOM and mode, sorted merge, missing-from-snapshot containment guard, `.html` kept out of diagnostics `textChanges`.
+- [x] 3.5 `auxiliaryEdits` channel in `createPlan`: safe-file check, `expectedHash` vs snapshot, overlap rejection, descending application, `PlannedFileInternal` with BOM and mode, sorted merge, missing-from-snapshot containment guard, `.html` kept out of diagnostics `textChanges`.
   - RED: `test/operations-templates.test.ts` > "overlapping auxiliary edits are rejected", "auxiliary edit with stale hash raises workspace-changed", "html PlannedFile preserves BOM and mode", "html edit absent from diagnostics textChanges".
   - Spec: ATN-R1, EWS-R2. Depends on 3.4.
-- [ ] 3.6 `prepareRename` integration: call `collectTemplateUsages` before `node.rename`; block on coverage not completed/n.a. (`INCOMPLETE_EVIDENCE`), inline usage or `newName` in `localsInScope` or `$any` (`MUTATION_BLOCKED`); count template edits in `reference_count`; pipe names not renamed.
+- [x] 3.6 `prepareRename` integration: call `collectTemplateUsages` before `node.rename`; block on coverage not completed/n.a. (`INCOMPLETE_EVIDENCE`), inline usage or `newName` in `localsInScope` or `$any` (`MUTATION_BLOCKED`); count template edits in `reference_count`; pipe names not renamed.
   - RED: "rename updates TS and external template (apply writes both)", "inline usage blocks rename", "unresolvable template blocks rename", "inherited member blocks rename", "compiler missing blocks rename", "new name colliding with a local blocks the whole plan", "new name $any blocks", "plain TS project rename unchanged", "pipe name not renamed".
   - Spec: ATN-R1 (updates), ATN-R3, ATN-R4 (3 S), ATN-R5 (2 S), ATN-R6, ATN-R7. Depends on 3.5.
-- [ ] 3.7 Apply-path guarantees (no new production code expected; adjust only if red): stale html after prepare, rollback of html, sequential-not-atomic, replay.
+- [x] 3.7 Apply-path guarantees (no new production code expected; adjust only if red): stale html after prepare, rollback of html, sequential-not-atomic, replay.
   - RED (using `setOperationTestHooksForTests`): "html edited after prepare yields CONFLICT", "TS commit failure after html restores html", "later target conflict leaves earlier html applied and reports AMBIGUOUS_APPLY/CONFLICT per contract", "rollback proof lost reports honestly", "template file earlier in sequence", "receipt persistence failure after commit", "replay and cancellation with html", "html in receipts and import/export replay", "plan prepared before upgrade conflicts (pre-upgrade plan)".
   - Spec: ATN-R1 (stale-html), ATN-R2, EWS-R1 (3 S), EWS-R2 (3 S), TWF-R5. Depends on 3.6.
-- [ ] 3.8 `rename_symbol.ts` description (template writes; TS-only diagnostics) + inventory re-baseline.
+- [ ] 3.8 (blocked: dsh-adapter smoke freezes tool descriptions; maintainer decision pending) `rename_symbol.ts` description (template writes; TS-only diagnostics) + inventory re-baseline.
   - RED: `test/tools/rename_symbol.test.ts` > "description states template edits and TS-only diagnostics"; inventory golden.
   - Spec: ATN-R8. Parallel with 3.7.
-- [ ] 3.9 Snapshot cost benchmark smoke (design Risks): `test/workspace-snapshot-bench.test.ts` > "listTemplateFiles adds bounded overhead on a large non-Angular project".
-- [ ] 3.10 U3 gate: all gates + all four smokes (`yarn test:mcp`, `test:lifecycle`, `test:cli`, `test:errors`).
+- [x] 3.9 Snapshot cost benchmark smoke (design Risks): `test/workspace-snapshot-bench.test.ts` > "listTemplateFiles adds bounded overhead on a large non-Angular project".
+- [x] 3.10 U3 gate: all gates + all four smokes (`yarn test:mcp`, `test:lifecycle`, `test:cli`, `test:errors`).
 
 Dependency order: 3.1 -> 3.2 -> (3.3 || 3.4) -> 3.5 -> 3.6 -> (3.7 || 3.8) -> 3.9 -> 3.10.
 

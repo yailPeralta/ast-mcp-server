@@ -1,9 +1,9 @@
 {
   "change": "2026-11-03-angular-template-references",
-  "unit": "U1, U2",
+  "unit": "U1, U2, U3 (3.8 blocked)",
   "branch": "split: u1a-hygiene (1.1-1.3), u1b-loader (1.4,1.5,1.8), u1c-extractor (1.6,1.7)",
   "mode": "Strict TDD",
-  "status": "partial (U1, U2 of 4 done and committed; U3-U4 pending)",
+  "status": "partial (U1, U2, U3 done and committed except 3.8 which is blocked; U4 pending)",
   "issue": 370,
   "tasks": {
     "1.1": "done",
@@ -18,9 +18,19 @@
     "2.2": "done",
     "2.3": "done",
     "2.4": "done",
-    "2.5": "done"
+    "2.5": "done",
+    "3.1": "done",
+    "3.2": "done",
+    "3.3": "done",
+    "3.4": "done",
+    "3.5": "done",
+    "3.6": "done",
+    "3.7": "done",
+    "3.9": "done",
+    "3.10": "done",
+    "3.8": "blocked: dsh-adapter smoke freezes tool descriptions; maintainer decision pending"
   },
-  "pending": ["U3 3.1-3.10", "U4 4.1-4.4"],
+  "pending": ["3.8 (blocked)", "U4 4.1-4.4"],
   "tdd_evidence": [
     {
       "task": "1.1",
@@ -97,6 +107,96 @@
       "green": "2/2 and 33/33",
       "triangulate": "TS error still diagnosed (error_count 1) vs template breakage (0)",
       "refactor": "none"
+    },
+    {
+      "task": "3.1",
+      "test": "test/workspace-hash.test.ts",
+      "layer": "approval (golden)",
+      "safety_net": "workspace.ts byte-identical to main",
+      "red": "2/2 failed against placeholder golden; real values recorded from unmodified code",
+      "green": "2/2, stable across 2 runs with different temp roots",
+      "triangulate": "plain TS project + html with fake @Component without core",
+      "refactor": "digest over fixture-relative paths so it is root independent"
+    },
+    {
+      "task": "3.2",
+      "test": "test/workspace-hash.test.ts",
+      "layer": "integration",
+      "safety_net": "file-fingerprints, operations, project, project-watcher, symbol-index, angular-templates 162 pass",
+      "red": "4/4 new failed",
+      "green": "6/6",
+      "triangulate": "compiler v21 vs null, removed template, sourceDigest unchanged",
+      "refactor": "none"
+    },
+    {
+      "task": "3.3",
+      "test": "test/project-watch.test.ts",
+      "layer": "integration (real fs watcher + spy)",
+      "safety_net": "project, project-watcher, project-status 112 pass",
+      "red": "3/3 failed with the production change reverted via patch (no stash)",
+      "green": "3/3, 3 consecutive runs",
+      "triangulate": "initial dirs, replaced watcher after new component, real fs event -> pending/source_change",
+      "refactor": "watchedFilePaths helper shared by both call sites"
+    },
+    {
+      "task": "3.4",
+      "test": "test/operations.test.ts",
+      "layer": "approval (refactor)",
+      "safety_net": "operations 36 pass",
+      "red": "createPlan not exported (2 failed)",
+      "green": "operations+scaffold+mcp.integration 73 pass",
+      "triangulate": "success path and rejected mutate",
+      "refactor": "none"
+    },
+    {
+      "task": "3.5",
+      "test": "test/operations-templates.test.ts",
+      "layer": "integration",
+      "safety_net": "operations 38 pass",
+      "red": "6/6 failed (auxiliaryEdits ignored)",
+      "green": "6/6; one test fixture bug fixed (notes.html had no usages)",
+      "triangulate": "overlap, descending apply, stale hash, outside snapshot, BOM+mode, diagnostics textChanges",
+      "refactor": "planAuxiliaryFiles/applyEditsDescending extracted"
+    },
+    {
+      "task": "3.6",
+      "test": "test/operations-templates.test.ts",
+      "layer": "integration (real compiler v21)",
+      "safety_net": "operations + mcp.integration",
+      "red": "11/12 failed",
+      "green": "18/18; operations, mcp.integration 86 pass",
+      "triangulate": "property, method, inline, unresolved, inherited, compiler missing, local collision, $any, plain TS, fake @Component",
+      "refactor": "assertTemplateRenameAllowed extracted"
+    },
+    {
+      "task": "3.7",
+      "test": "test/operations-templates.test.ts",
+      "layer": "integration (test hooks)",
+      "safety_net": "operations 38 pass",
+      "red": "guard tests: task states no production code expected; all 8 passed immediately with concrete assertions",
+      "green": "26/26",
+      "triangulate": "stale html, TS failure rollback, later conflict, proof lost, receipt failure, replay+cancel, import/export, pre-upgrade plan",
+      "refactor": "none"
+    },
+    {
+      "task": "3.8",
+      "test": "n/a",
+      "layer": "n/a",
+      "safety_net": "n/a",
+      "red": "not started",
+      "green": "BLOCKED by orchestrator instruction: yarn test:dsh-adapter freezes tool descriptions vs public 0.13.0",
+      "triangulate": "n/a",
+      "refactor": "n/a"
+    },
+    {
+      "task": "3.9",
+      "test": "test/workspace-snapshot-bench.test.ts",
+      "layer": "benchmark smoke",
+      "safety_net": "N/A (new)",
+      "red": "guard: function pre-exists, passes at once",
+      "green": "2/2 over 3 runs",
+      "triangulate": "non-Angular 300 files (relative bound) and Angular 150 components (absolute bound)",
+      "refactor": "none"
     }
   ],
   "commands": [
@@ -135,6 +235,18 @@
     {
       "cmd": "yarn test:cli",
       "result": "ok"
+    },
+    {
+      "cmd": "yarn typecheck; yarn lint; yarn format:check; yarn build (U3 head)",
+      "result": "all exit 0"
+    },
+    {
+      "cmd": "env -u GIT_EDITOR yarn test (U3 head)",
+      "result": "90 files, 1300 passed, 2 skipped; supervised-worker 2 passed; exit 0"
+    },
+    {
+      "cmd": "yarn test:mcp / test:cli / test:errors / test:lifecycle",
+      "result": "all exit 0"
     }
   ],
   "changed_lines": {
@@ -144,7 +256,8 @@
     "u2a": 591,
     "u2b": 288,
     "yarn_lock": 42,
-    "budget": 800
+    "budget": 800,
+    "u3": 1204
   },
   "decisions": [
     "Alias versions: 20.3.34, 21.2.25, 22.2.4. Latest 20.3.35 and 21.2.26 are quarantined by Yarn npmMinimalAgeGate (1440 min) and were not bypassed.",
@@ -165,12 +278,21 @@
     "U2: template item context for detail=context is read lazily from the template file (or the TS file for inline) and capped at 500 chars like TS items.",
     "U2: tasks name test/tools/find_references.test.ts and test/references.test.ts, which did not exist; created them.",
     "Native attempt ledger unavailable in this gentle-ai build (no sdd-attempt command); proceeded without a token.",
-    "U2b: the find_references description change was reverted after CI. `yarn test:dsh-adapter` (mandatory) hashes description plus input schema of every tool except ast_explore against the public 0.13.0 package, so tool descriptions cannot change until the public baseline moves. Output-schema additions are not hashed and stay. Maintainer chose revert over extending the smoke exemption; the description text (and rename_symbol's in 3.8) is deferred as U4 debt."
+    "U2b: the find_references description change was reverted after CI. `yarn test:dsh-adapter` (mandatory) hashes description plus input schema of every tool except ast_explore against the public 0.13.0 package, so tool descriptions cannot change until the public baseline moves. Output-schema additions are not hashed and stay. Maintainer chose revert over extending the smoke exemption; the description text (and rename_symbol's in 3.8) is deferred as U4 debt.",
+    "U3: workspace snapshot adds canonical template paths to files (digest, fileCount) but not sourceFiles, so sourceDigest/sourceFileCount stay TS-only.",
+    "U3: createPlan exported as an internal seam so the mutate contract and auxiliary-edit channel are testable directly; mutate returns {referenceCount, auxiliaryEdits?}.",
+    "U3: auxiliary edit offsets are over BOM-free decoded text; BOM re-added by encodeUpdatedSource; edits missing from snapshot raise 'missing from the workspace snapshot', hash mismatch raises the existing 'Workspace changed' error (CONFLICT/STALE class).",
+    "U3: $any and local-name collision block only when coverage is completed, keeping non-Angular and not_applicable renames unchanged.",
+    "U3: error codes via PublicOperationalError: INCOMPLETE_EVIDENCE (unfinished/unsupported), MUTATION_BLOCKED (inline usage, collision, $any).",
+    "U3 task 3.8 NOT implemented per orchestrator: rename_symbol description must not change (dsh-adapter smoke); ATN-R8 remains open pending maintainer decision. No inventory re-baseline.",
+    "U3: Watcher call site 2 lists templates from the AST before refreshFromFileSystem, so a templateUrl edit in an existing TS file takes effect for watching on the next sync; newly added component files are covered immediately."
   ],
   "blockers": [],
   "risks": [
     "Split resolves the budget: u1a 356, u1b 619, u1c 494 lines.",
-    "U2 landed at 879 changed lines (src/test/scripts) vs the ~350 forecast; split by commit into u2a (591) and u2b (288). u2a exceeds the 400-line repo budget and carries size:exception."
+    "U2 landed at 879 changed lines (src/test/scripts) vs the ~350 forecast; split by commit into u2a (591) and u2b (288). u2a exceeds the 400-line repo budget and carries size:exception.",
+    "U3 landed at 1204 changed lines (src 193, test 1011) vs ~550 forecast; test code is 84%. Split by commit.",
+    "u3 branch was based on 8423a77; u2b branch has since advanced (c21f3e5) so U3 needs a rebase onto it."
   ],
   "u2_split": {
     "reason": "auto-chain: U2 was 879 lines vs 800 budget",
