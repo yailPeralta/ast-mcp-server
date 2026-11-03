@@ -1,6 +1,14 @@
+import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createFreshProject } from "../src/services/project.js";
+import { collectTemplateUsages } from "../src/services/angular-templates.js";
+import {
+  createFreshProject,
+  findDeclarationByName,
+  getSourceFileOrThrow,
+} from "../src/services/project.js";
+import { NO_REQUEST_CONTEXT } from "../src/services/request-context.js";
+import { createAngularFixture, type AngularFixture } from "./helpers/angular-fixture.js";
 import { createWorkspaceSnapshot, hashWorkspaceFiles } from "../src/services/workspace.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
@@ -67,5 +75,80 @@ describe("workspace hash regression guard (TWF-R2)", () => {
     expect(relativeFiles).toEqual(["src/fake.component.ts", "tsconfig.json"]);
     expect(relativeDigest(root, snapshot.files)).toBe(FAKE_COMPONENT_GOLDEN);
     expect(snapshot.digest).toBe(hashWorkspaceFiles(snapshot.files));
+  });
+});
+
+const ANGULAR_FILES = {
+  "src/a.component.ts": [
+    'import { Component } from "@angular/core";',
+    '@Component({ selector: "app-a", templateUrl: "./a.component.html" })',
+    "export class AComponent {",
+    '  title = "x";',
+    "}",
+    "",
+  ].join("\n"),
+  "src/a.component.html": "<h1>{{ title }}</h1>\n",
+};
+
+const angularFixtures: AngularFixture[] = [];
+
+afterEach(async () => {
+  await Promise.all(angularFixtures.splice(0).map((fixture) => fixture.cleanup()));
+});
+
+async function angularSnapshot(compiler: "v21" | null) {
+  const fixture = await createAngularFixture(ANGULAR_FILES, { compiler });
+  angularFixtures.push(fixture);
+  const digest = () => createWorkspaceSnapshot(createFreshProject(fixture.root)).digest;
+  return { fixture, digest };
+}
+
+describe("templates join the workspace hash (TWF-R1, TWF-R4)", () => {
+  it("html edit changes the hash in an Angular project", async () => {
+    const { fixture, digest } = await angularSnapshot("v21");
+    const before = digest();
+
+    expect(digest()).toBe(before);
+    await fixture.write("src/a.component.html", "<h1>{{ title }}!</h1>\n");
+
+    expect(digest()).not.toBe(before);
+  });
+
+  it("hash does not depend on compiler availability", async () => {
+    const { fixture, digest } = await angularSnapshot(null);
+    const before = digest();
+
+    await fixture.write("src/a.component.html", "<h1>{{ title }}!</h1>\n");
+
+    expect(digest()).not.toBe(before);
+  });
+
+  it("removed template fails closed", async () => {
+    const { fixture, digest } = await angularSnapshot("v21");
+    const before = digest();
+
+    await rm(path.join(fixture.root, "src/a.component.html"));
+
+    expect(digest()).not.toBe(before);
+    const context = createFreshProject(fixture.root);
+    const node = findDeclarationByName(
+      getSourceFileOrThrow(context.project, "src/a.component.ts"),
+      "AComponent.title",
+    );
+    const { coverage } = await collectTemplateUsages(node, context, NO_REQUEST_CONTEXT);
+    expect(coverage).toMatchObject({ status: "unfinished", reason: "template_unresolved" });
+  });
+
+  it("ts-only discovery keeps sourceDigest unchanged by template edits", async () => {
+    const { fixture } = await angularSnapshot("v21");
+    const snapshot = () => createWorkspaceSnapshot(createFreshProject(fixture.root));
+    const before = snapshot();
+    await writeFile(path.join(fixture.root, "src/a.component.html"), "<p>{{ title }}</p>\n");
+    const after = snapshot();
+
+    expect(after.sourceDigest).toBe(before.sourceDigest);
+    expect(after.sourceFileCount).toBe(before.sourceFileCount);
+    expect(after.fileCount).toBe(before.fileCount);
+    expect(after.digest).not.toBe(before.digest);
   });
 });
