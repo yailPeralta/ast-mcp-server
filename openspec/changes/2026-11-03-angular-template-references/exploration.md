@@ -44,10 +44,12 @@ Angular component logic is already covered by ast-mcp-server because `.ts` files
 Approach 1 as slice 1.
 
 Seams:
+
 - (a) `references.ts` returns template usages as an additive field or as items flagged `source: "template"`; they count toward total and pagination and stay bounded.
 - (b) `createPlan` takes auxiliary edits and an `auxiliaryFiles` set that feeds the workspace hash. `applyOperation` needs no logic change beyond mirroring that hash input.
 
 In scope:
+
 - External templates (`templateUrl` string literal inside the project root).
 - Inline `template:` literals for read-only `find_references`.
 - Rename that writes into `.html`, with full hash binding.
@@ -55,6 +57,7 @@ In scope:
 - Control-flow blocks, `@let`, structural directives and pipe arguments.
 
 Out of scope:
+
 - Rename into inline templates (conflicts with ts-morph in-memory edits; reported as unsupported and blocks the rename).
 - Pipe names; template reference variables as rename targets; child-component `@Input`/`@Output` renames and selector matching; host-binding strings; computed or non-literal `templateUrl`; `styleUrls`; template type diagnostics.
 - `get_impact` edges (separate slice, separate additive channel, never entering the compiler-authoritative edge set; `find_test_candidates` stays unaffected or returns explicit incomplete evidence).
@@ -63,6 +66,7 @@ Out of scope:
 Completeness model: when Angular is detected and a template cannot be resolved or parsed (missing file, non-literal `templateUrl`, parse error, compiler outside the supported range), the template channel's coverage is `unfinished` and rename is blocked (INCOMPLETE_EVIDENCE style). The tool never claims proven absence. If the `.html` changes after prepare, apply hits the same workspace-hash conflict as TS.
 
 Suggested slices (likely exceeds 800 review lines; 5 is a separate change):
+
 1. Loader, locator and extractor as a read-only service with tests.
 2. `find_references` integration and output contract.
 3. Hash-bound `.html` rename and workspace hash.

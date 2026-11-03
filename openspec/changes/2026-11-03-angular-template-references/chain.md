@@ -4,19 +4,20 @@ Strategy: `feature-branch-chain` (delivery `auto-chain`). One draft/no-merge tra
 
 ## Branches and PR order
 
-| Order | PR | Branch | Base | Est. lines |
-|---|---|---|---|---|
-| T | Tracker (draft, no-merge) | `feat/angular-template-references` | `main` | 0 |
-| 1 | U1 service | `feat/angular-template-references-u1-service` | tracker | ~600 |
-| 2 | U2 find_references | `feat/angular-template-references-u2-find-references` | U1 branch | ~350 |
-| 3 | U3 hash-bound rename | `feat/angular-template-references-u3-rename` | U2 branch | ~550 |
-| 4 | U4 docs and metadata | `feat/angular-template-references-u4-docs` | U3 branch | ~200 |
+| Order | PR                        | Branch                                                | Base      | Est. lines |
+| ----- | ------------------------- | ----------------------------------------------------- | --------- | ---------- |
+| T     | Tracker (draft, no-merge) | `feat/angular-template-references`                    | `main`    | 0          |
+| 1     | U1 service                | `feat/angular-template-references-u1-service`         | tracker   | ~600       |
+| 2     | U2 find_references        | `feat/angular-template-references-u2-find-references` | U1 branch | ~350       |
+| 3     | U3 hash-bound rename      | `feat/angular-template-references-u3-rename`          | U2 branch | ~550       |
+| 4     | U4 docs and metadata      | `feat/angular-template-references-u4-docs`            | U3 branch | ~200       |
 
 ## Dependency diagram
 
 ```
 main <- tracker <- U1 <- U2 <- U3 <- U4
 ```
+
 Every child PR body marks its own position with the pointer marker and states start, end, prior dependencies, follow-up and out-of-scope.
 
 ## Merge order
@@ -32,12 +33,12 @@ Review and merge children bottom-up into their bases: U1 into tracker, then U2 i
 
 ## Native attempt ledger request-id labels (unique per unit)
 
-| Unit | Acquire | Settle |
-|---|---|---|
-| U1 | `atr-u1-acquire` | `atr-u1-settle` |
-| U2 | `atr-u2-acquire` | `atr-u2-settle` |
-| U3 | `atr-u3-acquire` | `atr-u3-settle` |
-| U4 | `atr-u4-acquire` | `atr-u4-settle` |
+| Unit | Acquire          | Settle          |
+| ---- | ---------------- | --------------- |
+| U1   | `atr-u1-acquire` | `atr-u1-settle` |
+| U2   | `atr-u2-acquire` | `atr-u2-settle` |
+| U3   | `atr-u3-acquire` | `atr-u3-settle` |
+| U4   | `atr-u4-acquire` | `atr-u4-settle` |
 
 Labels are prefixes; append the attempt number (for example `atr-u1-acquire-1`) on retry so request ids never collide.
 

@@ -4,13 +4,13 @@ Strict TDD: every task names its RED test first (file + test name), then GREEN, 
 
 ## Review Workload Forecast
 
-| Unit | Scope | Est. changed lines |
-|---|---|---|
-| U1 | Service, `safe-file.ts` move, fixtures helper, alias devDeps, ignore entries, dependency-policy | ~600 |
-| U2 | `collectSymbolReferencesWithTemplates`, find_references schema/TOON, inventory, explore-unchanged test | ~350 |
-| U3 | Async `mutate`, auxiliary `.html` edits, snapshot template set, `currentWorkspaceHash`, watcher dirs, tests | ~550 |
-| U4 | Docs, skill, tool descriptions, package metadata, package-smoke | ~200 |
-| **Total** | | **~1700** |
+| Unit      | Scope                                                                                                       | Est. changed lines |
+| --------- | ----------------------------------------------------------------------------------------------------------- | ------------------ |
+| U1        | Service, `safe-file.ts` move, fixtures helper, alias devDeps, ignore entries, dependency-policy             | ~600               |
+| U2        | `collectSymbolReferencesWithTemplates`, find_references schema/TOON, inventory, explore-unchanged test      | ~350               |
+| U3        | Async `mutate`, auxiliary `.html` edits, snapshot template set, `currentWorkspaceHash`, watcher dirs, tests | ~550               |
+| U4        | Docs, skill, tool descriptions, package metadata, package-smoke                                             | ~200               |
+| **Total** |                                                                                                             | **~1700**          |
 
 - Chained PRs recommended: Yes
 - 800-line budget risk: High as a single PR (~1700); Low per unit (each <= 800, max ~600)
