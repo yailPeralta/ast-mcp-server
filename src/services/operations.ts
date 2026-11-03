@@ -4,6 +4,7 @@ import { open, readFile, stat, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { createTwoFilesPatch } from "diff";
 import { LanguageVariant, Node, ScriptTarget, SyntaxKind, ts, type Project } from "ts-morph";
+import { collectTemplateUsages, type TemplateUsage } from "./angular-templates.js";
 import {
   compareObservedDiagnostics,
   observeDiagnostic,
@@ -28,6 +29,7 @@ import {
   invalidateProjectIfIdle,
   recordProjectMutationHistory,
   withProjectOperation,
+  type ProjectContext,
 } from "./project.js";
 import { PublicOperationalError } from "./public-errors.js";
 import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
@@ -326,11 +328,99 @@ function assertSafeCreationState(
   }
 }
 
-async function createPlan(
+/** A byte-range replacement in a file outside the TypeScript program (an external template). */
+export interface AuxiliaryEdit {
+  readonly absolutePath: string;
+  readonly start: number;
+  readonly end: number;
+  readonly newText: string;
+  /** Hash of the file bytes the offsets were computed against. */
+  readonly expectedHash: string;
+}
+
+export interface PlanMutation {
+  readonly referenceCount: number;
+  readonly auxiliaryEdits?: readonly AuxiliaryEdit[];
+}
+
+function compareFiles(left: { file: string }, right: { file: string }): number {
+  return left.file < right.file ? -1 : left.file > right.file ? 1 : 0;
+}
+
+function applyEditsDescending(text: string, edits: readonly AuxiliaryEdit[], file: string): string {
+  const ordered = [...edits].sort((left, right) => left.start - right.start);
+  let previousEnd = 0;
+  for (const edit of ordered) {
+    if (!(edit.start >= previousEnd && edit.end >= edit.start && edit.end <= text.length)) {
+      throw new Error(`Auxiliary edits overlap or fall outside the file: ${file}`);
+    }
+    previousEnd = edit.end;
+  }
+  return ordered
+    .reverse()
+    .reduce(
+      (updated, edit) => updated.slice(0, edit.start) + edit.newText + updated.slice(edit.end),
+      text,
+    );
+}
+
+/** Plans edits to files outside the compiler program, bound to the workspace snapshot hashes. */
+async function planAuxiliaryFiles(
+  edits: readonly AuxiliaryEdit[],
+  projectRoot: string,
+  snapshotFiles: ReadonlyMap<string, string>,
+  requestContext: RequestContext,
+): Promise<PlannedFileInternal[]> {
+  const byFile = new Map<string, AuxiliaryEdit[]>();
+  for (const edit of edits) {
+    const absolutePath = realpathSync(edit.absolutePath);
+    byFile.set(absolutePath, [...(byFile.get(absolutePath) ?? []), edit]);
+  }
+  const planned: PlannedFileInternal[] = [];
+  for (const [absolutePath, fileEdits] of byFile) {
+    requestContext.checkpoint();
+    const file = path.relative(projectRoot, absolutePath);
+    assertSafeOperationFile(projectRoot, absolutePath, file);
+    const snapshotHash = snapshotFiles.get(absolutePath);
+    if (snapshotHash === undefined) {
+      throw new Error(`Affected file is missing from the workspace snapshot: ${file}`);
+    }
+    const originalBytes = await readFile(absolutePath);
+    requestContext.checkpoint();
+    const bytesHash = hashBytes(originalBytes);
+    if (bytesHash !== snapshotHash || fileEdits.some((edit) => edit.expectedHash !== bytesHash)) {
+      throw new Error(
+        `Workspace changed while the operation was being prepared (${file}). Retry preparation.`,
+      );
+    }
+    const originalText = decodeSource(originalBytes, absolutePath);
+    const updatedText = applyEditsDescending(originalText, fileEdits, file);
+    if (updatedText === originalText) continue;
+    const updatedBytes = encodeUpdatedSource(originalBytes, updatedText);
+    planned.push({
+      absolutePath,
+      file,
+      originalHash: bytesHash,
+      updatedHash: hashBytes(updatedBytes),
+      originalText,
+      updatedText,
+      originalBytes,
+      updatedBytes,
+      diff: createTwoFilesPatch(file, file, originalText, updatedText, "before", "after", {
+        context: 3,
+      }),
+      mode: (await stat(absolutePath)).mode,
+    });
+  }
+  return planned;
+}
+
+/** Internal seam shared by the prepare functions; exported so tests can drive `mutate` directly. */
+export async function createPlan(
   projectRootInput: string,
   kind: OperationKind,
   allowNewErrors: boolean,
-  mutate: (project: Project, projectRoot: string) => number,
+  mutate: (context: ProjectContext, requestContext: RequestContext) => Promise<PlanMutation>,
   requestContext: RequestContext,
 ): Promise<PreparedOperation> {
   requestContext.checkpoint();
@@ -371,7 +461,7 @@ async function createPlan(
       }
 
       operationContext.checkpoint();
-      const referenceCount = mutate(context.project, context.projectRoot);
+      const { referenceCount, auxiliaryEdits = [] } = await mutate(context, operationContext);
       operationContext.checkpoint();
       const afterObservations = observeProjectDiagnostics(
         context.project,
@@ -384,7 +474,13 @@ async function createPlan(
         originals,
         operationContext,
       );
-      if (textChanges.length === 0) {
+      const auxiliaryFiles = await planAuxiliaryFiles(
+        auxiliaryEdits,
+        context.projectRoot,
+        workspaceBefore.files,
+        operationContext,
+      );
+      if (textChanges.length === 0 && auxiliaryFiles.length === 0) {
         throw new Error("The structural operation produced no file changes.");
       }
 
@@ -457,6 +553,9 @@ async function createPlan(
           mode: fileStat.mode,
         });
       }
+
+      files.push(...auxiliaryFiles);
+      files.sort(compareFiles);
 
       const postWorkspaceFiles = new Map(workspaceBefore.files);
       for (const file of files) {
@@ -548,6 +647,38 @@ function publicOperation(record: OperationRecord): PreparedOperation {
   };
 }
 
+const TEMPLATE_ANY_CAST = "$any";
+
+/** Fails closed before any edit when template evidence is incomplete or the new name would be captured. */
+function assertTemplateRenameAllowed(
+  coverageStatus: string,
+  usages: readonly TemplateUsage[],
+  newName: string,
+): void {
+  if (coverageStatus === "unfinished" || coverageStatus === "unsupported") {
+    throw new PublicOperationalError(
+      "INCOMPLETE_EVIDENCE",
+      "Template coverage is incomplete, so the rename cannot be proven safe.",
+    );
+  }
+  if (usages.some((usage) => usage.container === "inline")) {
+    throw new PublicOperationalError(
+      "MUTATION_BLOCKED",
+      "The member is used in an inline template, which rename does not edit.",
+    );
+  }
+  const collides =
+    coverageStatus === "completed" &&
+    (newName === TEMPLATE_ANY_CAST ||
+      usages.some((usage) => usage.localsInScope.includes(newName)));
+  if (collides) {
+    throw new PublicOperationalError(
+      "MUTATION_BLOCKED",
+      "The new name would collide with a template-local name or the $any cast.",
+    );
+  }
+}
+
 export async function prepareRename(
   args: {
     projectRoot: string;
@@ -575,19 +706,31 @@ export async function prepareRename(
     args.projectRoot,
     "rename_symbol",
     args.allowNewErrors ?? false,
-    (project) => {
-      const sourceFile = getSourceFileOrThrow(project, args.filePath);
+    async (context, rc) => {
+      const sourceFile = getSourceFileOrThrow(context.project, args.filePath);
       const node = findDeclarationByName(sourceFile, args.symbolPath);
       if (!Node.isRenameable(node)) {
         throw new Error(
           `Symbol "${args.symbolPath}" (${node.getKindName()}) does not support structural rename.`,
         );
       }
-      const referenceCount = Node.isReferenceFindable(node)
+      // Template usages must be collected before the rename mutates the program.
+      const { coverage, usages } = await collectTemplateUsages(node, context, rc);
+      assertTemplateRenameAllowed(coverage.status, usages, args.newName);
+      const tsReferenceCount = Node.isReferenceFindable(node)
         ? node.findReferencesAsNodes().length
         : 0;
       node.rename(args.newName);
-      return referenceCount;
+      return {
+        referenceCount: tsReferenceCount + usages.length,
+        auxiliaryEdits: usages.map((usage) => ({
+          absolutePath: usage.absolutePath,
+          start: usage.start,
+          end: usage.end,
+          newText: args.newName,
+          expectedHash: usage.fileHash,
+        })),
+      };
     },
     requestContext,
   );
@@ -607,7 +750,7 @@ export async function prepareReplaceBody(
     args.projectRoot,
     "replace_symbol_body",
     args.allowNewErrors ?? false,
-    (project) => {
+    async ({ project }) => {
       const sourceFile = getSourceFileOrThrow(project, args.filePath);
       const declaration = findDeclarationByName(sourceFile, args.symbolPath);
       const executable = executableDeclaration(declaration) as Node & {
@@ -620,7 +763,7 @@ export async function prepareReplaceBody(
         executable.getBody().replaceWithText("{}");
       }
       executable.setBodyText(args.newBody);
-      return 0;
+      return { referenceCount: 0 };
     },
     requestContext,
   );
@@ -665,7 +808,7 @@ export async function prepareScaffoldClass(
     args.projectRoot,
     "scaffold_class",
     args.allowNewErrors ?? false,
-    (project, projectRoot) => {
+    async ({ project, projectRoot }) => {
       const absolutePath = path.resolve(projectRoot, normalizedFile);
       assertSafeNewOperationFile(projectRoot, absolutePath, normalizedFile);
       const scaffold = buildClassScaffold(project, absolutePath, args.spec);
@@ -673,7 +816,7 @@ export async function prepareScaffoldClass(
         outline: scaffold.outline,
         pendingMethods: scaffold.pendingMethods,
       };
-      return 0;
+      return { referenceCount: 0 };
     },
     requestContext,
   );

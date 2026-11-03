@@ -17,6 +17,7 @@ import {
   applyOperation,
   clearOperationsForTests,
   configureOperationApply,
+  createPlan,
   exportOperationRecord,
   getOperationPreview,
   importOperationRecord,
@@ -33,6 +34,7 @@ import {
   invalidateProject,
   withProjectOperation,
 } from "../src/services/project.js";
+import { getSourceFileOrThrow } from "../src/services/project.js";
 import { classifyPublicError } from "../src/services/public-errors.js";
 import { createRequestContext } from "../src/services/request-context.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
@@ -1281,4 +1283,59 @@ return replacement;`,
       expect(() => importOperationRecord(persisted, prepared.plan_hash)).toThrow(/symbolic link/i);
     },
   );
+});
+
+describe("createPlan mutate contract", () => {
+  it("createPlan mutate receives ProjectContext and RequestContext", async () => {
+    const fixture = await renameFixture();
+    const requestContext = createRequestContext();
+    const seen: { root?: string; tsConfig?: string; checkpoint?: unknown; files?: number } = {};
+
+    const prepared = await createPlan(
+      fixture.root,
+      "replace_symbol_body",
+      false,
+      async (context, rc) => {
+        seen.root = context.projectRoot;
+        seen.tsConfig = context.tsConfigFilePath;
+        seen.checkpoint = rc.checkpoint;
+        seen.files = context.project.getSourceFiles().length;
+        const declaration = getSourceFileOrThrow(context.project, "src/value.ts");
+        declaration.getFunctionOrThrow("formatValue").setBodyText("return 'changed';");
+        return { referenceCount: 7 };
+      },
+      requestContext,
+    );
+
+    expect(seen.root).toBe(prepared.project_root);
+    expect(seen.tsConfig).toBe(path.join(prepared.project_root, "tsconfig.json"));
+    expect(typeof seen.checkpoint).toBe("function");
+    expect(seen.files).toBe(2);
+    expect(prepared.reference_count).toBe(7);
+    expect(prepared.affected_files.map((file) => file.file)).toEqual(["src/value.ts"]);
+  });
+
+  it("a rejected mutate leaves no retained operation", async () => {
+    const fixture = await renameFixture();
+
+    await expect(
+      createPlan(
+        fixture.root,
+        "replace_symbol_body",
+        false,
+        async () => {
+          throw new Error("mutate failed");
+        },
+        createRequestContext(),
+      ),
+    ).rejects.toThrow("mutate failed");
+    await expect(
+      prepareRename({
+        projectRoot: fixture.root,
+        filePath: "src/value.ts",
+        symbolPath: "formatValue",
+        newName: "renderValue",
+      }),
+    ).resolves.toMatchObject({ reference_count: 2, kind: "rename_symbol" });
+  });
 });
