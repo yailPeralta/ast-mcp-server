@@ -1,0 +1,95 @@
+schemaName: gentle-ai.sdd-status
+schemaVersion: 1
+changeName: 2026-11-03-angular-template-references
+artifactStore: hybrid
+planningHome:
+  mode: repo-local
+  path: /home/yail/Documentos/proyects/ast-mcp-server/openspec
+changeRoot: /home/yail/Documentos/proyects/ast-mcp-server/openspec/changes/2026-11-03-angular-template-references
+artifacts:
+  exploration: done
+  proposal: done
+  specs: done
+  design: done
+  tasks: done
+  applyProgress: missing
+  verifyReport: missing
+dependencies:
+  proposal: ready
+  specs: ready
+  design: ready
+  tasks: ready
+  apply: ready
+  verify: blocked
+  archive: blocked
+sessionPreflight:
+  executionMode: auto
+  artifactStore: hybrid
+  deliveryStrategy: auto-chain
+  reviewBudgetLines: 800
+exploration:
+  status: success
+  engramObservation: 3844
+  recommendedApproach: angular-compiler-from-user-project
+  readyForProposal: true
+  changedLineBudgetRisk: High
+  chainedPRsRecommended: true
+  forecastUnits: 4
+proposal:
+  status: success
+  engramTopic: sdd/2026-11-03-angular-template-references/proposal
+  newCapabilities:
+    - angular-template-references
+    - angular-template-rename
+    - template-workspace-freshness
+  modifiedCapabilities:
+    - external-writer-safe-apply
+  implementationUnits: 4
+  estimatedChangedLines: 1700
+  maxUnitLines: 600
+  chainedPRsRequired: true
+  issueNumber: 370
+nextRecommended: apply
+blockedReasons: []
+spec:
+  status: success
+  engramTopic: sdd/2026-11-03-angular-template-references/spec
+  newDomains:
+    - angular-template-references
+    - angular-template-rename
+    - template-workspace-freshness
+  modifiedDomains:
+    - external-writer-safe-apply
+  alignedToDesign: true
+  correctiveRerun: 1
+  errorCodes: [INCOMPLETE_EVIDENCE, MUTATION_BLOCKED, CONFLICT, AMBIGUOUS_APPLY]
+  usageKinds: [TemplatePropertyRead, TemplatePropertyWrite, TemplateCall]
+  originValues: [compiler, template_external, template_inline]
+design:
+  status: success
+  engramTopic: sdd/2026-11-03-angular-template-references/design
+  module: src/services/angular-templates.ts
+  supportedCompilerRange: ">=20.0.0 <23.0.0"
+  newErrorCodes: []
+  operationSchemaChanged: false
+  threatMatrix: not-applicable
+  correctiveRerun: 1
+  risksSection: true
+  exploreReferences: ts-only-unchanged
+  newReferencesApi: collectSymbolReferencesWithTemplates
+  compilerContainment: realpath-under-ancestor-node_modules
+tasks:
+  status: success
+  engramTopic: sdd/2026-11-03-angular-template-references/tasks
+  deliveryStrategy: auto-chain
+  chainStrategy: feature-branch-chain
+  chainPath: openspec/changes/2026-11-03-angular-template-references/chain.md
+  trackerBranch: feat/angular-template-references
+  units: 4
+  estimatedChangedLinesPerUnit: { U1: 600, U2: 350, U3: 550, U4: 200 }
+  estimatedChangedLinesTotal: 1700
+  chainedPRsRecommended: true
+  budgetRisk800: "High single-PR, Low per-unit"
+  decisionNeededBeforeApply: false
+  preApplyOpen: [github-issue-number, explore-follow-up-issue]
+lastPhase: tasks
