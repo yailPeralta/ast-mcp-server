@@ -120,15 +120,15 @@ Dependency order: 3.1 -> 3.2 -> (3.3 || 3.4) -> 3.5 -> 3.6 -> (3.7 || 3.8) -> 3.
 
 ## Unit 4: Docs, skill, descriptions, package metadata (branch `feat/angular-template-references-u4-docs`, base U3, ~200 lines)
 
-- [ ] 4.1 `scripts/package-smoke.mjs`: assert the optional peer is not installed in the consumer and the packed `dependencies` exclude `@angular/compiler`.
+- [x] 4.1 `scripts/package-smoke.mjs`: assert the optional peer is not installed in the consumer and the packed `dependencies` exclude `@angular/compiler`.
   - RED: extend smoke assertion first (fails if metadata wrong); `yarn test:package` equivalent script (check `package.json` scripts) green after.
   - Spec: ATR-R1 (optional, not bundled).
-- [ ] 4.2 Skill and README docs: `skills/structural-code-editing/**` (template usage in find_references, rename blocks, ast_explore TS-only limit referencing follow-up issue from 0.2, compiler install guidance, PnP caveat), README section.
+- [x] 4.2 Skill and README docs: `skills/structural-code-editing/**` (template usage in find_references, rename blocks, ast_explore TS-only limit referencing follow-up issue from 0.2, compiler install guidance, PnP caveat), README section.
   - RED: `test/docs.test.ts` (or existing skill-lint test) > "skill documents ast_explore TS-only limit and compiler optional peer"; run any existing skill/doc lint.
   - Spec: ATR-R8, ATN-R8, ATR-R1.
-- [ ] 4.3 CHANGELOG entry and final description polish; confirm inventory golden matches final descriptions.
+- [x] 4.3 CHANGELOG entry and final description polish; confirm inventory golden matches final descriptions. (Description polish deferred: tool descriptions are frozen by the dsh-adapter smoke; the deferred text is recorded in the CHANGELOG, skill and README. Inventory golden unchanged and green.)
   - RED: inventory golden test.
-- [ ] 4.4 Final chain verification: gates on the U4 head, confirm each PR diff contains only its unit, update tracker PR body. Then hand to `sdd-verify`.
+- [x] 4.4 Final chain verification: gates on the U4 head, confirm each PR diff contains only its unit, update tracker PR body. Then hand to `sdd-verify`.
 
 Dependency order: (4.1 || 4.2) -> 4.3 -> 4.4.
 
