@@ -116,6 +116,33 @@ function nextToolFailureEvent(stream, timeoutMs = 5000) {
   });
 }
 
+const angularCompilerName = "@angular/compiler";
+
+function assertAngularCompilerIsOptionalPeer(packedMetadata) {
+  for (const field of ["dependencies", "optionalDependencies"]) {
+    if (Object.hasOwn(packedMetadata[field] ?? {}, angularCompilerName)) {
+      throw new Error(`packed ${field} must not include ${angularCompilerName}`);
+    }
+  }
+  if (
+    typeof packedMetadata.peerDependencies?.[angularCompilerName] !== "string" ||
+    packedMetadata.peerDependenciesMeta?.[angularCompilerName]?.optional !== true
+  ) {
+    throw new Error(`packed metadata must declare ${angularCompilerName} as an optional peer`);
+  }
+}
+
+async function assertAngularCompilerNotInstalled(consumerRoot) {
+  const installedCompiler = path.join(consumerRoot, "node_modules", "@angular", "compiler");
+  const present = await lstat(installedCompiler).then(
+    () => true,
+    () => false,
+  );
+  if (present) {
+    throw new Error(`consumer install must not provide ${angularCompilerName}`);
+  }
+}
+
 async function installFakeAgents() {
   await mkdir(fakeBin, { recursive: true });
   await writeFile(path.join(fakeBin, "package.json"), '{"type":"module"}\n', "utf8");
@@ -185,6 +212,8 @@ try {
     path.join(installedPackageRoot, "CHANGELOG.md"),
     "utf8",
   );
+  assertAngularCompilerIsOptionalPeer(installedMetadata);
+  await assertAngularCompilerNotInstalled(consumerDirectory);
   const [packagedSkill, packagedGuidance, packagedReleases] = await Promise.all([
     readFile(
       path.join(installedPackageRoot, "skills", "structural-code-editing", "SKILL.md"),

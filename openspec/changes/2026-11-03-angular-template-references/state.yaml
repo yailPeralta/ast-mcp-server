@@ -13,15 +13,15 @@ artifacts:
   design: done
   tasks: done
   applyProgress: done
-  verifyReport: missing
+  verifyReport: done
 dependencies:
   proposal: ready
   specs: ready
   design: ready
   tasks: ready
   apply: ready
-  verify: blocked
-  archive: blocked
+  verify: ready
+  archive: ready
 sessionPreflight:
   executionMode: auto
   artifactStore: hybrid
@@ -49,7 +49,16 @@ proposal:
   maxUnitLines: 600
   chainedPRsRequired: true
   issueNumber: 370
-nextRecommended: apply (U4); U3 task 3.8 blocked pending maintainer decision
+nextRecommended: archive after the chain PRs merge; verify passed with warnings (ATN-R8 / task 3.8 and the description polish deferred until the public dsh-adapter baseline moves past a release with this feature)
+verify:
+  status: pass-with-warnings
+  report: openspec/changes/2026-11-03-angular-template-references/verify-report.md
+  engramTopic: sdd/2026-11-03-angular-template-references/verify-report
+  critical: 0
+  warnings: 4
+  suggestions: 3
+  scenariosCompliant: 52
+  scenariosTotal: 53
 blockedReasons: []
 spec:
   status: success
@@ -91,13 +100,13 @@ tasks:
   chainedPRsRecommended: true
   budgetRisk800: "High single-PR, Low per-unit"
   decisionNeededBeforeApply: false
-  preApplyOpen: [github-issue-number, explore-follow-up-issue]
-lastPhase: apply
+  preApplyOpen: []
+lastPhase: verify
 applyState: partial
 taskProgress:
-  completed: 22
+  completed: 26
   total: 27
-  unit: "U1, U2 and U3 (except blocked 3.8) done; U4 pending; U3 bases on the u2b branch"
+  unit: "U1, U2, U3 (except blocked 3.8) and U4 done; U4 bases on u3c; ready for verify"
   branches:
     [
       feat/angular-template-references-u1a-hygiene,
@@ -108,5 +117,7 @@ taskProgress:
       feat/angular-template-references-u3a-freshness,
       feat/angular-template-references-u3b-rename,
       feat/angular-template-references-u3c-apply-guards,
+      feat/angular-template-references-u4-docs,
     ]
-  changedLines: { u1a: 356, u1b: 619, u1c: 494, u2a: 591, u2b: 288, u3a: 271, u3b: 626, u3c: 309 }
+  changedLines:
+    { u1a: 356, u1b: 619, u1c: 494, u2a: 591, u2b: 288, u3a: 271, u3b: 626, u3c: 309, u4: 137 }

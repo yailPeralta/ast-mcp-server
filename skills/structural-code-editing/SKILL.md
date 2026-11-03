@@ -43,6 +43,20 @@ La selección default conserva los siete kinds. `contains` aplicable es `unsuppo
 
 For each dimension, `groups.length + omitted_group_count = total_group_count` and group counts sum to `covered_diagnostic_count`. Code coverage plus omitted diagnostics equals the total; file coverage additionally includes `unfiled_diagnostic_count`. File groups expose normalized project-relative paths only and may include paths absent from the raw page.
 
+## Angular templates
+
+In an Angular project (`@angular/core` resolvable from the tsconfig directory), `ast_find_references` also reports usages of a component member inside its external `templateUrl` template and inline `template`. Each item carries `origin` (`compiler`, `template_external` or `template_inline`), and the response adds `template_coverage` and `template_reference_count`. `reference_count` stays TypeScript-only; `total` counts both kinds.
+
+Read `template_coverage` before inferring absence. Only `completed` proves every template of the declaring component was examined. `unfinished` (for example `compiler_missing`, `compiler_unsupported`, `template_unresolved`, `template_parse_error`, `size_exceeded`) and `unsupported` (for example an inherited member) never prove that no template usage exists. `not_applicable` means the feature is off and the response is unchanged.
+
+`ast_rename_symbol` updates external templates in the same reviewed plan and rewrites them only through `ast_apply_operation`. It fails closed: coverage `unfinished` or `unsupported` returns `INCOMPLETE_EVIDENCE`, and an inline template usage, a new name that collides with a template local, or `$any` returns `MUTATION_BLOCKED`. Pipe names, `#ref`/`let-` targets, child inputs and outputs, host bindings and `styleUrls` are not renamed. Apply is sequential, not globally atomic; rollback restores the owned templates.
+
+Limits to state when reporting:
+
+- `ast_explore` is TypeScript-only: its references omit template usages. This is tracked in issue #380. Use `ast_find_references` for template evidence; rename still blocks independently.
+- Diagnostics stay TypeScript-only: `ast_get_diagnostics` and the post-apply delta do not detect template errors. A template-only breakage produces no diagnostic, so run the project's Angular build or tests after a rename.
+- Detection uses the user's own `@angular/compiler`, never a bundled one. It is an optional peer (`>=20.0.0 <23.0.0`) that the project already installs with Angular. If it is missing or out of range, coverage is `unfinished` and rename is blocked. Yarn PnP projects without `node_modules` resolve nothing and report `unfinished`.
+
 ## Contributor contract
 
 Al agregar o modificar una tool, mantener schemas, metadata, annotations, handler, errores y serialización en su módulo. Exportar un descriptor congelado y ubicarlo deliberadamente en `src/tools/catalog.ts`; el catálogo solo admite hechos estáticos de efecto, batch, compatibilidad y formatos directos.
