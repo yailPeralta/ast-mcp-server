@@ -623,6 +623,33 @@ __metadata:
   languageName: node
   linkType: hard
 
+"angular-compiler-v20@npm:@angular/compiler@20.3.34":
+  version: 20.3.34
+  resolution: "@angular/compiler@npm:20.3.34"
+  dependencies:
+    tslib: "npm:^2.3.0"
+  checksum: 10c0/04fac30835019e0b1e361d75e5e452f976e741008dc6869e044b270ccf69f8ca35b54e02ffe1304a401157b467420eb27f807980e8b6a98d4485438f70231b22
+  languageName: node
+  linkType: hard
+
+"angular-compiler-v21@npm:@angular/compiler@21.2.25":
+  version: 21.2.25
+  resolution: "@angular/compiler@npm:21.2.25"
+  dependencies:
+    tslib: "npm:^2.3.0"
+  checksum: 10c0/be1b734984ea7907368313f0ee75caf78ef67574bec94341c584f309f527957545c22cfba958cce35aef0aeba212131dc2f9b1d5f8f246bf0c4d9790eff30c26
+  languageName: node
+  linkType: hard
+
+"angular-compiler-v22@npm:@angular/compiler@22.2.4":
+  version: 22.2.4
+  resolution: "@angular/compiler@npm:22.2.4"
+  dependencies:
+    tslib: "npm:^2.3.0"
+  checksum: 10c0/b28829aef9e74814ea5b39599aae92f5ef04c2d9dd1bb1dde4f9bed9f13f58be5f5b80092a552eff1243d03064985d4c25ca94baa5dcd312a7c81d50fd124f5b
+  languageName: node
+  linkType: hard
+
 "assertion-error@npm:^2.0.1":
   version: 2.0.1
   resolution: "assertion-error@npm:2.0.1"
@@ -638,6 +665,9 @@ __metadata:
     "@modelcontextprotocol/sdk": "npm:^1.32.1"
     "@toon-format/toon": "npm:4.4.0"
     "@types/node": "npm:^26.6.5"
+    angular-compiler-v20: "npm:@angular/compiler@20.3.34"
+    angular-compiler-v21: "npm:@angular/compiler@21.2.25"
+    angular-compiler-v22: "npm:@angular/compiler@22.2.4"
     diff: "npm:^9.0.0"
     eslint: "npm:^10.8.0"
     gpt-tokenizer: "npm:4.1.0"
@@ -651,6 +681,11 @@ __metadata:
     vitest: "npm:^5.0.5"
     yaml: "npm:^2.9.0"
     zod: "npm:^4.6.7"
+  peerDependencies:
+    "@angular/compiler": ">=20.0.0 <23.0.0"
+  peerDependenciesMeta:
+    "@angular/compiler":
+      optional: true
   bin:
     ast-mcp-server: dist/index.js
     ast-tool: dist/cli.js
@@ -2282,6 +2317,13 @@ __metadata:
     "@ts-morph/common": "npm:~0.29.0"
     code-block-writer: "npm:^13.0.3"
   checksum: 10c0/969570a5e983b4193735fff43878ce7b78787b4860bf3d23f330c86d7de707286969e5a82d486dce333eea27bf9d373a46f9de58a80c0bf86d2a462620563a55
+  languageName: node
+  linkType: hard
+
+"tslib@npm:^2.3.0":
+  version: 2.9.1
+  resolution: "tslib@npm:2.9.1"
+  checksum: 10c0/8ff46e7a4d19fa62c23483c89cf5ccc3906e742ef6e6d60bd3826b686143b300b4f6f04161cc1cf31a6b11fe70e1058ae4d4e4a108b5c68326d469684736a83c
   languageName: node
   linkType: hard
 

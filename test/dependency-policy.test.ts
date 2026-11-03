@@ -114,3 +114,31 @@ it("admits the patched Hono and Vitest family without installation-policy except
       .toMatchObject({ version, resolution: `${name}@npm:${version}` });
   }
 });
+
+it("declares @angular/compiler as an optional peer and not a dependency", async () => {
+  const [manifestBytes, lockBytes] = await Promise.all(
+    ["package.json", "yarn.lock"].map((file) => readFile(path.join(repositoryRoot, file), "utf8")),
+  );
+  const manifest = JSON.parse(manifestBytes!) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
+    peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+    engines?: Record<string, string>;
+  };
+
+  expect.soft(manifest.peerDependencies?.["@angular/compiler"]).toBe(">=20.0.0 <23.0.0");
+  expect.soft(manifest.peerDependenciesMeta?.["@angular/compiler"]).toEqual({ optional: true });
+  expect.soft(manifest.dependencies?.["@angular/compiler"]).toBeUndefined();
+  expect.soft(manifest.devDependencies?.["@angular/compiler"]).toBeUndefined();
+  expect.soft(manifest.engines?.node).toBe(">=22.13.0");
+
+  for (const major of ["20", "21", "22"]) {
+    const alias = `angular-compiler-v${major}`;
+    const range = manifest.devDependencies?.[alias];
+    expect.soft(range, alias).toMatch(new RegExp(`^npm:@angular/compiler@${major}\\.\\d+\\.\\d+$`));
+    expect
+      .soft(lockBytes, alias)
+      .toContain(`"${alias}@npm:@angular/compiler@${range?.split("@").pop()}"`);
+  }
+});

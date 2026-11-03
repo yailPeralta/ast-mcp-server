@@ -7,3 +7,4 @@ coverage/
 .DS_Store
 .atl/
 benchmark/results/runtime/
+.tmp/
