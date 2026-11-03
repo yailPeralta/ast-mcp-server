@@ -3,7 +3,7 @@
   "unit": "U1, U2",
   "branch": "split: u1a-hygiene (1.1-1.3), u1b-loader (1.4,1.5,1.8), u1c-extractor (1.6,1.7)",
   "mode": "Strict TDD",
-  "status": "partial (U1, U2 of 4 done; U2 commit 4 and gate pending git index repair)",
+  "status": "partial (U1, U2 of 4 done and committed; U3-U4 pending)",
   "issue": 370,
   "tasks": {
     "1.1": "done",
@@ -141,6 +141,8 @@
     "u1a": 356,
     "u1b": 619,
     "u1c": 494,
+    "u2a": 591,
+    "u2b": 288,
     "yarn_lock": 42,
     "budget": 800
   },
@@ -164,13 +166,29 @@
     "U2: tasks name test/tools/find_references.test.ts and test/references.test.ts, which did not exist; created them.",
     "Native attempt ledger unavailable in this gentle-ai build (no sdd-attempt command); proceeded without a token."
   ],
-  "blockers": [
-    "Git index has unmerged entries from an accidental `git stash pop` of a pre-existing stash (stash@{0} issue247-rebase-verification-blocked); the 5th U2 commit (guards) and the artifact commit are blocked until the index is repaired. Stash is intact."
-  ],
+  "blockers": [],
   "risks": [
     "Split resolves the budget: u1a 356, u1b 619, u1c 494 lines.",
-    "U2 changed lines are about 650 of which tests dominate; see final diff stat."
+    "U2 landed at 879 changed lines (src/test/scripts) vs the ~350 forecast; split by commit into u2a (591) and u2b (288). u2a exceeds the 400-line repo budget and carries size:exception."
   ],
+  "u2_split": {
+    "reason": "auto-chain: U2 was 879 lines vs 800 budget",
+    "u2a": {
+      "branch": "feat/angular-template-references-u2a-references",
+      "base": "feat/angular-template-references-u1c-extractor",
+      "commits": ["abbed6e", "860f906"],
+      "tasks": ["2.1", "2.2"],
+      "changed_lines": 591
+    },
+    "u2b": {
+      "branch": "feat/angular-template-references-u2b-tool",
+      "base": "feat/angular-template-references-u2a-references",
+      "commits": ["148ce4a", "8a75085", "8fa157f"],
+      "tasks": ["2.3", "2.4", "2.5"],
+      "changed_lines": 288
+    },
+    "index_incident": "The executor ran `git stash; git stash pop` on a clean tree, which applied the pre-existing stash@{0} (issue247-rebase-verification-blocked). The orchestrator restored the affected issue-247 paths to HEAD; the stash is intact."
+  },
   "split": {
     "reason": "user chose split over size:exception (single U1 was 1426 lines vs 800 budget)",
     "changed_lines_excluding_lockfile_and_openspec": {

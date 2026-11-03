@@ -66,10 +66,10 @@ Strict TDD: every task names its RED test first (file + test name), then GREEN, 
 
 Dependency order: 1.1 || 1.2 -> 1.3 -> 1.4 -> 1.5 -> 1.6 -> 1.7 -> 1.8.
 
-## Unit 2: find_references integration (branch `feat/angular-template-references-u2-find-references`, base U1, ~350 lines)
+## Unit 2: find_references integration (split into U2a references service 2.1-2.2 and U2b tool 2.3-2.5; branches `feat/angular-template-references-u2{a-references,b-tool}`, 591/288 lines)
 
 - [x] 2.1 Extract the shared private TS-location helper in `references.ts`; sync `collectSymbolReferences` signature and output unchanged.
-  - RED: `test/references.test.ts` > "collectSymbolReferences output unchanged after helper extraction" (golden against current output) and "non-Angular find_references output deep-equals pre-change golden".
+  - RED: `test/references.test.ts` > "collectSymbolReferences output unchanged after helper extraction" (golden against current output) and `test/tools/find_references.test.ts` > "non-Angular find_references output deep-equals pre-change golden".
   - Spec: ATR-R1 (S: core absent), ATR-R7 (non-Angular identical). Sequential first.
 - [x] 2.2 Implement async `collectSymbolReferencesWithTemplates`: merge, sort, paginate with `origin`, `kind`, `context`, `template_coverage`, `template_reference_count`; `reference_count` TS-only; `total` counts both.
   - RED: `test/references-templates.test.ts` > "merges template items with TS items and sorts deterministically", "paginates over mixed items with truthful total/has_more", "reference_count stays TS-only while total counts both", "origin is uniform per response", "fields absent when not_applicable", "many usages paginate" (ATR-R6 S: many).
