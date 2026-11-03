@@ -49,7 +49,7 @@ proposal:
   maxUnitLines: 600
   chainedPRsRequired: true
   issueNumber: 370
-nextRecommended: apply (U3)
+nextRecommended: apply (U4); U3 task 3.8 blocked pending maintainer decision
 blockedReasons: []
 spec:
   status: success
@@ -95,9 +95,9 @@ tasks:
 lastPhase: apply
 applyState: partial
 taskProgress:
-  completed: 13
+  completed: 22
   total: 27
-  unit: "U1 (1.1-1.8) and U2 (2.1-2.5) done; U3-U4 pending; U3 bases on the u2b branch"
+  unit: "U1, U2 and U3 (except blocked 3.8) done; U4 pending; U3 bases on the u2b branch"
   branches:
     [
       feat/angular-template-references-u1a-hygiene,
@@ -105,5 +105,8 @@ taskProgress:
       feat/angular-template-references-u1c-extractor,
       feat/angular-template-references-u2a-references,
       feat/angular-template-references-u2b-tool,
+      feat/angular-template-references-u3a-freshness,
+      feat/angular-template-references-u3b-rename,
+      feat/angular-template-references-u3c-apply-guards,
     ]
-  changedLines: { u1a: 356, u1b: 619, u1c: 494, u2a: 591, u2b: 288 }
+  changedLines: { u1a: 356, u1b: 619, u1c: 494, u2a: 591, u2b: 288, u3a: 271, u3b: 626, u3c: 309 }
