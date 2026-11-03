@@ -85,7 +85,7 @@ export function registerFindReferences(server: McpServer): void {
     {
       title: "Find semantic symbol references",
       description:
-        "Finds type-resolved references and returns bounded project-relative locations, including declaration impact by default. In Angular projects with an installed @angular/compiler it also reports usages of component members in the component's own template (origin template_external or template_inline) and a template_coverage verdict; incomplete coverage means template usages are not proven absent.",
+        "Finds type-resolved references and returns bounded project-relative locations, including declaration impact by default.",
       inputSchema: AstFindReferencesInputSchema,
       annotations: {
         readOnlyHint: true,

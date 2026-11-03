@@ -164,7 +164,8 @@
     "U2: origin is optional in the output schema and set on every item only when coverage is not not_applicable; non-Angular responses are deep-equal to the pre-change golden.",
     "U2: template item context for detail=context is read lazily from the template file (or the TS file for inline) and capped at 500 chars like TS items.",
     "U2: tasks name test/tools/find_references.test.ts and test/references.test.ts, which did not exist; created them.",
-    "Native attempt ledger unavailable in this gentle-ai build (no sdd-attempt command); proceeded without a token."
+    "Native attempt ledger unavailable in this gentle-ai build (no sdd-attempt command); proceeded without a token.",
+    "U2b: the find_references description change was reverted after CI. `yarn test:dsh-adapter` (mandatory) hashes description plus input schema of every tool except ast_explore against the public 0.13.0 package, so tool descriptions cannot change until the public baseline moves. Output-schema additions are not hashed and stay. Maintainer chose revert over extending the smoke exemption; the description text (and rename_symbol's in 3.8) is deferred as U4 debt."
   ],
   "blockers": [],
   "risks": [
