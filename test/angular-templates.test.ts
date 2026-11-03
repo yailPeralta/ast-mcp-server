@@ -431,6 +431,16 @@ describe("completeness and bounds", () => {
     });
   });
 
+  it("inline template over 512 KiB yields size_exceeded", async () => {
+    // "</b>" would be a parse error, so the reason proves the parser never ran.
+    const source = COMPONENT(`template: \`</b>${" ".repeat(512 * 1024)}\``);
+    expect(await coverageOf({ "src/a.component.ts": source })).toEqual({
+      status: "unfinished",
+      reason: "size_exceeded",
+      templates: 0,
+    });
+  });
+
   it("node bound exhaustion yields work_exhausted", async () => {
     const html = "<i>{{a}}</i>".repeat(25_000);
     expect(await coverageOf({ "src/a.component.html": html })).toEqual({

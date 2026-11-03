@@ -574,12 +574,13 @@ export async function collectTemplateUsages(
       return fail("unfinished", "size_exceeded");
     }
     bytes = await readFile(located.absolutePath);
-    if (bytes.length > MAX_TEMPLATE_BYTES) return fail("unfinished", "size_exceeded");
     const decoded = decodeTemplate(bytes);
     if (decoded === undefined) return fail("unfinished", "template_parse_error");
     text = decoded;
   }
 
+  // Shared cap: the external path also checks the size before reading, inline checks here.
+  if (bytes.length > MAX_TEMPLATE_BYTES) return fail("unfinished", "size_exceeded");
   rc.checkpoint();
   const parsed = loaded.compiler.parseTemplate(text, located.absolutePath, {
     preserveWhitespaces: true,
