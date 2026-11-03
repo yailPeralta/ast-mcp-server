@@ -110,7 +110,7 @@ Dependency order: 2.1 -> 2.2 -> 2.3; 2.4 parallel with 2.3; 2.5 last.
 - [x] 3.7 Apply-path guarantees (no new production code expected; adjust only if red): stale html after prepare, rollback of html, sequential-not-atomic, replay.
   - RED (using `setOperationTestHooksForTests`): "html edited after prepare yields CONFLICT", "TS commit failure after html restores html", "later target conflict leaves the external TS and restores the owned html" (CONFLICT, EWS-R1 literal), "rollback proof lost with the template earlier in sequence reports AMBIGUOUS_APPLY" (covers the proof-lost and earlier-template items), "receipt persistence failure after commit", "replay and cancellation with html", "html in receipts and import/export replay", "plan prepared before upgrade conflicts (pre-upgrade plan)".
   - Spec: ATN-R1 (stale-html), ATN-R2, EWS-R1 (3 S), EWS-R2 (3 S), TWF-R5. Depends on 3.6.
-- [ ] 3.8 (blocked: dsh-adapter smoke freezes tool descriptions; maintainer decision pending) `rename_symbol.ts` description (template writes; TS-only diagnostics) + inventory re-baseline.
+- [ ] 3.8 (deferred by maintainer decision at archive time: the dsh-adapter smoke freezes tool descriptions against the public 0.13.0 baseline; the deferred text lives in CHANGELOG Unreleased) `rename_symbol.ts` description (template writes; TS-only diagnostics) + inventory re-baseline.
   - RED: `test/tools/rename_symbol.test.ts` > "description states template edits and TS-only diagnostics"; inventory golden.
   - Spec: ATN-R8. Parallel with 3.7.
 - [x] 3.9 Snapshot cost benchmark smoke (design Risks): `test/workspace-snapshot-bench.test.ts` > "listTemplateFiles adds bounded overhead on a large non-Angular project".
