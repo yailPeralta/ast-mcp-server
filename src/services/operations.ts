@@ -28,6 +28,7 @@ import {
   invalidateProjectIfIdle,
   recordProjectMutationHistory,
   withProjectOperation,
+  type ProjectContext,
 } from "./project.js";
 import { PublicOperationalError } from "./public-errors.js";
 import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
@@ -326,11 +327,16 @@ function assertSafeCreationState(
   }
 }
 
-async function createPlan(
+export interface PlanMutation {
+  readonly referenceCount: number;
+}
+
+/** Internal seam shared by the prepare functions; exported so tests can drive `mutate` directly. */
+export async function createPlan(
   projectRootInput: string,
   kind: OperationKind,
   allowNewErrors: boolean,
-  mutate: (project: Project, projectRoot: string) => number,
+  mutate: (context: ProjectContext, requestContext: RequestContext) => Promise<PlanMutation>,
   requestContext: RequestContext,
 ): Promise<PreparedOperation> {
   requestContext.checkpoint();
@@ -371,7 +377,7 @@ async function createPlan(
       }
 
       operationContext.checkpoint();
-      const referenceCount = mutate(context.project, context.projectRoot);
+      const { referenceCount } = await mutate(context, operationContext);
       operationContext.checkpoint();
       const afterObservations = observeProjectDiagnostics(
         context.project,
@@ -575,7 +581,7 @@ export async function prepareRename(
     args.projectRoot,
     "rename_symbol",
     args.allowNewErrors ?? false,
-    (project) => {
+    async ({ project }) => {
       const sourceFile = getSourceFileOrThrow(project, args.filePath);
       const node = findDeclarationByName(sourceFile, args.symbolPath);
       if (!Node.isRenameable(node)) {
@@ -587,7 +593,7 @@ export async function prepareRename(
         ? node.findReferencesAsNodes().length
         : 0;
       node.rename(args.newName);
-      return referenceCount;
+      return { referenceCount };
     },
     requestContext,
   );
@@ -607,7 +613,7 @@ export async function prepareReplaceBody(
     args.projectRoot,
     "replace_symbol_body",
     args.allowNewErrors ?? false,
-    (project) => {
+    async ({ project }) => {
       const sourceFile = getSourceFileOrThrow(project, args.filePath);
       const declaration = findDeclarationByName(sourceFile, args.symbolPath);
       const executable = executableDeclaration(declaration) as Node & {
@@ -620,7 +626,7 @@ export async function prepareReplaceBody(
         executable.getBody().replaceWithText("{}");
       }
       executable.setBodyText(args.newBody);
-      return 0;
+      return { referenceCount: 0 };
     },
     requestContext,
   );
@@ -665,7 +671,7 @@ export async function prepareScaffoldClass(
     args.projectRoot,
     "scaffold_class",
     args.allowNewErrors ?? false,
-    (project, projectRoot) => {
+    async ({ project, projectRoot }) => {
       const absolutePath = path.resolve(projectRoot, normalizedFile);
       assertSafeNewOperationFile(projectRoot, absolutePath, normalizedFile);
       const scaffold = buildClassScaffold(project, absolutePath, args.spec);
@@ -673,7 +679,7 @@ export async function prepareScaffoldClass(
         outline: scaffold.outline,
         pendingMethods: scaffold.pendingMethods,
       };
-      return 0;
+      return { referenceCount: 0 };
     },
     requestContext,
   );
