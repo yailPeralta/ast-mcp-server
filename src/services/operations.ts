@@ -327,8 +327,91 @@ function assertSafeCreationState(
   }
 }
 
+/** A byte-range replacement in a file outside the TypeScript program (an external template). */
+export interface AuxiliaryEdit {
+  readonly absolutePath: string;
+  readonly start: number;
+  readonly end: number;
+  readonly newText: string;
+  /** Hash of the file bytes the offsets were computed against. */
+  readonly expectedHash: string;
+}
+
 export interface PlanMutation {
   readonly referenceCount: number;
+  readonly auxiliaryEdits?: readonly AuxiliaryEdit[];
+}
+
+function compareFiles(left: { file: string }, right: { file: string }): number {
+  return left.file < right.file ? -1 : left.file > right.file ? 1 : 0;
+}
+
+function applyEditsDescending(text: string, edits: readonly AuxiliaryEdit[], file: string): string {
+  const ordered = [...edits].sort((left, right) => left.start - right.start);
+  let previousEnd = 0;
+  for (const edit of ordered) {
+    if (!(edit.start >= previousEnd && edit.end >= edit.start && edit.end <= text.length)) {
+      throw new Error(`Auxiliary edits overlap or fall outside the file: ${file}`);
+    }
+    previousEnd = edit.end;
+  }
+  return ordered
+    .reverse()
+    .reduce(
+      (updated, edit) => updated.slice(0, edit.start) + edit.newText + updated.slice(edit.end),
+      text,
+    );
+}
+
+/** Plans edits to files outside the compiler program, bound to the workspace snapshot hashes. */
+async function planAuxiliaryFiles(
+  edits: readonly AuxiliaryEdit[],
+  projectRoot: string,
+  snapshotFiles: ReadonlyMap<string, string>,
+  requestContext: RequestContext,
+): Promise<PlannedFileInternal[]> {
+  const byFile = new Map<string, AuxiliaryEdit[]>();
+  for (const edit of edits) {
+    const absolutePath = realpathSync(edit.absolutePath);
+    byFile.set(absolutePath, [...(byFile.get(absolutePath) ?? []), edit]);
+  }
+  const planned: PlannedFileInternal[] = [];
+  for (const [absolutePath, fileEdits] of byFile) {
+    requestContext.checkpoint();
+    const file = path.relative(projectRoot, absolutePath);
+    assertSafeOperationFile(projectRoot, absolutePath, file);
+    const snapshotHash = snapshotFiles.get(absolutePath);
+    if (snapshotHash === undefined) {
+      throw new Error(`Affected file is missing from the workspace snapshot: ${file}`);
+    }
+    const originalBytes = await readFile(absolutePath);
+    requestContext.checkpoint();
+    const bytesHash = hashBytes(originalBytes);
+    if (bytesHash !== snapshotHash || fileEdits.some((edit) => edit.expectedHash !== bytesHash)) {
+      throw new Error(
+        `Workspace changed while the operation was being prepared (${file}). Retry preparation.`,
+      );
+    }
+    const originalText = decodeSource(originalBytes, absolutePath);
+    const updatedText = applyEditsDescending(originalText, fileEdits, file);
+    if (updatedText === originalText) continue;
+    const updatedBytes = encodeUpdatedSource(originalBytes, updatedText);
+    planned.push({
+      absolutePath,
+      file,
+      originalHash: bytesHash,
+      updatedHash: hashBytes(updatedBytes),
+      originalText,
+      updatedText,
+      originalBytes,
+      updatedBytes,
+      diff: createTwoFilesPatch(file, file, originalText, updatedText, "before", "after", {
+        context: 3,
+      }),
+      mode: (await stat(absolutePath)).mode,
+    });
+  }
+  return planned;
 }
 
 /** Internal seam shared by the prepare functions; exported so tests can drive `mutate` directly. */
@@ -377,7 +460,7 @@ export async function createPlan(
       }
 
       operationContext.checkpoint();
-      const { referenceCount } = await mutate(context, operationContext);
+      const { referenceCount, auxiliaryEdits = [] } = await mutate(context, operationContext);
       operationContext.checkpoint();
       const afterObservations = observeProjectDiagnostics(
         context.project,
@@ -390,7 +473,13 @@ export async function createPlan(
         originals,
         operationContext,
       );
-      if (textChanges.length === 0) {
+      const auxiliaryFiles = await planAuxiliaryFiles(
+        auxiliaryEdits,
+        context.projectRoot,
+        workspaceBefore.files,
+        operationContext,
+      );
+      if (textChanges.length === 0 && auxiliaryFiles.length === 0) {
         throw new Error("The structural operation produced no file changes.");
       }
 
@@ -463,6 +552,9 @@ export async function createPlan(
           mode: fileStat.mode,
         });
       }
+
+      files.push(...auxiliaryFiles);
+      files.sort(compareFiles);
 
       const postWorkspaceFiles = new Map(workspaceBefore.files);
       for (const file of files) {
