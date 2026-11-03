@@ -4,6 +4,7 @@ import { open, readFile, stat, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { createTwoFilesPatch } from "diff";
 import { LanguageVariant, Node, ScriptTarget, SyntaxKind, ts, type Project } from "ts-morph";
+import { collectTemplateUsages, type TemplateUsage } from "./angular-templates.js";
 import {
   compareObservedDiagnostics,
   observeDiagnostic,
@@ -646,6 +647,38 @@ function publicOperation(record: OperationRecord): PreparedOperation {
   };
 }
 
+const TEMPLATE_ANY_CAST = "$any";
+
+/** Fails closed before any edit when template evidence is incomplete or the new name would be captured. */
+function assertTemplateRenameAllowed(
+  coverageStatus: string,
+  usages: readonly TemplateUsage[],
+  newName: string,
+): void {
+  if (coverageStatus === "unfinished" || coverageStatus === "unsupported") {
+    throw new PublicOperationalError(
+      "INCOMPLETE_EVIDENCE",
+      "Template coverage is incomplete, so the rename cannot be proven safe.",
+    );
+  }
+  if (usages.some((usage) => usage.container === "inline")) {
+    throw new PublicOperationalError(
+      "MUTATION_BLOCKED",
+      "The member is used in an inline template, which rename does not edit.",
+    );
+  }
+  const collides =
+    coverageStatus === "completed" &&
+    (newName === TEMPLATE_ANY_CAST ||
+      usages.some((usage) => usage.localsInScope.includes(newName)));
+  if (collides) {
+    throw new PublicOperationalError(
+      "MUTATION_BLOCKED",
+      "The new name would collide with a template-local name or the $any cast.",
+    );
+  }
+}
+
 export async function prepareRename(
   args: {
     projectRoot: string;
@@ -673,19 +706,31 @@ export async function prepareRename(
     args.projectRoot,
     "rename_symbol",
     args.allowNewErrors ?? false,
-    async ({ project }) => {
-      const sourceFile = getSourceFileOrThrow(project, args.filePath);
+    async (context, rc) => {
+      const sourceFile = getSourceFileOrThrow(context.project, args.filePath);
       const node = findDeclarationByName(sourceFile, args.symbolPath);
       if (!Node.isRenameable(node)) {
         throw new Error(
           `Symbol "${args.symbolPath}" (${node.getKindName()}) does not support structural rename.`,
         );
       }
-      const referenceCount = Node.isReferenceFindable(node)
+      // Template usages must be collected before the rename mutates the program.
+      const { coverage, usages } = await collectTemplateUsages(node, context, rc);
+      assertTemplateRenameAllowed(coverage.status, usages, args.newName);
+      const tsReferenceCount = Node.isReferenceFindable(node)
         ? node.findReferencesAsNodes().length
         : 0;
       node.rename(args.newName);
-      return { referenceCount };
+      return {
+        referenceCount: tsReferenceCount + usages.length,
+        auxiliaryEdits: usages.map((usage) => ({
+          absolutePath: usage.absolutePath,
+          start: usage.start,
+          end: usage.end,
+          newText: args.newName,
+          expectedHash: usage.fileHash,
+        })),
+      };
     },
     requestContext,
   );
