@@ -13,15 +13,15 @@ artifacts:
   design: done
   tasks: done
   applyProgress: done
-  verifyReport: missing
+  verifyReport: done
 dependencies:
   proposal: ready
   specs: ready
   design: ready
   tasks: ready
   apply: ready
-  verify: blocked
-  archive: blocked
+  verify: ready
+  archive: ready
 sessionPreflight:
   executionMode: auto
   artifactStore: hybrid
@@ -49,7 +49,16 @@ proposal:
   maxUnitLines: 600
   chainedPRsRequired: true
   issueNumber: 370
-nextRecommended: verify; task 3.8 (ATN-R8) and the find_references description polish deferred until the public dsh-adapter baseline moves past a release with this feature
+nextRecommended: archive after the chain PRs merge; verify passed with warnings (ATN-R8 / task 3.8 and the description polish deferred until the public dsh-adapter baseline moves past a release with this feature)
+verify:
+  status: pass-with-warnings
+  report: openspec/changes/2026-11-03-angular-template-references/verify-report.md
+  engramTopic: sdd/2026-11-03-angular-template-references/verify-report
+  critical: 0
+  warnings: 4
+  suggestions: 3
+  scenariosCompliant: 52
+  scenariosTotal: 53
 blockedReasons: []
 spec:
   status: success
@@ -91,8 +100,8 @@ tasks:
   chainedPRsRecommended: true
   budgetRisk800: "High single-PR, Low per-unit"
   decisionNeededBeforeApply: false
-  preApplyOpen: [github-issue-number, explore-follow-up-issue]
-lastPhase: apply
+  preApplyOpen: []
+lastPhase: verify
 applyState: partial
 taskProgress:
   completed: 26

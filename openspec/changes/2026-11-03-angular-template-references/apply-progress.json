@@ -36,8 +36,7 @@
   },
   "pending": [
     "3.8 (blocked, ATN-R8)",
-    "find_references/rename_symbol description polish (deferred with 3.8)",
-    "pre-apply 0.2 follow-up issue number to fill in docs"
+    "find_references/rename_symbol description polish (deferred with 3.8)"
   ],
   "tdd_evidence": [
     {

@@ -30,8 +30,8 @@ Strict TDD: every task names its RED test first (file + test name), then GREEN, 
 
 - [x] 0.1 Open the GitHub issue for this change (repo uses GitHub Issues, `docs/agents/issue-tracker.md`) and record its number in `state.yaml` (`proposal.issueNumber`) and `proposal.md` ("Issue: #___"). The executor must NOT create it; the human/orchestrator does.
 - [x] 0.2 Open the follow-up issue "Template evidence in ast_explore" (design Risks) and note its number in the U4 docs. Issue: #380.
-- [ ] 0.3 Create tracker branch `feat/angular-template-references` from main and open the draft tracker PR.
-- [ ] 0.4 Record the non-Angular workspace-hash golden hex from `main` BEFORE any U3 code lands (needed as the U3 RED fixture; capture in U3 task 3.1 against unmodified `workspace.ts`).
+- [x] 0.3 Create tracker branch `feat/angular-template-references` from main and open the draft tracker PR. PR: #371.
+- [x] 0.4 Record the non-Angular workspace-hash golden hex from `main` BEFORE any U3 code lands (needed as the U3 RED fixture; capture in U3 task 3.1 against unmodified `workspace.ts`).
 
 ---
 
