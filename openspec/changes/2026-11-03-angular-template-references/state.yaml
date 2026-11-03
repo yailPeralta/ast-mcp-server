@@ -49,7 +49,7 @@ proposal:
   maxUnitLines: 600
   chainedPRsRequired: true
   issueNumber: 370
-nextRecommended: apply (U2)
+nextRecommended: apply (U3)
 blockedReasons: []
 spec:
   status: success
@@ -95,13 +95,15 @@ tasks:
 lastPhase: apply
 applyState: partial
 taskProgress:
-  completed: 8
+  completed: 13
   total: 27
-  unit: "U1 of 4 done as U1a/U1b/U1c (1.1-1.8); U2-U4 pending; U2 bases on u1c"
+  unit: "U1 (1.1-1.8) and U2 (2.1-2.5) done; U3-U4 pending; U3 bases on the u2b branch"
   branches:
     [
       feat/angular-template-references-u1a-hygiene,
       feat/angular-template-references-u1b-loader,
       feat/angular-template-references-u1c-extractor,
+      feat/angular-template-references-u2a-references,
+      feat/angular-template-references-u2b-tool,
     ]
-  changedLines: { u1a: 356, u1b: 619, u1c: 494 }
+  changedLines: { u1a: 356, u1b: 619, u1c: 494, u2a: 591, u2b: 288 }

@@ -4,6 +4,7 @@ import { decode } from "@toon-format/toon";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer } from "../../src/server.js";
 import { clearProjectSessions } from "../../src/services/project.js";
+import { createAngularFixture } from "../helpers/angular-fixture.js";
 import { createProjectFixture, type ProjectFixture } from "../helpers/project-fixture.js";
 
 const PLAIN_FILES = {
@@ -93,5 +94,79 @@ describe("ast_find_references non-Angular output", () => {
     expect(decoded.references).toEqual(
       expect.not.arrayContaining([expect.objectContaining({ origin: expect.anything() })]),
     );
+  });
+});
+
+const ANGULAR_FILES = {
+  "src/a.component.ts": `import { Component } from "@angular/core";
+@Component({ selector: "app-a", templateUrl: "./a.component.html" })
+export class AComponent {
+  title = "x";
+}
+`,
+  "src/user.ts": `import { AComponent } from "./a.component.js";
+export const first = new AComponent().title;
+`,
+  "src/a.component.html": `<h1>{{ title }}</h1>\n<p>{{ title }}</p>\n`,
+};
+const angular = (files: Record<string, string>) => createAngularFixture(files, { compiler: "v21" });
+const ANGULAR_ARGS = { file_path: "src/a.component.ts", symbol_path: "AComponent.title" };
+
+describe("ast_find_references with Angular templates", () => {
+  it("JSON and TOON parity for Angular responses", async () => {
+    const json = await call(ANGULAR_FILES, ANGULAR_ARGS, angular);
+    const expected = json.structuredContent as Record<string, unknown>;
+    expect(expected).toMatchObject({
+      reference_count: 1,
+      template_reference_count: 2,
+      total: 4,
+      template_coverage: { status: "completed", templates: 1 },
+    });
+    expect((expected.references as { origin: string }[]).map((item) => item.origin)).toEqual([
+      "template_external",
+      "template_external",
+      "compiler",
+      "compiler",
+    ]);
+    expect(expected.affected_files).toContain("src/a.component.html");
+
+    const toonResult = await client.callTool({
+      name: "ast_find_references",
+      arguments: { project_root: fixture!.root, ...ANGULAR_ARGS, output_format: "toon" },
+    });
+    const envelope = toonResult.structuredContent as { format: string; data: string };
+    expect(decode(envelope.data)).toEqual(expected);
+  });
+
+  it("TOON stays tabular with uniform origin", async () => {
+    const result = await call(ANGULAR_FILES, { ...ANGULAR_ARGS, output_format: "toon" }, angular);
+    const { data } = result.structuredContent as { data: string };
+    expect(data).toMatch(/references\[4\]\{[^}]*\borigin\b[^}]*\}:/);
+  });
+
+  it("unfinished coverage is reported not silently dropped", async () => {
+    const result = await call(
+      { ...ANGULAR_FILES, "src/a.component.html": "<p>{{ title </div>" },
+      ANGULAR_ARGS,
+      angular,
+    );
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      reference_count: 1,
+      template_reference_count: 0,
+      total: 2,
+      template_coverage: { status: "unfinished", reason: "template_parse_error", templates: 0 },
+    });
+  });
+
+  it("includes the template line as context for detail=context", async () => {
+    const result = await call(ANGULAR_FILES, { ...ANGULAR_ARGS, detail: "context" }, angular);
+    const references = (result.structuredContent as { references: Record<string, unknown>[] })
+      .references;
+    expect(references[0]).toMatchObject({
+      origin: "template_external",
+      kind: "TemplatePropertyRead",
+      context: "<h1>{{ title }}</h1>",
+    });
   });
 });

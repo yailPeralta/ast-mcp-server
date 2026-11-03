@@ -4,20 +4,21 @@ Strategy: `feature-branch-chain` (delivery `auto-chain`). One draft/no-merge tra
 
 ## Branches and PR order
 
-| Order | PR                                                 | Branch                                                | Base       | Est. lines |
-| ----- | -------------------------------------------------- | ----------------------------------------------------- | ---------- | ---------- |
-| T     | Tracker (draft, no-merge)                          | `feat/angular-template-references`                    | `main`     | 0          |
-| 1a    | U1a hygiene (safe-file move, deps, fixture helper) | `feat/angular-template-references-u1a-hygiene`        | tracker    | 356        |
-| 1b    | U1b compiler gate and template locator             | `feat/angular-template-references-u1b-loader`         | U1a branch | 619        |
-| 1c    | U1c usage extractor and bounds                     | `feat/angular-template-references-u1c-extractor`      | U1b branch | 494        |
-| 2     | U2 find_references                                 | `feat/angular-template-references-u2-find-references` | U1c branch | ~350       |
-| 3     | U3 hash-bound rename                               | `feat/angular-template-references-u3-rename`          | U2 branch  | ~550       |
-| 4     | U4 docs and metadata                               | `feat/angular-template-references-u4-docs`            | U3 branch  | ~200       |
+| Order | PR                                                 | Branch                                            | Base       | Est. lines |
+| ----- | -------------------------------------------------- | ------------------------------------------------- | ---------- | ---------- |
+| T     | Tracker (draft, no-merge)                          | `feat/angular-template-references`                | `main`     | 0          |
+| 1a    | U1a hygiene (safe-file move, deps, fixture helper) | `feat/angular-template-references-u1a-hygiene`    | tracker    | 356        |
+| 1b    | U1b compiler gate and template locator             | `feat/angular-template-references-u1b-loader`     | U1a branch | 619        |
+| 1c    | U1c usage extractor and bounds                     | `feat/angular-template-references-u1c-extractor`  | U1b branch | 494        |
+| 2a    | U2a references service (helper, templates merge)   | `feat/angular-template-references-u2a-references` | U1c branch | 591        |
+| 2b    | U2b find_references tool, guards, digests          | `feat/angular-template-references-u2b-tool`       | U2a branch | 288        |
+| 3     | U3 hash-bound rename                               | `feat/angular-template-references-u3-rename`      | U2b branch | ~550       |
+| 4     | U4 docs and metadata                               | `feat/angular-template-references-u4-docs`        | U3 branch  | ~200       |
 
 ## Dependency diagram
 
 ```
-main <- tracker <- U1a <- U1b <- U1c <- U2 <- U3 <- U4
+main <- tracker <- U1a <- U1b <- U1c <- U2a <- U2b <- U3 <- U4
 ```
 
 Every child PR body marks its own position with the pointer marker and states start, end, prior dependencies, follow-up and out-of-scope.
@@ -31,7 +32,8 @@ Review and merge children bottom-up into their bases: U1a into tracker, U1b into
 - U1a: start = tracker; end = safe-file module + deps/aliases + fixture helper; out of scope = service.
 - U1b: start = U1a; end = compiler gate, template locator, `listTemplateFiles`; out of scope = extraction, bounds.
 - U1c: start = U1b; end = usage extractor, bounds, full `collectTemplateUsages`; out of scope = tool output, rename, docs.
-- U2: start = U1c; end = find_references additive output; out of scope = rename, hash, ast_explore.
+- U2a: start = U1c; end = `collectSymbolReferencesWithTemplates` in the references service; out of scope = tool wiring.
+- U2b: start = U2a; end = find_references additive output, explore/diagnostics guards, inventory digests; out of scope = rename, hash, ast_explore.
 - U3: start = U2; end = rename writes hash-bound `.html`; out of scope = docs.
 - U4: start = U3; end = docs/package smoke; nothing after.
 
