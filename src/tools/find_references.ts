@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { PaginationInputSchema, PaginationOutputSchema } from "../services/pagination.js";
 import { findDeclarationByName, getSourceFileOrThrow, withProject } from "../services/project.js";
-import { collectSymbolReferences } from "../services/references.js";
+import { collectSymbolReferencesWithTemplates } from "../services/references.js";
 import { createRequestContext } from "../services/request-context.js";
 import {
   createToolErrorContext,
@@ -38,13 +38,34 @@ const ContextReferenceSchema = z.object({
   context: z.string(),
 });
 
-const LocationReferenceSchema = ContextReferenceSchema.omit({ context: true });
+const ContextReferenceSchemaWithOrigin = ContextReferenceSchema.extend({
+  origin: z.enum(["compiler", "template_external", "template_inline"]).optional(),
+});
+const LocationReferenceSchema = ContextReferenceSchemaWithOrigin.omit({ context: true });
+const TemplateCoverageSchema = z.object({
+  status: z.enum(["completed", "unfinished", "unsupported"]),
+  reason: z
+    .enum([
+      "compiler_missing",
+      "compiler_unsupported",
+      "template_unresolved",
+      "template_unsafe",
+      "template_parse_error",
+      "size_exceeded",
+      "work_exhausted",
+      "inherited_member",
+    ])
+    .optional(),
+  templates: z.number().int().min(0).optional(),
+});
 const ReferenceOutputBase = {
   symbol: z.string(),
   include_declaration: z.boolean(),
   declaration_count: z.number().int().min(0),
   reference_count: z.number().int().min(0),
   affected_files: z.array(z.string()),
+  template_coverage: TemplateCoverageSchema.optional(),
+  template_reference_count: z.number().int().min(0).optional(),
   ...PaginationOutputSchema,
 };
 const ReferenceOutputSchemas = {
@@ -54,7 +75,7 @@ const ReferenceOutputSchemas = {
   }),
   context: z.object({
     ...ReferenceOutputBase,
-    references: z.array(ContextReferenceSchema),
+    references: z.array(ContextReferenceSchemaWithOrigin),
   }),
 } as const;
 
@@ -90,17 +111,19 @@ export function registerFindReferences(server: McpServer): void {
       try {
         const structuredContent = await withProject(
           project_root,
-          ({ project, projectRoot }, operationContext) => {
-            const sourceFile = getSourceFileOrThrow(project, file_path);
+          async (context, operationContext) => {
+            const sourceFile = getSourceFileOrThrow(context.project, file_path);
             const node = findDeclarationByName(sourceFile, symbol_path);
-            const collected = collectSymbolReferences(
+            const collected = await collectSymbolReferencesWithTemplates(
               node,
-              projectRoot,
-              symbol_path,
-              include_declaration,
-              detail,
-              offset,
-              limit,
+              context,
+              {
+                symbolPath: symbol_path,
+                includeDeclaration: include_declaration,
+                detail,
+                offset,
+                limit,
+              },
               operationContext,
             );
             const { references, ...metadata } = collected;
@@ -109,9 +132,16 @@ export function registerFindReferences(server: McpServer): void {
               references:
                 detail === "context"
                   ? references
-                  : references.map(({ file, line, column, kind, is_declaration }) => {
+                  : references.map(({ file, line, column, kind, is_declaration, origin }) => {
                       operationContext.checkpoint();
-                      return { file, line, column, kind, is_declaration };
+                      return {
+                        file,
+                        line,
+                        column,
+                        kind,
+                        is_declaration,
+                        ...(origin === undefined ? {} : { origin }),
+                      };
                     }),
             };
           },

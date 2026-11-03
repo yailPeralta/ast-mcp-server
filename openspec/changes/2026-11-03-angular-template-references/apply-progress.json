@@ -1,0 +1,393 @@
+{
+  "change": "2026-11-03-angular-template-references",
+  "unit": "U1, U2, U3 (3.8 blocked), U4",
+  "branch": "split: u1a-hygiene (1.1-1.3), u1b-loader (1.4,1.5,1.8), u1c-extractor (1.6,1.7); u4-docs (4.1-4.4)",
+  "mode": "Strict TDD",
+  "status": "partial (all units done and committed except 3.8 (ATN-R8) and the description polish in 4.3, both deferred behind the dsh-adapter baseline)",
+  "issue": 370,
+  "tasks": {
+    "1.1": "done",
+    "1.2": "done",
+    "1.3": "done",
+    "1.4": "done",
+    "1.5": "done",
+    "1.6": "done",
+    "1.7": "done",
+    "1.8": "done",
+    "2.1": "done",
+    "2.2": "done",
+    "2.3": "done",
+    "2.4": "done",
+    "2.5": "done",
+    "3.1": "done",
+    "3.2": "done",
+    "3.3": "done",
+    "3.4": "done",
+    "3.5": "done",
+    "3.6": "done",
+    "3.7": "done",
+    "3.9": "done",
+    "3.10": "done",
+    "3.8": "blocked: dsh-adapter smoke freezes tool descriptions; maintainer decision pending",
+    "4.1": "done",
+    "4.2": "done",
+    "4.3": "done",
+    "4.4": "done"
+  },
+  "pending": [
+    "3.8 (blocked, ATN-R8)",
+    "find_references/rename_symbol description polish (deferred with 3.8)"
+  ],
+  "tdd_evidence": [
+    {
+      "task": "1.1",
+      "test": "test/safe-file.test.ts",
+      "red": "module missing (import failure)",
+      "green": "2/2",
+      "triangulate": "accept case + 6 reject cases",
+      "safety_net": "operations.test.ts 37 pass"
+    },
+    {
+      "task": "1.2",
+      "test": "test/dependency-policy.test.ts",
+      "red": "1 failed (no peer, no aliases)",
+      "green": "4/4",
+      "triangulate": "skipped: structural manifest check"
+    },
+    {
+      "task": "1.3",
+      "test": "test/angular-fixture.test.ts",
+      "red": "helper module missing",
+      "green": "4/4",
+      "triangulate": "v20/v21/null/os-tmp + node floor table"
+    },
+    {
+      "task": "1.4-1.7",
+      "test": "test/angular-templates.test.ts",
+      "red": "service module missing",
+      "green": "test/angular-templates.test.ts: 50 tests on u1c (48 passed, 2 skipped); u1b subset 17 passed",
+      "triangulate": "describe.each v20/v21/v22, 3 out-of-range versions, 2 templateUrl forms, 3 unresolved forms"
+    },
+    {
+      "task": "1.7 fix",
+      "test": "test/angular-templates.test.ts > inline template over 512 KiB yields size_exceeded",
+      "red": "failed (inline template was parsed) before cap",
+      "green": "passes after shared cap",
+      "triangulate": "external over-cap test already present"
+    },
+    {
+      "task": "2.1",
+      "test": "test/references.test.ts, test/tools/find_references.test.ts",
+      "layer": "approval (refactor)",
+      "safety_net": "mcp.integration+explore+context-builder 42/42",
+      "red": "approval goldens recorded against pre-refactor output (pass before refactor by design); one initial golden mismatch fixed to current output",
+      "green": "16/16 after helper extraction",
+      "triangulate": "locations+declaration, context+pagination, TOON no-template-fields",
+      "refactor": "collectTsLocations + compareLocations extracted"
+    },
+    {
+      "task": "2.2",
+      "test": "test/references-templates.test.ts",
+      "layer": "integration",
+      "safety_net": "references.test.ts 2/2",
+      "red": "8/8 failed (function missing)",
+      "green": "8/8 (after fixing guessed columns in my own expectations)",
+      "triangulate": "external, inline, unfinished, not_applicable, many (33 total), detail context",
+      "refactor": "TS lookup moved after the not_applicable check to avoid a double findReferences"
+    },
+    {
+      "task": "2.3",
+      "test": "test/tools/find_references.test.ts",
+      "layer": "integration (MCP in-memory client)",
+      "safety_net": "6 existing tool/mcp tests",
+      "red": "4/4 Angular tests failed; inventory sha failed",
+      "green": "6/6; mcp.integration, tool-catalog, batch suites green",
+      "triangulate": "JSON vs TOON parity, tabular header, unfinished coverage, context detail",
+      "refactor": "none needed"
+    },
+    {
+      "task": "2.4",
+      "test": "test/explore-unchanged.test.ts, test/diagnostics.test.ts",
+      "layer": "integration",
+      "safety_net": "diagnostics 31/31",
+      "red": "guard tests, no source change expected (task states this); assertions use concrete counts so production code runs",
+      "green": "2/2 and 33/33",
+      "triangulate": "TS error still diagnosed (error_count 1) vs template breakage (0)",
+      "refactor": "none"
+    },
+    {
+      "task": "3.1",
+      "test": "test/workspace-hash.test.ts",
+      "layer": "approval (golden)",
+      "safety_net": "workspace.ts byte-identical to main",
+      "red": "2/2 failed against placeholder golden; real values recorded from unmodified code",
+      "green": "2/2, stable across 2 runs with different temp roots",
+      "triangulate": "plain TS project + html with fake @Component without core",
+      "refactor": "digest over fixture-relative paths so it is root independent"
+    },
+    {
+      "task": "3.2",
+      "test": "test/workspace-hash.test.ts",
+      "layer": "integration",
+      "safety_net": "file-fingerprints, operations, project, project-watcher, symbol-index, angular-templates 162 pass",
+      "red": "4/4 new failed",
+      "green": "6/6",
+      "triangulate": "compiler v21 vs null, removed template, sourceDigest unchanged",
+      "refactor": "none"
+    },
+    {
+      "task": "3.3",
+      "test": "test/project-watch.test.ts",
+      "layer": "integration (real fs watcher + spy)",
+      "safety_net": "project, project-watcher, project-status 112 pass",
+      "red": "3/3 failed with the production change reverted via patch (no stash)",
+      "green": "3/3, 3 consecutive runs",
+      "triangulate": "initial dirs, replaced watcher after new component, real fs event -> pending/source_change",
+      "refactor": "watchedFilePaths helper shared by both call sites"
+    },
+    {
+      "task": "3.4",
+      "test": "test/operations.test.ts",
+      "layer": "approval (refactor)",
+      "safety_net": "operations 36 pass",
+      "red": "createPlan not exported (2 failed)",
+      "green": "operations+scaffold+mcp.integration 73 pass",
+      "triangulate": "success path and rejected mutate",
+      "refactor": "none"
+    },
+    {
+      "task": "3.5",
+      "test": "test/operations-templates.test.ts",
+      "layer": "integration",
+      "safety_net": "operations 38 pass",
+      "red": "6/6 failed (auxiliaryEdits ignored)",
+      "green": "6/6; one test fixture bug fixed (notes.html had no usages)",
+      "triangulate": "overlap, descending apply, stale hash, outside snapshot, BOM+mode, diagnostics textChanges",
+      "refactor": "planAuxiliaryFiles/applyEditsDescending extracted"
+    },
+    {
+      "task": "3.6",
+      "test": "test/operations-templates.test.ts",
+      "layer": "integration (real compiler v21)",
+      "safety_net": "operations + mcp.integration",
+      "red": "11/12 failed",
+      "green": "18/18; operations, mcp.integration 86 pass",
+      "triangulate": "property, method, inline, unresolved, inherited, compiler missing, local collision, $any, plain TS, fake @Component",
+      "refactor": "assertTemplateRenameAllowed extracted"
+    },
+    {
+      "task": "3.7",
+      "test": "test/operations-templates.test.ts",
+      "layer": "integration (test hooks)",
+      "safety_net": "operations 38 pass",
+      "red": "guard tests: task states no production code expected; all 8 passed immediately with concrete assertions",
+      "green": "26/26",
+      "triangulate": "stale html, TS failure rollback, later conflict, proof lost, receipt failure, replay+cancel, import/export, pre-upgrade plan",
+      "refactor": "none"
+    },
+    {
+      "task": "3.8",
+      "test": "n/a",
+      "layer": "n/a",
+      "safety_net": "n/a",
+      "red": "not started",
+      "green": "BLOCKED by orchestrator instruction: yarn test:dsh-adapter freezes tool descriptions vs public 0.13.0",
+      "triangulate": "n/a",
+      "refactor": "n/a"
+    },
+    {
+      "task": "3.9",
+      "test": "test/workspace-snapshot-bench.test.ts",
+      "layer": "benchmark smoke",
+      "safety_net": "N/A (new)",
+      "red": "guard: function pre-exists, passes at once",
+      "green": "2/2 over 3 runs",
+      "triangulate": "non-Angular 300 files (relative bound) and Angular 150 components (absolute bound)",
+      "refactor": "none"
+    },
+    {
+      "task": "4.1",
+      "test": "scripts/package-smoke.mjs (yarn test:package)",
+      "layer": "e2e smoke",
+      "safety_net": "N/A (assertion added to existing smoke)",
+      "red": "package.json temporarily listed @angular/compiler in dependencies: smoke failed with \"packed dependencies must not include @angular/compiler\"; manifest restored",
+      "green": "yarn test:package exit 0 on the real manifest",
+      "triangulate": "dependencies, optionalDependencies, peer range, peerDependenciesMeta.optional, consumer node_modules absence",
+      "refactor": "none"
+    },
+    {
+      "task": "4.2",
+      "test": "test/angular-docs.test.ts",
+      "layer": "doc guard",
+      "safety_net": "managed-skill-bundle-validator, skill-installer, agent-setup, release-preflight 106 pass",
+      "red": "4/4 failed before docs",
+      "green": "3/3 doc tests plus related suites; releases.json current hashes recomputed (skill version left at 4.6.0, as in 62e5346)",
+      "triangulate": "skill, operations reference, README",
+      "refactor": "none"
+    },
+    {
+      "task": "4.3",
+      "test": "test/angular-docs.test.ts CHANGELOG test + inventory golden (test/mcp.integration.test.ts, test/tools)",
+      "layer": "doc guard + approval",
+      "safety_net": "inventory golden green before and after",
+      "red": "CHANGELOG test failed (no Angular entry); inventory golden stays green by design because descriptions are frozen",
+      "green": "4/4 doc tests; mcp.integration and tools suites 40 pass; no src/tools change",
+      "triangulate": "entry names both tools, descriptions deferred, TS-only",
+      "refactor": "none"
+    }
+  ],
+  "commands": [
+    {
+      "cmd": "yarn vitest run test/safe-file.test.ts test/operations.test.ts",
+      "result": "38 tests, all pass after move"
+    },
+    {
+      "cmd": "yarn vitest run test/angular-templates.test.ts test/angular-fixture.test.ts test/safe-file.test.ts test/dependency-policy.test.ts",
+      "result": "57 passed, 2 skipped"
+    },
+    {
+      "cmd": "yarn typecheck && yarn lint && yarn format:check && yarn build",
+      "result": "all exit 0"
+    },
+    {
+      "cmd": "env -u GIT_EDITOR yarn test",
+      "result": "82 files, 1240 passed, 2 skipped; supervised-worker 2 passed; exit 0"
+    },
+    {
+      "cmd": "yarn test (ambient GIT_EDITOR set)",
+      "result": "1 failure in test/canary-local-mcp.test.ts: 'ambient Git controls must be unset: GIT_EDITOR' (environmental, unrelated; passes with GIT_EDITOR unset)"
+    },
+    {
+      "cmd": "yarn typecheck; yarn lint; yarn format:check; yarn build",
+      "result": "all exit 0"
+    },
+    {
+      "cmd": "env -u GIT_EDITOR yarn test",
+      "result": "86 files, 1261 passed, 2 skipped; supervised-worker canary failed once on stale oracle hash, fixed by re-baselining scripts/canary-local-mcp.mjs, then 29/29 pass"
+    },
+    {
+      "cmd": "yarn test:mcp",
+      "result": "ok (16 tools)"
+    },
+    {
+      "cmd": "yarn test:cli",
+      "result": "ok"
+    },
+    {
+      "cmd": "yarn typecheck; yarn lint; yarn format:check; yarn build (U3 head)",
+      "result": "all exit 0"
+    },
+    {
+      "cmd": "env -u GIT_EDITOR yarn test (U3 head)",
+      "result": "90 files, 1300 passed, 2 skipped; supervised-worker 2 passed; exit 0"
+    },
+    {
+      "cmd": "yarn test:mcp / test:cli / test:errors / test:lifecycle",
+      "result": "all exit 0"
+    },
+    {
+      "cmd": "U4 gates: typecheck, lint, format:check, build, yarn test (91 files, 1304 passed, 2 skipped; supervised-worker 2 passed), test:package, test:mcp, test:cli, test:errors, test:lifecycle, test:dsh-adapter",
+      "result": "see final report"
+    }
+  ],
+  "changed_lines": {
+    "u1a": 356,
+    "u1b": 619,
+    "u1c": 494,
+    "u2a": 591,
+    "u2b": 288,
+    "yarn_lock": 42,
+    "budget": 800,
+    "u3": 1204,
+    "u4": 137
+  },
+  "decisions": [
+    "Alias versions: 20.3.34, 21.2.25, 22.2.4. Latest 20.3.35 and 21.2.26 are quarantined by Yarn npmMinimalAgeGate (1440 min) and were not bypassed.",
+    "Yarn 4 does not enforce dependency engines: install with the v22 alias (engines ^22.22.3||^24.15.0||>=26) succeeded under Node 22.13.0. engines left unchanged; v22 tests skip below its floor.",
+    "ThisReceiver does not extend ImplicitReceiver in v21, so member matching tests both classes (explicit this. bypasses template locals).",
+    "Two-way [(x)]=y is reported as TemplatePropertyWrite from the BoundAttribute; the paired TwoWay BoundEvent is skipped to avoid duplicates (BindingType.TwoWay=5, ParsedEventType.TwoWay=2 are stable across 20-22).",
+    "Angular 20+ removed PropertyWrite; assignments are Binary with =, +=, etc.",
+    "templateAttrs (structural microsyntax) are not visited by the compiler's recursive visitor, so the extractor visits them explicitly in the outer scope.",
+    "Inline template spans are exact only when cooked text equals source text; escapes/CRLF yield template_unresolved (fail closed).",
+    "Missing templateUrl target maps to template_unresolved; lexical escape check precedes existence so '../../x.html' is template_unsafe.",
+    "Non-member symbols, static members, and members of non-component classes without derived components return not_applicable.",
+    "Planning docs under openspec/changes were reformatted by prettier so format:check passes.",
+    "Validator fix: the 512 KiB cap now applies to inline templates too (shared check before parse).",
+    "u1b collectTemplateUsages is a documented seam: it locates and path-checks the template and reports completed with no usages until u1c wires the extractor; u1b tests assert coverage only for those cases and u1c restores the usage assertions.",
+    "Per-branch format:check fails only on pre-existing unformatted planning docs under openspec/changes (tracker state); fixed by prettier in the u1c docs commit.",
+    "U2: tool inventory digests re-baselined in three places (test/fixtures/tool-inventory.json, scripts/registry-consumer-smoke.mjs fc80e77e..., scripts/canary-local-mcp.mjs 2f152ce7... independent oracle) because only the find_references schema/description changed.",
+    "U2: origin is optional in the output schema and set on every item only when coverage is not not_applicable; non-Angular responses are deep-equal to the pre-change golden.",
+    "U2: template item context for detail=context is read lazily from the template file (or the TS file for inline) and capped at 500 chars like TS items.",
+    "U2: tasks name test/tools/find_references.test.ts and test/references.test.ts, which did not exist; created them.",
+    "Native attempt ledger unavailable in this gentle-ai build (no sdd-attempt command); proceeded without a token.",
+    "U2b: the find_references description change was reverted after CI. `yarn test:dsh-adapter` (mandatory) hashes description plus input schema of every tool except ast_explore against the public 0.13.0 package, so tool descriptions cannot change until the public baseline moves. Output-schema additions are not hashed and stay. Maintainer chose revert over extending the smoke exemption; the description text (and rename_symbol's in 3.8) is deferred as U4 debt.",
+    "U3: workspace snapshot adds canonical template paths to files (digest, fileCount) but not sourceFiles, so sourceDigest/sourceFileCount stay TS-only.",
+    "U3: createPlan exported as an internal seam so the mutate contract and auxiliary-edit channel are testable directly; mutate returns {referenceCount, auxiliaryEdits?}.",
+    "U3: auxiliary edit offsets are over BOM-free decoded text; BOM re-added by encodeUpdatedSource; edits missing from snapshot raise 'missing from the workspace snapshot', hash mismatch raises the existing 'Workspace changed' error (CONFLICT/STALE class).",
+    "U3: $any and local-name collision block only when coverage is completed, keeping non-Angular and not_applicable renames unchanged.",
+    "U3: error codes via PublicOperationalError: INCOMPLETE_EVIDENCE (unfinished/unsupported), MUTATION_BLOCKED (inline usage, collision, $any).",
+    "U3 task 3.8 NOT implemented per orchestrator: rename_symbol description must not change (dsh-adapter smoke); ATN-R8 remains open pending maintainer decision. No inventory re-baseline.",
+    "U3: Watcher call site 2 lists templates from the AST before refreshFromFileSystem, so a templateUrl edit in an existing TS file takes effect for watching on the next sync; newly added component files are covered immediately.",
+    "U4: tool descriptions and schemas untouched (dsh-adapter smoke). Deferred description text recorded in CHANGELOG [Unreleased] and the skill/README as authoritative behavior; polish and task 3.8 wait until the public baseline in scripts/dsh-adapter-smoke.mjs moves past a release containing this feature.",
+    "U4: skill content edited with version left at 4.6.0 and releases.json current hashes recomputed, following commit 62e5346.",
+    "U4: docs reference the ast_explore follow-up as \"tracked as a follow-up issue\" without a number (pre-apply 0.2 not opened); the orchestrator fills the number.",
+    "U4 chain verification: every slice diff (base..head) contains only its unit files plus openspec planning docs."
+  ],
+  "blockers": [],
+  "risks": [
+    "Split resolves the budget: u1a 356, u1b 619, u1c 494 lines.",
+    "U2 landed at 879 changed lines (src/test/scripts) vs the ~350 forecast; split by commit into u2a (591) and u2b (288). u2a exceeds the 400-line repo budget and carries size:exception.",
+    "U3 landed at 1204 changed lines (src 193, test 1011) vs ~550 forecast; test code is 84%. Split by commit into u3a (3.1-3.3, 271), u3b (3.4-3.6, 626, size:exception) and u3c (3.7, 3.9, 309); rebased onto c21f3e5."
+  ],
+  "u3_split": {
+    "reason": "auto-chain: U3 was 1204 lines vs 800 budget",
+    "u3a": {
+      "branch": "feat/angular-template-references-u3a-freshness",
+      "base": "feat/angular-template-references-u2b-tool",
+      "tasks": ["3.1", "3.2", "3.3"],
+      "changed_lines": 271
+    },
+    "u3b": {
+      "branch": "feat/angular-template-references-u3b-rename",
+      "base": "feat/angular-template-references-u3a-freshness",
+      "tasks": ["3.4", "3.5", "3.6"],
+      "changed_lines": 626
+    },
+    "u3c": {
+      "branch": "feat/angular-template-references-u3c-apply-guards",
+      "base": "feat/angular-template-references-u3b-rename",
+      "tasks": ["3.7", "3.9", "3.10"],
+      "changed_lines": 309
+    },
+    "task_3_7_test_mapping": "tasks.md item 'later target conflict leaves earlier html applied and reports AMBIGUOUS_APPLY/CONFLICT per contract' is implemented as 'later target conflict leaves the external TS and restores the owned html' (CONFLICT, EWS-R1 literal); 'rollback proof lost reports honestly' and 'template file earlier in sequence' are merged into one test asserting AMBIGUOUS_APPLY."
+  },
+  "u2_split": {
+    "reason": "auto-chain: U2 was 879 lines vs 800 budget",
+    "u2a": {
+      "branch": "feat/angular-template-references-u2a-references",
+      "base": "feat/angular-template-references-u1c-extractor",
+      "commits": ["abbed6e", "860f906"],
+      "tasks": ["2.1", "2.2"],
+      "changed_lines": 591
+    },
+    "u2b": {
+      "branch": "feat/angular-template-references-u2b-tool",
+      "base": "feat/angular-template-references-u2a-references",
+      "commits": ["148ce4a", "8a75085", "8fa157f"],
+      "tasks": ["2.3", "2.4", "2.5"],
+      "changed_lines": 288
+    },
+    "index_incident": "The executor ran `git stash; git stash pop` on a clean tree, which applied the pre-existing stash@{0} (issue247-rebase-verification-blocked). The orchestrator restored the affected issue-247 paths to HEAD; the stash is intact."
+  },
+  "split": {
+    "reason": "user chose split over size:exception (single U1 was 1426 lines vs 800 budget)",
+    "changed_lines_excluding_lockfile_and_openspec": {
+      "u1a": 356,
+      "u1b": 619,
+      "u1c": 494
+    },
+    "u2_base": "feat/angular-template-references-u1c-extractor",
+    "old_branch_kept": "feat/angular-template-references-u1-service"
+  },
+  "estimation_lesson": "Tests were about 75% of production lines (service 613 vs tests ~457); budget tests at ~0.75x production code."
+}

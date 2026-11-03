@@ -1,5 +1,7 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Project } from "ts-morph";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildDiagnosticAggregates,
   buildEditContext,
@@ -14,7 +16,10 @@ import {
   type EditBudget,
   type NormalizedDiagnostic,
 } from "../src/services/diagnostics.js";
+import { clearProjectSessions } from "../src/services/project.js";
 import { RequestContextError, type RequestContext } from "../src/services/request-context.js";
+import { createServer } from "../src/server.js";
+import { createAngularFixture, type AngularFixture } from "./helpers/angular-fixture.js";
 
 function diagnostic(overrides: Partial<NormalizedDiagnostic> = {}): NormalizedDiagnostic {
   return {
@@ -414,5 +419,61 @@ describe("diagnostic aggregates", () => {
     expect(() => buildDiagnosticAggregates([diagnostic()], interruptAt(2))).toThrow("checkpoint:2");
     expect(() => buildDiagnosticAggregates(twoGroups, interruptAt(4))).toThrow("checkpoint:4");
     expect(() => buildDiagnosticAggregates(twoGroups, interruptAt(6))).toThrow("checkpoint:6");
+  });
+});
+
+describe("Angular template diagnostics", () => {
+  let client: Client;
+  let server: ReturnType<typeof createServer>;
+  let fixture: AngularFixture | undefined;
+
+  beforeEach(async () => {
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    server = createServer();
+    client = new Client({ name: "diagnostics-template-client", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  });
+
+  afterEach(async () => {
+    await Promise.all([client.close(), server.close()]);
+    clearProjectSessions();
+    await fixture?.cleanup();
+    fixture = undefined;
+  });
+
+  async function errorCount(files: Record<string, string>): Promise<number> {
+    fixture = await createAngularFixture(
+      {
+        "src/a.component.ts": `import { Component } from "@angular/core";
+@Component({ selector: "app-a", templateUrl: "./a.component.html" })
+export class AComponent {
+  title = "x";
+}
+`,
+        ...files,
+      },
+      { compiler: "v21" },
+    );
+    const result = await client.callTool({
+      name: "ast_get_diagnostics",
+      arguments: { project_root: fixture.root },
+    });
+    expect(result.isError).not.toBe(true);
+    return (result.structuredContent as { error_count: number }).error_count;
+  }
+
+  it("template breakage is not diagnosed", async () => {
+    // The template reads a member that does not exist and is not even valid markup.
+    expect(await errorCount({ "src/a.component.html": "<p>{{ missingMember </div>" })).toBe(0);
+  });
+
+  it("still diagnoses a TypeScript error in the same project", async () => {
+    expect(
+      await errorCount({
+        "src/a.component.html": "<p>{{ title }}</p>",
+        "src/broken.ts": "export const broken: number = 'x';\n",
+      }),
+    ).toBe(1);
   });
 });

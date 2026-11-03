@@ -33,6 +33,7 @@ import {
   type ProjectWatcher,
 } from "./project-watcher.js";
 import { createConfigSnapshot, createWorkspaceSnapshot } from "./workspace.js";
+import { listTemplateFiles } from "./angular-templates.js";
 import {
   createInitialProjectStatus,
   createProjectIdentity,
@@ -470,6 +471,14 @@ function assertProjectRuntimeAdmissionOpen(): void {
   }
 }
 
+/** Compiler sources plus external templates, which sit outside the TS program but join the hash. */
+function watchedFilePaths(context: ProjectContext): readonly string[] {
+  return [
+    ...context.project.getSourceFiles().map((sourceFile) => sourceFile.getFilePath()),
+    ...listTemplateFiles(context),
+  ];
+}
+
 function createProjectSession(
   projectRoot: string,
   runtimePolicy: RuntimePolicy,
@@ -486,7 +495,7 @@ function createProjectSession(
   };
   const watchDirectories = selectProjectWatchDirectories(
     context.projectRoot,
-    context.project.getSourceFiles().map((sourceFile) => sourceFile.getFilePath()),
+    watchedFilePaths(context),
   );
   const owner: { session?: ProjectSession } = {};
   const watcher = createSessionWatcher(() => owner.session!, context.projectRoot, watchDirectories);
@@ -601,10 +610,7 @@ async function synchronizeSession(
     requestContext.checkpoint();
     replaceSessionWatcher(
       session,
-      selectProjectWatchDirectories(
-        session.context.projectRoot,
-        project.getSourceFiles().map((sourceFile) => sourceFile.getFilePath()),
-      ),
+      selectProjectWatchDirectories(session.context.projectRoot, watchedFilePaths(session.context)),
     );
     requestContext.checkpoint();
 

@@ -6,7 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Angular template references (#370). In projects where `@angular/core` resolves, `ast_find_references` reports usages of a component member in its external (`templateUrl`) and inline templates. Items carry `origin` (`compiler`, `template_external`, `template_inline`), and the response adds `template_coverage` and `template_reference_count`; `reference_count` stays TypeScript-only and `total` counts both. Only `template_coverage.status: "completed"` supports an absence claim.
+- `ast_rename_symbol` rewrites external Angular templates in the same reviewed, hash-bound plan, with rollback covering the templates. It returns `INCOMPLETE_EVIDENCE` when coverage is `unfinished` or `unsupported`, and `MUTATION_BLOCKED` for inline-template usages, a new name that collides with a template local, or `$any`. Apply remains sequential, not globally atomic.
+- `@angular/compiler` (`>=20.0.0 <23.0.0`) is an optional peer dependency resolved from the target project; it is never bundled. `yarn test:package` now asserts it is absent from the packed `dependencies` and from a consumer install. Yarn PnP projects without `node_modules` report `unfinished` coverage.
+- Workspace snapshots and the file watcher include Angular template files when Angular is detected; workspaces without `@angular/core` hash identically to before.
+
 ### Changed
+
+- Documented limits: `ast_explore` references stay TypeScript-only (template evidence is tracked as a follow-up issue) and diagnostics, including the post-apply delta, stay TypeScript-only, so template-only errors are not detected.
+- Deferred tool description text. The `ast_find_references` and `ast_rename_symbol` descriptions are intentionally unchanged in this release because the dsh-adapter smoke freezes every tool description and input schema against the public 0.13.0 package. When that baseline moves past a release containing this feature, update them to state that `ast_find_references` reports template usages with `template_coverage`, that `ast_rename_symbol` writes external templates, and that diagnostics stay TypeScript-only, and re-baseline the tool inventory in the same change. Until then the skill and README are the authoritative description of this behavior.
 
 - The issue #103 `node:test` suites now run once per CI run in a dedicated `fixture` job on pinned Node 24.16.0, in parallel with `quality`, instead of once per `quality` matrix entry; the workflow policy check pins both job chains (#368).
 - The CI `quality` job now runs every committed `node:test` suite from the issue #103 chain: `npm-pack-json`, `acquisition`, `setup`, `test-lock`, `prepared-runner` and `prepared-install-build` join the exact-Node fixture command after the four suites it already ran, and the workflow policy check pins the extended command (#364).

@@ -20,6 +20,12 @@ El setup falla cerrado ante un registro `ast` conflictivo. No borrar ni reemplaz
 
 Preferir `file_path` relativo; un suffix ambiguo debe devolver candidatos. `ast_get_file` solo admite archivos del tsconfig activo y `snapshot_state: "fresh"` no implica cero diagnostics. `ast_explore` es read-only: revisar `budget`, `completeness`, `unresolved` y `truncation`; sus `call_spines` son recorridos estáticos, no stacks de runtime.
 
+### Angular templates
+
+`ast_find_references` adds template usages (`origin: "template_external" | "template_inline"`, `template_coverage`, `template_reference_count`) only when `@angular/core` resolves; otherwise the response is unchanged. Treat `template_coverage.status` other than `completed` as not proving absence. `ast_explore` is TypeScript-only for references (tracked in issue #380), and diagnostics stay TypeScript-only, so template errors are never detected.
+
+`ast_rename_symbol` edits external templates and returns `INCOMPLETE_EVIDENCE` (coverage `unfinished` or `unsupported`) or `MUTATION_BLOCKED` (inline usage, template-local collision, `$any`). The user's `@angular/compiler` is an optional peer, never bundled; Yarn PnP projects without `node_modules` report `unfinished`. See the Angular templates section of `SKILL.md`.
+
 ## Trust, freshness y ausencia
 
 Solo `provenance: "compiler"`, `confidence: "exact"`, `resolution: "resolved"` y `freshness.state: "fresh"` producen evidencia autoritativa. `syntax` describe estructura; `heuristic` nunca autoriza una mutación. El índice acelera, pero el compilador valida. Administrar su cache derivada solo con `ast-tool cache inspect` y `ast-tool cache clear --yes`, nunca borrándola manualmente. La ausencia usa el contrato específico: solo `ast_find_test_candidates` usa `completeness.proven_empty` para evidencia vacía de tests afectados; `ast_explore.call_spines` usa `empty_proven`; listados, búsquedas y referencias agotan paginación con `total`, `has_more` y `next_offset` según corresponda, nunca con `proven_empty`.

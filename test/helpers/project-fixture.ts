@@ -10,8 +10,18 @@ export interface ProjectFixture {
   remove(): Promise<void>;
 }
 
-export async function createProjectFixture(files: Record<string, string>): Promise<ProjectFixture> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "ast-mcp-test-"));
+export interface ProjectFixtureOptions {
+  /** Directory that will contain the fixture root. Defaults to `os.tmpdir()`. */
+  parentDir?: string;
+}
+
+export async function createProjectFixture(
+  files: Record<string, string>,
+  options: ProjectFixtureOptions = {},
+): Promise<ProjectFixture> {
+  const parentDir = options.parentDir ?? os.tmpdir();
+  await mkdir(parentDir, { recursive: true });
+  const root = await mkdtemp(path.join(parentDir, "ast-mcp-test-"));
   const write = async (relativePath: string, content: string): Promise<void> => {
     const absolutePath = path.join(root, relativePath);
     await mkdir(path.dirname(absolutePath), { recursive: true });
