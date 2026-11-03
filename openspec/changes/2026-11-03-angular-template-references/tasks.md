@@ -68,21 +68,21 @@ Dependency order: 1.1 || 1.2 -> 1.3 -> 1.4 -> 1.5 -> 1.6 -> 1.7 -> 1.8.
 
 ## Unit 2: find_references integration (branch `feat/angular-template-references-u2-find-references`, base U1, ~350 lines)
 
-- [ ] 2.1 Extract the shared private TS-location helper in `references.ts`; sync `collectSymbolReferences` signature and output unchanged.
+- [x] 2.1 Extract the shared private TS-location helper in `references.ts`; sync `collectSymbolReferences` signature and output unchanged.
   - RED: `test/references.test.ts` > "collectSymbolReferences output unchanged after helper extraction" (golden against current output) and "non-Angular find_references output deep-equals pre-change golden".
   - Spec: ATR-R1 (S: core absent), ATR-R7 (non-Angular identical). Sequential first.
-- [ ] 2.2 Implement async `collectSymbolReferencesWithTemplates`: merge, sort, paginate with `origin`, `kind`, `context`, `template_coverage`, `template_reference_count`; `reference_count` TS-only; `total` counts both.
+- [x] 2.2 Implement async `collectSymbolReferencesWithTemplates`: merge, sort, paginate with `origin`, `kind`, `context`, `template_coverage`, `template_reference_count`; `reference_count` TS-only; `total` counts both.
   - RED: `test/references-templates.test.ts` > "merges template items with TS items and sorts deterministically", "paginates over mixed items with truthful total/has_more", "reference_count stays TS-only while total counts both", "origin is uniform per response", "fields absent when not_applicable", "many usages paginate" (ATR-R6 S: many).
   - Spec: ATR-R6, ATR-R7 (counts), ATR-R3. Depends on 2.1.
-- [ ] 2.3 Wire `src/tools/find_references.ts` (full `ProjectContext` from `withProject`, `operationContext` as rc), additive output schema, description, `affected_files` includes `.html`; TOON parity.
+- [x] 2.3 Wire `src/tools/find_references.ts` (full `ProjectContext` from `withProject`, `operationContext` as rc), additive output schema, description, `affected_files` includes `.html`; TOON parity.
   - RED: `test/tools/find_references.test.ts` > "JSON and TOON parity for Angular responses", "TOON stays tabular with uniform origin", "unfinished coverage is reported not silently dropped"; tool-inventory golden fails until re-baselined.
   - GREEN: handler + `test/fixtures/tool-inventory.json` re-baseline (find_references only).
   - Spec: ATR-R7 (parity, counts), ATR-R5 (unfinished reported). Depends on 2.2.
-- [ ] 2.4 Diagnostics-unchanged and explore-unchanged guards.
+- [x] 2.4 Diagnostics-unchanged and explore-unchanged guards.
   - RED: `test/explore-unchanged.test.ts` > "ast_explore output for an Angular member equals pre-change output"; `test/diagnostics.test.ts` > "template breakage is not diagnosed".
   - GREEN: no source change expected (`context-builder.ts`, `explore.ts` untouched; assert via test).
   - Spec: ATR-R8. Parallel with 2.3 (disjoint files).
-- [ ] 2.5 U2 gate: all gates + `yarn test:mcp`, `yarn test:cli`. Confirm `find_test_candidates`/`get_impact` suites green.
+- [x] 2.5 U2 gate: all gates + `yarn test:mcp`, `yarn test:cli`. Confirm `find_test_candidates`/`get_impact` suites green.
 
 Dependency order: 2.1 -> 2.2 -> 2.3; 2.4 parallel with 2.3; 2.5 last.
 

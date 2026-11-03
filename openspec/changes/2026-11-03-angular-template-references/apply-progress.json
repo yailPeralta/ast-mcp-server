@@ -1,9 +1,9 @@
 {
   "change": "2026-11-03-angular-template-references",
-  "unit": "U1",
+  "unit": "U1, U2",
   "branch": "split: u1a-hygiene (1.1-1.3), u1b-loader (1.4,1.5,1.8), u1c-extractor (1.6,1.7)",
   "mode": "Strict TDD",
-  "status": "partial (U1 of 4 done)",
+  "status": "partial (U1, U2 of 4 done; U2 commit 4 and gate pending git index repair)",
   "issue": 370,
   "tasks": {
     "1.1": "done",
@@ -13,9 +13,14 @@
     "1.5": "done",
     "1.6": "done",
     "1.7": "done",
-    "1.8": "done"
+    "1.8": "done",
+    "2.1": "done",
+    "2.2": "done",
+    "2.3": "done",
+    "2.4": "done",
+    "2.5": "done"
   },
-  "pending": ["U2 2.1-2.5", "U3 3.1-3.10", "U4 4.1-4.4"],
+  "pending": ["U3 3.1-3.10", "U4 4.1-4.4"],
   "tdd_evidence": [
     {
       "task": "1.1",
@@ -52,6 +57,46 @@
       "red": "failed (inline template was parsed) before cap",
       "green": "passes after shared cap",
       "triangulate": "external over-cap test already present"
+    },
+    {
+      "task": "2.1",
+      "test": "test/references.test.ts, test/tools/find_references.test.ts",
+      "layer": "approval (refactor)",
+      "safety_net": "mcp.integration+explore+context-builder 42/42",
+      "red": "approval goldens recorded against pre-refactor output (pass before refactor by design); one initial golden mismatch fixed to current output",
+      "green": "16/16 after helper extraction",
+      "triangulate": "locations+declaration, context+pagination, TOON no-template-fields",
+      "refactor": "collectTsLocations + compareLocations extracted"
+    },
+    {
+      "task": "2.2",
+      "test": "test/references-templates.test.ts",
+      "layer": "integration",
+      "safety_net": "references.test.ts 2/2",
+      "red": "8/8 failed (function missing)",
+      "green": "8/8 (after fixing guessed columns in my own expectations)",
+      "triangulate": "external, inline, unfinished, not_applicable, many (33 total), detail context",
+      "refactor": "TS lookup moved after the not_applicable check to avoid a double findReferences"
+    },
+    {
+      "task": "2.3",
+      "test": "test/tools/find_references.test.ts",
+      "layer": "integration (MCP in-memory client)",
+      "safety_net": "6 existing tool/mcp tests",
+      "red": "4/4 Angular tests failed; inventory sha failed",
+      "green": "6/6; mcp.integration, tool-catalog, batch suites green",
+      "triangulate": "JSON vs TOON parity, tabular header, unfinished coverage, context detail",
+      "refactor": "none needed"
+    },
+    {
+      "task": "2.4",
+      "test": "test/explore-unchanged.test.ts, test/diagnostics.test.ts",
+      "layer": "integration",
+      "safety_net": "diagnostics 31/31",
+      "red": "guard tests, no source change expected (task states this); assertions use concrete counts so production code runs",
+      "green": "2/2 and 33/33",
+      "triangulate": "TS error still diagnosed (error_count 1) vs template breakage (0)",
+      "refactor": "none"
     }
   ],
   "commands": [
@@ -74,6 +119,22 @@
     {
       "cmd": "yarn test (ambient GIT_EDITOR set)",
       "result": "1 failure in test/canary-local-mcp.test.ts: 'ambient Git controls must be unset: GIT_EDITOR' (environmental, unrelated; passes with GIT_EDITOR unset)"
+    },
+    {
+      "cmd": "yarn typecheck; yarn lint; yarn format:check; yarn build",
+      "result": "all exit 0"
+    },
+    {
+      "cmd": "env -u GIT_EDITOR yarn test",
+      "result": "86 files, 1261 passed, 2 skipped; supervised-worker canary failed once on stale oracle hash, fixed by re-baselining scripts/canary-local-mcp.mjs, then 29/29 pass"
+    },
+    {
+      "cmd": "yarn test:mcp",
+      "result": "ok (16 tools)"
+    },
+    {
+      "cmd": "yarn test:cli",
+      "result": "ok"
     }
   ],
   "changed_lines": {
@@ -96,10 +157,20 @@
     "Planning docs under openspec/changes were reformatted by prettier so format:check passes.",
     "Validator fix: the 512 KiB cap now applies to inline templates too (shared check before parse).",
     "u1b collectTemplateUsages is a documented seam: it locates and path-checks the template and reports completed with no usages until u1c wires the extractor; u1b tests assert coverage only for those cases and u1c restores the usage assertions.",
-    "Per-branch format:check fails only on pre-existing unformatted planning docs under openspec/changes (tracker state); fixed by prettier in the u1c docs commit."
+    "Per-branch format:check fails only on pre-existing unformatted planning docs under openspec/changes (tracker state); fixed by prettier in the u1c docs commit.",
+    "U2: tool inventory digests re-baselined in three places (test/fixtures/tool-inventory.json, scripts/registry-consumer-smoke.mjs fc80e77e..., scripts/canary-local-mcp.mjs 2f152ce7... independent oracle) because only the find_references schema/description changed.",
+    "U2: origin is optional in the output schema and set on every item only when coverage is not not_applicable; non-Angular responses are deep-equal to the pre-change golden.",
+    "U2: template item context for detail=context is read lazily from the template file (or the TS file for inline) and capped at 500 chars like TS items.",
+    "U2: tasks name test/tools/find_references.test.ts and test/references.test.ts, which did not exist; created them.",
+    "Native attempt ledger unavailable in this gentle-ai build (no sdd-attempt command); proceeded without a token."
   ],
-  "blockers": [],
-  "risks": ["Split resolves the budget: u1a 356, u1b 619, u1c 494 lines."],
+  "blockers": [
+    "Git index has unmerged entries from an accidental `git stash pop` of a pre-existing stash (stash@{0} issue247-rebase-verification-blocked); the 5th U2 commit (guards) and the artifact commit are blocked until the index is repaired. Stash is intact."
+  ],
+  "risks": [
+    "Split resolves the budget: u1a 356, u1b 619, u1c 494 lines.",
+    "U2 changed lines are about 650 of which tests dominate; see final diff stat."
+  ],
   "split": {
     "reason": "user chose split over size:exception (single U1 was 1426 lines vs 800 budget)",
     "changed_lines_excluding_lockfile_and_openspec": {
