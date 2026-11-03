@@ -49,7 +49,7 @@ proposal:
   maxUnitLines: 600
   chainedPRsRequired: true
   issueNumber: 370
-nextRecommended: archive after the chain PRs merge; verify passed with warnings (ATN-R8 / task 3.8 and the description polish deferred until the public dsh-adapter baseline moves past a release with this feature)
+nextRecommended: none
 verify:
   status: pass-with-warnings
   report: openspec/changes/2026-11-03-angular-template-references/verify-report.md
@@ -101,7 +101,15 @@ tasks:
   budgetRisk800: "High single-PR, Low per-unit"
   decisionNeededBeforeApply: false
   preApplyOpen: []
-lastPhase: verify
+lastPhase: archive
+archiveState: done
+archive:
+  status: done
+  date: 2026-11-03
+  archivedTo: openspec/changes/archive/2026-11-03-2026-11-03-angular-template-references/
+  engramTopic: sdd/2026-11-03-angular-template-references/archive-report
+  intentionalWithWarnings: true
+  deferredGap: ATN-R8 tool-description clause and ATR-R8 tool-description clause (task 3.8 unchecked, deliberate)
 applyState: partial
 taskProgress:
   completed: 26
