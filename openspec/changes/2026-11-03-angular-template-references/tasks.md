@@ -15,7 +15,7 @@ Strict TDD: every task names its RED test first (file + test name), then GREEN, 
 - Chained PRs recommended: Yes
 - 800-line budget risk: High as a single PR (~1700); Low per unit (each <= 800, max ~600)
 - Decision needed before apply: No (strategy resolved: `auto-chain`, `feature-branch-chain`)
-- Chain strategy: feature-branch-chain. Tracker branch `feat/angular-template-references` (draft, no-merge). U1 targets tracker; U2 targets U1 branch; U3 targets U2 branch; U4 targets U3 branch. Only the tracker merges to main.
+- Chain strategy: feature-branch-chain. Tracker branch `feat/angular-template-references` (draft, no-merge). U1 targets tracker; U2 targets the U1c branch; U3 targets U2 branch; U4 targets U3 branch. Only the tracker merges to main.
 - Branch naming: `feat/angular-template-references-u1-service`, `-u2-find-references`, `-u3-rename`, `-u4-docs`.
 - Details: `chain.md`.
 
@@ -35,33 +35,33 @@ Strict TDD: every task names its RED test first (file + test name), then GREEN, 
 
 ---
 
-## Unit 1: Angular template service (branch `feat/angular-template-references-u1-service`, ~600 lines)
+## Unit 1: Angular template service (split into U1a hygiene, U1b loader, U1c extractor; branches `feat/angular-template-references-u1{a-hygiene,b-loader,c-extractor}`, 356/619/494 lines)
 
-- [ ] 1.1 Move `assertSafeOperationFile` to `src/services/safe-file.ts` (pure move, re-export-free; update importers).
+- [x] 1.1 [U1a] Move `assertSafeOperationFile` to `src/services/safe-file.ts` (pure move, re-export-free; update importers).
   - RED: `test/safe-file.test.ts` > "rejects symlink, multi-link, foreign owner and out-of-root files" (same cases as the existing operations coverage); existing operations tests must stay green.
   - GREEN: create module, import from `operations.ts`. REFACTOR: none.
   - Spec: ATR-R2 (symlink/hardlink, escape). Parallel: no (1.2+ depend on it).
-- [ ] 1.2 Repo hygiene and dev tooling: add `.tmp/` to `.gitignore`, `.prettierignore`, `eslint.config.js` ignores; add devDeps aliases `angular-compiler-v20/-v21/-v22` (`npm:@angular/compiler@...`) and optional peer `@angular/compiler >=20.0.0 <23.0.0` with `peerDependenciesMeta.optional`; refresh `yarn.lock`. Confirm Yarn 4 does not enforce dep `engines` (design assumption).
+- [x] 1.2 [U1a] Repo hygiene and dev tooling: add `.tmp/` to `.gitignore`, `.prettierignore`, `eslint.config.js` ignores; add devDeps aliases `angular-compiler-v20/-v21/-v22` (`npm:@angular/compiler@...`) and optional peer `@angular/compiler >=20.0.0 <23.0.0` with `peerDependenciesMeta.optional`; refresh `yarn.lock`. Confirm Yarn 4 does not enforce dep `engines` (design assumption).
   - RED: `test/dependency-policy.test.ts` > "declares @angular/compiler as an optional peer and not a dependency".
   - GREEN: package.json/lock edits. Spec: ATR-R1.
   - Parallel with 1.1 (disjoint files).
-- [ ] 1.3 Fixture helper `createAngularFixture(files, { compiler })` under `test/helpers/` writing into `.tmp/angular-fixtures/` (stub `@angular/core`, symlink to alias).
+- [x] 1.3 [U1a] Fixture helper `createAngularFixture(files, { compiler })` under `test/helpers/` writing into `.tmp/angular-fixtures/` (stub `@angular/core`, symlink to alias).
   - RED: `test/angular-fixture.test.ts` > "resolves the aliased compiler through createRequire from the fixture dir" and > "fixture with compiler:null has no compiler".
   - Spec: ATR-R1 (S: majors). Depends on 1.2.
-- [ ] 1.4 Detection and compiler gate (`loadCompiler`, `listTemplateFiles`, coverage types).
+- [x] 1.4 [U1b] Detection and compiler gate (`loadCompiler`, `listTemplateFiles`, coverage types).
   - RED: `test/angular-templates.test.ts` > "core absent returns not_applicable and lists no templates", "compiler missing yields unfinished/compiler_missing", "out-of-range version yields compiler_unsupported", "missing required export yields compiler_unsupported", "realpath outside ancestor node_modules is rejected (os.tmpdir fixture)", and `describe.each(v20,v21,v22)` "loads supported major" (v22 skipped below its Node floor).
   - GREEN: implement per design (createRequire + import(pathToFileURL), cache by path+version, package.json check before import).
   - Spec: ATR-R1 (all four S), ATR-R5 (compiler-related unfinished). Depends on 1.1, 1.3.
-- [ ] 1.5 Template location (`locateTemplates`): literal `templateUrl`, no-substitution template literal, inline `template`, declaring-class-only ownership, safety rules, computed URL, inherited-member.
+- [x] 1.5 [U1b] Template location (`locateTemplates`): literal `templateUrl`, no-substitution template literal, inline `template`, declaring-class-only ownership, safety rules, computed URL, inherited-member.
   - RED: `test/angular-templates.test.ts` > "resolves literal templateUrl", "same member name in another component is not a usage", "templateUrl escaping root is template_unsafe", "symlink/hardlink template is template_unsafe", "computed templateUrl is template_unresolved", "derived component yields unsupported/inherited_member".
   - Spec: ATR-R2 (all six S). Depends on 1.4.
-- [ ] 1.6 Usage extraction (`extract` visitor with scope stack): read/write/call kinds, `@if/@for/@switch`, pipes args, microsyntax, `@let`, `#ref`, `let-x`, `$event`, `localsInScope`, inline container.
+- [x] 1.6 [U1c] Usage extraction (`extract` visitor with scope stack): read/write/call kinds, `@if/@for/@switch`, pipes args, microsyntax, `@let`, `#ref`, `let-x`, `$event`, `localsInScope`, inline container.
   - RED (describe.each over aliases): "extracts TemplatePropertyRead/Write/Call", "extracts through control flow and pipe arguments", "marks inline template usages container=inline", "@for item shadows member", "$event shadows member", "member read outside shadowing scope is still a usage", "records localsInScope", "write via PropertyWrite or assignment Binary (v20 AST)".
   - Spec: ATR-R3 (3 S), ATR-R4 (3 S). Depends on 1.5.
-- [ ] 1.7 Completeness and bounds: parse errors -> `template_parse_error`; 512 KiB cap; 100k node cap; `rc.checkpoint()` cadence; coverage `completed` with template count.
+- [x] 1.7 [U1c] Completeness and bounds: parse errors -> `template_parse_error`; 512 KiB cap; 100k node cap; `rc.checkpoint()` cadence; coverage `completed` with template count.
   - RED: "unparseable template yields unfinished/template_parse_error", "fully covered returns completed with template count", "template over 512 KiB yields size_exceeded without parsing", "node bound exhaustion yields work_exhausted", "cancelled request stops between templates".
   - Spec: ATR-R5 (2 S), ATR-R6 (size, node-bound; "many" covered in U2). Depends on 1.6.
-- [ ] 1.8 U1 gate: run all gates; verify `listTemplateFiles` is sync and compiler-free (test "listTemplateFiles does not load the compiler").
+- [x] 1.8 [U1b] U1 gate: run all gates; verify `listTemplateFiles` is sync and compiler-free (test "listTemplateFiles does not load the compiler").
   - Spec: TWF-R1 (S: compiler-independent hash, enabling U3).
 
 Dependency order: 1.1 || 1.2 -> 1.3 -> 1.4 -> 1.5 -> 1.6 -> 1.7 -> 1.8.
