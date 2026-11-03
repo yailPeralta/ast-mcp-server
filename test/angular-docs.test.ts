@@ -23,7 +23,7 @@ function unreleasedSection(): string {
 describe("Angular template documentation", () => {
   it("skill documents ast_explore TS-only limit and compiler optional peer", () => {
     expect(skillDocs).toMatch(/ast_explore[^\n]*TypeScript-only/i);
-    expect(skillDocs).toMatch(/follow-up issue/i);
+    expect(skillDocs).toMatch(/issue #380/);
     expect(skillDocs).toContain("@angular/compiler");
     expect(skillDocs).toMatch(/optional peer/i);
     expect(skillDocs).toMatch(/Yarn PnP/);

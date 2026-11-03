@@ -53,7 +53,7 @@ Read `template_coverage` before inferring absence. Only `completed` proves every
 
 Limits to state when reporting:
 
-- `ast_explore` is TypeScript-only: its references omit template usages. This is tracked as a follow-up issue. Use `ast_find_references` for template evidence; rename still blocks independently.
+- `ast_explore` is TypeScript-only: its references omit template usages. This is tracked in issue #380. Use `ast_find_references` for template evidence; rename still blocks independently.
 - Diagnostics stay TypeScript-only: `ast_get_diagnostics` and the post-apply delta do not detect template errors. A template-only breakage produces no diagnostic, so run the project's Angular build or tests after a rename.
 - Detection uses the user's own `@angular/compiler`, never a bundled one. It is an optional peer (`>=20.0.0 <23.0.0`) that the project already installs with Angular. If it is missing or out of range, coverage is `unfinished` and rename is blocked. Yarn PnP projects without `node_modules` resolve nothing and report `unfinished`.
 

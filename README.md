@@ -93,7 +93,7 @@ Template evidence is explicit about what it proves:
 
 - Each item carries `origin` (`compiler`, `template_external`, `template_inline`); the response adds `template_coverage` and `template_reference_count`. Only `template_coverage.status: "completed"` supports a claim that no template usage exists.
 - Rename returns `INCOMPLETE_EVIDENCE` when coverage is `unfinished` or `unsupported`, and `MUTATION_BLOCKED` for inline templates, a new name that collides with a template local, or `$any`. Inline templates are never rewritten.
-- `ast_explore` stays TypeScript-only for references; template evidence there is tracked as a follow-up issue. Use `ast_find_references` for template usages.
+- `ast_explore` stays TypeScript-only for references; template evidence there is tracked in #380. Use `ast_find_references` for template usages.
 - Diagnostics stay TypeScript-only: template errors are not detected, so run the project's Angular build or tests after a rename.
 - Yarn PnP projects without a `node_modules` directory cannot resolve the compiler and report `unfinished`; use `nodeLinker: node-modules` for template coverage.
 
