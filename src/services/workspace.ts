@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { ts } from "ts-morph";
+import { listTemplateFiles } from "./angular-templates.js";
 import {
   collectFileFingerprints,
   compareFileFingerprints,
@@ -108,7 +109,9 @@ export function createWorkspaceSnapshot(
     .getSourceFiles()
     .map((sourceFile) => canonicalPath(sourceFile.getFilePath()));
   const configSnapshot = createConfigSnapshot(context.tsConfigFilePath);
-  const allPaths = [...new Set([...sourcePaths, ...configSnapshot.files])];
+  // Template files sit outside the TS program; listing them here keeps every snapshot consumer in agreement.
+  const templatePaths = listTemplateFiles(context).map(canonicalPath);
+  const allPaths = [...new Set([...sourcePaths, ...configSnapshot.files, ...templatePaths])];
   const fingerprintCollection = collectFileFingerprints(allPaths, options.previousFingerprints, {
     verifyContentHash: options.verifyContentHash,
   });
@@ -134,6 +137,11 @@ export function createWorkspaceSnapshot(
       throw new Error(`Workspace identity collision for ${filePath}.`);
     }
     files.set(filePath, digest);
+  }
+
+  for (const filePath of templatePaths) {
+    const fingerprint = fingerprints.get(filePath);
+    if (fingerprint) files.set(filePath, fingerprint.content_hash);
   }
 
   return {
