@@ -12,7 +12,7 @@ artifacts:
   specs: done
   design: done
   tasks: done
-  applyProgress: missing
+  applyProgress: done
   verifyReport: missing
 dependencies:
   proposal: ready
@@ -49,7 +49,7 @@ proposal:
   maxUnitLines: 600
   chainedPRsRequired: true
   issueNumber: 370
-nextRecommended: apply
+nextRecommended: apply (U2)
 blockedReasons: []
 spec:
   status: success
@@ -92,4 +92,16 @@ tasks:
   budgetRisk800: "High single-PR, Low per-unit"
   decisionNeededBeforeApply: false
   preApplyOpen: [github-issue-number, explore-follow-up-issue]
-lastPhase: tasks
+lastPhase: apply
+applyState: partial
+taskProgress:
+  completed: 8
+  total: 27
+  unit: "U1 of 4 done as U1a/U1b/U1c (1.1-1.8); U2-U4 pending; U2 bases on u1c"
+  branches:
+    [
+      feat/angular-template-references-u1a-hygiene,
+      feat/angular-template-references-u1b-loader,
+      feat/angular-template-references-u1c-extractor,
+    ]
+  changedLines: { u1a: 356, u1b: 619, u1c: 494 }

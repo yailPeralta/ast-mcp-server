@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -37,9 +39,15 @@ export interface TemplateUsage {
   readonly fileHash: string;
 }
 
+const MAX_TEMPLATE_BYTES = 512 * 1024;
+const MAX_TEMPLATE_NODES = 100_000;
+const CHECKPOINT_EVERY_NODES = 1000;
 const MIN_COMPILER_MAJOR = 20;
 const MAX_COMPILER_MAJOR = 22;
+const TWO_WAY_BINDING = 5; // BindingType.TwoWay, stable across supported majors
+const TWO_WAY_EVENT = 2; // ParsedEventType.TwoWay, stable across supported majors
 const NOT_APPLICABLE = { coverage: { status: "not_applicable" }, usages: [] } as const;
+const ASSIGNMENT_OPERATION = /^(?:=|(?:\*\*|&&|\|\||\?\?|<<|>>>|>>|[+\-*/%&|^])=)$/u;
 
 type AnyCtor = new () => any;
 interface CompilerModule {
@@ -312,10 +320,225 @@ function hasDerivedComponent(context: ProjectContext, cls: ClassDeclaration): bo
   });
 }
 
-/**
- * Resolves coverage and the owning template of a component member. Usage extraction is
- * wired in by the next change; until then a located, safe template reports no usages.
- */
+class WorkExhausted extends Error {}
+type RawUsage = Pick<TemplateUsage, "start" | "end" | "kind" | "localsInScope">;
+
+/** Walks parsed template nodes with a scope stack so template-local names shadow members. */
+function extractUsages(
+  compiler: CompilerModule,
+  nodes: any[],
+  memberName: string,
+  rc: RequestContext,
+): RawUsage[] {
+  const usages = new Map<string, RawUsage>();
+  const scopes: Set<string>[] = [];
+  let visited = 0;
+  const tick = (): void => {
+    if (++visited > MAX_TEMPLATE_NODES) throw new WorkExhausted();
+    if (visited % CHECKPOINT_EVERY_NODES === 0) rc.checkpoint();
+  };
+  const isLocal = (name: string) => scopes.some((scope) => scope.has(name));
+  const record = (ast: any, kind: RawUsage["kind"]): void => {
+    const key = `${ast.nameSpan.start}:${ast.nameSpan.end}`;
+    const merged =
+      usages.get(key)?.kind === "TemplatePropertyWrite" ? "TemplatePropertyWrite" : kind;
+    usages.set(key, {
+      start: ast.nameSpan.start,
+      end: ast.nameSpan.end,
+      kind: merged,
+      localsInScope: [...new Set(scopes.flatMap((scope) => [...scope]))].sort(),
+    });
+  };
+  // Explicit `this.` bypasses template locals; ThisReceiver only extends ImplicitReceiver in some majors.
+  const isMemberReceiver = (receiver: any): boolean =>
+    receiver instanceof compiler.ThisReceiver ||
+    (receiver instanceof compiler.ImplicitReceiver && !isLocal(memberName));
+  const isMember = (ast: any): boolean =>
+    ast instanceof compiler.PropertyRead &&
+    ast.name === memberName &&
+    isMemberReceiver(ast.receiver);
+
+  class Expressions extends (compiler.RecursiveAstVisitor as new () => {
+    visitPropertyRead(ast: any, context?: any): void;
+    visitCall(ast: any, context?: any): void;
+    visitBinary(ast: any, context?: any): void;
+  }) {
+    writeRoot: unknown;
+    visit(ast: any, context?: any): void {
+      tick();
+      ast.visit(this, context);
+    }
+    override visitPropertyRead(ast: any, context?: any): void {
+      if (isMember(ast))
+        record(ast, ast === this.writeRoot ? "TemplatePropertyWrite" : "TemplatePropertyRead");
+      super.visitPropertyRead(ast, context);
+    }
+    override visitCall(ast: any, context?: any): void {
+      if (!isMember(ast.receiver)) return super.visitCall(ast, context);
+      record(ast.receiver, "TemplateCall");
+      ast.args.forEach((arg: any) => this.visit(arg, context));
+    }
+    visitSafeCall(ast: any, context?: any): void {
+      this.visitCall(ast, context);
+    }
+    override visitBinary(ast: any, context?: any): void {
+      if (!ASSIGNMENT_OPERATION.test(ast.operation) || !isMember(ast.left)) {
+        return super.visitBinary(ast, context);
+      }
+      record(ast.left, "TemplatePropertyWrite");
+      this.visit(ast.right, context);
+    }
+    visitPropertyWrite(ast: any, context?: any): void {
+      if (ast.name === memberName && isMemberReceiver(ast.receiver)) {
+        record(ast, "TemplatePropertyWrite");
+      }
+      this.visit(ast.receiver, context);
+      this.visit(ast.value, context);
+    }
+    visitArrowFunction(ast: any, context?: any): void {
+      scopes.push(new Set(ast.parameters.map((parameter: any) => parameter.name)));
+      this.visit(ast.body, context);
+      scopes.pop();
+    }
+  }
+  const expressions = new Expressions();
+
+  // References belong to the view that declares them and are visible before the declaration.
+  class References extends (compiler.TmplAstRecursiveVisitor as new () => object) {
+    names: string[] = [];
+    visitReference(reference: any): void {
+      this.names.push(reference.name);
+    }
+    visitTemplate(template: any): void {
+      template.references.forEach((reference: any) => this.visitReference(reference));
+    }
+    visitIfBlock = (): void => {};
+    visitForLoopBlock = (): void => {};
+    visitSwitchBlock = (): void => {};
+    visitDeferredBlock = (): void => {};
+  }
+  const referencesOf = (children: any[]): string[] => {
+    const collector = new References();
+    compiler.tmplAstVisitAll(collector, children);
+    return collector.names;
+  };
+
+  class Templates extends (compiler.TmplAstRecursiveVisitor as new () => object) {
+    visit(node: any): void {
+      tick();
+      node.visit(this);
+    }
+    view(locals: (string | undefined)[], children: any[], before?: () => void): void {
+      const names = [...locals, ...referencesOf(children)].filter((name): name is string => !!name);
+      scopes.push(new Set(names));
+      before?.();
+      compiler.tmplAstVisitAll(this, children);
+      scopes.pop();
+    }
+    expression(value: any, writeRoot?: unknown): void {
+      if (!value?.ast) return;
+      expressions.writeRoot = writeRoot && value.ast;
+      expressions.visit(value.ast);
+      expressions.writeRoot = undefined;
+    }
+    visitBoundText(text: any): void {
+      this.expression(text.value);
+    }
+    visitBoundAttribute(attribute: any): void {
+      this.expression(attribute.value, attribute.type === TWO_WAY_BINDING);
+    }
+    visitBoundEvent(event: any): void {
+      if (event.type === TWO_WAY_EVENT) return; // covered by the paired two-way input
+      scopes.push(new Set(["$event"]));
+      this.expression(event.handler);
+      scopes.pop();
+    }
+    visitTemplate(template: any): void {
+      for (const list of [
+        template.templateAttrs,
+        template.inputs,
+        template.outputs,
+        template.directives,
+      ]) {
+        compiler.tmplAstVisitAll(this, list ?? []);
+      }
+      this.view(
+        template.variables.map((variable: any) => variable.name),
+        template.children,
+      );
+    }
+    visitIfBlockBranch(branch: any): void {
+      this.expression(branch.expression);
+      this.view([branch.expressionAlias?.name], branch.children);
+    }
+    visitForLoopBlock(block: any): void {
+      this.expression(block.expression);
+      const locals = [
+        block.item.name,
+        ...block.contextVariables.map((variable: any) => variable.name),
+      ];
+      this.view(locals, block.children, () => this.expression(block.trackBy));
+      if (block.empty) this.visit(block.empty);
+    }
+    visitForLoopBlockEmpty(block: any): void {
+      this.view([], block.children);
+    }
+    visitSwitchBlock(block: any): void {
+      this.expression(block.expression);
+      const groups =
+        block.groups ?? block.cases.map((c: any) => ({ cases: [c], children: c.children }));
+      for (const group of groups) {
+        group.cases.forEach((c: any) => this.expression(c.expression));
+        this.view([], group.children);
+      }
+    }
+    visitDeferredBlock(block: any): void {
+      for (const triggers of [block.triggers, block.prefetchTriggers, block.hydrateTriggers]) {
+        Object.values(triggers ?? {}).forEach((trigger: any) => this.expression(trigger?.value));
+      }
+      this.view([], block.children);
+      [block.placeholder, block.loading, block.error].forEach((sub) => sub && this.visit(sub));
+    }
+    visitDeferredBlockPlaceholder(block: any): void {
+      this.view([], block.children);
+    }
+    visitDeferredBlockLoading(block: any): void {
+      this.view([], block.children);
+    }
+    visitDeferredBlockError(block: any): void {
+      this.view([], block.children);
+    }
+    visitLetDeclaration(declaration: any): void {
+      this.expression(declaration.value);
+      scopes[scopes.length - 1]?.add(declaration.name);
+    }
+    visitIcu(icu: any): void {
+      [...Object.values(icu.vars ?? {}), ...Object.values(icu.placeholders ?? {})].forEach(
+        (text: any) => this.expression(text.value),
+      );
+    }
+  }
+  new Templates().view([], nodes);
+  return [...usages.values()].sort((left, right) => left.start - right.start);
+}
+
+function lineColumn(text: string, offset: number): { line: number; column: number } {
+  const before = text.slice(0, offset);
+  const lineStart = before.lastIndexOf("\n") + 1;
+  return { line: before.split("\n").length, column: offset - lineStart + 1 };
+}
+
+function decodeTemplate(bytes: Buffer): string | undefined {
+  try {
+    const utf16 =
+      (bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff);
+    return utf16 ? undefined : new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Collects usages of a component member inside its declaring component's template. */
 export async function collectTemplateUsages(
   node: Node,
   context: ProjectContext,
@@ -337,9 +560,55 @@ export async function collectTemplateUsages(
   if ("reason" in loaded) return fail("unfinished", loaded.reason);
   const located = locateTemplate(owner.cls);
   if ("reason" in located) return fail("unfinished", located.reason);
-  if (located.container === "external") {
+
+  let text: string;
+  let offset = 0;
+  let bytes: Buffer;
+  if (located.container === "inline") {
+    ({ text, offset } = located);
+    bytes = Buffer.from(text, "utf8");
+  } else {
     const unsafe = checkTemplatePath(context.projectRoot, located.absolutePath);
     if (unsafe) return fail("unfinished", unsafe);
+    if ((await stat(located.absolutePath)).size > MAX_TEMPLATE_BYTES) {
+      return fail("unfinished", "size_exceeded");
+    }
+    bytes = await readFile(located.absolutePath);
+    const decoded = decodeTemplate(bytes);
+    if (decoded === undefined) return fail("unfinished", "template_parse_error");
+    text = decoded;
   }
-  return { coverage: { status: "completed", templates: 1 }, usages: [] };
+
+  // Shared cap: the external path also checks the size before reading, inline checks here.
+  if (bytes.length > MAX_TEMPLATE_BYTES) return fail("unfinished", "size_exceeded");
+  rc.checkpoint();
+  const parsed = loaded.compiler.parseTemplate(text, located.absolutePath, {
+    preserveWhitespaces: true,
+  });
+  if (parsed.errors?.length) return fail("unfinished", "template_parse_error");
+  let raw: RawUsage[];
+  try {
+    raw = extractUsages(loaded.compiler, parsed.nodes, owner.name, rc);
+  } catch (error) {
+    if (error instanceof WorkExhausted) return fail("unfinished", "work_exhausted");
+    throw error;
+  }
+
+  const fileText = located.container === "inline" ? owner.cls.getSourceFile().getFullText() : text;
+  const fileHash = createHash("sha256").update(bytes).digest("hex");
+  const usages = raw.map((usage): TemplateUsage => {
+    const start = usage.start + offset;
+    return {
+      absolutePath: located.absolutePath,
+      file: path.relative(context.projectRoot, located.absolutePath),
+      container: located.container,
+      start,
+      end: usage.end + offset,
+      ...lineColumn(fileText, start),
+      kind: usage.kind,
+      localsInScope: usage.localsInScope,
+      fileHash,
+    };
+  });
+  return { coverage: { status: "completed", templates: 1 }, usages };
 }
