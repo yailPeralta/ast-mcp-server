@@ -90,7 +90,7 @@ Dependency order: 1.1 || 1.2 -> 1.3 -> 1.4 -> (1.5 || 1.6 || 1.8) -> 1.7 -> 1.9 
   - Spec: DTC-R8 (S: evidence recorded).
 - [x] 2.6 RED pin 1: `test/mcp.integration.test.ts` tool-inventory digest test fails after 2.3. GREEN: set `test/fixtures/tool-inventory.json` to the received hex from that failing assertion.
   - Spec: DTC-R10 (S: pins consistent). Depends on 2.3.
-- [x] 2.7 RED/GREEN pin 2: new test `test/declared-tool-contracts.test.ts` > "registry-consumer pin equals tool-inventory pin" (both formulas use SDK `Client.listTools()`). GREEN: set `EXPECTED_TOOLS_SHA256` in `scripts/registry-consumer-smoke.mjs` to the 2.6 value.
+- [x] 2.7 RED/GREEN pin 2: new test `test/declared-tool-contracts.test.ts` > "registry-consumer pin equals tool-inventory pin" (both formulas use SDK `Client.listTools()`). GREEN: set `EXPECTED_TOOLS_LIST_SHA256` in `scripts/registry-consumer-smoke.mjs` to the 2.6 value.
   - Spec: DTC-R10. Depends on 2.6.
 - [x] 2.8 RED/GREEN pin 3 (independent): `yarn build`, `vitest run test/supervised-worker.integration.test.ts` fails with the digest printed by `assertExpectedToolInventory` (`...independent oracle (<hex>)`); commit that value in `scripts/canary-local-mcp.mjs`, rerun green. Never copy from 2.6; expected to differ (`fa9a5661...` vs `a7027585...` class of difference).
   - Spec: DTC-R10 (S: canary pin source). Depends on 2.3; parallel with 2.6/2.7 (own run).
