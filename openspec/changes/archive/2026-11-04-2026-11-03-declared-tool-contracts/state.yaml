@@ -13,7 +13,7 @@ artifacts:
   specs: done
   design: done
   tasks: done
-  applyProgress: done (U1 and U2 applied; awaiting verify)
+  applyProgress: done (U1 and U2 applied and verified)
   verifyReport: done
 dependencies:
   proposal: ready
@@ -49,8 +49,17 @@ verify:
   suggestions: 3
   scenariosCompliant: 23
   scenariosTotal: 23
-lastPhase: verify
-nextRecommended: merge chain (#385 -> tracker, #386, #387), undraft #384, then archive
+nextRecommended: none
+lastPhase: archive
+archiveState: done
+archive:
+  status: done
+  date: 2026-11-04
+  archivedTo: openspec/changes/archive/2026-11-04-2026-11-03-declared-tool-contracts/
+  engramTopic: sdd/2026-11-03-declared-tool-contracts/archive-report
+  intentionalWithWarnings: false
+  deferredGap: none
+  followUps: [S1 direct test for DTC-R7 baseline advance, S2 assert canary pin != inventory pin]
 applyState:
   u1: done (tasks 1.1-1.12)
   u2: done (tasks 2.1-2.11)
