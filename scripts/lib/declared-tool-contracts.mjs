@@ -48,3 +48,57 @@ export function toolContractSha256(name, { description, parameters }) {
     .update(JSON.stringify({ name, description, parameters: semanticSchema(parameters) }))
     .digest("hex");
 }
+
+function sameJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function compareDeclaredTool(name, publicTool, candidateTool, declaration, failures) {
+  const declaredSchema = semanticSchema(declaration.input_schema);
+  const candidateSchema = semanticSchema(candidateTool.parameters);
+  if (candidateTool.description !== declaration.description) {
+    failures.push({ tool: name, field: "description", reason: "mismatch_declaration" });
+  }
+  if (!sameJson(candidateSchema, declaredSchema)) {
+    failures.push({ tool: name, field: "input_schema", reason: "mismatch_declaration" });
+  }
+  if (
+    publicTool.description === declaration.description &&
+    sameJson(semanticSchema(publicTool.parameters), declaredSchema)
+  ) {
+    failures.push({ tool: name, field: "description", reason: "stale_equals_public" });
+  }
+}
+
+function compareUndeclaredTool(name, publicTool, candidateTool, failures) {
+  if (candidateTool.description !== publicTool.description) {
+    failures.push({ tool: name, field: "description", reason: "drift_from_public" });
+  }
+  if (!sameJson(semanticSchema(candidateTool.parameters), semanticSchema(publicTool.parameters))) {
+    failures.push({ tool: name, field: "input_schema", reason: "drift_from_public" });
+  }
+}
+
+/**
+ * Compare the candidate tool catalog with the public baseline under the declared contract
+ * changes. Catalogs are keyed by bare tool name. Pure and total: bad data becomes failures.
+ */
+export function compareToolContracts({ publicTools, candidateTools, declared }) {
+  const failures = [];
+  const declarations = declared.tools;
+  for (const name of Object.keys(publicTools).sort()) {
+    if (RESERVED_TOOL_NAMES.includes(name) || !(name in candidateTools)) continue;
+    if (name in declarations) {
+      compareDeclaredTool(
+        name,
+        publicTools[name],
+        candidateTools[name],
+        declarations[name],
+        failures,
+      );
+    } else {
+      compareUndeclaredTool(name, publicTools[name], candidateTools[name], failures);
+    }
+  }
+  return { ok: failures.length === 0, failures };
+}

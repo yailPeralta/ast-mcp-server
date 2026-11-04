@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   RESERVED_TOOL_NAMES,
+  compareToolContracts,
   contractFromTool,
   semanticSchema,
   toolContractSha256,
@@ -124,5 +125,152 @@ describe("semantic normalization and digests", () => {
   it("RESERVED_TOOL_NAMES lists only ast_explore and is frozen", () => {
     expect([...RESERVED_TOOL_NAMES]).toEqual(["ast_explore"]);
     expect(Object.isFrozen(RESERVED_TOOL_NAMES)).toBe(true);
+  });
+});
+
+type Surface = { description: string; parameters: Record<string, unknown> };
+type Catalog = Record<string, Surface>;
+
+function surface(description: string, extra: Record<string, unknown> = {}): Surface {
+  return {
+    description,
+    parameters: {
+      type: "object",
+      properties: { project_root: { type: "string" }, ...extra },
+      required: ["project_root"],
+    },
+  };
+}
+
+function catalog(): Catalog {
+  return {
+    ast_explore: surface("Explores."),
+    ast_find_symbols: surface("Finds symbols."),
+    ast_find_references: surface("Finds references."),
+    ast_rename_symbol: surface("Prepares a rename."),
+  };
+}
+
+function contractOf(tool: Surface): { description: string; input_schema: unknown } {
+  return { description: tool.description, input_schema: semanticSchema(tool.parameters) };
+}
+
+const BASELINE = "0.13.0";
+
+function compare(
+  publicTools: Catalog,
+  candidateTools: Catalog,
+  tools: Record<string, unknown> = {},
+  baseline = BASELINE,
+) {
+  return compareToolContracts({
+    publicTools,
+    candidateTools,
+    declared: { baseline, tools },
+    baselineVersion: BASELINE,
+  });
+}
+
+describe("compareToolContracts undeclared and declared rules", () => {
+  it("identical catalogs pass", () => {
+    const result = compare(catalog(), catalog());
+    expect(result.failures).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("undeclared description drift fails naming tool and description", () => {
+    const candidate = catalog();
+    candidate.ast_find_symbols = surface("Finds symbols, differently.");
+    const result = compare(catalog(), candidate);
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      { tool: "ast_find_symbols", field: "description", reason: "drift_from_public" },
+    ]);
+  });
+
+  it("undeclared schema drift fails naming input_schema", () => {
+    const candidate = catalog();
+    candidate.ast_find_symbols = surface("Finds symbols.", { limit: { type: "integer" } });
+    const result = compare(catalog(), candidate);
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      { tool: "ast_find_symbols", field: "input_schema", reason: "drift_from_public" },
+    ]);
+  });
+
+  it("matching declaration passes", () => {
+    const candidate = catalog();
+    candidate.ast_rename_symbol = surface("Prepares a rename, with templates.");
+    const result = compare(catalog(), candidate, {
+      ast_rename_symbol: contractOf(candidate.ast_rename_symbol),
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.ok).toBe(true);
+    // The declaration only excuses its own tool.
+    candidate.ast_find_symbols = surface("Finds symbols, differently.");
+    expect(
+      compare(catalog(), candidate, {
+        ast_rename_symbol: contractOf(candidate.ast_rename_symbol),
+      }).failures,
+    ).toEqual([{ tool: "ast_find_symbols", field: "description", reason: "drift_from_public" }]);
+  });
+
+  it("declaration mismatch on description fails", () => {
+    const candidate = catalog();
+    candidate.ast_rename_symbol = surface("Prepares a rename, with templates.");
+    const declared = { ...contractOf(candidate.ast_rename_symbol), description: "Other text." };
+    const result = compare(catalog(), candidate, { ast_rename_symbol: declared });
+    expect(result.failures).toEqual([
+      { tool: "ast_rename_symbol", field: "description", reason: "mismatch_declaration" },
+    ]);
+  });
+
+  it("declaration mismatch on input_schema fails", () => {
+    const candidate = catalog();
+    candidate.ast_find_references = surface("Finds references, with templates.");
+    const declared = contractOf(
+      surface("Finds references, with templates.", { x: { type: "string" } }),
+    );
+    const result = compare(catalog(), candidate, { ast_find_references: declared });
+    expect(result.failures).toEqual([
+      { tool: "ast_find_references", field: "input_schema", reason: "mismatch_declaration" },
+    ]);
+  });
+
+  it("stale declaration fails stale_equals_public", () => {
+    const result = compare(catalog(), catalog(), {
+      ast_rename_symbol: contractOf(catalog().ast_rename_symbol),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      { tool: "ast_rename_symbol", field: "description", reason: "stale_equals_public" },
+    ]);
+  });
+
+  it("a declaration that differs from public in only one field is not stale", () => {
+    const candidate = catalog();
+    candidate.ast_rename_symbol = surface("Prepares a rename.", { x: { type: "string" } });
+    const result = compare(catalog(), candidate, {
+      ast_rename_symbol: contractOf(candidate.ast_rename_symbol),
+    });
+    expect(result.failures).toEqual([]);
+  });
+
+  it("zod 3 versus zod 4 serialization of the same schema is not drift", () => {
+    const publicTools = catalog();
+    publicTools.ast_find_symbols.parameters = {
+      $schema: "http://json-schema.org/draft-07/schema#",
+      type: "object",
+      properties: { project_root: { type: "string" } },
+      required: ["project_root"],
+      additionalProperties: false,
+    };
+    const candidate = catalog();
+    candidate.ast_find_symbols.parameters = {
+      type: "object",
+      properties: { project_root: { type: "string" } },
+      required: ["project_root"],
+    };
+    expect(compare(publicTools, candidate).failures).toEqual([]);
   });
 });
