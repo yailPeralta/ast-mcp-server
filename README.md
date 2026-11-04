@@ -392,8 +392,14 @@ the official bridge drops MCP tool annotations
 integrity, packs the candidate, builds the pinned Harness and bridge from source, and proves
 `tools.mode: native`, the 15-tool scoped catalog, complete executable input schemas,
 read/prepare/preview, all three invalid `ast_explore` combinations, apply absence, and rejected direct apply.
-The schema gate freezes the public empty `ast_explore` contract as RED, requires the candidate
-registry/native definitions to match, and hashes all 14 unaffected model schemas. A deterministic
+The schema gate freezes the public empty `ast_explore` contract as RED and requires the candidate
+registry/native definitions to match. For every other tool, the candidate description and input
+schema must equal the public baseline or its committed declaration in
+`test/fixtures/declared-tool-contracts.json`; a declaration that equals the public contract fails
+as stale, and no tool may loosen `additionalProperties`. To change a tool contract, declare the new
+description and semantic input schema in that fixture, change the source, and re-baseline the three
+inventory pins (`test/fixtures/tool-inventory.json`, `scripts/registry-consumer-smoke.mjs`,
+`scripts/canary-local-mcp.mjs`), taking the canary value from its own run. A deterministic
 two-step model then invokes
 `mcp__ast__ast_get_project_status` through a real headless Agent/Session: the public baseline
 must reproduce the empty-result marker, while the corrected candidate must deliver lossless

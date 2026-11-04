@@ -41,9 +41,9 @@ Base boundaries: U1 base = tracker `feat/declared-tool-contracts`; U2 base = U1 
 ## Pre-apply checklist
 
 - [x] 0.1 Issue #383 exists.
-- [ ] 0.2 Maintainer applies `status:approved` to #383 (human action, pending; apply must not start before it).
-- [ ] 0.3 Orchestrator creates tracker branch `feat/declared-tool-contracts` from main and opens the draft tracker PR.
-- [ ] 0.4 Apply phase runs `git log -S tools_list_sha256` on the pin files before any re-baselining (feeds U2 task 2.7).
+- [x] 0.2 Maintainer applies `status:approved` to #383 (applied by the maintainer on 2026-11-04).
+- [x] 0.3 Orchestrator creates tracker branch `feat/declared-tool-contracts` from main and opens the draft tracker PR. PR: #384.
+- [x] 0.4 Apply phase runs `git log -S tools_list_sha256` on the pin files before any re-baselining (feeds U2 task 2.7).
 
 ---
 
@@ -76,28 +76,28 @@ Base boundaries: U1 base = tracker `feat/declared-tool-contracts`; U2 base = U1 
 
 Dependency order: 1.1 || 1.2 -> 1.3 -> 1.4 -> (1.5 || 1.6 || 1.8) -> 1.7 -> 1.9 -> 1.10 -> 1.11 -> 1.12.
 
-## Unit 2: Descriptions, fixture entries, pins, docs (branch `feat/declared-tool-contracts-u2-descriptions`, base U1)
+## Unit 2: Descriptions, fixture entries, pins, docs (branch `feat/declared-tool-contracts-u2-descriptions`, base `feat/declared-tool-contracts-u1b-wiring`; applied)
 
-- [ ] 2.1 Pre-check on the U1 base: `yarn build && vitest run test/mcp.integration.test.ts test/supervised-worker.integration.test.ts` green; inspect `git log -S tools_list_sha256` (checklist 0.4).
+- [x] 2.1 Pre-check on the U1 base: `yarn build && vitest run test/mcp.integration.test.ts test/supervised-worker.integration.test.ts` green; inspect `git log -S tools_list_sha256` (checklist 0.4).
   - Spec: DTC-R10. Sequential first.
-- [ ] 2.2 RED oracle: `test/declared-tool-contracts.test.ts` > "declared fixture matches the in-process server" (`createServer()` + `InMemoryTransport`, each entry `toEqual(contractFromTool(tool))`, and each declared tool differs from public baseline description). Fails first because entries are absent/mismatched.
+- [x] 2.2 RED oracle: `test/declared-tool-contracts.test.ts` > "declared fixture matches the in-process server" (`createServer()` + `InMemoryTransport`, each entry `toEqual(contractFromTool(tool))`, and each declared tool differs from public baseline description). Fails first because entries are absent/mismatched.
   - Spec: DTC-R2, DTC-R3, DTC-R8. Depends on 2.1.
-- [ ] 2.3 GREEN: add the two fixture entries (`ast_find_references`, `ast_rename_symbol`, formatted JSON, values taken from the oracle vitest diff) and change the exact description strings in `src/tools/find_references.ts` and `src/tools/rename_symbol.ts` (strings from design.md "Exact descriptions").
+- [x] 2.3 GREEN: add the two fixture entries (`ast_find_references`, `ast_rename_symbol`, formatted JSON, values taken from the oracle vitest diff) and change the exact description strings in `src/tools/find_references.ts` and `src/tools/rename_symbol.ts` (strings from design.md "Exact descriptions").
   - Spec: ATR-R8, ATN-R8, DTC-R2. Depends on 2.2.
-- [ ] 2.4 RED per-tool description checks: `test/tools/find_references.test.ts` > "description states template usages and that template errors are not diagnosed" and `test/tools/rename_symbol.test.ts` > "description states external template edits and TS-only diagnostics" (assert fail before 2.3 if added first; keep them in the same RED batch as 2.2).
+- [x] 2.4 RED per-tool description checks: `test/tools/find_references.test.ts` > "description states template usages and that template errors are not diagnosed" and `test/tools/rename_symbol.test.ts` > "description states external template edits and TS-only diagnostics" (assert fail before 2.3 if added first; keep them in the same RED batch as 2.2).
   - Spec: ATR-R8, ATN-R8. Parallel with 2.2.
-- [ ] 2.5 Smoke evidence RED: extend `test/dsh-adapter.test.ts` > "smoke records per-tool declaredContracts with public, candidate and declared digests" (source-text); GREEN already provided by 1.10, verified in 2.11.
+- [x] 2.5 Smoke evidence RED: extend `test/dsh-adapter.test.ts` > "smoke records per-tool declaredContracts with public, candidate and declared digests" (source-text); GREEN already provided by 1.10, verified in 2.11.
   - Spec: DTC-R8 (S: evidence recorded).
-- [ ] 2.6 RED pin 1: `test/mcp.integration.test.ts` tool-inventory digest test fails after 2.3. GREEN: set `test/fixtures/tool-inventory.json` to the received hex from that failing assertion.
+- [x] 2.6 RED pin 1: `test/mcp.integration.test.ts` tool-inventory digest test fails after 2.3. GREEN: set `test/fixtures/tool-inventory.json` to the received hex from that failing assertion.
   - Spec: DTC-R10 (S: pins consistent). Depends on 2.3.
-- [ ] 2.7 RED/GREEN pin 2: new test `test/declared-tool-contracts.test.ts` > "registry-consumer pin equals tool-inventory pin" (both formulas use SDK `Client.listTools()`). GREEN: set `EXPECTED_TOOLS_SHA256` in `scripts/registry-consumer-smoke.mjs` to the 2.6 value.
+- [x] 2.7 RED/GREEN pin 2: new test `test/declared-tool-contracts.test.ts` > "registry-consumer pin equals tool-inventory pin" (both formulas use SDK `Client.listTools()`). GREEN: set `EXPECTED_TOOLS_LIST_SHA256` in `scripts/registry-consumer-smoke.mjs` to the 2.6 value.
   - Spec: DTC-R10. Depends on 2.6.
-- [ ] 2.8 RED/GREEN pin 3 (independent): `yarn build`, `vitest run test/supervised-worker.integration.test.ts` fails with the digest printed by `assertExpectedToolInventory` (`...independent oracle (<hex>)`); commit that value in `scripts/canary-local-mcp.mjs`, rerun green. Never copy from 2.6; expected to differ (`fa9a5661...` vs `a7027585...` class of difference).
+- [x] 2.8 RED/GREEN pin 3 (independent): `yarn build`, `vitest run test/supervised-worker.integration.test.ts` fails with the digest printed by `assertExpectedToolInventory` (`...independent oracle (<hex>)`); commit that value in `scripts/canary-local-mcp.mjs`, rerun green. Never copy from 2.6; expected to differ (`fa9a5661...` vs `a7027585...` class of difference).
   - Spec: DTC-R10 (S: canary pin source). Depends on 2.3; parallel with 2.6/2.7 (own run).
-- [ ] 2.9 Docs RED: `test/angular-docs.test.ts` > rename to "updated tool descriptions": Unreleased Changed entry mentions `description` and `TypeScript-only`, and the "Deferred tool description text" bullet is gone; `test/dsh-adapter.test.ts` README rule asserts the declared-contract paragraph. GREEN: rewrite CHANGELOG deferred bullet into a Changed entry, add README mandatory-verification paragraph (`README.md:391-397`), add ADR 0015 addendum in `docs/adr/0015-harness-adapter-first-slice.md` (lifecycle: declare, change source, re-baseline three pins, drop declaration when baseline advances; stale rule enforces the drop).
+- [x] 2.9 Docs RED: `test/angular-docs.test.ts` > rename to "updated tool descriptions": Unreleased Changed entry mentions `description` and `TypeScript-only`, and the "Deferred tool description text" bullet is gone; `test/dsh-adapter.test.ts` README rule asserts the declared-contract paragraph. GREEN: rewrite CHANGELOG deferred bullet into a Changed entry, add README mandatory-verification paragraph (`README.md:391-397`), add ADR 0015 addendum in `docs/adr/0015-harness-adapter-first-slice.md` (lifecycle: declare, change source, re-baseline three pins, drop declaration when baseline advances; stale rule enforces the drop).
   - Spec: DTC-R7 (S: baseline advances), ATR-R8, ATN-R8, DTC-R9. Depends on 2.3.
-- [ ] 2.10 REFACTOR: format fixture and docs; confirm no skill file touched (`skills/structural-code-editing/releases.json` needs no regeneration).
-- [ ] 2.11 U2 gate: all gates plus `yarn test:local-registry` once and one full `env -u GIT_EDITOR yarn test:dsh-adapter` (checks `summary.h02.declaredContracts`: candidate == declared digest, public differs, for both tools). Native ledger labels `dtc-u2-acquire` / `dtc-u2-settle`. Then hand to `sdd-verify`.
+- [x] 2.10 REFACTOR: format fixture and docs; confirm no skill file touched (`skills/structural-code-editing/releases.json` needs no regeneration).
+- [x] 2.11 U2 gate: all gates plus `yarn test:local-registry` once and one full `env -u GIT_EDITOR yarn test:dsh-adapter` (checks `summary.h02.declaredContracts`: candidate == declared digest, public differs, for both tools). Native ledger labels `dtc-u2-acquire` / `dtc-u2-settle`. Then hand to `sdd-verify`.
   - Spec: DTC-R8, DTC-R9, DTC-R10.
 
 Dependency order: 2.1 -> (2.2 || 2.4) -> 2.3 -> (2.6 -> 2.7 || 2.8 || 2.9) -> 2.5 -> 2.10 -> 2.11.

@@ -387,6 +387,19 @@ describe("pinned Harness smoke contract", () => {
     expect(source).toContain("undeclaredSha256");
   });
 
+  it("smoke records per-tool declaredContracts with public, candidate and declared digests", async () => {
+    const source = await readFile(SMOKE_PATH, "utf8");
+    const module = await readFile(
+      path.join(repositoryRoot, "scripts", "lib", "declared-tool-contracts.mjs"),
+      "utf8",
+    );
+    // The h02 evidence projects the per-tool map the module builds, so each tool reports all digests.
+    expect(source).toMatch(/declaredContracts: \{[\s\S]*tools: contractComparison\.tools/u);
+    for (const field of ["publicSha256", "candidateSha256", "declaredSha256"]) {
+      expect(module).toContain(field);
+    }
+  });
+
   it("smoke no longer defines semanticSchema or the blanket unaffected equality", async () => {
     const source = await readFile(SMOKE_PATH, "utf8");
     expect(source).not.toContain("function semanticSchema(");
@@ -395,6 +408,27 @@ describe("pinned Harness smoke contract", () => {
     // The summary keeps the undeclared-set digest while the tool maps stay out of it.
     expect(source).toContain("unaffectedSemanticSha256: hashJson(");
     expect(source).toMatch(/delete \w+\.toolContracts|const \{ toolContracts/u);
+  });
+
+  it("documents the declared tool contract rule in the README and the ADR addendum", async () => {
+    const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
+    const adr = await readFile(
+      path.join(repositoryRoot, "docs", "adr", "0015-harness-adapter-first-slice.md"),
+      "utf8",
+    );
+    expect(readme).not.toContain("hashes all 14 unaffected model schemas");
+    expect(readme).toContain("test/fixtures/declared-tool-contracts.json");
+    expect(readme).toMatch(/equal the public baseline or its committed declaration/u);
+    expect(readme).toMatch(/stale/u);
+    expect(adr).toContain("## Addendum: Declared tool-contract changes (2026-11-04)");
+    for (const rule of [
+      "PUBLIC_BASELINE_VERSION",
+      "stale_equals_public",
+      "three pins",
+      "test/fixtures/declared-tool-contracts.json",
+    ]) {
+      expect(adr).toContain(rule);
+    }
   });
 
   it("keeps installation guidance executable and free of unpublished registry claims", async () => {
