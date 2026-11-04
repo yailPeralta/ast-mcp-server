@@ -54,6 +54,27 @@ interface TsLocations {
   readonly locations: SymbolReference[];
 }
 
+/**
+ * Semantic references of `node` excluding the declaration itself.
+ *
+ * ts-morph only skips the first definition entry per referenced symbol; when a usage
+ * precedes the declaration in source order the declaration identifier is returned again
+ * as an ordinary reference. Drop any node at the declaration's position (the declaration
+ * node or its name identifier) so the declaration is reported exactly once.
+ */
+export function findNonDeclarationReferences(
+  node: Node & { findReferencesAsNodes(): Node[] },
+): Node[] {
+  const declarationNodes = Node.hasName(node) ? [node, node.getNameNode()] : [node];
+  const isDeclaration = (reference: Node) =>
+    declarationNodes.some(
+      (declaration) =>
+        declaration.getSourceFile().getFilePath() === reference.getSourceFile().getFilePath() &&
+        declaration.getStart() === reference.getStart(),
+    );
+  return node.findReferencesAsNodes().filter((reference) => !isDeclaration(reference));
+}
+
 function collectTsLocations(
   node: Node,
   projectRoot: string,
@@ -93,7 +114,9 @@ function collectTsLocations(
   };
 
   requestContext.checkpoint();
-  const references = node.findReferencesAsNodes().map((reference) => location(reference, false));
+  const references = findNonDeclarationReferences(node).map((reference) =>
+    location(reference, false),
+  );
   const declaration = location(node, true);
   return {
     declaration,

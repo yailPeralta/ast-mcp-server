@@ -78,6 +78,27 @@ describe("ast_find_references non-Angular output", () => {
     });
   });
 
+  it("reference_count equals the real call sites of a method used before its declaration", async () => {
+    const result = await call(
+      {
+        "src/header.ts": `export class Header {\n  toggle(): void {\n    this.closeMenu();\n  }\n\n  closeMenu(): void {}\n}\n`,
+        "src/use.ts": `import { Header } from "./header.js";\nexport const closed = new Header().closeMenu();\n`,
+      },
+      { file_path: "src/header.ts", symbol_path: "Header.closeMenu" },
+    );
+    expect(result.isError).not.toBe(true);
+    const content = result.structuredContent as {
+      reference_count: number;
+      total: number;
+      references: { line: number; file: string; is_declaration: boolean }[];
+    };
+    expect(content.reference_count).toBe(2);
+    expect(content.total).toBe(3);
+    expect(
+      content.references.filter((item) => item.file === "src/header.ts" && item.line === 6),
+    ).toEqual([expect.objectContaining({ is_declaration: true })]);
+  });
+
   it("non-Angular TOON output decodes to the same golden without template fields", async () => {
     const result = await call(PLAIN_FILES, {
       file_path: "src/value.ts",
