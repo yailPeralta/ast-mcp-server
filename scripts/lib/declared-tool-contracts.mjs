@@ -81,6 +81,65 @@ function compareUndeclaredTool(name, publicTool, candidateTool, failures) {
   }
 }
 
+function compareFailures(left, right) {
+  for (const key of ["tool", "field", "reason"]) {
+    if (left[key] !== right[key]) return left[key] < right[key] ? -1 : 1;
+  }
+  return 0;
+}
+
+function result(failures, tools, undeclared) {
+  const sorted = [...failures].sort(compareFailures);
+  return { ok: sorted.length === 0, failures: sorted, tools, undeclaredSha256: undeclared };
+}
+
+/** Compared, non-reserved tools that carry no declaration, in name order. */
+function undeclaredNames(common, declarations) {
+  return common.filter(
+    (name) => !RESERVED_TOOL_NAMES.includes(name) && !Object.hasOwn(declarations, name),
+  );
+}
+
+function undeclaredSha256(common, declarations, tools) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify(
+        undeclaredNames(common, declarations).map((name) => ({
+          name,
+          description: tools[name].description,
+          parameters: semanticSchema(tools[name].parameters),
+        })),
+      ),
+    )
+    .digest("hex");
+}
+
+function toolEvidence(common, declarations, publicTools, candidateTools) {
+  const evidence = {};
+  for (const name of common) {
+    if (RESERVED_TOOL_NAMES.includes(name)) continue;
+    const entry = {
+      status: Object.hasOwn(declarations, name) ? "declared" : "undeclared",
+      publicSha256: toolContractSha256(name, publicTools[name]),
+      candidateSha256: toolContractSha256(name, candidateTools[name]),
+    };
+    const declaration = declarations[name];
+    if (isToolDeclaration(declaration)) {
+      entry.declaredSha256 = toolContractSha256(name, {
+        description: declaration.description,
+        parameters: declaration.input_schema,
+      });
+    }
+    evidence[name] = entry;
+  }
+  return evidence;
+}
+
+/** Render failures as `tool.field: reason`, joined by "; ". */
+export function formatContractFailures(failures) {
+  return failures.map(({ tool, field, reason }) => `${tool}.${field}: ${reason}`).join("; ");
+}
+
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -133,7 +192,7 @@ export function compareToolContracts(input) {
   if (!hasExactKeys(declared, ["baseline", "tools"]) || !isPlainObject(declared.tools)) {
     wholeCatalog("declaration", "malformed");
   }
-  if (failures.length > 0) return { ok: false, failures };
+  if (failures.length > 0) return result(failures, {}, { public: null, candidate: null });
   if (declared.baseline !== baselineVersion) wholeCatalog("baseline", "baseline_mismatch");
 
   const publicNames = validCatalogNames(publicTools, failures);
@@ -153,7 +212,7 @@ export function compareToolContracts(input) {
   }
   for (const name of common) {
     if (RESERVED_TOOL_NAMES.includes(name)) continue;
-    const declaration = declared.tools[name];
+    const declaration = Object.hasOwn(declared.tools, name) ? declared.tools[name] : undefined;
     if (declaration === undefined) {
       compareUndeclaredTool(name, publicTools[name], candidateTools[name], failures);
     } else if (isToolDeclaration(declaration)) {
@@ -172,5 +231,8 @@ export function compareToolContracts(input) {
       failures.push({ tool: name, field: "additionalProperties", reason: "loosened" });
     }
   }
-  return { ok: failures.length === 0, failures };
+  return result(failures, toolEvidence(common, declared.tools, publicTools, candidateTools), {
+    public: undeclaredSha256(common, declared.tools, publicTools),
+    candidate: undeclaredSha256(common, declared.tools, candidateTools),
+  });
 }

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -5,6 +6,7 @@ import {
   RESERVED_TOOL_NAMES,
   compareToolContracts,
   contractFromTool,
+  formatContractFailures,
   semanticSchema,
   toolContractSha256,
 } from "../scripts/lib/declared-tool-contracts.mjs";
@@ -461,5 +463,107 @@ describe("compareToolContracts strictness", () => {
     const candidate = catalog();
     candidate.ast_explore = withAdditional(true);
     expect(compare(catalog(), candidate).failures).toEqual([]);
+  });
+});
+
+describe("compareToolContracts ordering, messages and evidence", () => {
+  it("failures sorted by tool then field", () => {
+    const candidate = catalog();
+    candidate.ast_rename_symbol = surface("Renames, differently.", { x: { type: "string" } });
+    candidate.ast_find_symbols = surface("Finds, differently.");
+    candidate.ast_find_references = {
+      ...surface("Finds references."),
+      parameters: { ...surface("x").parameters, additionalProperties: true },
+    };
+    const result = compare(catalog(), candidate, {}, "0.12.0");
+    expect(result.failures).toEqual([
+      { tool: "*", field: "baseline", reason: "baseline_mismatch" },
+      { tool: "ast_find_references", field: "additionalProperties", reason: "loosened" },
+      { tool: "ast_find_references", field: "input_schema", reason: "drift_from_public" },
+      { tool: "ast_find_symbols", field: "description", reason: "drift_from_public" },
+      { tool: "ast_rename_symbol", field: "description", reason: "drift_from_public" },
+      { tool: "ast_rename_symbol", field: "input_schema", reason: "drift_from_public" },
+    ]);
+  });
+
+  it("formatContractFailures renders tool.field: reason joined by '; '", () => {
+    expect(
+      formatContractFailures([
+        { tool: "ast_find_symbols", field: "description", reason: "drift_from_public" },
+        { tool: "ast_rename_symbol", field: "description", reason: "stale_equals_public" },
+      ]),
+    ).toBe(
+      "ast_find_symbols.description: drift_from_public; ast_rename_symbol.description: stale_equals_public",
+    );
+    expect(formatContractFailures([])).toBe("");
+  });
+
+  it("empty declarations reproduce the blanket freeze (committed fixture)", async () => {
+    const fixture = await readFixture();
+    expect(fixture.tools).toEqual({});
+    const run = (candidate: Catalog) =>
+      compareToolContracts({
+        publicTools: catalog(),
+        candidateTools: candidate,
+        declared: fixture,
+        baselineVersion: BASELINE,
+      });
+    expect(run(catalog()).ok).toBe(true);
+    for (const name of Object.keys(catalog()).filter(
+      (tool) => !RESERVED_TOOL_NAMES.includes(tool),
+    )) {
+      const drifted = catalog();
+      drifted[name] = surface(`${name} drifted.`);
+      expect(run(drifted).failures, name).toEqual([
+        { tool: name, field: "description", reason: "drift_from_public" },
+      ]);
+    }
+  });
+
+  it("result exposes per-tool status, digests and undeclaredSha256 public and candidate", () => {
+    const candidate = catalog();
+    candidate.ast_rename_symbol = surface("Prepares a rename, with templates.");
+    const declaration = contractOf(candidate.ast_rename_symbol);
+    const result = compare(catalog(), candidate, { ast_rename_symbol: declaration });
+    expect(result.ok).toBe(true);
+    expect(Object.keys(result.tools)).toEqual([
+      "ast_find_references",
+      "ast_find_symbols",
+      "ast_rename_symbol",
+    ]);
+    expect(result.tools.ast_find_symbols).toEqual({
+      status: "undeclared",
+      publicSha256: toolContractSha256("ast_find_symbols", catalog().ast_find_symbols),
+      candidateSha256: toolContractSha256("ast_find_symbols", catalog().ast_find_symbols),
+    });
+    const renamed = result.tools.ast_rename_symbol;
+    expect(renamed.status).toBe("declared");
+    expect(renamed.candidateSha256).toBe(
+      toolContractSha256("ast_rename_symbol", candidate.ast_rename_symbol),
+    );
+    expect(renamed.declaredSha256).toBe(renamed.candidateSha256);
+    expect(renamed.publicSha256).not.toBe(renamed.candidateSha256);
+    const undeclaredDigest = (tools: Catalog) =>
+      createHash("sha256")
+        .update(
+          JSON.stringify(
+            ["ast_find_references", "ast_find_symbols"].map((name) => ({
+              name,
+              description: tools[name].description,
+              parameters: semanticSchema(tools[name].parameters),
+            })),
+          ),
+        )
+        .digest("hex");
+    expect(result.undeclaredSha256).toEqual({
+      public: undeclaredDigest(catalog()),
+      candidate: undeclaredDigest(candidate),
+    });
+    // The undeclared digest ignores declared tools but follows undeclared drift.
+    candidate.ast_find_symbols = surface("Finds, differently.");
+    const drifted = compare(catalog(), candidate, { ast_rename_symbol: declaration });
+    expect(drifted.undeclaredSha256.public).toBe(undeclaredDigest(catalog()));
+    expect(drifted.undeclaredSha256.candidate).toBe(undeclaredDigest(candidate));
+    expect(drifted.undeclaredSha256.candidate).not.toBe(drifted.undeclaredSha256.public);
   });
 });
