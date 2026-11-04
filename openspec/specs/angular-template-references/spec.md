@@ -8,7 +8,7 @@ Surface Angular component-member usages located in templates through `find_refer
 
 ### Requirement: Angular detection and compiler gate
 
-Angular MUST be considered present only when `@angular/core/package.json` resolves from the tsconfig directory. When it does not resolve, the feature MUST be off and output MUST be byte-identical to the pre-change behavior, with no template fields. When core is present, the user's `@angular/compiler` MUST resolve from the same directory, MUST satisfy the supported range `>=20.0.0 <23.0.0`, and MUST expose every required capability (`parseTemplate`, the template and expression recursive visitors, `ImplicitReceiver`, `ThisReceiver`, `PropertyRead`, `Call`, and a write node as either `PropertyWrite` or assignment `Binary`). When core is present and the compiler is missing, out of range, or lacks a required capability, template coverage MUST be `unfinished` (reason `compiler_missing` or `compiler_unsupported`), never `completed` and never silently off. The server MUST NOT bundle its own compiler; `@angular/compiler` is an optional peer only.
+Angular MUST be considered present only when `@angular/core/package.json` resolves from the tsconfig directory. When it does not resolve, the feature MUST be off and output MUST be byte-identical to the pre-change behavior, with no template fields. When core is present, the user's `@angular/compiler` MUST resolve from the same directory, MUST satisfy the supported range `>=18.0.0 <23.0.0`, and MUST expose every required capability (`parseTemplate`, the template and expression recursive visitors, `ImplicitReceiver`, `ThisReceiver`, `PropertyRead`, `Call`, and a write node as either `PropertyWrite` or assignment `Binary`). When core is present and the compiler is missing, out of range, or lacks a required capability, template coverage MUST be `unfinished` (reason `compiler_missing` or `compiler_unsupported`), never `completed` and never silently off. The server MUST NOT bundle its own compiler; `@angular/compiler` is an optional peer only.
 
 #### Scenario: Compiler absent in an Angular project
 
@@ -18,13 +18,13 @@ Angular MUST be considered present only when `@angular/core/package.json` resolv
 
 #### Scenario: Compiler out of range
 
-- GIVEN `@angular/compiler` resolves to a version outside `>=20.0.0 <23.0.0`
+- GIVEN `@angular/compiler` resolves to a version outside `>=18.0.0 <23.0.0`
 - WHEN `find_references` runs
 - THEN no template is parsed and `template_coverage` is `unfinished` with reason `compiler_unsupported`
 
 #### Scenario: Supported majors
 
-- GIVEN `@angular/compiler` resolves to a v20, v21, or v22 release
+- GIVEN `@angular/compiler` resolves to a v18, v19, v20, v21, or v22 release
 - WHEN `find_references` runs
 - THEN templates are parsed and usages are reported identically across those majors
 

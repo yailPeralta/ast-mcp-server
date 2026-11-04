@@ -9,7 +9,7 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 /** Repo-local (gitignored) parent for Angular fixtures so the compiler alias realpath stays under an ancestor node_modules. */
 export const ANGULAR_FIXTURE_ROOT = path.join(repositoryRoot, ".tmp", "angular-fixtures");
 
-export type AngularCompilerAlias = "v20" | "v21" | "v22";
+export type AngularCompilerAlias = "v18" | "v19" | "v20" | "v21" | "v22";
 
 export interface AngularFixtureOptions {
   /** Aliased compiler major to expose as `@angular/compiler`, or `null` for none. */
@@ -65,10 +65,12 @@ export async function createAngularFixture(
 
 /** Node engines floors for `@angular/compiler` majors that are stricter than this repository's own. */
 export function compilerMajorSupportedByNode(
-  major: 20 | 21 | 22,
+  major: 18 | 19 | 20 | 21 | 22,
   nodeVersion: string = process.versions.node,
 ): boolean {
   const [nodeMajor = 0, nodeMinor = 0, nodePatch = 0] = nodeVersion.split(".").map(Number);
+  // v18 and v19 require `>=22.0.0`, which this repository's own floor already satisfies.
+  if (major < 20) return true;
   if (major !== 22) return nodeMajor > 22 || (nodeMajor === 22 && nodeMinor >= 12);
   if (nodeMajor >= 26) return true;
   if (nodeMajor === 24) return nodeMinor >= 15;

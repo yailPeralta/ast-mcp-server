@@ -81,7 +81,7 @@ These fields are additive: existing edge shapes, kind strings, defaults, and pub
 
 ### Angular templates
 
-In an Angular project, `ast_find_references` also reports usages of a component member in its template, and `ast_rename_symbol` rewrites external templates as part of the same reviewed plan. This needs the project's own `@angular/compiler`. The server does not bundle it: it is an optional peer dependency (`>=20.0.0 <23.0.0`, majors 20 to 22) that Angular projects already install next to `@angular/core`. Nothing changes for projects without `@angular/core`.
+In an Angular project, `ast_find_references` also reports usages of a component member in its template, and `ast_rename_symbol` rewrites external templates as part of the same reviewed plan. This needs the project's own `@angular/compiler`. The server does not bundle it: it is an optional peer dependency (`>=18.0.0 <23.0.0`, majors 18 to 22) that Angular projects already install next to `@angular/core`. Nothing changes for projects without `@angular/core`.
 
 Install or align it in the target project when the response reports `compiler_missing` or `compiler_unsupported`:
 

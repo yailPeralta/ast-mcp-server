@@ -623,6 +623,29 @@ __metadata:
   languageName: node
   linkType: hard
 
+"angular-compiler-v18@npm:@angular/compiler@18.2.14":
+  version: 18.2.14
+  resolution: "@angular/compiler@npm:18.2.14"
+  dependencies:
+    tslib: "npm:^2.3.0"
+  peerDependencies:
+    "@angular/core": 18.2.14
+  peerDependenciesMeta:
+    "@angular/core":
+      optional: true
+  checksum: 10c0/8e4988f0eab7907610edde6288e94a62765bfd4de0102023429ea028b0e48bea95e3bc89204aa69a83377be320dc008c4ba4cd58a4cc834aa4f2491f675ba6b3
+  languageName: node
+  linkType: hard
+
+"angular-compiler-v19@npm:@angular/compiler@19.2.15":
+  version: 19.2.15
+  resolution: "@angular/compiler@npm:19.2.15"
+  dependencies:
+    tslib: "npm:^2.3.0"
+  checksum: 10c0/f6382df770fa3a83e71c47e4acc7fa2474064cdecdadf40536ea0c77a4732e2973c51fd0652e44eb77902e6484834c8c79eff79e918323604e8eaecfe49c4172
+  languageName: node
+  linkType: hard
+
 "angular-compiler-v20@npm:@angular/compiler@20.3.34":
   version: 20.3.34
   resolution: "@angular/compiler@npm:20.3.34"
@@ -665,6 +688,8 @@ __metadata:
     "@modelcontextprotocol/sdk": "npm:^1.32.1"
     "@toon-format/toon": "npm:4.4.0"
     "@types/node": "npm:^26.6.5"
+    angular-compiler-v18: "npm:@angular/compiler@18.2.14"
+    angular-compiler-v19: "npm:@angular/compiler@19.2.15"
     angular-compiler-v20: "npm:@angular/compiler@20.3.34"
     angular-compiler-v21: "npm:@angular/compiler@21.2.25"
     angular-compiler-v22: "npm:@angular/compiler@22.2.4"

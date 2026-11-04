@@ -121,7 +121,7 @@ describe("detection and compiler gate", () => {
     });
   });
 
-  it.each(["19.2.0", "23.0.0", "20.0.0-next.1"])(
+  it.each(["17.3.12", "23.0.0", "18.0.0-next.1"])(
     "out-of-range version %s yields compiler_unsupported without evaluating it",
     async (version) => {
       const { context, write } = await setup(
@@ -155,6 +155,8 @@ describe("detection and compiler gate", () => {
   });
 
   describe.each([
+    ["v18", 18],
+    ["v19", 19],
     ["v20", 20],
     ["v21", 21],
     ["v22", 22],
@@ -288,6 +290,8 @@ export class BComponent extends AComponent {}
 });
 
 describe.each([
+  ["v18", 18],
+  ["v19", 19],
   ["v20", 20],
   ["v21", 21],
   ["v22", 22],
@@ -388,18 +392,39 @@ describe.each([
     },
   );
 
-  run("write via PropertyWrite or assignment Binary (v20 AST)", async () => {
-    const html = `<a (click)="title = 'x'; limit += 1; items[0] = limit"></a>`;
+  run("write via PropertyWrite (v18/v19 AST) or assignment Binary (v20 AST)", async () => {
+    const html = `<a (click)="title = 'x'; items[0] = limit"></a>`;
     const { context } = await prepare(html);
     const kinds = async (symbol: string) =>
       (await usagesOf(context, symbol)).usages.map((usage) => usage.kind);
     expect(await kinds("AComponent.title")).toEqual(["TemplatePropertyWrite"]);
-    expect(await kinds("AComponent.limit")).toEqual([
-      "TemplatePropertyWrite",
-      "TemplatePropertyRead",
-    ]);
+    expect(await kinds("AComponent.limit")).toEqual(["TemplatePropertyRead"]);
     expect(await kinds("AComponent.items")).toEqual(["TemplatePropertyRead"]);
   });
+
+  // Compound assignment operators are template syntax since Angular 20; v18/v19 reject them.
+  it.skipIf(!compilerMajorSupportedByNode(major) || major < 20)(
+    "compound assignment is a write via assignment Binary (v20 AST)",
+    async () => {
+      const { context } = await prepare(`<a (click)="limit += 1"></a>`);
+      const { usages } = await usagesOf(context, "AComponent.limit");
+      expect(usages.map((usage) => usage.kind)).toEqual(["TemplatePropertyWrite"]);
+    },
+  );
+
+  it.skipIf(!compilerMajorSupportedByNode(major) || major >= 20)(
+    "compound assignment is a parse error before v20",
+    async () => {
+      const { context } = await prepare(`<a (click)="limit += 1"></a>`);
+      const { coverage, usages } = await usagesOf(context, "AComponent.limit");
+      expect(coverage).toEqual({
+        status: "unfinished",
+        reason: "template_parse_error",
+        templates: 0,
+      });
+      expect(usages).toEqual([]);
+    },
+  );
 });
 
 describe("completeness and bounds", () => {
