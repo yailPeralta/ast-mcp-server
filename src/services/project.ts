@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { Project, type Node, type SourceFile } from "ts-morph";
+import { Project, ts, type Node, type SourceFile } from "ts-morph";
 import type { FileFingerprint } from "./file-fingerprints.js";
 // prettier-ignore
 import { bindConfiguredH03Error, captureConfiguredH03Command, captureConfiguredH05Command, runConfiguredH03Fixture, runConfiguredH05Fixture } from "./h03-timeout-fixture.js";
@@ -56,6 +56,7 @@ import {
   type RequestContext,
 } from "./request-context.js";
 import { readRuntimePolicy, type RuntimePolicy } from "./runtime-policy.js";
+import { PublicOperationalError } from "./public-errors.js";
 
 export interface ProjectContext {
   project: Project;
@@ -313,12 +314,47 @@ export function resolveTsConfigPath(projectRoot: string): string {
 
   const candidate = path.join(abs, "tsconfig.json");
   if (fs.existsSync(candidate)) {
-    return fs.realpathSync(candidate);
+    const resolved = fs.realpathSync(candidate);
+    const references = solutionStyleReferences(resolved);
+    if (references !== null) {
+      throw new PublicOperationalError(
+        "PROJECT_NOT_FOUND",
+        `"${resolved}" is a solution-style tsconfig with no source files and ${references.length} project reference${references.length === 1 ? "" : "s"} (${references.join(", ")}). Pass one of the referenced configs as project_root.`,
+      );
+    }
+    return resolved;
   }
 
   throw new Error(
     `No tsconfig.json found at "${abs}". Pass a project directory containing tsconfig.json or the config file itself.`,
   );
+}
+
+/**
+ * Detect a solution-style config (`tsc -b` root: no `files`/`include` of its
+ * own, only `references`). Returns the referenced paths as written, or `null`
+ * when the config declares sources or cannot be read; unreadable configs keep
+ * the existing compiler-failure path.
+ */
+function solutionStyleReferences(tsConfigFilePath: string): readonly string[] | null {
+  try {
+    const { config, error } = ts.readConfigFile(tsConfigFilePath, ts.sys.readFile);
+    if (error !== undefined || typeof config !== "object" || config === null) return null;
+    const raw = config as { include?: unknown; references?: unknown };
+    if (raw.include !== undefined || !Array.isArray(raw.references)) return null;
+    const references = raw.references.flatMap((reference) =>
+      typeof reference === "object" &&
+      reference !== null &&
+      typeof (reference as { path?: unknown }).path === "string"
+        ? [(reference as { path: string }).path]
+        : [],
+    );
+    if (references.length === 0) return null;
+    const parsed = ts.parseJsonConfigFileContent(config, ts.sys, path.dirname(tsConfigFilePath));
+    return parsed.fileNames.length === 0 ? references : null;
+  } catch {
+    return null;
+  }
 }
 
 function buildProjectContext(tsConfigFilePath: string): ProjectContext {

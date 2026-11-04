@@ -1695,3 +1695,86 @@ describe("project sessions", () => {
     });
   });
 });
+
+describe("solution-style tsconfig resolution", () => {
+  const SOLUTION_TSCONFIG = `{
+  /* Angular CLI solution-style root config: no sources, only references. */
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.spec.json" }
+  ]
+}
+`;
+  const APP_TSCONFIG = JSON.stringify({
+    compilerOptions: { strict: true, target: "ES2022", module: "NodeNext" },
+    include: ["src/**/*.ts"],
+  });
+
+  afterEach(async () => {
+    clearProjectSessions();
+    await Promise.all(fixtures.splice(0).map((fixture) => fixture.cleanup()));
+  });
+
+  it("rejects a directory whose tsconfig.json is solution-style and names the referenced configs", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+      "tsconfig.app.json": APP_TSCONFIG,
+      "tsconfig.spec.json": APP_TSCONFIG,
+    });
+    fixtures.push(fixture);
+    await fixture.write("tsconfig.json", SOLUTION_TSCONFIG);
+
+    const configPath = path.join(fixture.root, "tsconfig.json");
+    expect(() => createFreshProject(fixture.root)).toThrow(
+      `"${configPath}" is a solution-style tsconfig with no source files and 2 project references (./tsconfig.app.json, ./tsconfig.spec.json). Pass one of the referenced configs as project_root.`,
+    );
+    await expect(withProject(fixture.root, () => undefined)).rejects.toThrow(
+      "is a solution-style tsconfig with no source files",
+    );
+  });
+
+  it("loads a referenced config passed directly inside a solution layout", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+      "tsconfig.app.json": APP_TSCONFIG,
+      "tsconfig.spec.json": APP_TSCONFIG,
+    });
+    fixtures.push(fixture);
+    await fixture.write("tsconfig.json", SOLUTION_TSCONFIG);
+
+    const context = createFreshProject(path.join(fixture.root, "tsconfig.app.json"));
+    expect(
+      context.project.getSourceFiles().map((file) => path.basename(file.getFilePath())),
+    ).toEqual(["value.ts"]);
+  });
+
+  it("keeps loading a directory whose tsconfig.json declares sources", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+    });
+    fixtures.push(fixture);
+
+    const context = createFreshProject(fixture.root);
+    expect(context.project.getSourceFiles()).toHaveLength(1);
+  });
+
+  it("does not treat a tsconfig with references and include as solution-style", async () => {
+    const fixture = await createProjectFixture({
+      "src/value.ts": "export const value = 1;\n",
+      "tsconfig.app.json": APP_TSCONFIG,
+    });
+    fixtures.push(fixture);
+    await fixture.write(
+      "tsconfig.json",
+      JSON.stringify({
+        compilerOptions: { strict: true, target: "ES2022", module: "NodeNext" },
+        include: ["src/**/*.ts"],
+        references: [{ path: "./tsconfig.app.json" }],
+      }),
+    );
+
+    const context = createFreshProject(fixture.root);
+    expect(context.project.getSourceFiles()).toHaveLength(1);
+  });
+});

@@ -1110,6 +1110,48 @@ export function formatValue(value: number): string { return String(value); }
     );
   });
 
+  it("fails closed on a solution-style tsconfig directory instead of reporting an empty project", async () => {
+    await fixture.write(
+      "tsconfig.app.json",
+      JSON.stringify({ compilerOptions: { strict: true }, include: ["src/**/*.ts"] }),
+    );
+    await fixture.write(
+      "tsconfig.spec.json",
+      JSON.stringify({ compilerOptions: { strict: true }, include: ["src/**/*.spec.ts"] }),
+    );
+    await fixture.write(
+      "tsconfig.json",
+      `{
+  /* solution-style root */
+  "files": [],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.spec.json" }]
+}
+`,
+    );
+
+    const failure = publicFailure(
+      await client.callTool({
+        name: "ast_get_project_status",
+        arguments: { project_root: fixture.root },
+      }),
+    );
+
+    expect(failure.code).toBe("PROJECT_NOT_FOUND");
+    expect(failure.message).toContain(
+      "is a solution-style tsconfig with no source files and 2 project references (./tsconfig.app.json, ./tsconfig.spec.json). Pass one of the referenced configs as project_root.",
+    );
+    expect(failure.message).not.toContain(fixture.root);
+    expect(String(stderr.mock.calls[0]![0])).not.toContain(fixture.root);
+
+    const direct = structured(
+      await client.callTool({
+        name: "ast_get_project_status",
+        arguments: { project_root: path.join(fixture.root, "tsconfig.app.json") },
+      }),
+    );
+    expect(direct.source_count).toBe(3);
+  });
+
   it("exposes project status without leaking the fixture path", async () => {
     const status = structured(
       await client.callTool({

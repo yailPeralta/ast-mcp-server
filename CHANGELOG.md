@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A `project_root` directory whose `tsconfig.json` is solution-style (`"files": []` or no `files`/`include`, plus a non-empty `references` array, as Angular CLI and other `tsc -b` layouts ship) no longer loads as a silent empty project with `source_count: 0`. Resolution now fails closed with a `PROJECT_NOT_FOUND` error that names the referenced configs and asks for one of them as `project_root`; passing a referenced `tsconfig.*.json` file directly is unchanged, and references are never followed automatically (#389).
 - The dsh-adapter smoke no longer reports a surviving Harness process tree when descendants are still exiting after a clean shutdown on a loaded runner. The lifecycle assertion now polls the owned process tree with a bounded ten-second deadline, and when survivors remain it keeps failing but lists each PID with its command line and parent chain (#363).
 
 ## [0.14.3] — not yet published (2026-10-28)
