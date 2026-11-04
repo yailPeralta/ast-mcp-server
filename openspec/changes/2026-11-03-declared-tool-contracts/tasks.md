@@ -41,8 +41,8 @@ Base boundaries: U1 base = tracker `feat/declared-tool-contracts`; U2 base = U1 
 ## Pre-apply checklist
 
 - [x] 0.1 Issue #383 exists.
-- [ ] 0.2 Maintainer applies `status:approved` to #383 (human action, pending; apply must not start before it).
-- [ ] 0.3 Orchestrator creates tracker branch `feat/declared-tool-contracts` from main and opens the draft tracker PR.
+- [x] 0.2 Maintainer applies `status:approved` to #383 (applied by the maintainer on 2026-11-04).
+- [x] 0.3 Orchestrator creates tracker branch `feat/declared-tool-contracts` from main and opens the draft tracker PR. PR: #384.
 - [x] 0.4 Apply phase runs `git log -S tools_list_sha256` on the pin files before any re-baselining (feeds U2 task 2.7).
 
 ---

@@ -146,7 +146,7 @@
   ],
   "gates": {
     "typecheck_lint_format_build": "exit 0",
-    "yarn test": "exit 0 (92 files, 1338 passed, 2 skipped; plus supervised-worker 2 passed)",
+    "yarn test": "exit 0 at the U2 head (93 files, 1344 passed, 2 skipped; plus supervised-worker 2 passed; --maxWorkers=4)",
     "yarn test:package": "exit 0",
     "yarn test:dsh-adapter": "exit 0, DSH_ADAPTER_SMOKE_OK"
   },
