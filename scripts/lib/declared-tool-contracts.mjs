@@ -6,6 +6,8 @@ import { createHash } from "node:crypto";
 /** Tools whose contract keeps its own RED/corrected checks in the smoke. */
 export const RESERVED_TOOL_NAMES = Object.freeze(["ast_explore"]);
 
+const STRICT_ADDITIONAL_PROPERTIES = Object.freeze(["false", "undefined"]);
+
 /**
  * Reduce a JSON Schema to its validation semantics. zod 3 and zod 4 serialize the same
  * constraints differently ($ref versus inlined, safe-integer bounds, uuid patterns), so the
@@ -156,6 +158,18 @@ export function compareToolContracts(input) {
       compareUndeclaredTool(name, publicTools[name], candidateTools[name], failures);
     } else if (isToolDeclaration(declaration)) {
       compareDeclaredTool(name, publicTools[name], candidateTools[name], declaration, failures);
+    }
+  }
+  for (const name of candidateNames) {
+    if (RESERVED_TOOL_NAMES.includes(name)) continue;
+    // The semantic comparison drops `additionalProperties: false`, so strictness is explicit:
+    // a tool may declare it false or leave it unset, never accept arbitrary properties.
+    if (
+      !STRICT_ADDITIONAL_PROPERTIES.includes(
+        String(candidateTools[name].parameters.additionalProperties),
+      )
+    ) {
+      failures.push({ tool: name, field: "additionalProperties", reason: "loosened" });
     }
   }
   return { ok: failures.length === 0, failures };

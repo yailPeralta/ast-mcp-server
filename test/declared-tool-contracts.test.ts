@@ -416,3 +416,50 @@ describe("compareToolContracts target validation and catalog shape", () => {
     expect(() => compareToolContracts(undefined as never)).not.toThrow();
   });
 });
+
+describe("compareToolContracts strictness", () => {
+  function withAdditional(value: unknown): Surface {
+    const tool = surface("Finds symbols.");
+    return { ...tool, parameters: { ...tool.parameters, additionalProperties: value } };
+  }
+
+  it("additionalProperties true or {} fails loosened for undeclared and declared tools", () => {
+    for (const loosened of [true, {}]) {
+      const publicTools = catalog();
+      publicTools.ast_find_symbols = withAdditional(loosened);
+      const candidate = catalog();
+      candidate.ast_find_symbols = withAdditional(loosened);
+      expect(compare(publicTools, candidate).failures).toEqual([
+        { tool: "ast_find_symbols", field: "additionalProperties", reason: "loosened" },
+      ]);
+    }
+    // A declared tool that matches its description is still held to strictness.
+    const candidate = catalog();
+    candidate.ast_rename_symbol = {
+      description: "Prepares a rename, with templates.",
+      parameters: { ...surface("x").parameters, additionalProperties: true },
+    };
+    const result = compare(catalog(), candidate, {
+      ast_rename_symbol: contractOf(candidate.ast_rename_symbol),
+    });
+    expect(result.failures).toEqual([
+      { tool: "ast_rename_symbol", field: "additionalProperties", reason: "loosened" },
+    ]);
+  });
+
+  it("undefined and false pass", () => {
+    for (const strict of [undefined, false]) {
+      const candidate = catalog();
+      candidate.ast_find_symbols = withAdditional(strict);
+      const publicTools = catalog();
+      publicTools.ast_find_symbols = withAdditional(strict);
+      expect(compare(publicTools, candidate).failures).toEqual([]);
+    }
+  });
+
+  it("ast_explore exempt", () => {
+    const candidate = catalog();
+    candidate.ast_explore = withAdditional(true);
+    expect(compare(catalog(), candidate).failures).toEqual([]);
+  });
+});
