@@ -1,0 +1,57 @@
+change: 2026-11-03-declared-tool-contracts
+issueNumber: 383
+artifactStore: hybrid
+sessionPreflight:
+  executionMode: auto
+  artifactStore: hybrid
+  deliveryStrategy: auto-chain
+  chainStrategy: feature-branch-chain
+  reviewBudgetLines: 800
+artifacts:
+  exploration: done
+  proposal: done
+  specs: done
+  design: done
+  tasks: done
+  applyProgress: done (U1 and U2 applied; awaiting verify)
+  verifyReport: done
+dependencies:
+  proposal: ready
+  specs: ready
+  design: ready
+  tasks: ready
+  apply: ready
+  verify: ready
+  archive: ready
+explore:
+  status: success
+  engramTopic: sdd/2026-11-03-declared-tool-contracts/explore
+  engramId: 3879
+  recommended: option-b-fixture-plus-pure-module
+proposal: { status: success, engramId: 3880 }
+spec: { status: success, engramId: 3881 }
+design:
+  status: success
+  engramId: 3882
+  gate: PASS (fresh-context validator; four non-blocking notes applied inline)
+tasks:
+  status: success
+  engramId: 3883
+  reviewWorkload: "U1 realistic 700-950 (size:exception, split smoke wiring if >800); U2 realistic 520-700"
+  chainedPRsRecommended: true
+  decisionNeededBeforeApply: false
+verify:
+  status: pass-with-warnings
+  report: openspec/changes/2026-11-03-declared-tool-contracts/verify-report.md
+  engramTopic: sdd/2026-11-03-declared-tool-contracts/verify-report
+  critical: 0
+  warnings: 3
+  suggestions: 3
+  scenariosCompliant: 23
+  scenariosTotal: 23
+lastPhase: verify
+nextRecommended: merge chain (#385 -> tracker, #386, #387), undraft #384, then archive
+applyState:
+  u1: done (tasks 1.1-1.12)
+  u2: done (tasks 2.1-2.11)
+blockedReasons: []

@@ -170,3 +170,14 @@ describe("ast_find_references with Angular templates", () => {
     });
   });
 });
+
+describe("ast_find_references description", () => {
+  it("description states template usages and that template errors are not diagnosed", async () => {
+    const tool = (await client.listTools()).tools.find((t) => t.name === "ast_find_references");
+    expect(tool?.description).toBe(
+      "Finds type-resolved references and returns bounded project-relative locations, including declaration impact by default. When @angular/compiler resolves, it also reports Angular template usages tagged by origin with a template_coverage verdict; incomplete coverage does not prove absence, and template errors are not diagnosed.",
+    );
+    expect(tool?.description).toMatch(/template_coverage/u);
+    expect(tool?.description).toMatch(/template errors are not diagnosed/u);
+  });
+});
