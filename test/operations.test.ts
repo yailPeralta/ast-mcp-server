@@ -183,6 +183,27 @@ describe("prepared structural operations", () => {
     await expect(access(cacheRoot)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("counts only real call sites when renaming a method used before its declaration", async () => {
+    const fixture = await createProjectFixture({
+      "src/header.ts": `export class Header {\n  toggle(): void {\n    this.closeMenu();\n  }\n\n  closeMenu(): void {}\n}\n`,
+      "src/use.ts": `import { Header } from "./header.js";\nexport const closed = new Header().closeMenu();\n`,
+    });
+    fixtures.push(fixture);
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/header.ts",
+      symbolPath: "Header.closeMenu",
+      newName: "closeMobileMenu",
+    });
+
+    expect(prepared.status).toBe("prepared");
+    expect(prepared.reference_count).toBe(2);
+    expect(prepared.affected_files.map((file) => file.file)).toEqual([
+      "src/header.ts",
+      "src/use.ts",
+    ]);
+  });
+
   it("removes every prepared-operation kind when cancellation wins after retention", async () => {
     const fixture = await renameFixture();
     const preparations = [

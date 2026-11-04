@@ -5,6 +5,7 @@ import path from "node:path";
 import { createTwoFilesPatch } from "diff";
 import { LanguageVariant, Node, ScriptTarget, SyntaxKind, ts, type Project } from "ts-morph";
 import { collectTemplateUsages, type TemplateUsage } from "./angular-templates.js";
+import { findNonDeclarationReferences } from "./references.js";
 import {
   compareObservedDiagnostics,
   observeDiagnostic,
@@ -718,7 +719,7 @@ export async function prepareRename(
       const { coverage, usages } = await collectTemplateUsages(node, context, rc);
       assertTemplateRenameAllowed(coverage.status, usages, args.newName);
       const tsReferenceCount = Node.isReferenceFindable(node)
-        ? node.findReferencesAsNodes().length
+        ? findNonDeclarationReferences(node).length
         : 0;
       node.rename(args.newName);
       return {
