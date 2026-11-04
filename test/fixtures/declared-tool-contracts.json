@@ -1,1 +1,88 @@
-{ "baseline": "0.13.0", "tools": {} }
+{
+  "baseline": "0.13.0",
+  "tools": {
+    "ast_find_references": {
+      "description": "Finds type-resolved references and returns bounded project-relative locations, including declaration impact by default. When @angular/compiler resolves, it also reports Angular template usages tagged by origin with a template_coverage verdict; incomplete coverage does not prove absence, and template errors are not diagnosed.",
+      "input_schema": {
+        "properties": {
+          "detail": {
+            "default": "locations",
+            "description": "Result detail: locations omits source lines; context adds bounded source-line text.",
+            "enum": ["locations", "context"],
+            "type": "string"
+          },
+          "file_path": {
+            "description": "File containing the declaration.",
+            "type": "string"
+          },
+          "include_declaration": {
+            "default": true,
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 100,
+            "description": "Maximum results to return (1-500).",
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Zero-based result offset.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "output_format": {
+            "default": "json",
+            "description": "Result representation. TOON wraps one compact encoded value in structuredContent.",
+            "enum": ["json", "toon"],
+            "type": "string"
+          },
+          "project_root": {
+            "description": "Absolute project directory containing tsconfig.json, or the config path.",
+            "type": "string"
+          },
+          "symbol_path": {
+            "description": "Exact symbol path returned by an outline or symbol search.",
+            "type": "string"
+          }
+        },
+        "required": ["project_root", "file_path", "symbol_path"],
+        "type": "object"
+      }
+    },
+    "ast_rename_symbol": {
+      "description": "Prepares an exact hash-bound rename plan without writing. Review the preview and apply its operation_id with ast_apply_operation. The plan also rewrites external Angular templates hash-bound to the workspace snapshot; diagnostics stay TypeScript-only.",
+      "input_schema": {
+        "properties": {
+          "allow_new_errors": {
+            "default": false,
+            "description": "Permit a plan with new TypeScript errors after explicit review.",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "default": true,
+            "description": "Compatibility field. Direct application is disabled; this tool always prepares.",
+            "type": "boolean"
+          },
+          "file_path": {
+            "type": "string"
+          },
+          "new_name": {
+            "description": "New identifier only, without a container prefix.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "project_root": {
+            "type": "string"
+          },
+          "symbol_path": {
+            "type": "string"
+          }
+        },
+        "required": ["project_root", "file_path", "symbol_path", "new_name"],
+        "type": "object"
+      }
+    }
+  }
+}

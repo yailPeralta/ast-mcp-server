@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
+import { createServer } from "../src/server.js";
 import {
   RESERVED_TOOL_NAMES,
   compareToolContracts,
@@ -498,9 +501,10 @@ describe("compareToolContracts ordering, messages and evidence", () => {
     expect(formatContractFailures([])).toBe("");
   });
 
-  it("empty declarations reproduce the blanket freeze (committed fixture)", async () => {
-    const fixture = await readFixture();
-    expect(fixture.tools).toEqual({});
+  it("empty declarations reproduce the blanket freeze (committed baseline)", async () => {
+    // Declarations are removed as the baseline advances, so the proof uses an empty set on the
+    // committed baseline instead of the committed entries.
+    const fixture = { baseline: (await readFixture()).baseline, tools: {} };
     const run = (candidate: Catalog) =>
       compareToolContracts({
         publicTools: catalog(),
@@ -565,5 +569,48 @@ describe("compareToolContracts ordering, messages and evidence", () => {
     expect(drifted.undeclaredSha256.public).toBe(undeclaredDigest(catalog()));
     expect(drifted.undeclaredSha256.candidate).toBe(undeclaredDigest(candidate));
     expect(drifted.undeclaredSha256.candidate).not.toBe(drifted.undeclaredSha256.public);
+  });
+});
+
+// Descriptions published in the public 0.13.0 package for the two declared tools. A declaration
+// must differ from them; once the baseline advances past a release containing the change, the
+// declaration, its entry here and the matching assertion in this file are removed together.
+const PUBLIC_BASELINE_DESCRIPTIONS: Record<string, string> = {
+  ast_find_references:
+    "Finds type-resolved references and returns bounded project-relative locations, including declaration impact by default.",
+  ast_rename_symbol:
+    "Prepares an exact hash-bound rename plan without writing. Review the preview and apply its operation_id with ast_apply_operation.",
+};
+
+describe("declared fixture against the in-process server", () => {
+  it("declared fixture matches the in-process server", async () => {
+    const server = createServer();
+    const client = new Client({ name: "declared-contracts-oracle", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const listed = (await client.listTools()).tools;
+      const byName = new Map(listed.map((tool) => [tool.name, tool]));
+      const fixture = await readFixture();
+      expect(Object.keys(fixture.tools).sort()).toEqual([
+        "ast_find_references",
+        "ast_rename_symbol",
+      ]);
+      for (const [name, entry] of Object.entries(fixture.tools)) {
+        const tool = byName.get(name);
+        expect(tool, `${name} is registered`).toBeDefined();
+        expect(entry, name).toEqual(
+          contractFromTool({
+            description: tool!.description ?? "",
+            inputSchema: tool!.inputSchema,
+          }),
+        );
+        const { description } = entry as { description: string };
+        expect(PUBLIC_BASELINE_DESCRIPTIONS[name], `${name} has a public baseline`).toBeDefined();
+        expect(description, name).not.toBe(PUBLIC_BASELINE_DESCRIPTIONS[name]);
+      }
+    } finally {
+      await Promise.all([client.close(), server.close()]);
+    }
   });
 });
