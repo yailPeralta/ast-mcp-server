@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- `@angular/compiler` 18 and 19 are now supported (`>=18.0.0 <23.0.0`); an Angular 18 project previously reported `compiler_unsupported` and missed every template usage (#399).
+
 ### Fixed
 
 - `publish-next` waits up to five minutes (was two) for the registry to expose an accepted publish before giving up, and when that bound is exhausted after a publish that did not throw, it now points the maintainer at `verify-next` instead of asking for a new dispatch that would try to republish immutable bytes. `0.15.0` was reported as failed 46 seconds before the registry served it (#395).

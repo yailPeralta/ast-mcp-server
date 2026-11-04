@@ -42,7 +42,7 @@ describe("Angular template documentation", () => {
 
   it("README documents the supported range and install guidance for the compiler peer", () => {
     expect(readme).toContain("@angular/compiler");
-    expect(readme).toContain(">=20.0.0 <23.0.0");
+    expect(readme).toContain(">=18.0.0 <23.0.0");
     expect(readme).toMatch(/optional peer/i);
     expect(readme).toMatch(/Yarn PnP/);
     expect(readme).toMatch(/not bundled|never bundled|does not bundle/i);

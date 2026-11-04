@@ -115,6 +115,31 @@ it("admits the patched Hono and Vitest family without installation-policy except
   }
 });
 
+it("excludes only the dev-only Angular 18 and 19 compiler aliases from the audit", async () => {
+  // Every 18.x and 19.x @angular/compiler release carries open runtime XSS advisories
+  // (sanitizer code that only runs in a browser), and no later patch exists on either
+  // branch. The aliases are devDependencies used solely to parse template strings in
+  // tests and never reach the published package (yarn test:package asserts that). The audit
+  // reports aliases under the real package name, so the exclusion names `@angular/compiler`,
+  // which nothing else depends on. Drop the exclusion with the aliases.
+  const [manifestBytes, configBytes] = await Promise.all(
+    ["package.json", ".yarnrc.yml"].map((file) =>
+      readFile(path.join(repositoryRoot, file), "utf8"),
+    ),
+  );
+  const manifest = JSON.parse(manifestBytes!) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  const config = yaml.parse(configBytes!) as { npmAuditExcludePackages?: string[] };
+  expect.soft(config.npmAuditExcludePackages).toEqual(["@angular/compiler"]);
+  for (const alias of ["angular-compiler-v18", "angular-compiler-v19"]) {
+    expect.soft(manifest.devDependencies?.[alias], alias).toBeDefined();
+    expect.soft(manifest.dependencies?.[alias], alias).toBeUndefined();
+  }
+  expect.soft(manifest.dependencies?.["@angular/compiler"]).toBeUndefined();
+});
+
 it("declares @angular/compiler as an optional peer and not a dependency", async () => {
   const [manifestBytes, lockBytes] = await Promise.all(
     ["package.json", "yarn.lock"].map((file) => readFile(path.join(repositoryRoot, file), "utf8")),
@@ -127,13 +152,13 @@ it("declares @angular/compiler as an optional peer and not a dependency", async 
     engines?: Record<string, string>;
   };
 
-  expect.soft(manifest.peerDependencies?.["@angular/compiler"]).toBe(">=20.0.0 <23.0.0");
+  expect.soft(manifest.peerDependencies?.["@angular/compiler"]).toBe(">=18.0.0 <23.0.0");
   expect.soft(manifest.peerDependenciesMeta?.["@angular/compiler"]).toEqual({ optional: true });
   expect.soft(manifest.dependencies?.["@angular/compiler"]).toBeUndefined();
   expect.soft(manifest.devDependencies?.["@angular/compiler"]).toBeUndefined();
   expect.soft(manifest.engines?.node).toBe(">=22.13.0");
 
-  for (const major of ["20", "21", "22"]) {
+  for (const major of ["18", "19", "20", "21", "22"]) {
     const alias = `angular-compiler-v${major}`;
     const range = manifest.devDependencies?.[alias];
     expect.soft(range, alias).toMatch(new RegExp(`^npm:@angular/compiler@${major}\\.\\d+\\.\\d+$`));

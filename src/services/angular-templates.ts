@@ -42,7 +42,7 @@ export interface TemplateUsage {
 const MAX_TEMPLATE_BYTES = 512 * 1024;
 const MAX_TEMPLATE_NODES = 100_000;
 const CHECKPOINT_EVERY_NODES = 1000;
-const MIN_COMPILER_MAJOR = 20;
+const MIN_COMPILER_MAJOR = 18;
 const MAX_COMPILER_MAJOR = 22;
 const TWO_WAY_BINDING = 5; // BindingType.TwoWay, stable across supported majors
 const TWO_WAY_EVENT = 2; // ParsedEventType.TwoWay, stable across supported majors
