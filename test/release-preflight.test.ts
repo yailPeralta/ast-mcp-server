@@ -43,6 +43,9 @@ import {
   validateVerificationEvidence,
   waitForPromotedRegistryState,
   waitForPublishedRegistryState,
+  PUBLISH_READBACK_DELAY_MS,
+  PUBLISH_READBACK_MAX_ATTEMPTS,
+  describeAbsentPublishResult,
 } from "../scripts/release-preflight.mjs";
 
 const RELEASE_SHA = "a".repeat(40);
@@ -1315,6 +1318,52 @@ describe("release preflight", () => {
     expect(delays).toBe(2);
   });
 
+  it("waits at least five minutes for the registry to expose a non-throwing publish", () => {
+    // Observed registry lag after an accepted publish: 55 s (0.14.0), 58 s (0.14.1) and
+    // about 2 min 45 s (0.15.0, run 41905976154). The previous two-minute bound failed the last one.
+    expect(PUBLISH_READBACK_MAX_ATTEMPTS * PUBLISH_READBACK_DELAY_MS).toBeGreaterThanOrEqual(
+      5 * 60 * 1000,
+    );
+    expect(PUBLISH_READBACK_DELAY_MS).toBeLessThanOrEqual(30_000);
+  });
+
+  it("accepts the default post-publish readback configuration", async () => {
+    let reads = 0;
+    await expect(
+      waitForPublishedRegistryState({
+        readRegistry: async () => {
+          reads += 1;
+          return registryReadback();
+        },
+        expectedSha: RELEASE_SHA,
+        sleep: async () => undefined,
+      }),
+    ).resolves.toEqual({ state: "already_published_needs_verification", publish: false });
+    expect(reads).toBe(1);
+  });
+
+  it("points an exhausted non-throwing publish at verify-next instead of a new dispatch", () => {
+    const message = describeAbsentPublishResult({
+      publishFailed: false,
+      version: RELEASE_VERSION,
+      sha: RELEASE_SHA,
+    });
+    expect(message).toMatch(/npm publish did not fail/u);
+    expect(message).toContain("verify-next");
+    expect(message).toContain(RELEASE_VERSION);
+    expect(message).not.toMatch(/new explicit dispatch/u);
+  });
+
+  it("keeps the explicit re-dispatch instruction when npm publish itself failed", () => {
+    const message = describeAbsentPublishResult({
+      publishFailed: true,
+      version: RELEASE_VERSION,
+      sha: RELEASE_SHA,
+    });
+    expect(message).toMatch(/publish result is ambiguous and the version is absent/u);
+    expect(message).toMatch(/new explicit dispatch is required/u);
+  });
+
   it("fails closed on a published gitHead mismatch without retrying", async () => {
     let reads = 0;
 
@@ -1344,7 +1393,7 @@ describe("release preflight", () => {
 
     for (const override of [
       { maxAttempts: 0 },
-      { maxAttempts: 21 },
+      { maxAttempts: 41 },
       { delayMs: -1 },
       { delayMs: 30_001 },
     ]) {

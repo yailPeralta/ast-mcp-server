@@ -27,8 +27,11 @@ const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 const NETWORK_TIMEOUT_MS = 20_000;
 const PROMOTION_READBACK_MAX_ATTEMPTS = 6;
 const PROMOTION_READBACK_DELAY_MS = 2_000;
-const PUBLISH_READBACK_MAX_ATTEMPTS = 12;
-const PUBLISH_READBACK_DELAY_MS = 10_000;
+// The registry exposed accepted publishes 55 s, 58 s and about 2 min 45 s after the publish
+// started (0.14.0, 0.14.1, 0.15.0); the bound must comfortably exceed the slowest observation.
+export const PUBLISH_READBACK_MAX_ATTEMPTS = 30;
+export const PUBLISH_READBACK_DELAY_MS = 10_000;
+const PUBLISH_READBACK_MAX_ATTEMPTS_LIMIT = 40;
 const API_VERSION = "2026-03-10";
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
 const STABLE_SEMVER_PATTERN = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u;
@@ -1023,7 +1026,7 @@ export async function waitForPublishedRegistryState({
     typeof sleep !== "function" ||
     !Number.isSafeInteger(maxAttempts) ||
     maxAttempts < 1 ||
-    maxAttempts > 20 ||
+    maxAttempts > PUBLISH_READBACK_MAX_ATTEMPTS_LIMIT ||
     !Number.isSafeInteger(delayMs) ||
     delayMs < 0 ||
     delayMs > 30_000
@@ -1037,6 +1040,21 @@ export async function waitForPublishedRegistryState({
     if (attempt < maxAttempts) await sleep(delayMs);
   }
   return state;
+}
+
+// A publish that npm accepted may still be invisible when the readback bound ends. Re-dispatching
+// publish-next would then try to publish immutable bytes that already exist, so the message hands
+// the maintainer to verify-next, which performs the authoritative readback and rejects an absent
+// version. A publish that threw keeps the explicit re-dispatch instruction.
+export function describeAbsentPublishResult({ publishFailed, version, sha }) {
+  if (publishFailed) {
+    return "publish result is ambiguous and the version is absent; a new explicit dispatch is required";
+  }
+  return (
+    `npm publish did not fail, but the registry has not exposed ${version} within the readback bound; ` +
+    `do not dispatch publish-next again. Dispatch verify-next for sha ${sha} and version ${version}: ` +
+    "it performs the authoritative readback and fails if the version is still absent."
+  );
 }
 
 async function assertExactEvidenceDirectory(evidenceRoot, expectedNames) {
@@ -1598,7 +1616,11 @@ async function runPublishNext(dispatch) {
   });
   if (finalState.state === "absent_requires_new_dispatch") {
     releaseFailure(
-      `publish result is ambiguous and the version is absent; a new explicit dispatch is required${publishError ? "" : "."}`,
+      describeAbsentPublishResult({
+        publishFailed: Boolean(publishError),
+        version: dispatch.version,
+        sha: dispatch.sha,
+      }),
     );
   }
   return {

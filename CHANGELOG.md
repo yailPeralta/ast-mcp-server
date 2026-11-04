@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `publish-next` waits up to five minutes (was two) for the registry to expose an accepted publish before giving up, and when that bound is exhausted after a publish that did not throw, it now points the maintainer at `verify-next` instead of asking for a new dispatch that would try to republish immutable bytes. `0.15.0` was reported as failed 46 seconds before the registry served it (#395).
+
 ## [0.15.0] — published to `next`, verification failed, not promoted (2026-11-04)
 
 ### Added

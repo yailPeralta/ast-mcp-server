@@ -1,5 +1,7 @@
 export const OFFICIAL_NPM_REGISTRY: "https://registry.npmjs.org";
 export const PUBLISH_AUTHORIZATION_FILE: "publish-authorization.json";
+export const PUBLISH_READBACK_MAX_ATTEMPTS: number;
+export const PUBLISH_READBACK_DELAY_MS: number;
 export const PREPARED_PACKAGE_FILE: "prepared-package.json";
 export const PROMOTION_AUTHORIZATION_FILE: "promotion-authorization.json";
 export const RELEASE_MODES: readonly ["publish-next", "verify-next", "promote-latest"];
@@ -267,6 +269,11 @@ export function validatePromotedRegistryState(
   expectedSha: string,
   expectedIntegrity: string,
 ): RegistryReadback;
+export function describeAbsentPublishResult(options: {
+  publishFailed: boolean;
+  version: string;
+  sha: string;
+}): string;
 export function waitForPublishedRegistryState(options: {
   readRegistry: () => Promise<unknown>;
   expectedSha: string;
