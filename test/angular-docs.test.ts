@@ -14,10 +14,13 @@ const [readme, skill, operations, changelog] = await Promise.all([
 ]);
 const skillDocs = `${skill}\n${operations}`;
 
-function unreleasedSection(): string {
-  const start = changelog.indexOf("## [Unreleased]");
+// The Angular template feature shipped in the 0.15.0 section (moved out of Unreleased when the
+// candidate was cut), so read that section rather than the now-empty Unreleased block.
+function releaseSection(version: string): string {
+  const start = changelog.indexOf(`## [${version}]`);
+  if (start === -1) throw new Error(`CHANGELOG has no ## [${version}] section`);
   const end = changelog.indexOf("\n## [", start + 1);
-  return changelog.slice(start, end);
+  return changelog.slice(start, end === -1 ? undefined : end);
 }
 
 describe("Angular template documentation", () => {
@@ -46,7 +49,7 @@ describe("Angular template documentation", () => {
   });
 
   it("CHANGELOG records the feature and the updated tool descriptions", () => {
-    const unreleased = unreleasedSection();
+    const unreleased = releaseSection("0.15.0");
     expect(unreleased).toContain("Angular");
     expect(unreleased).toContain("ast_find_references");
     expect(unreleased).toContain("ast_rename_symbol");

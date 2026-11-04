@@ -46,7 +46,7 @@ const summaryReportAuthority = new WeakSet();
 let terminalContext;
 let terminalPublishAttempted = false;
 
-export const RELEASE_CANDIDATE_PACKAGE_VERSION = "0.14.3";
+export const RELEASE_CANDIDATE_PACKAGE_VERSION = "0.15.0";
 
 export const RELEASE_CANDIDATE_COMMAND_IDS = Object.freeze([
   "install",
