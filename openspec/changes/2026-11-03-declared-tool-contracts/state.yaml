@@ -13,7 +13,7 @@ artifacts:
   specs: done
   design: done
   tasks: done
-  applyProgress: missing
+  applyProgress: partial (U1 done, U2 pending)
   verifyReport: missing
 dependencies:
   proposal: ready
@@ -40,6 +40,9 @@ tasks:
   reviewWorkload: "U1 realistic 700-950 (size:exception, split smoke wiring if >800); U2 realistic 520-700"
   chainedPRsRecommended: true
   decisionNeededBeforeApply: false
-lastPhase: tasks
-nextRecommended: apply (U1) after status:approved on #383 and tracker PR
+lastPhase: apply-u1
+nextRecommended: sdd-verify U1 then apply U2
+applyState:
+  u1: done (tasks 1.1-1.12)
+  u2: pending
 blockedReasons: []

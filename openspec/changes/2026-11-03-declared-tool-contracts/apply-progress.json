@@ -1,0 +1,48 @@
+{
+  "schema": "dsh-sdd-apply-progress",
+  "change": "2026-11-03-declared-tool-contracts",
+  "phase": "apply",
+  "deliveryStrategy": "auto-chain",
+  "chainStrategy": "feature-branch-chain",
+  "reviewBudgetLines": 800,
+  "tasks": [
+    {
+      "id": "U1",
+      "name": "Module, empty fixture, smoke wiring",
+      "status": "applied-awaiting-verify",
+      "branch": "split: feat/declared-tool-contracts-u1a-module (1.1-1.5, commits 9f4ead1..ea309e3, 625 lines, size:exception) and feat/declared-tool-contracts-u1b-wiring (1.6-1.12, 6bff891..68e1a91, 334 lines); U1 measured 996 lines vs 800 budget",
+      "base": "feat/declared-tool-contracts",
+      "completed": [
+        "1.1",
+        "1.2",
+        "1.3",
+        "1.4",
+        "1.5",
+        "1.6",
+        "1.7",
+        "1.8",
+        "1.9",
+        "1.10",
+        "1.11",
+        "1.12"
+      ],
+      "commits": ["9f4ead1", "bbe6632", "00f174e", "ea309e3", "6bff891", "21910f5", "68e1a91"],
+      "ledger": "unavailable (no native attempt token)"
+    },
+    {
+      "id": "U2",
+      "name": "Descriptions, fixture entries, pins, docs",
+      "status": "pending"
+    }
+  ],
+  "gates": {
+    "typecheck_lint_format_build": "exit 0",
+    "yarn test": "exit 0 (92 files, 1338 passed, 2 skipped; plus supervised-worker 2 passed)",
+    "yarn test:package": "exit 0",
+    "yarn test:dsh-adapter": "exit 0, DSH_ADAPTER_SMOKE_OK"
+  },
+  "notes": [
+    "First full yarn test under default parallelism had 11 load-induced timeouts (load avg 96-134); all 11 files passed in isolation and the full suite passed with --maxWorkers=6.",
+    "Stale failure uses field description per design example."
+  ]
+}

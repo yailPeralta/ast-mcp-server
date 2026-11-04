@@ -368,6 +368,35 @@ describe("pinned Harness smoke contract", () => {
     );
   });
 
+  it("smoke imports the declared tool contracts module and fixture", async () => {
+    const source = await readFile(SMOKE_PATH, "utf8");
+    for (const contract of [
+      './lib/declared-tool-contracts.mjs"',
+      "compareToolContracts(",
+      "declared-tool-contracts.json",
+      "declaredContracts",
+      "formatContractFailures(",
+      "`declared tool contracts failed: ${",
+    ]) {
+      expect(source).toContain(contract);
+    }
+    expect(source).toMatch(
+      /compareToolContracts\(\{[\s\S]*baselineVersion: PUBLIC_BASELINE_VERSION/u,
+    );
+    expect(source).toContain("toolContracts");
+    expect(source).toContain("undeclaredSha256");
+  });
+
+  it("smoke no longer defines semanticSchema or the blanket unaffected equality", async () => {
+    const source = await readFile(SMOKE_PATH, "utf8");
+    expect(source).not.toContain("function semanticSchema(");
+    expect(source).not.toContain("unaffectedSemanticSha256 ===");
+    expect(source).not.toContain("process.exit(");
+    // The summary keeps the undeclared-set digest while the tool maps stay out of it.
+    expect(source).toContain("unaffectedSemanticSha256: hashJson(");
+    expect(source).toMatch(/delete \w+\.toolContracts|const \{ toolContracts/u);
+  });
+
   it("keeps installation guidance executable and free of unpublished registry claims", async () => {
     const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
     const patch = await readFile(PATCH_PATH, "utf8");
