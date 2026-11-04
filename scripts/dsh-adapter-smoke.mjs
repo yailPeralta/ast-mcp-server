@@ -34,6 +34,11 @@ import { URL, fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import yaml from "yaml";
 import { validateTimeoutBudget } from "./harness-timeout-budget.mjs";
+import {
+  compareToolContracts,
+  formatContractFailures,
+  semanticSchema,
+} from "./lib/declared-tool-contracts.mjs";
 import { parseSingleNpmPackRecord } from "./npm-pack-json.mjs";
 import { createPrivatePnpmEnvironment, provisionPrivatePnpm } from "./private-pnpm.mjs";
 // prettier-ignore
@@ -58,6 +63,7 @@ const PUBLIC_PACKAGE_SHASUM = "166f95121a72f0b03c325cef586a211cd9107a24";
 const PINNED_GUI_IDENTITY = Object.freeze({ webPackageSha256: "d73d37377783372f27971b0518b62c9cd1cbf03177e5ac402bb2c4fe1f42a3ec", webEntrypointSha256: "069851c0c35055baa63fbd8bca9b833f1d05a4e96613c618ff1ff0c0595c7db0", playwrightVersion: "1.61.1", playwrightPackageSha256: "6b840268612656f0639fb7d68782e8353bdf11518589d30ddf66f283c2670ed5", playwrightSourceSha256: "a0f5715ea22354f922791a9c53dc012d5d5c067ff9cc4cd35ffb7cd272071a9f", browserManifestSha256: "ee39bc924bc3d1bd895626c2910f1292d109bbfeeb5abd113acb45e1951cc942", chromiumRevision: "1228", chromiumVersion: "149.0.7827.55", chromiumSha256: "2d18db9d8608b052b6a552ee00ec1e830f93692e928b65ecc67d693bd33fe801" });
 // prettier-ignore
 const PINNED_H05_PROFILE_SHA256 = Object.freeze({ native: "adb9834526e653617b95c8cc6873384405435dd6a1be954e4beac4b485172622", web: "751fee9e2fdafac2c8cb85f12253d4d772fea6f676adfbbb56d3bdb3719cf9ed", nativeTempRoots: 1, webTempRoots: 2 });
+const AST_TOOL_PREFIX = "mcp__ast__";
 const H01_TOOL_NAME = "mcp__ast__ast_get_project_status";
 // prettier-ignore
 const H03_COMPRESSED_BUDGET = validateTimeoutBudget({ queueWaitMs: 100, executionDeadlineMs: 1000, marginMs: 100, outerToolCallMs: 1500 });
@@ -137,37 +143,6 @@ async function digestFile(filePath, algorithm, encoding) {
 
 function hashJson(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-
-/**
- * Reduce a JSON Schema to its validation semantics. zod 3 and zod 4 serialize the same
- * constraints differently ($ref versus inlined, safe-integer bounds, uuid patterns), so the
- * public-baseline comparison must not depend on that serialization. Only `false` values of
- * additionalProperties and additionalItems are dropped; callers compare strictness explicitly.
- */
-function semanticSchema(node, root = node) {
-  if (Array.isArray(node)) return node.map((item) => semanticSchema(item, root));
-  if (node === null || typeof node !== "object") return node;
-  if (typeof node.$ref === "string" && node.$ref.startsWith("#/")) {
-    const target = node.$ref
-      .slice(2)
-      .split("/")
-      .reduce((value, key) => value?.[key], root);
-    const rest = Object.fromEntries(Object.entries(node).filter(([key]) => key !== "$ref"));
-    return semanticSchema({ ...target, ...rest }, root);
-  }
-  const result = {};
-  for (const key of Object.keys(node).sort()) {
-    const value = node[key];
-    if (["$schema", "$defs", "definitions"].includes(key)) continue;
-    if ((key === "additionalProperties" || key === "additionalItems") && value === false) continue;
-    if ((key === "minimum" || key === "maximum") && Math.abs(value) === Number.MAX_SAFE_INTEGER) {
-      continue;
-    }
-    if (key === "pattern" && node.format === "uuid") continue;
-    result[key] = semanticSchema(value, root);
-  }
-  return result;
 }
 
 // prettier-ignore
@@ -1155,10 +1130,23 @@ async function runNativeAgentJourney({
         exploreProperties: Object.keys(exploreParameters?.properties ?? {}).sort(),
       },
       workspaceSha256,
+      // Bare-name catalog for the declared-contract comparison; removed before the summary.
+      toolContracts: Object.fromEntries(
+        astTools.map((tool) => [
+          tool.function.name.slice(AST_TOOL_PREFIX.length),
+          { description: tool.function.description, parameters: tool.function.parameters },
+        ]),
+      ),
     };
   } finally {
     await mock.close();
   }
+}
+
+function withoutToolContracts(evidence) {
+  const copy = { ...evidence };
+  delete copy.toolContracts;
+  return copy;
 }
 
 const packageDirectory = path.join(temporaryRoot, "package");
@@ -2122,19 +2110,26 @@ try {
   );
   assert(
     isDeepStrictEqual(correctedCandidate.schemaEvidence.exploreRequired, ["project_root"]) &&
-      correctedCandidate.schemaEvidence.exploreProperties.includes("call_spines") &&
-      correctedCandidate.schemaEvidence.unaffectedSemanticSha256 ===
-        publicBaseline.schemaEvidence.unaffectedSemanticSha256,
+      correctedCandidate.schemaEvidence.exploreProperties.includes("call_spines"),
     "candidate schema correction changed the wrong model contract",
   );
-  // The semantic comparison drops `additionalProperties: false`, so strictness is checked here:
-  // zod 4 stops declaring it on non-strict objects, but the candidate must never loosen a tool
-  // to accept arbitrary properties.
-  assert(
-    correctedCandidate.schemaEvidence.unaffectedAdditionalProperties.every(
-      (value) => value === "false" || value === "undefined",
+  // Every non-ast_explore tool equals the public baseline or its committed declaration, and no
+  // tool may loosen to accept additional properties (the semantic comparison drops `false`).
+  const declaredContracts = JSON.parse(
+    await readFile(
+      path.join(repositoryRoot, "test", "fixtures", "declared-tool-contracts.json"),
+      "utf8",
     ),
-    "candidate loosened an unaffected tool to accept additional properties",
+  );
+  const contractComparison = compareToolContracts({
+    publicTools: publicBaseline.toolContracts,
+    candidateTools: correctedCandidate.toolContracts,
+    declared: declaredContracts,
+    baselineVersion: PUBLIC_BASELINE_VERSION,
+  });
+  assert(
+    contractComparison.ok,
+    `declared tool contracts failed: ${formatContractFailures(contractComparison.failures)}`,
   );
   const directSpines = directExploreSchema?.properties?.call_spines;
   assert(
@@ -2160,8 +2155,16 @@ try {
     unaffectedSha256: correctedCandidate.schemaEvidence.unaffectedSha256,
     registryExploreSha256: hashJson(probe.exploreSchema),
     invalidExploreRejected: probe.invalidExplore.length,
+    declaredContracts: {
+      baseline: declaredContracts.baseline,
+      tools: contractComparison.tools,
+      undeclaredSha256: contractComparison.undeclaredSha256,
+    },
   };
-  summary.h01a = { publicBaseline, correctedCandidate };
+  summary.h01a = {
+    publicBaseline: withoutToolContracts(publicBaseline),
+    correctedCandidate: withoutToolContracts(correctedCandidate),
+  };
   summary.phases.d = "ok";
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });
