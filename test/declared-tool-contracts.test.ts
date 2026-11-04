@@ -17,6 +17,8 @@ import {
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const FIXTURE_PATH = path.join(repositoryRoot, "test", "fixtures", "declared-tool-contracts.json");
 const SMOKE_PATH = path.join(repositoryRoot, "scripts", "dsh-adapter-smoke.mjs");
+const REGISTRY_SMOKE_PATH = path.join(repositoryRoot, "scripts", "registry-consumer-smoke.mjs");
+const INVENTORY_PATH = path.join(repositoryRoot, "test", "fixtures", "tool-inventory.json");
 
 async function readFixture(): Promise<{ baseline: string; tools: Record<string, unknown> }> {
   return JSON.parse(await readFile(FIXTURE_PATH, "utf8"));
@@ -612,5 +614,15 @@ describe("declared fixture against the in-process server", () => {
     } finally {
       await Promise.all([client.close(), server.close()]);
     }
+  });
+
+  it("registry-consumer pin equals tool-inventory pin", async () => {
+    const inventory = JSON.parse(await readFile(INVENTORY_PATH, "utf8")) as {
+      tools_list_sha256: string;
+    };
+    const source = await readFile(REGISTRY_SMOKE_PATH, "utf8");
+    const match = /const EXPECTED_TOOLS_LIST_SHA256 =\s*"([0-9a-f]{64})"/u.exec(source);
+    expect(match?.[1]).toMatch(/^[0-9a-f]{64}$/u);
+    expect(match?.[1]).toBe(inventory.tools_list_sha256);
   });
 });
