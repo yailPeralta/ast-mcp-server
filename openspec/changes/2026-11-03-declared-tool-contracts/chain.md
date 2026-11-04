@@ -4,11 +4,12 @@ Strategy: `feature-branch-chain` (delivery `auto-chain`). One draft/no-merge tra
 
 ## Branches and PR order
 
-| Order | PR                                                          | Branch                                         | Base      | Est. lines (design / realistic)          |
-| ----- | ----------------------------------------------------------- | ---------------------------------------------- | --------- | ---------------------------------------- |
-| T     | Tracker (draft, no-merge)                                   | `feat/declared-tool-contracts`                 | `main`    | 0                                        |
-| 1     | U1 module, empty fixture, smoke wiring (behavior identical) | `feat/declared-tool-contracts-u1-module`       | tracker   | ~490 / 700-950 (`size:exception` likely) |
-| 2     | U2 descriptions, fixture entries, three pins, docs          | `feat/declared-tool-contracts-u2-descriptions` | U1 branch | ~260-300 / 520-700                       |
+| Order | PR                                                                  | Branch                                         | Base       | Est. lines (design / realistic) |
+| ----- | ------------------------------------------------------------------- | ---------------------------------------------- | ---------- | ------------------------------- |
+| T     | Tracker (draft, no-merge)                                           | `feat/declared-tool-contracts`                 | `main`     | 0                               |
+| 1a    | U1a fixture, pure module, comparison rules, target validation       | `feat/declared-tool-contracts-u1a-module`      | tracker    | 625 (`size:exception`)          |
+| 1b    | U1b strictness, ordered evidence, smoke wiring (behavior identical) | `feat/declared-tool-contracts-u1b-wiring`      | U1a branch | 334                             |
+| 2     | U2 descriptions, fixture entries, three pins, docs                  | `feat/declared-tool-contracts-u2-descriptions` | U1b branch | ~260-300 / 520-700              |
 
 ## Dependency diagram
 

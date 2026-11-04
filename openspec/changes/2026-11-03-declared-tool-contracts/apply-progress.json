@@ -10,7 +10,7 @@
       "id": "U1",
       "name": "Module, empty fixture, smoke wiring",
       "status": "applied-awaiting-verify",
-      "branch": "feat/declared-tool-contracts-u1-module",
+      "branch": "split: feat/declared-tool-contracts-u1a-module (1.1-1.5, commits 9f4ead1..ea309e3, 625 lines, size:exception) and feat/declared-tool-contracts-u1b-wiring (1.6-1.12, 6bff891..68e1a91, 334 lines); U1 measured 996 lines vs 800 budget",
       "base": "feat/declared-tool-contracts",
       "completed": [
         "1.1",

@@ -47,7 +47,7 @@ Base boundaries: U1 base = tracker `feat/declared-tool-contracts`; U2 base = U1 
 
 ---
 
-## Unit 1: Module, empty fixture, smoke wiring (branch `feat/declared-tool-contracts-u1-module`, base tracker; behavior identical to today)
+## Unit 1: Module, empty fixture, smoke wiring (split into U1a 1.1-1.5 and U1b 1.6-1.12; branches `feat/declared-tool-contracts-u1{a-module,b-wiring}`, 625/334 lines; behavior identical to today)
 
 - [x] 1.1 Create fixture `test/fixtures/declared-tool-contracts.json` = `{"baseline":"0.13.0","tools":{}}`.
   - RED: `test/declared-tool-contracts.test.ts` > "committed fixture baseline equals PUBLIC_BASELINE_VERSION in the smoke source" (source regex) and "fixture entries are semanticSchema fixed points" (vacuous with `{}`, enforced in U2).
