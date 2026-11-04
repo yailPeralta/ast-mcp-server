@@ -410,6 +410,27 @@ describe("pinned Harness smoke contract", () => {
     expect(source).toMatch(/delete \w+\.toolContracts|const \{ toolContracts/u);
   });
 
+  it("documents the declared tool contract rule in the README and the ADR addendum", async () => {
+    const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
+    const adr = await readFile(
+      path.join(repositoryRoot, "docs", "adr", "0015-harness-adapter-first-slice.md"),
+      "utf8",
+    );
+    expect(readme).not.toContain("hashes all 14 unaffected model schemas");
+    expect(readme).toContain("test/fixtures/declared-tool-contracts.json");
+    expect(readme).toMatch(/equal the public baseline or its committed declaration/u);
+    expect(readme).toMatch(/stale/u);
+    expect(adr).toContain("## Addendum: Declared tool-contract changes (2026-11-04)");
+    for (const rule of [
+      "PUBLIC_BASELINE_VERSION",
+      "stale_equals_public",
+      "three pins",
+      "test/fixtures/declared-tool-contracts.json",
+    ]) {
+      expect(adr).toContain(rule);
+    }
+  });
+
   it("keeps installation guidance executable and free of unpublished registry claims", async () => {
     const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
     const patch = await readFile(PATCH_PATH, "utf8");

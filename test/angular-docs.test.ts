@@ -45,12 +45,14 @@ describe("Angular template documentation", () => {
     expect(readme).toMatch(/not bundled|never bundled|does not bundle/i);
   });
 
-  it("CHANGELOG records the feature and the deferred tool description text", () => {
+  it("CHANGELOG records the feature and the updated tool descriptions", () => {
     const unreleased = unreleasedSection();
     expect(unreleased).toContain("Angular");
     expect(unreleased).toContain("ast_find_references");
     expect(unreleased).toContain("ast_rename_symbol");
     expect(unreleased).toMatch(/description/i);
     expect(unreleased).toMatch(/TypeScript-only/i);
+    expect(unreleased).not.toContain("Deferred tool description text");
+    expect(unreleased).toMatch(/dsh-adapter smoke now declares/i);
   });
 });
