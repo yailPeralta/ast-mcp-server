@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.15.0] — not yet published (2026-11-04)
+
 ### Added
 
 - Angular template references (#370). In projects where `@angular/core` resolves, `ast_find_references` reports usages of a component member in its external (`templateUrl`) and inline templates. Items carry `origin` (`compiler`, `template_external`, `template_inline`), and the response adds `template_coverage` and `template_reference_count`; `reference_count` stays TypeScript-only and `total` counts both. Only `template_coverage.status: "completed"` supports an absence claim.
@@ -27,7 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `ast_find_references` and `ast_rename_symbol` no longer count the declaration identifier as a reference. When a member was used before its declaration in source order, ts-morph returned the declaration identifier among the references, so the declaration appeared twice and `reference_count` was inflated by one. The declaration is now reported once and `reference_count` counts only real references (#390).
 - The dsh-adapter smoke no longer reports a surviving Harness process tree when descendants are still exiting after a clean shutdown on a loaded runner. The lifecycle assertion now polls the owned process tree with a bounded ten-second deadline, and when survivors remain it keeps failing but lists each PID with its command line and parent chain (#363).
 
-## [0.14.3] — not yet published (2026-10-28)
+## [0.14.3] — published to `next`, verification failed, not promoted (2026-11-01)
 
 ### Security
 
@@ -37,6 +39,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - `ast_get_impact` with `direction: "incoming"` no longer returns an empty, incomplete result on larger projects. The compiler resolver now finds incoming references through the language service instead of walking every AST node, so its work scales with the number of references rather than the project size, and the project-wide computed-call scan runs on its own budget so it can no longer starve the reference lookup (#353).
+
+### Release status
+
+- npm published these immutable bytes under `next` with provenance and the expected Git commit. Public-registry verification then failed because the consumer install resolves `ts-morph@28.0.0 → @ts-morph/common@0.29.0 → minimatch@10.2.6`, vulnerable to GHSA-g3hv-75wg-m249, and the root `minimatch` resolution does not reach consumers (#361, upstream dsherret/ts-morph#1697); `0.14.3` was never promoted to `latest`, tagged in Git, or released on GitHub.
 
 ## [0.14.2] — published to `latest` and `next`, registry verified (2026-10-28)
 
