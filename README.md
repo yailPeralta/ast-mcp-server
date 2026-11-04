@@ -351,7 +351,7 @@ hermes mcp add ast --command node --env AST_MCP_APPLY_GUARD=allow --args /absolu
 hermes mcp test ast
 ```
 
-Project-scoped tools accept `project_root`, either the project directory or an explicit `tsconfig.json` path. The server contains no repository-specific paths.
+Project-scoped tools accept `project_root`, either the project directory or an explicit `tsconfig.json` path. A directory whose `tsconfig.json` is solution-style (no `files`/`include`, only `references`, as Angular CLI generates) is rejected with an error naming the referenced configs; pass one of them, such as `tsconfig.app.json`, as `project_root` instead. The server contains no repository-specific paths.
 
 ### DeepSeek Harness (Developer Preview)
 
