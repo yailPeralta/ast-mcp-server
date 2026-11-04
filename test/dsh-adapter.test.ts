@@ -387,6 +387,19 @@ describe("pinned Harness smoke contract", () => {
     expect(source).toContain("undeclaredSha256");
   });
 
+  it("smoke records per-tool declaredContracts with public, candidate and declared digests", async () => {
+    const source = await readFile(SMOKE_PATH, "utf8");
+    const module = await readFile(
+      path.join(repositoryRoot, "scripts", "lib", "declared-tool-contracts.mjs"),
+      "utf8",
+    );
+    // The h02 evidence projects the per-tool map the module builds, so each tool reports all digests.
+    expect(source).toMatch(/declaredContracts: \{[\s\S]*tools: contractComparison\.tools/u);
+    for (const field of ["publicSha256", "candidateSha256", "declaredSha256"]) {
+      expect(module).toContain(field);
+    }
+  });
+
   it("smoke no longer defines semanticSchema or the blanket unaffected equality", async () => {
     const source = await readFile(SMOKE_PATH, "utf8");
     expect(source).not.toContain("function semanticSchema(");
