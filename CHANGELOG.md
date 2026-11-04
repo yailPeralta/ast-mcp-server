@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.15.0] — not yet published (2026-11-04)
+## [0.15.0] — published to `next`, verification failed, not promoted (2026-11-04)
 
 ### Added
 
@@ -28,6 +28,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A `project_root` directory whose `tsconfig.json` is solution-style (`"files": []` or no `files`/`include`, plus a non-empty `references` array, as Angular CLI and other `tsc -b` layouts ship) no longer loads as a silent empty project with `source_count: 0`. Resolution now fails closed with a `PROJECT_NOT_FOUND` error that names the referenced configs and asks for one of them as `project_root`; passing a referenced `tsconfig.*.json` file directly is unchanged, and references are never followed automatically (#389).
 - `ast_find_references` and `ast_rename_symbol` no longer count the declaration identifier as a reference. When a member was used before its declaration in source order, ts-morph returned the declaration identifier among the references, so the declaration appeared twice and `reference_count` was inflated by one. The declaration is now reported once and `reference_count` counts only real references (#390).
 - The dsh-adapter smoke no longer reports a surviving Harness process tree when descendants are still exiting after a clean shutdown on a loaded runner. The lifecycle assertion now polls the owned process tree with a bounded ten-second deadline, and when survivors remain it keeps failing but lists each PID with its command line and parent chain (#363).
+
+### Release status
+
+- npm published these immutable bytes under `next` with provenance and the expected Git commit (`5b2d483001d21ef29a760a9c0ae538dc719f11ea`, integrity `sha512-4dUo7lyTyIGMPhWfVHHZ0BnUMXNAiSIapItorm3VTGiJXm8JyL6jW5lrNlj1LGyONAGtA6S6cHoFtiZxakGy1A==`, publish run `41905976154`). Public-registry verification (run `41906680048`) then failed for the same reason as `0.14.3`: the consumer install resolves `minimatch@10.2.6` through `ts-morph@28.0.0`, flagged by `npm audit` for GHSA-g3hv-75wg-m249 (#361). `0.15.0` was never promoted to `latest`, tagged in Git, or released on GitHub; the version that ships the ts-morph fix will supersede it.
 
 ## [0.14.3] — published to `next`, verification failed, not promoted (2026-11-01)
 
