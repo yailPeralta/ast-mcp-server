@@ -14,7 +14,7 @@ Strategy: `feature-branch-chain` (delivery `auto-chain`). One draft/no-merge tra
 ## Dependency diagram
 
 ```
-main <- tracker <- U1 <- U2
+main <- tracker <- U1a <- U1b <- U2
 ```
 
 Every child PR body marks its own position with the pointer marker and states start, end, prior dependencies, follow-up and out-of-scope.

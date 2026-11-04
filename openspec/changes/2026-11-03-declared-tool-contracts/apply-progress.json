@@ -32,7 +32,116 @@
     {
       "id": "U2",
       "name": "Descriptions, fixture entries, pins, docs",
-      "status": "pending"
+      "status": "applied-awaiting-verify",
+      "branch": "feat/declared-tool-contracts-u2-descriptions",
+      "base": "feat/declared-tool-contracts-u1b-wiring",
+      "completed": ["2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7", "2.8", "2.9", "2.10", "2.11"],
+      "commits": ["c6fa05f", "ea7fbc3", "83e58db", "475ea15", "602cdb5", "f2b1ce5"],
+      "measuredChangedLines": "267 excluding openspec (254+/13-), within the 800 review budget; 17 files 272+/31- including openspec before the docs(sdd) commit",
+      "ledger": "unavailable (no native attempt token); labels dtc-u2-acquire/dtc-u2-settle recorded in chain.md only",
+      "pins": {
+        "toolInventoryAndRegistryConsumer": "b7e8f28bfa74345f9279c90afc7c1040a77ab42057eed3c4c40689f29804e074 (was a7027585...)",
+        "canary": "48d24031f9cc07d9339e67ba7741e9c6707df1b7b4c88bbb3e7026a1a863090b from its own run (was fa9a5661...)"
+      },
+      "pinHistory": "git log -S tools_list_sha256: 284b8f4 introduced the pins (test(tools): add independent capability oracles); 148ce4a re-baselined them in #370's chain, reverted by c21f3e5; 8a75085 re-baselined the canary digest; aa428e5 (zod 4) also touched them.",
+      "tddEvidence": [
+        {
+          "task": "2.1",
+          "test": "test/mcp.integration.test.ts, test/supervised-worker.integration.test.ts",
+          "layer": "Integration",
+          "safetyNet": "32/32 on the U1b base",
+          "red": "n/a (pre-check)",
+          "green": "pass",
+          "refactor": "none"
+        },
+        {
+          "task": "2.2",
+          "test": "test/declared-tool-contracts.test.ts > declared fixture matches the in-process server",
+          "layer": "Integration (in-process server)",
+          "red": "failed: expected [] to deeply equal [ast_find_references, ast_rename_symbol]",
+          "green": "pass after entries + descriptions (generated from createServer listTools through contractFromTool)",
+          "refactor": "empty-declarations test now uses an empty set on the committed baseline"
+        },
+        {
+          "task": "2.3",
+          "test": "same",
+          "layer": "Integration",
+          "red": "shared with 2.2",
+          "green": "pass",
+          "refactor": "prettier"
+        },
+        {
+          "task": "2.4",
+          "test": "test/tools/find_references.test.ts, test/tools/rename_symbol.test.ts (new)",
+          "layer": "Integration",
+          "red": "2 failed (description strings)",
+          "green": "pass",
+          "refactor": "none"
+        },
+        {
+          "task": "2.5",
+          "test": "test/dsh-adapter.test.ts > smoke records per-tool declaredContracts ...",
+          "layer": "Unit (source text)",
+          "red": "green on write by design (wiring from 1.10); verified by smoke run in 2.11",
+          "green": "pass",
+          "refactor": "none"
+        },
+        {
+          "task": "2.6",
+          "test": "test/mcp.integration.test.ts digest",
+          "layer": "Integration",
+          "red": "received b7e8f28b... vs a7027585...",
+          "green": "pass after pin",
+          "refactor": "none"
+        },
+        {
+          "task": "2.7",
+          "test": "test/declared-tool-contracts.test.ts > registry-consumer pin equals tool-inventory pin",
+          "layer": "Unit",
+          "red": "expected b7e8f28b... received a7027585...",
+          "green": "pass after pin; test:local-registry exact_tool_inventory true",
+          "refactor": "none"
+        },
+        {
+          "task": "2.8",
+          "test": "test/supervised-worker.integration.test.ts",
+          "layer": "Integration",
+          "red": "independent oracle (48d24031...) mismatch",
+          "green": "pass after pin",
+          "refactor": "none"
+        },
+        {
+          "task": "2.9",
+          "test": "test/angular-docs.test.ts, test/dsh-adapter.test.ts",
+          "layer": "Unit (docs)",
+          "red": "2 failed",
+          "green": "pass",
+          "refactor": "prettier"
+        },
+        {
+          "task": "2.10",
+          "test": "yarn format / format:check",
+          "layer": "n/a",
+          "red": "n/a",
+          "green": "clean; no skill file touched",
+          "refactor": "done"
+        },
+        {
+          "task": "2.11",
+          "test": "gates",
+          "layer": "gate",
+          "red": "n/a",
+          "green": "see gates",
+          "refactor": "n/a"
+        }
+      ],
+      "gates": {
+        "typecheck_lint_format_build": "exit 0",
+        "yarn test": "94 files, 1346 passed, 2 skipped (maxWorkers=4 run); an earlier maxWorkers=6 run under host load had 9 files / 10 tests fail and passed on rerun, consistent with the load-induced timeouts seen in U1",
+        "yarn test:package": "exit 0",
+        "yarn test:local-registry": "exit 0 (run with the release-candidate authority arguments: Node 24.16.0, Yarn 4.15.0, npm 11.13.0 packed from the registry); gates.exact_tool_inventory true",
+        "yarn test:dsh-adapter": "exit 0, DSH_ADAPTER_SMOKE_OK; h02.declaredContracts: ast_find_references and ast_rename_symbol declared, public != candidate == declared; undeclaredSha256 public == candidate (1e10f5dc...)"
+      }
     }
   ],
   "gates": {
@@ -43,6 +152,8 @@
   },
   "notes": [
     "First full yarn test under default parallelism had 11 load-induced timeouts (load avg 96-134); all 11 files passed in isolation and the full suite passed with --maxWorkers=6.",
-    "Stale failure uses field description per design example."
+    "Stale failure uses field description per design example.",
+    "U2: fixture entries were generated from createServer() listTools through contractFromTool (equivalent to the oracle diff); the U1 test 'empty declarations reproduce the blanket freeze (committed fixture)' was renamed '(committed baseline)' and uses an empty set on the committed baseline because the committed fixture is now non-empty.",
+    "test:local-registry needs --output/--expected-node/--yarn-entry/--npm-entry/--transitive-node-bin and three sha256 args; Corepack's yarn.js is mode 664 (rejected), so a 644 copy was used, and npm 11.13.0 was packed because the host npm is 12.1.0."
   ]
 }
