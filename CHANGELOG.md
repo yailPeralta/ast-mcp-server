@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.15.1] — not yet published (2026-11-04)
+
 ### Changed
 
 - `@angular/compiler` 18 and 19 are now supported (`>=18.0.0 <23.0.0`); an Angular 18 project previously reported `compiler_unsupported` and missed every template usage (#399).
