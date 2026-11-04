@@ -274,3 +274,145 @@ describe("compareToolContracts undeclared and declared rules", () => {
     expect(compare(publicTools, candidate).failures).toEqual([]);
   });
 });
+
+describe("compareToolContracts target validation and catalog shape", () => {
+  it("declaration for unknown tool fails unknown_tool", () => {
+    const result = compare(catalog(), catalog(), {
+      ast_nonexistent: { description: "Nope.", input_schema: { type: "object" } },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      { tool: "ast_nonexistent", field: "declaration", reason: "unknown_tool" },
+    ]);
+  });
+
+  it("declared tool missing from candidate fails", () => {
+    const candidate = catalog();
+    delete candidate.ast_rename_symbol;
+    const result = compare(catalog(), candidate, {
+      ast_rename_symbol: { description: "New.", input_schema: { type: "object" } },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual(
+      expect.arrayContaining([
+        { tool: "ast_rename_symbol", field: "declaration", reason: "unknown_tool" },
+        { tool: "ast_rename_symbol", field: "catalog", reason: "names_differ" },
+      ]),
+    );
+    expect(result.failures).toHaveLength(2);
+  });
+
+  it("tool missing from public fails", () => {
+    const candidate = catalog();
+    candidate.ast_new_tool = surface("Brand new.");
+    const result = compare(catalog(), candidate);
+    expect(result.failures).toEqual([
+      { tool: "ast_new_tool", field: "catalog", reason: "names_differ" },
+    ]);
+  });
+
+  it("ast_explore declaration fails reserved_tool", () => {
+    const result = compare(catalog(), catalog(), {
+      ast_explore: { description: "Explores more.", input_schema: { type: "object" } },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      { tool: "ast_explore", field: "declaration", reason: "reserved_tool" },
+    ]);
+  });
+
+  it("ast_explore skipped in comparison", () => {
+    const candidate = catalog();
+    candidate.ast_explore = surface("Explores, corrected.", { call_spines: { type: "object" } });
+    const result = compare(catalog(), candidate);
+    expect(result.failures).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("catalog names differing fails names_differ", () => {
+    const candidate = catalog();
+    delete candidate.ast_find_symbols;
+    candidate.ast_other = surface("Other.");
+    const result = compare(catalog(), candidate);
+    expect(result.failures).toEqual(
+      expect.arrayContaining([
+        { tool: "ast_find_symbols", field: "catalog", reason: "names_differ" },
+        { tool: "ast_other", field: "catalog", reason: "names_differ" },
+      ]),
+    );
+    expect(result.failures).toHaveLength(2);
+  });
+
+  it("malformed entry or extra key fails malformed", () => {
+    const malformed: Array<[string, unknown]> = [
+      ["not an object", "text"],
+      ["null", null],
+      ["extra key", { description: "A.", input_schema: { type: "object" }, notes: "x" }],
+      ["missing input_schema", { description: "A." }],
+      ["description not string", { description: 3, input_schema: { type: "object" } }],
+      ["input_schema not object", { description: "A.", input_schema: "object" }],
+      ["input_schema array", { description: "A.", input_schema: [] }],
+    ];
+    for (const [label, entry] of malformed) {
+      const result = compare(catalog(), catalog(), { ast_rename_symbol: entry });
+      expect(result.failures, label).toEqual([
+        { tool: "ast_rename_symbol", field: "declaration", reason: "malformed" },
+      ]);
+    }
+    const fixture = (declared: unknown) =>
+      compareToolContracts({
+        publicTools: catalog(),
+        candidateTools: catalog(),
+        declared,
+        baselineVersion: BASELINE,
+      }).failures;
+    expect(fixture({ baseline: BASELINE, tools: [], extra: 1 })).toEqual([
+      { tool: "*", field: "declaration", reason: "malformed" },
+    ]);
+    expect(fixture({ baseline: BASELINE })).toEqual([
+      { tool: "*", field: "declaration", reason: "malformed" },
+    ]);
+    const badCatalog = { ...catalog(), ast_find_symbols: { description: 1, parameters: {} } };
+    expect(
+      compareToolContracts({
+        publicTools: catalog(),
+        candidateTools: badCatalog,
+        declared: { baseline: BASELINE, tools: {} },
+        baselineVersion: BASELINE,
+      }).failures,
+    ).toEqual([{ tool: "ast_find_symbols", field: "catalog", reason: "malformed" }]);
+  });
+
+  it("baseline mismatch fails baseline_mismatch", () => {
+    const result = compare(catalog(), catalog(), {}, "0.12.0");
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([
+      { tool: "*", field: "baseline", reason: "baseline_mismatch" },
+    ]);
+    const other = compareToolContracts({
+      publicTools: catalog(),
+      candidateTools: catalog(),
+      declared: { baseline: BASELINE, tools: {} },
+      baselineVersion: "0.14.0",
+    });
+    expect(other.failures).toEqual([{ tool: "*", field: "baseline", reason: "baseline_mismatch" }]);
+  });
+
+  it("never throws on bad data", () => {
+    for (const bad of [undefined, null, 7, "x", [], [1, 2]]) {
+      for (const slot of ["publicTools", "candidateTools", "declared"] as const) {
+        const input = {
+          publicTools: catalog() as unknown,
+          candidateTools: catalog() as unknown,
+          declared: { baseline: BASELINE, tools: {} } as unknown,
+          baselineVersion: BASELINE,
+          [slot]: bad,
+        };
+        const result = compareToolContracts(input);
+        expect(result.ok, `${slot}=${JSON.stringify(bad)}`).toBe(false);
+        expect(result.failures.length).toBeGreaterThan(0);
+      }
+    }
+    expect(() => compareToolContracts(undefined as never)).not.toThrow();
+  });
+});

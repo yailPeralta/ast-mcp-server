@@ -79,25 +79,83 @@ function compareUndeclaredTool(name, publicTool, candidateTool, failures) {
   }
 }
 
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isToolSurface(value) {
+  return (
+    isPlainObject(value) && typeof value.description === "string" && isPlainObject(value.parameters)
+  );
+}
+
+function hasExactKeys(value, keys) {
+  return isPlainObject(value) && sameJson(Object.keys(value).sort(), keys);
+}
+
+function isToolDeclaration(value) {
+  return (
+    hasExactKeys(value, ["description", "input_schema"]) &&
+    typeof value.description === "string" &&
+    isPlainObject(value.input_schema)
+  );
+}
+
+/** Names of well-formed tools in a catalog; malformed entries are reported and dropped. */
+function validCatalogNames(tools, failures) {
+  const names = [];
+  for (const name of Object.keys(tools)) {
+    if (isToolSurface(tools[name])) names.push(name);
+    else failures.push({ tool: name, field: "catalog", reason: "malformed" });
+  }
+  return names;
+}
+
+function symmetricDifference(left, right) {
+  return [
+    ...left.filter((name) => !right.includes(name)),
+    ...right.filter((name) => !left.includes(name)),
+  ];
+}
+
 /**
  * Compare the candidate tool catalog with the public baseline under the declared contract
  * changes. Catalogs are keyed by bare tool name. Pure and total: bad data becomes failures.
  */
-export function compareToolContracts({ publicTools, candidateTools, declared }) {
+export function compareToolContracts(input) {
+  const { publicTools, candidateTools, declared, baselineVersion } = input ?? {};
   const failures = [];
-  const declarations = declared.tools;
-  for (const name of Object.keys(publicTools).sort()) {
-    if (RESERVED_TOOL_NAMES.includes(name) || !(name in candidateTools)) continue;
-    if (name in declarations) {
-      compareDeclaredTool(
-        name,
-        publicTools[name],
-        candidateTools[name],
-        declarations[name],
-        failures,
-      );
-    } else {
+  const wholeCatalog = (field, reason) => failures.push({ tool: "*", field, reason });
+  if (!isPlainObject(publicTools) || !isPlainObject(candidateTools))
+    wholeCatalog("catalog", "malformed");
+  if (!hasExactKeys(declared, ["baseline", "tools"]) || !isPlainObject(declared.tools)) {
+    wholeCatalog("declaration", "malformed");
+  }
+  if (failures.length > 0) return { ok: false, failures };
+  if (declared.baseline !== baselineVersion) wholeCatalog("baseline", "baseline_mismatch");
+
+  const publicNames = validCatalogNames(publicTools, failures);
+  const candidateNames = validCatalogNames(candidateTools, failures);
+  for (const name of symmetricDifference(Object.keys(publicTools), Object.keys(candidateTools))) {
+    failures.push({ tool: name, field: "catalog", reason: "names_differ" });
+  }
+  const common = publicNames.filter((name) => candidateNames.includes(name)).sort();
+  for (const [name, declaration] of Object.entries(declared.tools)) {
+    if (RESERVED_TOOL_NAMES.includes(name)) {
+      failures.push({ tool: name, field: "declaration", reason: "reserved_tool" });
+    } else if (!isToolDeclaration(declaration)) {
+      failures.push({ tool: name, field: "declaration", reason: "malformed" });
+    } else if (!common.includes(name)) {
+      failures.push({ tool: name, field: "declaration", reason: "unknown_tool" });
+    }
+  }
+  for (const name of common) {
+    if (RESERVED_TOOL_NAMES.includes(name)) continue;
+    const declaration = declared.tools[name];
+    if (declaration === undefined) {
       compareUndeclaredTool(name, publicTools[name], candidateTools[name], failures);
+    } else if (isToolDeclaration(declaration)) {
+      compareDeclaredTool(name, publicTools[name], candidateTools[name], declaration, failures);
     }
   }
   return { ok: failures.length === 0, failures };
