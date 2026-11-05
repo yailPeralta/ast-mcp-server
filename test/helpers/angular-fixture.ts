@@ -34,7 +34,15 @@ const CORE_DECLARATIONS = `export interface DirectiveMetadata {
 export interface ComponentMetadata extends DirectiveMetadata {
   template?: string;
   templateUrl?: string;
+  imports?: unknown[];
 }
+export interface NgModuleMetadata {
+  declarations?: unknown[];
+  imports?: unknown[];
+  exports?: unknown[];
+}
+export declare function forwardRef<T>(factory: () => T): T;
+export declare function NgModule(metadata: NgModuleMetadata): ClassDecorator;
 export declare function Component(metadata: ComponentMetadata): ClassDecorator;
 export declare function Directive(metadata?: DirectiveMetadata): ClassDecorator;
 export declare function Pipe(metadata: { name: string }): ClassDecorator;
