@@ -74,6 +74,28 @@ Only the template of the declaring class that carries a resolved `@Component` MU
 - WHEN references to that member are collected
 - THEN `template_coverage` is `unsupported` with reason `inherited_member`
 
+### Requirement: Cross-component usages are reported as unfinished
+
+A member bound through the component selector (declared with `@Input` or `@Output` imported from `@angular/core`, or initialized with `input()`, `input.required()`, `output()`, `model()` or `model.required()` from `@angular/core`) is used in the templates of consuming components, which are never read. For such a member, coverage MUST be `unfinished` with reason `cross_component` even when the own template was fully read, and the own-template usages MUST still be reported with the count of templates examined. A decorator or factory of the same name imported from another module MUST NOT trigger this rule. A class decorated with `@Pipe` from `@angular/core`, and every member of it, MUST yield coverage `unfinished` with reason `cross_component` and no usages instead of `not_applicable`; a project without `@angular/core` MUST stay `not_applicable`. A failure to read the own template MUST keep its own reason.
+
+#### Scenario: Input or output member
+
+- GIVEN a component member declared with `@Input()`, `@Output()`, `input()` or `model()` from `@angular/core` and used in its own template
+- WHEN references to that member are collected
+- THEN own-template usages are reported and `template_coverage` is `{ status: "unfinished", reason: "cross_component", templates: 1 }`
+
+#### Scenario: Same-named decorator from another module
+
+- GIVEN a member decorated with an `Input` imported from a module other than `@angular/core`
+- WHEN references to that member are collected
+- THEN the member is treated as a plain member and coverage is `completed`
+
+#### Scenario: Pipe class or transform
+
+- GIVEN a class decorated with `@Pipe` from `@angular/core`
+- WHEN references to the class or its `transform` member are collected
+- THEN `template_coverage` is `{ status: "unfinished", reason: "cross_component", templates: 0 }` and `ast_rename_symbol` returns `INCOMPLETE_EVIDENCE`
+
 ### Requirement: Member usage extraction
 
 The system MUST report declaring-component member usages in templates (properties, methods, accessors, signals), including control flow, structural directives, `@let` values, and pipe arguments, each with exact source span (`nameSpan` offsets, line, column), project-relative file, and a usage `kind` of exactly `TemplatePropertyRead`, `TemplatePropertyWrite`, or `TemplateCall`. A signal call MUST be reported as `TemplateCall`. The reported `context` of a template item MUST be the template line text. Usages in inline templates MUST be reported with their spans but MUST NOT be writable.
@@ -120,7 +142,7 @@ Matching MUST be scope-aware. Names in scope from `@for` (item alias and implici
 
 ### Requirement: Completeness and fail-closed coverage
 
-Template coverage MUST be `completed` (carrying the number of templates examined) only when every declaring-component template was resolved and parsed within bounds. An unresolvable (`template_unresolved`), unsafe (`template_unsafe`), unparseable (`template_parse_error`), oversized (`size_exceeded`), or work-exhausted (`work_exhausted`) template MUST set coverage `unfinished` with that reason. Coverage MUST be `not_applicable` when Angular is absent. The system MUST NOT claim proven absence of template usages when coverage is not `completed`. TypeScript references MUST still be returned in every case.
+Template coverage MUST be `completed` (carrying the number of templates examined) only when every declaring-component template was resolved and parsed within bounds. An unresolvable (`template_unresolved`), unsafe (`template_unsafe`), unparseable (`template_parse_error`), oversized (`size_exceeded`), or work-exhausted (`work_exhausted`) template MUST set coverage `unfinished` with that reason. A selector-public member or a pipe MUST set coverage `unfinished` with reason `cross_component`. Coverage MUST be `not_applicable` when Angular is absent. The system MUST NOT claim proven absence of template usages when coverage is not `completed`. TypeScript references MUST still be returned in every case.
 
 #### Scenario: Unparseable template
 

@@ -17,7 +17,8 @@ export type TemplateCoverageReason =
   | "template_parse_error"
   | "size_exceeded"
   | "work_exhausted"
-  | "inherited_member";
+  | "inherited_member"
+  | "cross_component";
 export type TemplateCoverage =
   | { readonly status: "not_applicable" }
   | { readonly status: "completed"; readonly templates: number }
@@ -166,10 +167,9 @@ function hasAngularCore(context: ProjectContext): boolean {
   return resolveFrom(context.tsConfigFilePath, "@angular/core/package.json") !== undefined;
 }
 
-function isComponentDecorator(decorator: Decorator): boolean {
-  const callee = decorator.getCallExpression()?.getExpression();
-  if (!callee) return false;
-  return decorator
+/** True when `callee` names `exportName` imported from `@angular/core` (named, aliased, or namespace). */
+function isAngularCoreExport(callee: Node, exportName: string): boolean {
+  return callee
     .getSourceFile()
     .getImportDeclarations()
     .filter((declaration) => declaration.getModuleSpecifierValue() === "@angular/core")
@@ -177,7 +177,7 @@ function isComponentDecorator(decorator: Decorator): boolean {
       const namespace = declaration.getNamespaceImport();
       if (Node.isPropertyAccessExpression(callee)) {
         return (
-          callee.getName() === "Component" &&
+          callee.getName() === exportName &&
           callee.getExpression().getText() === namespace?.getText()
         );
       }
@@ -185,14 +185,45 @@ function isComponentDecorator(decorator: Decorator): boolean {
         .getNamedImports()
         .some(
           (specifier) =>
-            specifier.getName() === "Component" &&
-            (specifier.getAliasNode()?.getText() ?? "Component") === callee.getText(),
+            specifier.getName() === exportName &&
+            (specifier.getAliasNode()?.getText() ?? exportName) === callee.getText(),
         );
     });
 }
 
+function isCoreDecorator(decorator: Decorator, name: string): boolean {
+  const callee = decorator.getCallExpression()?.getExpression();
+  return callee !== undefined && isAngularCoreExport(callee, name);
+}
+
+function isComponentDecorator(decorator: Decorator): boolean {
+  return isCoreDecorator(decorator, "Component");
+}
+
 function componentDecorator(cls: ClassDeclaration): Decorator | undefined {
   return cls.getDecorators().find(isComponentDecorator);
+}
+
+/** Pipe usages live in other components' templates, which are never read. */
+function isPipeClass(cls: ClassDeclaration): boolean {
+  return cls.getDecorators().some((decorator) => isCoreDecorator(decorator, "Pipe"));
+}
+
+/** Members bound through the selector (`@Input`, `@Output`, `input()`, `output()`, `model()`). */
+function isSelectorPublic(node: Node): boolean {
+  const decorated =
+    Node.isDecoratable(node) &&
+    node
+      .getDecorators()
+      .some((decorator) => ["Input", "Output"].some((name) => isCoreDecorator(decorator, name)));
+  if (decorated || !Node.isPropertyDeclaration(node)) return decorated;
+  const initializer = node.getInitializer();
+  if (!Node.isCallExpression(initializer)) return false;
+  let callee = initializer.getExpression();
+  if (Node.isPropertyAccessExpression(callee) && callee.getName() === "required") {
+    callee = callee.getExpression(); // input.required(...) / model.required(...)
+  }
+  return ["input", "output", "model"].some((name) => isAngularCoreExport(callee, name));
 }
 
 type Located =
@@ -545,15 +576,20 @@ export async function collectTemplateUsages(
   rc: RequestContext,
 ): Promise<{ coverage: TemplateCoverage; usages: readonly TemplateUsage[] }> {
   rc.checkpoint();
-  const owner = memberOwner(node);
-  if (!owner || !hasAngularCore(context)) return NOT_APPLICABLE;
-  const isComponent = componentDecorator(owner.cls) !== undefined;
-  const derived = hasDerivedComponent(context, owner.cls);
-  if (!isComponent && !derived) return NOT_APPLICABLE;
+  if (!hasAngularCore(context)) return NOT_APPLICABLE;
   const fail = (status: "unfinished" | "unsupported", reason: TemplateCoverageReason) => ({
     coverage: { status, reason, templates: 0 } as TemplateCoverage,
     usages: [] as readonly TemplateUsage[],
   });
+  if (Node.isClassDeclaration(node)) {
+    return isPipeClass(node) ? fail("unfinished", "cross_component") : NOT_APPLICABLE;
+  }
+  const owner = memberOwner(node);
+  if (!owner) return NOT_APPLICABLE;
+  if (isPipeClass(owner.cls)) return fail("unfinished", "cross_component");
+  const isComponent = componentDecorator(owner.cls) !== undefined;
+  const derived = hasDerivedComponent(context, owner.cls);
+  if (!isComponent && !derived) return NOT_APPLICABLE;
   if (derived) return fail("unsupported", "inherited_member");
 
   const loaded = await loadCompiler(context.tsConfigFilePath);
@@ -610,5 +646,9 @@ export async function collectTemplateUsages(
       fileHash,
     };
   });
-  return { coverage: { status: "completed", templates: 1 }, usages };
+  // Selector-public members are also bound in consuming templates, which are never read.
+  const coverage: TemplateCoverage = isSelectorPublic(node)
+    ? { status: "unfinished", reason: "cross_component", templates: 1 }
+    : { status: "completed", templates: 1 };
+  return { coverage, usages };
 }

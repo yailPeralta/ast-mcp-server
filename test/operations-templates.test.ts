@@ -346,6 +346,43 @@ describe("prepareRename across Angular templates (ATN-R1, R3-R7)", () => {
     ).rejects.toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
   });
 
+  it.each([
+    ["@Input", `@Input() title = "x";`],
+    ["signal input()", `title = input("x");`],
+  ])("%s member blocks rename with INCOMPLETE_EVIDENCE before any edit", async (_, member) => {
+    const fixture = await renameFixture({
+      "src/a.component.ts": RENAME_COMPONENT()
+        .replace("import { Component }", "import { Component, Input, input }")
+        .replace('  title = "x";', `  ${member}`),
+    });
+
+    await expect(renameTitle(fixture)).rejects.toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
+    expect(await fixture.read("src/a.component.ts")).toContain(member);
+    expect(await fixture.read("src/a.component.html")).toBe(RENAME_TEMPLATE);
+  });
+
+  it("pipe transform blocks rename with INCOMPLETE_EVIDENCE", async () => {
+    const pipe = [
+      'import { Pipe } from "@angular/core";',
+      '@Pipe({ name: "fmt" })',
+      "export class FmtPipe {",
+      "  transform(value: string): string { return value; }",
+      "}",
+      "",
+    ].join("\n");
+    const fixture = await renameFixture({ "src/fmt.pipe.ts": pipe });
+
+    await expect(
+      prepareRename({
+        projectRoot: fixture.root,
+        filePath: "src/fmt.pipe.ts",
+        symbolPath: "FmtPipe.transform",
+        newName: "format",
+      }),
+    ).rejects.toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
+    expect(await fixture.read("src/fmt.pipe.ts")).toBe(pipe);
+  });
+
   it("compiler missing blocks rename", async () => {
     const fixture = await renameFixture({}, null);
 
