@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.15.1] — not yet published (2026-11-04)
+## [0.15.1] — published to `next`, verification failed, not promoted (2026-11-05)
 
 ### Changed
 
@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - `publish-next` waits up to five minutes (was two) for the registry to expose an accepted publish before giving up, and when that bound is exhausted after a publish that did not throw, it now points the maintainer at `verify-next` instead of asking for a new dispatch that would try to republish immutable bytes. `0.15.0` was reported as failed 46 seconds before the registry served it (#395).
+
+### Release status
+
+- npm published these immutable bytes under `next` with provenance and the expected Git commit (`20548017b7c9266160963a0272ce8757b8f42a77`, integrity `sha512-+DkpmFAHMnvfKmZhEN8Rrk1baryumHcAkXgcw5YABhC6vzaAmD1WiPLP25YzoFNzSPFgz+L11yW/Nd4Ukq2Ixw==`, publish run `41970126401`, the first `publish-next` to confirm the registry readback under the widened bound). Public-registry verification (run `41970518670`) then failed for the same reason as `0.14.3` and `0.15.0`: the consumer install resolves `minimatch@10.2.6` through `ts-morph@28.0.0`, flagged by `npm audit` for GHSA-g3hv-75wg-m249 (#361). `0.15.1` supersedes `0.15.0` on `next` and was never promoted to `latest`, tagged in Git, or released on GitHub.
 
 ## [0.15.0] — published to `next`, verification failed, not promoted (2026-11-04)
 
