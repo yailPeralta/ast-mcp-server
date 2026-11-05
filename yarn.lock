@@ -707,7 +707,7 @@ __metadata:
     yaml: "npm:^2.9.0"
     zod: "npm:^4.6.7"
   peerDependencies:
-    "@angular/compiler": ">=20.0.0 <23.0.0"
+    "@angular/compiler": ">=18.0.0 <23.0.0"
   peerDependenciesMeta:
     "@angular/compiler":
       optional: true
