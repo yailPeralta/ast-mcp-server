@@ -238,6 +238,26 @@ export class FmtPipe {
     expect(result.references.every((item) => item.origin === "compiler")).toBe(true);
   });
 
+  it("@Input directive member reports unfinished/cross_component with zero templates", async () => {
+    const fixture = await open({
+      "src/a.directive.ts": `import { Directive, Input } from "@angular/core";
+@Directive({ selector: "[appA]" })
+export class ADirective {
+  @Input() title = "x";
+}
+`,
+    });
+    const result = await collect(fixture, {
+      file: "src/a.directive.ts",
+      symbolPath: "ADirective.title",
+    });
+    expect(result).toMatchObject({
+      template_reference_count: 0,
+      template_coverage: { status: "unfinished", reason: "cross_component", templates: 0 },
+    });
+    expect(result.references.every((item) => item.origin === "compiler")).toBe(true);
+  });
+
   it("many usages paginate", async () => {
     const html = Array.from({ length: 30 }, () => "<i>{{ title }}</i>").join("\n");
     const fixture = await open({ "src/a.component.html": html });

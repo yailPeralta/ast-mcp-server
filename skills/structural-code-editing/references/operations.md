@@ -22,7 +22,7 @@ Preferir `file_path` relativo; un suffix ambiguo debe devolver candidatos. `ast_
 
 ### Angular templates
 
-`ast_find_references` adds template usages (`origin: "template_external" | "template_inline"`, `template_coverage`, `template_reference_count`) only when `@angular/core` resolves; otherwise the response is unchanged. Treat `template_coverage.status` other than `completed` as not proving absence; `@Input`/`@Output`/signal-input members and `@Pipe` classes always report `unfinished` with reason `cross_component` because consuming templates are never read. `ast_explore` is TypeScript-only for references (tracked in issue #380), and diagnostics stay TypeScript-only, so template errors are never detected.
+`ast_find_references` adds template usages (`origin: "template_external" | "template_inline"`, `template_coverage`, `template_reference_count`) only when `@angular/core` resolves; otherwise the response is unchanged. Treat `template_coverage.status` other than `completed` as not proving absence; `@Input`/`@Output`/signal-input members, members listed in `inputs` / `outputs` metadata (component or directive), and `@Pipe` classes always report `unfinished` with reason `cross_component` because consuming templates are never read. `ast_explore` is TypeScript-only for references (tracked in issue #380), and diagnostics stay TypeScript-only, so template errors are never detected.
 
 `ast_rename_symbol` edits external templates and returns `INCOMPLETE_EVIDENCE` (coverage `unfinished` or `unsupported`) or `MUTATION_BLOCKED` (inline usage, template-local collision, `$any`). The user's `@angular/compiler` is an optional peer, never bundled; Yarn PnP projects without `node_modules` report `unfinished`. See the Angular templates section of `SKILL.md`.
 
