@@ -4,7 +4,14 @@ import { readFile, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { Node, SyntaxKind, type ClassDeclaration, type Decorator } from "ts-morph";
+import { Node, SyntaxKind, type ClassDeclaration } from "ts-morph";
+import {
+  componentDecorator,
+  isDirectiveClass,
+  isMetadataPublic,
+  isPipeClass,
+  isSelectorPublic,
+} from "./angular-decorators.js";
 import type { ProjectContext } from "./project.js";
 import type { RequestContext } from "./request-context.js";
 import { assertSafeOperationFile } from "./safe-file.js";
@@ -165,104 +172,6 @@ async function loadCompiler(tsConfigFilePath: string): Promise<CompilerLoad> {
 
 function hasAngularCore(context: ProjectContext): boolean {
   return resolveFrom(context.tsConfigFilePath, "@angular/core/package.json") !== undefined;
-}
-
-/** True when `callee` names `exportName` imported from `@angular/core` (named, aliased, or namespace). */
-function isAngularCoreExport(callee: Node, exportName: string): boolean {
-  return callee
-    .getSourceFile()
-    .getImportDeclarations()
-    .filter((declaration) => declaration.getModuleSpecifierValue() === "@angular/core")
-    .some((declaration) => {
-      const namespace = declaration.getNamespaceImport();
-      if (Node.isPropertyAccessExpression(callee)) {
-        return (
-          callee.getName() === exportName &&
-          callee.getExpression().getText() === namespace?.getText()
-        );
-      }
-      return declaration
-        .getNamedImports()
-        .some(
-          (specifier) =>
-            specifier.getName() === exportName &&
-            (specifier.getAliasNode()?.getText() ?? exportName) === callee.getText(),
-        );
-    });
-}
-
-function isCoreDecorator(decorator: Decorator, name: string): boolean {
-  const callee = decorator.getCallExpression()?.getExpression();
-  return callee !== undefined && isAngularCoreExport(callee, name);
-}
-
-function isComponentDecorator(decorator: Decorator): boolean {
-  return isCoreDecorator(decorator, "Component");
-}
-
-function componentDecorator(cls: ClassDeclaration): Decorator | undefined {
-  return cls.getDecorators().find(isComponentDecorator);
-}
-
-/** Pipe usages live in other components' templates, which are never read. */
-function isPipeClass(cls: ClassDeclaration): boolean {
-  return cls.getDecorators().some((decorator) => isCoreDecorator(decorator, "Pipe"));
-}
-
-/** Directives have no template; their selector-public members are bound only in consuming templates. */
-function isDirectiveClass(cls: ClassDeclaration): boolean {
-  return cls.getDecorators().some((decorator) => isCoreDecorator(decorator, "Directive"));
-}
-
-/**
- * Members listed in the `inputs` / `outputs` metadata arrays of `@Component` / `@Directive`.
- * Fails closed: a non-literal array or element makes every member of the class public.
- */
-function isMetadataPublic(cls: ClassDeclaration, memberName: string): boolean {
-  const literalName = (node: Node | undefined): string | undefined =>
-    Node.isStringLiteral(node) || Node.isNoSubstitutionTemplateLiteral(node)
-      ? node.getLiteralText()
-      : undefined;
-  const listsMember = (element: Node): boolean => {
-    const text = literalName(element);
-    if (text !== undefined) return text.split(":")[0]!.trim() === memberName;
-    if (!Node.isObjectLiteralExpression(element)) return true;
-    const name = element.getProperty("name");
-    const value = Node.isPropertyAssignment(name) ? literalName(name.getInitializer()) : undefined;
-    return value === undefined || value === memberName;
-  };
-  return cls
-    .getDecorators()
-    .filter((decorator) =>
-      ["Component", "Directive"].some((name) => isCoreDecorator(decorator, name)),
-    )
-    .some((decorator) => {
-      const metadata = decorator.getArguments()[0];
-      if (!Node.isObjectLiteralExpression(metadata)) return false;
-      return ["inputs", "outputs"].some((key) => {
-        const property = metadata.getProperty(key);
-        if (!property) return false;
-        const list = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
-        return !Node.isArrayLiteralExpression(list) || list.getElements().some(listsMember);
-      });
-    });
-}
-
-/** Members bound through the selector (`@Input`, `@Output`, `input()`, `output()`, `model()`). */
-function isSelectorPublic(node: Node): boolean {
-  const decorated =
-    Node.isDecoratable(node) &&
-    node
-      .getDecorators()
-      .some((decorator) => ["Input", "Output"].some((name) => isCoreDecorator(decorator, name)));
-  if (decorated || !Node.isPropertyDeclaration(node)) return decorated;
-  const initializer = node.getInitializer();
-  if (!Node.isCallExpression(initializer)) return false;
-  let callee = initializer.getExpression();
-  if (Node.isPropertyAccessExpression(callee) && callee.getName() === "required") {
-    callee = callee.getExpression(); // input.required(...) / model.required(...)
-  }
-  return ["input", "output", "model"].some((name) => isAngularCoreExport(callee, name));
 }
 
 type Located =
