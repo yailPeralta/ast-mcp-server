@@ -58,7 +58,7 @@ const NOT_APPLICABLE = { coverage: { status: "not_applicable" }, usages: [] } as
 const ASSIGNMENT_OPERATION = /^(?:=|(?:\*\*|&&|\|\||\?\?|<<|>>>|>>|[+\-*/%&|^])=)$/u;
 
 type AnyCtor = new () => any;
-interface CompilerModule {
+export interface CompilerModule {
   parseTemplate(
     text: string,
     url: string,
@@ -73,6 +73,9 @@ interface CompilerModule {
   Call: AnyCtor;
   Binary?: AnyCtor;
   PropertyWrite?: AnyCtor;
+  CssSelector?: AnyCtor & { parse(selector: string): any[] };
+  SelectorMatcher?: AnyCtor;
+  createCssSelectorFromNode?(node: any): any;
 }
 type CompilerLoad =
   | { readonly compiler: CompilerModule }
