@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Selector-public component members (`@Input`, `@Output`, `input()`, `output()`, `model()`) and `@Pipe` classes reported `template_coverage: completed` (pipes reported nothing), and a rename of an `@Input` was planned without blocking although the consuming templates were never read. They now report `unfinished` with the new reason `cross_component` (own-template usages are still listed for inputs and outputs), and `ast_rename_symbol` refuses them with `INCOMPLETE_EVIDENCE` (#407).
+
 ## [0.15.1] — published to `next`, verification failed, not promoted (2026-11-05)
 
 ### Changed
