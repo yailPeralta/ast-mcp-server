@@ -76,7 +76,7 @@ Only the template of the declaring class that carries a resolved `@Component` MU
 
 ### Requirement: Cross-component usages are reported as unfinished
 
-A member bound through the component selector (declared with `@Input` or `@Output` imported from `@angular/core`, or initialized with `input()`, `input.required()`, `output()`, `model()` or `model.required()` from `@angular/core`) is used in the templates of consuming components, which are never read. For such a member, coverage MUST be `unfinished` with reason `cross_component` even when the own template was fully read, and the own-template usages MUST still be reported with the count of templates examined. A decorator or factory of the same name imported from another module MUST NOT trigger this rule. A class decorated with `@Pipe` from `@angular/core`, and every member of it, MUST yield coverage `unfinished` with reason `cross_component` and no usages instead of `not_applicable`; a project without `@angular/core` MUST stay `not_applicable`. A failure to read the own template MUST keep its own reason.
+A member bound through the component selector (declared with `@Input` or `@Output` imported from `@angular/core`, initialized with `input()`, `input.required()`, `output()`, `model()` or `model.required()` from `@angular/core`, or named in the `inputs` or `outputs` metadata array of its `@Component` or `@Directive` decorator as a string literal with an optional `: alias` suffix or as an object literal with a literal `name`) is used in the templates of consuming components, which are never read. For such a member, coverage MUST be `unfinished` with reason `cross_component` even when the own template was fully read, and the own-template usages MUST still be reported with the count of templates examined. When `inputs` or `outputs` is not an array literal, or contains an element that is not a string literal or an object literal with a literal `name`, every member of that class MUST be treated as selector-public. A decorator or factory of the same name imported from another module MUST NOT trigger this rule. A selector-public member of a class decorated with `@Directive` from `@angular/core` MUST yield coverage `unfinished` with reason `cross_component` and no usages (a directive has no template); a plain member of a directive stays `not_applicable`. A class decorated with `@Pipe` from `@angular/core`, and every member of it, MUST yield coverage `unfinished` with reason `cross_component` and no usages instead of `not_applicable`; a project without `@angular/core` MUST stay `not_applicable`. A failure to read the own template MUST keep its own reason.
 
 #### Scenario: Input or output member
 
@@ -95,6 +95,18 @@ A member bound through the component selector (declared with `@Input` or `@Outpu
 - GIVEN a class decorated with `@Pipe` from `@angular/core`
 - WHEN references to the class or its `transform` member are collected
 - THEN `template_coverage` is `{ status: "unfinished", reason: "cross_component", templates: 0 }` and `ast_rename_symbol` returns `INCOMPLETE_EVIDENCE`
+
+#### Scenario: Directive input or output
+
+- GIVEN a class decorated with `@Directive` from `@angular/core` with a member declared with `@Input()`, `input()` or listed in its `outputs` metadata
+- WHEN references to that member are collected
+- THEN `template_coverage` is `{ status: "unfinished", reason: "cross_component", templates: 0 }` with no template usages and `ast_rename_symbol` returns `INCOMPLETE_EVIDENCE`
+
+#### Scenario: Member listed in metadata inputs
+
+- GIVEN a component with `inputs: ["title: alias"]` or `inputs: [{ name: "title", alias: "y" }]` whose template uses `title` and a sibling member `other`
+- WHEN references to `title` and `other` are collected
+- THEN `title` reports its own-template usages with `{ status: "unfinished", reason: "cross_component", templates: 1 }` and `other` stays `completed`; with `inputs: [...shared]` both report `cross_component`
 
 ### Requirement: Member usage extraction
 

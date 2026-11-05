@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Selector-public component members (`@Input`, `@Output`, `input()`, `output()`, `model()`) and `@Pipe` classes reported `template_coverage: completed` (pipes reported nothing), and a rename of an `@Input` was planned without blocking although the consuming templates were never read. They now report `unfinished` with the new reason `cross_component` (own-template usages are still listed for inputs and outputs), and `ast_rename_symbol` refuses them with `INCOMPLETE_EVIDENCE` (#407).
+- `@Directive` members declared with `@Input`, `@Output`, `input()`, `output()` or `model()` reported no `template_coverage`, and members listed in the `inputs` / `outputs` metadata arrays of a `@Component` or `@Directive` were treated as plain members, so `ast_rename_symbol` planned their rename without blocking. They now report `unfinished` with reason `cross_component` (directives with `templates: 0`; a non-literal metadata array marks every member of the class), and `ast_rename_symbol` refuses them with `INCOMPLETE_EVIDENCE` (#410).
 
 ## [0.15.1] — published to `next`, verification failed, not promoted (2026-11-05)
 
