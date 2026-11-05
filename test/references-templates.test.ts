@@ -50,18 +50,21 @@ async function collect(
     offset?: number;
     limit?: number;
     declaration?: boolean;
+    file?: string;
+    symbolPath?: string;
   } = {},
 ) {
   const context = createFreshProject(fixture.root);
+  const symbolPath = options.symbolPath ?? "AComponent.title";
   const node = findDeclarationByName(
-    getSourceFileOrThrow(context.project, "src/a.component.ts"),
-    "AComponent.title",
+    getSourceFileOrThrow(context.project, options.file ?? "src/a.component.ts"),
+    symbolPath,
   );
   return collectSymbolReferencesWithTemplates(
     node,
     context,
     {
-      symbolPath: "AComponent.title",
+      symbolPath,
       includeDeclaration: options.declaration ?? true,
       detail: options.detail ?? "locations",
       offset: options.offset ?? 0,
@@ -196,6 +199,43 @@ describe("collectSymbolReferencesWithTemplates", () => {
       "compiler",
       "compiler",
     ]);
+  });
+
+  it("@Input member reports unfinished/cross_component and keeps own-template usages", async () => {
+    const result = await collect(
+      await open({
+        "src/a.component.ts": COMPONENT()
+          .replace("import { Component }", "import { Component, Input }")
+          .replace("  title", "  @Input() title"),
+        "src/a.component.html": HTML,
+      }),
+    );
+    expect(result).toMatchObject({
+      reference_count: 2,
+      template_reference_count: 3,
+      total: 6,
+      template_coverage: { status: "unfinished", reason: "cross_component", templates: 1 },
+    });
+  });
+
+  it("@Pipe transform reports unfinished/cross_component instead of an absent field", async () => {
+    const fixture = await open({
+      "src/fmt.pipe.ts": `import { Pipe } from "@angular/core";
+@Pipe({ name: "fmt" })
+export class FmtPipe {
+  transform(value: string): string { return value; }
+}
+`,
+    });
+    const result = await collect(fixture, {
+      file: "src/fmt.pipe.ts",
+      symbolPath: "FmtPipe.transform",
+    });
+    expect(result).toMatchObject({
+      template_reference_count: 0,
+      template_coverage: { status: "unfinished", reason: "cross_component", templates: 0 },
+    });
+    expect(result.references.every((item) => item.origin === "compiler")).toBe(true);
   });
 
   it("many usages paginate", async () => {

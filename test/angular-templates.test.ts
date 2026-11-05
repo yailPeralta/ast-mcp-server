@@ -289,6 +289,143 @@ export class BComponent extends AComponent {}
   });
 });
 
+const PUBLIC = (member: string, imports = "Component, Input, Output, Pipe, input, model, output") =>
+  `import { ${imports} } from "@angular/core";
+@Component({ selector: "app-a", templateUrl: "./a.component.html" })
+export class AComponent {
+  ${member}
+}
+`;
+const PIPE = `import { Pipe } from "@angular/core";
+@Pipe({ name: "fmt" })
+export class FmtPipe {
+  transform(value: string): string { return value; }
+}
+`;
+const CROSS_COMPONENT = { status: "unfinished", reason: "cross_component", templates: 1 };
+
+describe("selector-public members and pipes", () => {
+  const publicUsages = async (member: string, html = "<p>{{ title }}</p>") => {
+    const { context } = await setup({
+      "src/a.component.ts": PUBLIC(member),
+      "src/a.component.html": html,
+    });
+    return usagesOf(context, "AComponent.title");
+  };
+
+  it("@Input member keeps own-template usages but is unfinished/cross_component", async () => {
+    const result = await publicUsages(`@Input() title = "x";`);
+    expect(result.coverage).toEqual(CROSS_COMPONENT);
+    expect(result.usages.map((usage) => usage.kind)).toEqual(["TemplatePropertyRead"]);
+  });
+
+  it("@Output member is unfinished/cross_component", async () => {
+    const result = await publicUsages(`@Output() title = output<string>();`);
+    expect(result.coverage).toEqual(CROSS_COMPONENT);
+  });
+
+  it.each([
+    `title = input("x");`,
+    `title = input.required<string>();`,
+    `title = model("x");`,
+    `title = model.required<string>();`,
+    `title = output<string>();`,
+  ])("signal member %s is unfinished/cross_component", async (member) => {
+    const result = await publicUsages(member, "<p>{{ title() }}</p>");
+    expect(result.coverage).toEqual(CROSS_COMPONENT);
+    expect(result.usages.map((usage) => usage.kind)).toEqual(["TemplateCall"]);
+  });
+
+  it("aliased and namespace imports from @angular/core count", async () => {
+    const aliased = PUBLIC(`@Prop() title = "x";`, "Component, Input as Prop");
+    const namespaced = `import * as ng from "@angular/core";
+@ng.Component({ selector: "app-a", templateUrl: "./a.component.html" })
+export class AComponent { title = ng.input.required<string>(); }
+`;
+    for (const source of [aliased, namespaced]) {
+      const { context } = await setup({
+        "src/a.component.ts": source,
+        "src/a.component.html": "<p>none</p>",
+      });
+      expect((await usagesOf(context, "AComponent.title")).coverage).toEqual(CROSS_COMPONENT);
+    }
+  });
+
+  it("Input decorator or input() from another module is a plain member", async () => {
+    const decorators = `export const Input = (): PropertyDecorator => () => {};
+export const input = <T>(value: T) => () => value;
+`;
+    for (const member of [`@Input() title = "x";`, `title = input("x");`]) {
+      const { context } = await setup({
+        "src/a.component.ts": `import { Input, input } from "./decorators";
+${PUBLIC(member, "Component")}`,
+        "src/decorators.ts": decorators,
+        "src/a.component.html": "<p>none</p>",
+      });
+      expect((await usagesOf(context, "AComponent.title")).coverage).toEqual({
+        status: "completed",
+        templates: 1,
+      });
+    }
+  });
+
+  it("plain member next to an @Input stays completed", async () => {
+    const result = await publicUsages(`@Input() other = 1;
+  title = "x";`);
+    expect(result.coverage).toEqual({ status: "completed", templates: 1 });
+    expect(result.usages).toHaveLength(1);
+  });
+
+  it("own-template failure keeps its own reason for an @Input", async () => {
+    const { context } = await setup({
+      "src/a.component.ts": PUBLIC(`@Input() title = "x";`).replace(
+        "./a.component.html",
+        "./missing.html",
+      ),
+    });
+    expect((await usagesOf(context, "AComponent.title")).coverage).toEqual({
+      status: "unfinished",
+      reason: "template_unresolved",
+      templates: 0,
+    });
+  });
+
+  it("@Pipe class and its transform are unfinished/cross_component without usages", async () => {
+    const { context } = await setup({ "src/fmt.pipe.ts": PIPE });
+    for (const symbol of ["FmtPipe", "FmtPipe.transform"]) {
+      expect(await usagesOf(context, symbol, NO_REQUEST_CONTEXT, "src/fmt.pipe.ts")).toEqual({
+        coverage: { status: "unfinished", reason: "cross_component", templates: 0 },
+        usages: [],
+      });
+    }
+  });
+
+  it("class that is both @Pipe and @Component is unfinished/cross_component", async () => {
+    const { context } = await setup({
+      "src/a.component.ts": PUBLIC(`title = "x";`).replace(
+        "@Component(",
+        '@Pipe({ name: "a" })\n@Component(',
+      ),
+      "src/a.component.html": "<p>{{ title }}</p>",
+    });
+    expect((await usagesOf(context, "AComponent.title")).coverage).toEqual({
+      status: "unfinished",
+      reason: "cross_component",
+      templates: 0,
+    });
+  });
+
+  it("@Pipe without @angular/core stays not_applicable", async () => {
+    const fixture = await createProjectFixture({ "src/fmt.pipe.ts": PIPE });
+    created.push(fixture);
+    const context = createFreshProject(fixture.root);
+    expect(await usagesOf(context, "FmtPipe", NO_REQUEST_CONTEXT, "src/fmt.pipe.ts")).toEqual({
+      coverage: { status: "not_applicable" },
+      usages: [],
+    });
+  });
+});
+
 describe.each([
   ["v18", 18],
   ["v19", 19],
@@ -297,6 +434,18 @@ describe.each([
   ["v22", 22],
 ] as const)("usage extraction with compiler %s", (alias, major) => {
   const run = it.skipIf(!compilerMajorSupportedByNode(major));
+  run("@Input member is unfinished/cross_component with its own usages", async () => {
+    const { context } = await setup(
+      {
+        "src/a.component.ts": PUBLIC(`@Input() title = "x";`),
+        "src/a.component.html": "<p>{{ title }}</p>",
+      },
+      { compiler: alias },
+    );
+    const result = await usagesOf(context, "AComponent.title");
+    expect(result.coverage).toEqual(CROSS_COMPONENT);
+    expect(result.usages).toHaveLength(1);
+  });
   const prepare = (html: string, files: Record<string, string> = {}) =>
     setup({ "src/a.component.html": html, ...files }, { compiler: alias });
 

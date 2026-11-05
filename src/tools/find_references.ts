@@ -54,6 +54,7 @@ const TemplateCoverageSchema = z.object({
       "size_exceeded",
       "work_exhausted",
       "inherited_member",
+      "cross_component",
     ])
     .optional(),
   templates: z.number().int().min(0).optional(),

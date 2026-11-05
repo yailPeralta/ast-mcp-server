@@ -32,6 +32,12 @@ const CORE_DECLARATIONS = `export interface ComponentMetadata {
   standalone?: boolean;
 }
 export declare function Component(metadata: ComponentMetadata): ClassDecorator;
+export declare function Pipe(metadata: { name: string }): ClassDecorator;
+export declare function Input(alias?: string): PropertyDecorator;
+export declare function Output(alias?: string): PropertyDecorator;
+export declare const input: (<T>(value?: T) => () => T) & { required<T>(): () => T };
+export declare const model: (<T>(value?: T) => () => T) & { required<T>(): () => T };
+export declare function output<T>(): { emit(value: T): void };
 `;
 
 export async function createAngularFixture(
