@@ -209,6 +209,45 @@ function isPipeClass(cls: ClassDeclaration): boolean {
   return cls.getDecorators().some((decorator) => isCoreDecorator(decorator, "Pipe"));
 }
 
+/** Directives have no template; their selector-public members are bound only in consuming templates. */
+function isDirectiveClass(cls: ClassDeclaration): boolean {
+  return cls.getDecorators().some((decorator) => isCoreDecorator(decorator, "Directive"));
+}
+
+/**
+ * Members listed in the `inputs` / `outputs` metadata arrays of `@Component` / `@Directive`.
+ * Fails closed: a non-literal array or element makes every member of the class public.
+ */
+function isMetadataPublic(cls: ClassDeclaration, memberName: string): boolean {
+  const literalName = (node: Node | undefined): string | undefined =>
+    Node.isStringLiteral(node) || Node.isNoSubstitutionTemplateLiteral(node)
+      ? node.getLiteralText()
+      : undefined;
+  const listsMember = (element: Node): boolean => {
+    const text = literalName(element);
+    if (text !== undefined) return text.split(":")[0]!.trim() === memberName;
+    if (!Node.isObjectLiteralExpression(element)) return true;
+    const name = element.getProperty("name");
+    const value = Node.isPropertyAssignment(name) ? literalName(name.getInitializer()) : undefined;
+    return value === undefined || value === memberName;
+  };
+  return cls
+    .getDecorators()
+    .filter((decorator) =>
+      ["Component", "Directive"].some((name) => isCoreDecorator(decorator, name)),
+    )
+    .some((decorator) => {
+      const metadata = decorator.getArguments()[0];
+      if (!Node.isObjectLiteralExpression(metadata)) return false;
+      return ["inputs", "outputs"].some((key) => {
+        const property = metadata.getProperty(key);
+        if (!property) return false;
+        const list = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
+        return !Node.isArrayLiteralExpression(list) || list.getElements().some(listsMember);
+      });
+    });
+}
+
 /** Members bound through the selector (`@Input`, `@Output`, `input()`, `output()`, `model()`). */
 function isSelectorPublic(node: Node): boolean {
   const decorated =
@@ -588,6 +627,10 @@ export async function collectTemplateUsages(
   if (!owner) return NOT_APPLICABLE;
   if (isPipeClass(owner.cls)) return fail("unfinished", "cross_component");
   const isComponent = componentDecorator(owner.cls) !== undefined;
+  const selectorPublic = isSelectorPublic(node) || isMetadataPublic(owner.cls, owner.name);
+  if (!isComponent && selectorPublic && isDirectiveClass(owner.cls)) {
+    return fail("unfinished", "cross_component");
+  }
   const derived = hasDerivedComponent(context, owner.cls);
   if (!isComponent && !derived) return NOT_APPLICABLE;
   if (derived) return fail("unsupported", "inherited_member");
@@ -647,7 +690,7 @@ export async function collectTemplateUsages(
     };
   });
   // Selector-public members are also bound in consuming templates, which are never read.
-  const coverage: TemplateCoverage = isSelectorPublic(node)
+  const coverage: TemplateCoverage = selectorPublic
     ? { status: "unfinished", reason: "cross_component", templates: 1 }
     : { status: "completed", templates: 1 };
   return { coverage, usages };

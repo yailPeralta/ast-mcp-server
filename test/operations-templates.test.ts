@@ -383,6 +383,50 @@ describe("prepareRename across Angular templates (ATN-R1, R3-R7)", () => {
     expect(await fixture.read("src/fmt.pipe.ts")).toBe(pipe);
   });
 
+  const RENAME_DIRECTIVE = (member: string, metadata = "") =>
+    [
+      'import { Directive, Input, input } from "@angular/core";',
+      `@Directive({ selector: "[appA]"${metadata} })`,
+      "export class ADirective {",
+      `  ${member}`,
+      "}",
+      "",
+    ].join("\n");
+  const WITH_INPUTS = (inputs: string) => `templateUrl: "./a.component.html", inputs: [${inputs}]`;
+
+  it.each([
+    ["directive @Input", "src/a.directive.ts", RENAME_DIRECTIVE(`@Input() title = "x";`)],
+    ["directive signal input()", "src/a.directive.ts", RENAME_DIRECTIVE(`title = input("x");`)],
+    [
+      "directive outputs metadata",
+      "src/a.directive.ts",
+      RENAME_DIRECTIVE(`title = "x";`, ', outputs: ["title"]'),
+    ],
+    ["component inputs metadata", "src/a.component.ts", RENAME_COMPONENT(WITH_INPUTS('"title"'))],
+    [
+      "component inputs object metadata",
+      "src/a.component.ts",
+      RENAME_COMPONENT(WITH_INPUTS('{ name: "title", alias: "y" }')),
+    ],
+  ])(
+    "%s blocks rename with INCOMPLETE_EVIDENCE and leaves files untouched",
+    async (_, file, source) => {
+      const fixture = await renameFixture({ [file]: source });
+      const symbolPath = file.includes("directive") ? "ADirective.title" : "AComponent.title";
+
+      await expect(
+        prepareRename({
+          projectRoot: fixture.root,
+          filePath: file,
+          symbolPath,
+          newName: "heading",
+        }),
+      ).rejects.toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
+      expect(await fixture.read(file)).toBe(source);
+      expect(await fixture.read("src/a.component.html")).toBe(RENAME_TEMPLATE);
+    },
+  );
+
   it("compiler missing blocks rename", async () => {
     const fixture = await renameFixture({}, null);
 

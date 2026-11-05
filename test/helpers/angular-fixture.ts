@@ -25,13 +25,18 @@ export interface AngularFixture extends ProjectFixture {
   root: string;
 }
 
-const CORE_DECLARATIONS = `export interface ComponentMetadata {
+const CORE_DECLARATIONS = `export interface DirectiveMetadata {
   selector?: string;
+  standalone?: boolean;
+  inputs?: (string | { name: string; alias?: string; required?: boolean })[];
+  outputs?: string[];
+}
+export interface ComponentMetadata extends DirectiveMetadata {
   template?: string;
   templateUrl?: string;
-  standalone?: boolean;
 }
 export declare function Component(metadata: ComponentMetadata): ClassDecorator;
+export declare function Directive(metadata?: DirectiveMetadata): ClassDecorator;
 export declare function Pipe(metadata: { name: string }): ClassDecorator;
 export declare function Input(alias?: string): PropertyDecorator;
 export declare function Output(alias?: string): PropertyDecorator;

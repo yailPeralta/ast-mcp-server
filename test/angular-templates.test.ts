@@ -426,6 +426,102 @@ ${PUBLIC(member, "Component")}`,
   });
 });
 
+const DIRECTIVE = (
+  member: string,
+  metadata = "",
+  imports = "Directive, Input, Output, input, model, output",
+) =>
+  `import { ${imports} } from "@angular/core";
+@Directive({ selector: "[appA]"${metadata} })
+export class ADirective {
+  ${member}
+}
+`;
+const METADATA = (metadata: string, prelude = "") =>
+  `import { Component } from "@angular/core";
+${prelude}@Component({ selector: "app-a", templateUrl: "./a.component.html", ${metadata} })
+export class AComponent {
+  title = "x"; other = 1;
+}
+`;
+const DIRECTIVE_CROSS = {
+  coverage: { status: "unfinished", reason: "cross_component", templates: 0 },
+  usages: [],
+};
+
+describe("directive members and metadata inputs/outputs", () => {
+  const directiveUsages = async (source: string) => {
+    const { context } = await setup({ "src/a.directive.ts": source });
+    return usagesOf(context, "ADirective.title", NO_REQUEST_CONTEXT, "src/a.directive.ts");
+  };
+  const metadataUsages = async (metadata: string, prelude = "") => {
+    const { context } = await setup({
+      "src/a.component.ts": METADATA(metadata, prelude),
+      "src/a.component.html": "<p>{{ title }} {{ other }}</p>",
+    });
+    return {
+      title: await usagesOf(context, "AComponent.title"),
+      other: await usagesOf(context, "AComponent.other"),
+    };
+  };
+
+  it.each([
+    `@Input() title = "x";`,
+    `@Output() title = output<string>();`,
+    `title = input("x");`,
+    `title = model.required<string>();`,
+  ])("directive member %s is unfinished/cross_component without usages", async (member) => {
+    expect(await directiveUsages(DIRECTIVE(member))).toEqual(DIRECTIVE_CROSS);
+  });
+
+  it("plain directive member stays not_applicable", async () => {
+    expect(await directiveUsages(DIRECTIVE(`title = "x";`))).toEqual({
+      coverage: { status: "not_applicable" },
+      usages: [],
+    });
+  });
+
+  it("Directive decorator from another module stays not_applicable", async () => {
+    const { context } = await setup({
+      "src/decorators.ts": `export const Directive = (): ClassDecorator => () => {};\n`,
+      "src/a.directive.ts": `import { Directive } from "./decorators";\n${DIRECTIVE(`@Input() title = "x";`, "", "Input")}`,
+    });
+    expect(
+      await usagesOf(context, "ADirective.title", NO_REQUEST_CONTEXT, "src/a.directive.ts"),
+    ).toEqual({ coverage: { status: "not_applicable" }, usages: [] });
+  });
+
+  it.each([
+    `inputs: ["title"]`,
+    `inputs: ["title: alias"]`,
+    `inputs: [{ name: "title", alias: "y" }]`,
+  ])(
+    "component %s is cross_component with own usages; unlisted sibling stays completed",
+    async (metadata) => {
+      const { title, other } = await metadataUsages(metadata);
+      expect(title.coverage).toEqual(CROSS_COMPONENT);
+      expect(title.usages.map((usage) => usage.kind)).toEqual(["TemplatePropertyRead"]);
+      expect(other.coverage).toEqual({ status: "completed", templates: 1 });
+    },
+  );
+
+  it.each([`inputs: [...SHARED]`, `inputs: SHARED`, `outputs: ["x", NAME]`])(
+    "non-literal %s makes every member cross_component",
+    async (metadata) => {
+      const prelude = `const SHARED = ["title"];\nconst NAME = "title";\n`;
+      const { title, other } = await metadataUsages(metadata, prelude);
+      expect(title.coverage).toEqual(CROSS_COMPONENT);
+      expect(other.coverage).toEqual(CROSS_COMPONENT);
+    },
+  );
+
+  it("directive outputs metadata is unfinished/cross_component", async () => {
+    expect(await directiveUsages(DIRECTIVE(`title = "x";`, `, outputs: ["title"]`))).toEqual(
+      DIRECTIVE_CROSS,
+    );
+  });
+});
+
 describe.each([
   ["v18", 18],
   ["v19", 19],
@@ -445,6 +541,15 @@ describe.each([
     const result = await usagesOf(context, "AComponent.title");
     expect(result.coverage).toEqual(CROSS_COMPONENT);
     expect(result.usages).toHaveLength(1);
+  });
+  run("@Input directive member is unfinished/cross_component", async () => {
+    const { context } = await setup(
+      { "src/a.directive.ts": DIRECTIVE(`@Input() title = "x";`) },
+      { compiler: alias },
+    );
+    expect(
+      await usagesOf(context, "ADirective.title", NO_REQUEST_CONTEXT, "src/a.directive.ts"),
+    ).toEqual(DIRECTIVE_CROSS);
   });
   const prepare = (html: string, files: Record<string, string> = {}) =>
     setup({ "src/a.component.html": html, ...files }, { compiler: alias });
