@@ -313,24 +313,35 @@ describe("selector-public members and pipes", () => {
     return usagesOf(context, "AComponent.title");
   };
 
-  it("@Input member keeps own-template usages but is unfinished/cross_component", async () => {
+  it("@Input member keeps own-template usages and is completed without consumers", async () => {
     const result = await publicUsages(`@Input() title = "x";`);
-    expect(result.coverage).toEqual(CROSS_COMPONENT);
+    expect(result.coverage).toEqual({ status: "completed", templates: 1 });
     expect(result.usages.map((usage) => usage.kind)).toEqual(["TemplatePropertyRead"]);
   });
 
-  it("@Output member is unfinished/cross_component", async () => {
+  it("@Output member is completed without consumers", async () => {
     const result = await publicUsages(`@Output() title = output<string>();`);
-    expect(result.coverage).toEqual(CROSS_COMPONENT);
+    expect(result.coverage).toEqual({ status: "completed", templates: 1 });
   });
 
   it.each([
     `title = input("x");`,
     `title = input.required<string>();`,
+    `title = output<string>();`,
+  ])("signal member %s is completed", async (member) => {
+    const result = await publicUsages(member, "<p>{{ title() }}</p>");
+    expect(result.coverage).toEqual({ status: "completed", templates: 1 });
+    expect(result.usages.map((usage) => usage.kind)).toEqual(["TemplateCall"]);
+  });
+
+  it.each([
     `title = model("x");`,
     `title = model.required<string>();`,
-    `title = output<string>();`,
-  ])("signal member %s is unfinished/cross_component", async (member) => {
+    `@Input("alias") title = "x";`,
+    `title = input("x", { alias: "a" });`,
+    `title = input.required<string>({ alias: "a" });`,
+    `title = output<string>({ alias: "a" });`,
+  ])("aliased or model member %s stays unfinished/cross_component", async (member) => {
     const result = await publicUsages(member, "<p>{{ title() }}</p>");
     expect(result.coverage).toEqual(CROSS_COMPONENT);
     expect(result.usages.map((usage) => usage.kind)).toEqual(["TemplateCall"]);
@@ -347,7 +358,10 @@ export class AComponent { title = ng.input.required<string>(); }
         "src/a.component.ts": source,
         "src/a.component.html": "<p>none</p>",
       });
-      expect((await usagesOf(context, "AComponent.title")).coverage).toEqual(CROSS_COMPONENT);
+      expect((await usagesOf(context, "AComponent.title")).coverage).toEqual({
+        status: "completed",
+        templates: 1,
+      });
     }
   });
 
@@ -522,6 +536,151 @@ describe("directive members and metadata inputs/outputs", () => {
   });
 });
 
+const CONSUMER = (html: string, imports = "[AComponent]", name = "b", metadata = "") => ({
+  [`src/${name}.component.ts`]: `import { Component } from "@angular/core";
+import { AComponent } from "./a.component";
+@Component({ selector: "app-${name}", standalone: true, imports: ${imports}, ${metadata || `templateUrl: "./${name}.component.html"`} })
+export class ${name.toUpperCase()}Component {}
+`,
+  [`src/${name}.component.html`]: html,
+});
+const TARGET_FILES = {
+  "src/a.component.ts": PUBLIC(`@Input() title = "x"; @Output() save = output<string>();`),
+  "src/a.component.html": "<p>{{ title }}</p>",
+};
+const BINDINGS = `<app-a [title]="1"></app-a><app-a title="lit"></app-a><app-a [(title)]="v"></app-a><app-a (save)="f()"></app-a>`;
+const CONSUMER_FILES = { ...TARGET_FILES, ...CONSUMER(BINDINGS) };
+const CONSUMER_KINDS = [
+  "TemplatePropertyRead",
+  "TemplateInputBinding",
+  "TemplateAttribute",
+  "TemplateTwoWayBinding",
+];
+
+describe("consumer template usages", () => {
+  const consumerUsages = async (
+    files: Record<string, string>,
+    symbol = "AComponent.title",
+    limits?: Parameters<typeof collectTemplateUsages>[3],
+  ) => {
+    const { context } = await setup({ ...TARGET_FILES, ...files });
+    const node = findDeclarationByName(
+      getSourceFileOrThrow(context.project, "src/a.component.ts"),
+      symbol,
+    );
+    return collectTemplateUsages(node, context, NO_REQUEST_CONTEXT, limits);
+  };
+
+  it("lists input, static, two-way and output bindings of importing consumers", async () => {
+    const input = await consumerUsages(CONSUMER_FILES);
+    expect(input.coverage).toEqual({ status: "completed", templates: 2 });
+    expect(
+      input.usages.map((usage) => [usage.kind, usage.role, path.basename(usage.file)]),
+    ).toEqual(
+      CONSUMER_KINDS.map((kind, index) => [
+        kind,
+        index ? "consumer" : "own",
+        index ? "b.component.html" : "a.component.html",
+      ]),
+    );
+    expect(input.usages[1]).toMatchObject({
+      binding: "input",
+      bindingName: "title",
+      container: "external",
+    });
+    const output = await consumerUsages(CONSUMER_FILES, "AComponent.save");
+    expect(output.usages.map((usage) => usage.kind)).toEqual(["TemplateOutputBinding"]);
+    expect(output.coverage).toEqual({ status: "completed", templates: 2 });
+  });
+
+  it("lists bindings of an inline consumer template as template_inline", async () => {
+    const files = CONSUMER("", "[AComponent]", "b", `template: '<app-a [title]="1"></app-a>'`);
+    const { usages } = await consumerUsages(files);
+    expect(usages.map((usage) => [usage.kind, usage.container])).toEqual([
+      ["TemplatePropertyRead", "external"],
+      ["TemplateInputBinding", "inline"],
+    ]);
+  });
+
+  it("ignores a decoy with the same selector that does not import the target", async () => {
+    const { coverage, usages } = await consumerUsages(CONSUMER(BINDINGS, "[]"));
+    expect(coverage).toEqual({ status: "completed", templates: 2 });
+    expect(usages.map((usage) => usage.kind)).toEqual(["TemplatePropertyRead"]);
+  });
+
+  it.each([
+    [
+      `<app-a [title]="1"></app-a>`,
+      { status: "unfinished", reason: "cross_component", templates: 2 },
+    ],
+    [`<p>no match</p>`, { status: "completed", templates: 2 }],
+  ])("opaque scope with template %s is %j", async (html, expected) => {
+    const files = CONSUMER(html, "[...SHARED]");
+    files["src/b.component.ts"] = `const SHARED: unknown[] = [];\n${files["src/b.component.ts"]}`;
+    expect((await consumerUsages(files)).coverage).toEqual(expected);
+  });
+
+  it("hostDirectives on the target is unfinished/cross_component", async () => {
+    const files = {
+      "src/a.component.ts": TARGET_FILES["src/a.component.ts"].replace(
+        "selector:",
+        "hostDirectives: [], selector:",
+      ),
+    };
+    expect((await consumerUsages(files)).coverage).toMatchObject({
+      status: "unfinished",
+      reason: "cross_component",
+    });
+  });
+
+  it.each([
+    ["template_unsafe", { templateUrl: "../../outside.html" }],
+    ["template_unresolved", { templateUrl: "missing.html" }],
+    ["template_parse_error", { html: "<app-a [title]=" }],
+  ])(
+    "consumer failing with %s is unfinished and other consumers are still listed",
+    async (reason, broken: { templateUrl?: string; html?: string }) => {
+      const metadata = broken.templateUrl ? `templateUrl: "${broken.templateUrl}"` : "";
+      const files = {
+        ...CONSUMER(broken.html ?? "", "[AComponent]", "b", metadata),
+        ...CONSUMER(BINDINGS, "[AComponent]", "c"),
+      };
+      const { coverage, usages } = await consumerUsages(files);
+      expect(coverage).toMatchObject({ status: "unfinished", reason });
+      expect(usages.map((usage) => usage.kind)).toEqual(CONSUMER_KINDS);
+    },
+  );
+
+  it("a project scan over its template budget is unfinished/work_exhausted", async () => {
+    const { coverage } = await consumerUsages(CONSUMER_FILES, "AComponent.title", { templates: 1 });
+    expect(coverage).toMatchObject({ status: "unfinished", reason: "work_exhausted" });
+  });
+
+  it("a compiler without the selector API leaves own-template coverage alone", async () => {
+    const { context, root, write } = await setup(TARGET_FILES, { compiler: null });
+    const real = path.join(
+      path.dirname(new URL(import.meta.url).pathname),
+      "..",
+      "node_modules",
+      "angular-compiler-v21",
+      "fesm2022",
+      "compiler.mjs",
+    );
+    await writeFakeCompiler(
+      write,
+      "21.0.0",
+      `export { parseTemplate, tmplAstVisitAll, TmplAstRecursiveVisitor, RecursiveAstVisitor, ImplicitReceiver, ThisReceiver, PropertyRead, Call, Binary } from ${JSON.stringify(real)};\n`,
+    );
+    expect((await usagesOf(context, "AComponent.title")).coverage).toMatchObject({
+      status: "unfinished",
+      reason: "compiler_unsupported",
+    });
+    await write("src/a.component.ts", COMPONENT());
+    const fresh = createFreshProject(root);
+    expect((await usagesOf(fresh, "AComponent.title")).coverage.status).toBe("completed");
+  });
+});
+
 describe.each([
   ["v18", 18],
   ["v19", 19],
@@ -530,17 +689,11 @@ describe.each([
   ["v22", 22],
 ] as const)("usage extraction with compiler %s", (alias, major) => {
   const run = it.skipIf(!compilerMajorSupportedByNode(major));
-  run("@Input member is unfinished/cross_component with its own usages", async () => {
-    const { context } = await setup(
-      {
-        "src/a.component.ts": PUBLIC(`@Input() title = "x";`),
-        "src/a.component.html": "<p>{{ title }}</p>",
-      },
-      { compiler: alias },
-    );
+  run("consumer bindings are listed next to own usages", async () => {
+    const { context } = await setup(CONSUMER_FILES, { compiler: alias });
     const result = await usagesOf(context, "AComponent.title");
-    expect(result.coverage).toEqual(CROSS_COMPONENT);
-    expect(result.usages).toHaveLength(1);
+    expect(result.coverage).toEqual({ status: "completed", templates: 2 });
+    expect(result.usages.map((usage) => usage.kind)).toEqual(CONSUMER_KINDS);
   });
   run("@Input directive member is unfinished/cross_component", async () => {
     const { context } = await setup(

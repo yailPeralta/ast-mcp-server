@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { Node, type ClassDeclaration, type Decorator } from "ts-morph";
+import {
+  Node,
+  type ClassDeclaration,
+  type Decorator,
+  type PropertyAccessExpression,
+} from "ts-morph";
 import type { ProjectContext } from "./project.js";
 
 /** The text of a plain string literal, or undefined for anything computed. */
@@ -114,4 +119,33 @@ export function isSelectorPublic(node: Node): boolean {
     callee = callee.getExpression(); // input.required(...) / model.required(...)
   }
   return ["input", "output", "model"].some((name) => isAngularCoreExport(callee, name));
+}
+
+/**
+ * `input` or `output` for an unaliased `@Input()` / `@Output()` / `input()` / `output()` member;
+ * undefined for `model()`, aliases and options, whose binding names need more than the member name.
+ */
+export function plainBindingKind(node: Node): "input" | "output" | undefined {
+  if (Node.isDecoratable(node)) {
+    for (const decorator of node.getDecorators()) {
+      for (const [name, kind] of [
+        ["Input", "input"],
+        ["Output", "output"],
+      ] as const) {
+        if (isCoreDecorator(decorator, name))
+          return decorator.getArguments().length ? undefined : kind;
+      }
+    }
+  }
+  const initializer = Node.isPropertyDeclaration(node) ? node.getInitializer() : undefined;
+  if (!Node.isCallExpression(initializer)) return undefined;
+  let callee = initializer.getExpression();
+  const required = Node.isPropertyAccessExpression(callee) && callee.getName() === "required";
+  if (required) callee = (callee as PropertyAccessExpression).getExpression();
+  const budget = required ? 0 : 1;
+  if (isAngularCoreExport(callee, "input"))
+    return initializer.getArguments().length <= budget ? "input" : undefined;
+  return isAngularCoreExport(callee, "output") && !initializer.getArguments().length
+    ? "output"
+    : undefined;
 }

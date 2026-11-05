@@ -349,10 +349,12 @@ describe("prepareRename across Angular templates (ATN-R1, R3-R7)", () => {
   it.each([
     ["@Input", `@Input() title = "x";`],
     ["signal input()", `title = input("x");`],
+    ["@Output", `@Output() title = output<string>();`],
+    ["signal output()", `title = output<string>();`],
   ])("%s member blocks rename with INCOMPLETE_EVIDENCE before any edit", async (_, member) => {
     const fixture = await renameFixture({
       "src/a.component.ts": RENAME_COMPONENT()
-        .replace("import { Component }", "import { Component, Input, input }")
+        .replace("import { Component }", "import { Component, Input, Output, input, output }")
         .replace('  title = "x";', `  ${member}`),
     });
 

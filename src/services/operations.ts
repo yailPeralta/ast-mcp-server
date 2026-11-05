@@ -655,8 +655,10 @@ function assertTemplateRenameAllowed(
   coverageStatus: string,
   usages: readonly TemplateUsage[],
   newName: string,
+  crossComponent = false,
 ): void {
-  if (coverageStatus === "unfinished" || coverageStatus === "unsupported") {
+  // Other components' templates bind the member through its selector; rename does not edit them yet.
+  if (crossComponent || coverageStatus === "unfinished" || coverageStatus === "unsupported") {
     throw new PublicOperationalError(
       "INCOMPLETE_EVIDENCE",
       "Template coverage is incomplete, so the rename cannot be proven safe.",
@@ -716,8 +718,8 @@ export async function prepareRename(
         );
       }
       // Template usages must be collected before the rename mutates the program.
-      const { coverage, usages } = await collectTemplateUsages(node, context, rc);
-      assertTemplateRenameAllowed(coverage.status, usages, args.newName);
+      const { coverage, usages, crossComponent } = await collectTemplateUsages(node, context, rc);
+      assertTemplateRenameAllowed(coverage.status, usages, args.newName, crossComponent);
       const tsReferenceCount = Node.isReferenceFindable(node)
         ? findNonDeclarationReferences(node).length
         : 0;

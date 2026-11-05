@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `ast_find_references` lists the binding usages of a selector-public member (`@Input`, `@Output`, `input()`, `output()` without aliases) in the templates of consuming components whose literal `imports` include the declaring standalone component, and reports `completed` only when every component template in the Project was read and every match resolved; otherwise `unfinished` with `cross_component`, `work_exhausted` or the template's own reason. `ast_rename_symbol` still refuses these members with `INCOMPLETE_EVIDENCE` (#408).
+
 ### Fixed
 
 - Selector-public component members (`@Input`, `@Output`, `input()`, `output()`, `model()`) and `@Pipe` classes reported `template_coverage: completed` (pipes reported nothing), and a rename of an `@Input` was planned without blocking although the consuming templates were never read. They now report `unfinished` with the new reason `cross_component` (own-template usages are still listed for inputs and outputs), and `ast_rename_symbol` refuses them with `INCOMPLETE_EVIDENCE` (#407).

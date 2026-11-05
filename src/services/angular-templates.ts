@@ -6,12 +6,27 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Node, SyntaxKind, type ClassDeclaration } from "ts-morph";
 import {
+  angularCoreMajor,
   componentDecorator,
   isDirectiveClass,
   isMetadataPublic,
   isPipeClass,
   isSelectorPublic,
+  literalString,
+  plainBindingKind,
 } from "./angular-decorators.js";
+import {
+  extractConsumerUsages,
+  mayMatch,
+  type BindingTarget,
+  type ConsumerBinding,
+  type SelectorCompiler,
+} from "./angular-template-bindings.js";
+import {
+  createScopeResolver,
+  MAX_SCOPE_VISITS,
+  ScopeWorkExhausted,
+} from "./angular-template-scope.js";
 import type { ProjectContext } from "./project.js";
 import type { RequestContext } from "./request-context.js";
 import { assertSafeOperationFile } from "./safe-file.js";
@@ -46,8 +61,13 @@ export interface TemplateUsage {
   readonly localsInScope: readonly string[];
   readonly fileHash: string;
   readonly role: "own" | "consumer";
-  readonly binding?: string;
+  readonly binding?: ConsumerBinding;
   readonly bindingName?: string;
+}
+export interface ScanLimits {
+  readonly templates: number;
+  readonly bytes: number;
+  readonly nodes: number;
 }
 
 const MAX_TEMPLATE_BYTES = 512 * 1024;
@@ -57,6 +77,7 @@ const MIN_COMPILER_MAJOR = 18;
 const MAX_COMPILER_MAJOR = 22;
 const TWO_WAY_BINDING = 5; // BindingType.TwoWay, stable across supported majors
 const TWO_WAY_EVENT = 2; // ParsedEventType.TwoWay, stable across supported majors
+const SCAN_LIMITS: ScanLimits = { templates: 2000, bytes: 32 * 1024 * 1024, nodes: 1_000_000 };
 const NOT_APPLICABLE = { coverage: { status: "not_applicable" }, usages: [] } as const;
 const ASSIGNMENT_OPERATION = /^(?:=|(?:\*\*|&&|\|\||\?\?|<<|>>>|>>|[+\-*/%&|^])=)$/u;
 
@@ -81,7 +102,7 @@ export interface CompilerModule {
   createCssSelectorFromNode?(node: any): any;
 }
 type CompilerLoad =
-  | { readonly compiler: CompilerModule }
+  | { readonly compiler: CompilerModule; readonly selectors: boolean }
   | { readonly reason: "compiler_missing" | "compiler_unsupported" };
 
 const compilerCache = new Map<string, Promise<CompilerModule>>();
@@ -170,7 +191,12 @@ async function loadCompiler(tsConfigFilePath: string): Promise<CompilerLoad> {
         compiler.PropertyRead,
         compiler.Call,
       ].every((member) => typeof member === "function");
-    return complete ? { compiler } : unsupported;
+    const selectors = [
+      compiler.CssSelector?.parse,
+      compiler.SelectorMatcher,
+      compiler.createCssSelectorFromNode,
+    ].every((member) => typeof member === "function");
+    return complete ? { compiler, selectors } : unsupported;
   } catch {
     return unsupported;
   }
@@ -581,14 +607,109 @@ function toUsages(
   });
 }
 
+/** Selector and unaliased member names, or undefined when bindings cannot be named from the member. */
+function bindingTarget(cls: ClassDeclaration, node: Node, name: string): BindingTarget | undefined {
+  const metadata = componentDecorator(cls)?.getArguments()[0];
+  if (!Node.isObjectLiteralExpression(metadata) || metadata.getProperty("hostDirectives")) {
+    return undefined;
+  }
+  const property = metadata.getProperty("selector");
+  const selector = literalString(
+    Node.isPropertyAssignment(property) ? property.getInitializer() : undefined,
+  );
+  const kind = isMetadataPublic(cls, name) ? undefined : plainBindingKind(node);
+  if (!selector || !kind) return undefined;
+  return {
+    selector,
+    inputs: kind === "input" ? [name] : [],
+    outputs: kind === "output" ? [name] : [],
+  };
+}
+
+/**
+ * Scans every component template in the Project for bindings of the target. Matching the selector
+ * comes first; scope only filters matches. Unreadable templates and unproven scopes are reported.
+ */
+async function scanConsumers(
+  context: ProjectContext,
+  cls: ClassDeclaration,
+  target: BindingTarget,
+  compiler: SelectorCompiler,
+  rc: RequestContext,
+  limits: Partial<ScanLimits>,
+): Promise<{ usages: TemplateUsage[]; failure?: TemplateCoverageReason; examined: number }> {
+  const remaining = { ...SCAN_LIMITS, ...limits };
+  const usages: TemplateUsage[] = [];
+  let failure: TemplateCoverageReason | undefined;
+  let examined = 0;
+  const resolve = createScopeResolver(cls, {
+    coreMajor: angularCoreMajor(context),
+    budget: { scopeVisits: MAX_SCOPE_VISITS },
+    rc,
+  });
+  const tick = (): void => {
+    if (--remaining.nodes < 0) throw new WorkExhausted();
+    if (remaining.nodes % CHECKPOINT_EVERY_NODES === 0) rc.checkpoint();
+  };
+  try {
+    for (const consumer of componentClasses(context)) {
+      rc.checkpoint();
+      if (--remaining.templates < 0) throw new WorkExhausted();
+      const located = locateTemplate(consumer);
+      if ("reason" in located) {
+        failure ??= located.reason;
+        continue;
+      }
+      const read = await readTemplate(context, located);
+      if ("reason" in read) {
+        failure ??= read.reason;
+        continue;
+      }
+      remaining.bytes -= read.bytes.length;
+      if (remaining.bytes < 0) throw new WorkExhausted();
+      examined += 1;
+      if (!mayMatch(compiler, target.selector, read.text)) continue;
+      const parsed = compiler.parseTemplate(read.text, located.absolutePath, {
+        preserveWhitespaces: true,
+      });
+      if (parsed.errors?.length) {
+        failure ??= "template_parse_error";
+        continue;
+      }
+      const scan = extractConsumerUsages(compiler, parsed.nodes, read.text, target, tick);
+      if (scan.opaque) failure ??= "cross_component";
+      if (!scan.matched) continue;
+      const verdict = resolve(consumer);
+      if (verdict === "opaque") failure ??= "cross_component";
+      if (verdict === "includes") {
+        const raw = scan.usages.map((usage): RawUsage => ({
+          ...usage,
+          localsInScope: [],
+          role: "consumer",
+        }));
+        usages.push(...toUsages(context, consumer, located, read, raw));
+      }
+    }
+  } catch (error) {
+    if (error instanceof WorkExhausted || error instanceof ScopeWorkExhausted) {
+      return { usages: [], failure: "work_exhausted", examined };
+    }
+    throw error;
+  }
+  return { usages, failure, examined };
+}
+
 /** Collects usages of a component member inside its declaring component's template. */
 export async function collectTemplateUsages(
   node: Node,
   context: ProjectContext,
   rc: RequestContext,
+  limits: Partial<ScanLimits> = {},
 ): Promise<{
   coverage: TemplateCoverage;
   usages: readonly TemplateUsage[];
+  /** The member is bound through its selector, so a rename must also edit other components. */
+  crossComponent?: boolean;
 }> {
   rc.checkpoint();
   if (!hasAngularCore(context)) return NOT_APPLICABLE;
@@ -632,9 +753,25 @@ export async function collectTemplateUsages(
   }
 
   const usages = toUsages(context, owner.cls, located, read, raw);
-  // Selector-public members are also bound in consuming templates, which are never read.
-  const coverage: TemplateCoverage = selectorPublic
-    ? { status: "unfinished", reason: "cross_component", templates: 1 }
-    : { status: "completed", templates: 1 };
-  return { coverage, usages };
+  if (!selectorPublic) return { coverage: { status: "completed", templates: 1 }, usages };
+  // Selector-public members are also bound in consuming templates: scan every component template.
+  const target = bindingTarget(owner.cls, node, owner.name);
+  const unfinished = (reason: TemplateCoverageReason, templates = 1) => ({
+    coverage: { status: "unfinished", reason, templates } as TemplateCoverage,
+    usages,
+  });
+  if (!target) return unfinished("cross_component");
+  if (!loaded.selectors) return unfinished("compiler_unsupported");
+  const scan = await scanConsumers(
+    context,
+    owner.cls,
+    target,
+    loaded.compiler as SelectorCompiler,
+    rc,
+    limits,
+  );
+  const coverage: TemplateCoverage = scan.failure
+    ? { status: "unfinished", reason: scan.failure, templates: scan.examined }
+    : { status: "completed", templates: scan.examined };
+  return { coverage, usages: [...usages, ...scan.usages], crossComponent: true };
 }

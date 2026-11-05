@@ -201,7 +201,7 @@ describe("collectSymbolReferencesWithTemplates", () => {
     ]);
   });
 
-  it("@Input member reports unfinished/cross_component and keeps own-template usages", async () => {
+  it("@Input member without consumers reports completed and keeps own-template usages", async () => {
     const result = await collect(
       await open({
         "src/a.component.ts": COMPONENT()
@@ -214,7 +214,7 @@ describe("collectSymbolReferencesWithTemplates", () => {
       reference_count: 2,
       template_reference_count: 3,
       total: 6,
-      template_coverage: { status: "unfinished", reason: "cross_component", templates: 1 },
+      template_coverage: { status: "completed", templates: 1 },
     });
   });
 
