@@ -72,6 +72,27 @@ describe("createAngularFixture", () => {
     expect(outside.root.startsWith((await realpath(os.tmpdir())) + path.sep)).toBe(true);
   });
 
+  it("declares the module-scope surface of @angular/core", async () => {
+    const fixture = await make({}, { compiler: null });
+    const declarations = await readFile(
+      path.join(fixture.root, "node_modules", "@angular", "core", "index.d.ts"),
+      "utf8",
+    );
+    for (const name of [
+      "NgModule",
+      "Directive",
+      "forwardRef",
+      "imports?",
+      "declarations?",
+      "exports?",
+      "standalone?",
+      "inputs?",
+      "outputs?",
+    ]) {
+      expect(declarations).toContain(name);
+    }
+  });
+
   it("reports which compiler majors the running Node can execute", () => {
     expect(compilerMajorSupportedByNode(20, "22.13.0")).toBe(true);
     expect(compilerMajorSupportedByNode(22, "22.13.0")).toBe(false);
