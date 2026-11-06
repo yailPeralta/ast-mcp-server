@@ -42,9 +42,12 @@ export interface TemplateUsage {
   readonly end: number;
   readonly line: number;
   readonly column: number;
-  readonly kind: "TemplatePropertyRead" | "TemplatePropertyWrite" | "TemplateCall";
+  readonly kind: string;
   readonly localsInScope: readonly string[];
   readonly fileHash: string;
+  readonly role: "own" | "consumer";
+  readonly binding?: string;
+  readonly bindingName?: string;
 }
 
 const MAX_TEMPLATE_BYTES = 512 * 1024;
@@ -58,7 +61,7 @@ const NOT_APPLICABLE = { coverage: { status: "not_applicable" }, usages: [] } as
 const ASSIGNMENT_OPERATION = /^(?:=|(?:\*\*|&&|\|\||\?\?|<<|>>>|>>|[+\-*/%&|^])=)$/u;
 
 type AnyCtor = new () => any;
-interface CompilerModule {
+export interface CompilerModule {
   parseTemplate(
     text: string,
     url: string,
@@ -73,6 +76,9 @@ interface CompilerModule {
   Call: AnyCtor;
   Binary?: AnyCtor;
   PropertyWrite?: AnyCtor;
+  CssSelector?: AnyCtor & { parse(selector: string): any[] };
+  SelectorMatcher?: AnyCtor;
+  createCssSelectorFromNode?(node: any): any;
 }
 type CompilerLoad =
   | { readonly compiler: CompilerModule }
@@ -300,7 +306,8 @@ function hasDerivedComponent(context: ProjectContext, cls: ClassDeclaration): bo
 }
 
 class WorkExhausted extends Error {}
-type RawUsage = Pick<TemplateUsage, "start" | "end" | "kind" | "localsInScope">;
+type RawUsage = Pick<TemplateUsage, "start" | "end" | "kind" | "localsInScope" | "role"> &
+  Partial<Pick<TemplateUsage, "binding" | "bindingName">>;
 
 /** Walks parsed template nodes with a scope stack so template-local names shadow members. */
 function extractUsages(
@@ -325,6 +332,7 @@ function extractUsages(
       start: ast.nameSpan.start,
       end: ast.nameSpan.end,
       kind: merged,
+      role: "own",
       localsInScope: [...new Set(scopes.flatMap((scope) => [...scope]))].sort(),
     });
   };
@@ -517,12 +525,71 @@ function decodeTemplate(bytes: Buffer): string | undefined {
   }
 }
 
+interface TemplateRead {
+  readonly text: string;
+  readonly bytes: Buffer;
+  readonly offset: number;
+}
+
+/** Reads a located template within the per-template size cap. */
+async function readTemplate(
+  context: ProjectContext,
+  located: Exclude<Located, { reason: TemplateCoverageReason }>,
+): Promise<TemplateRead | { readonly reason: TemplateCoverageReason }> {
+  let text: string;
+  let bytes: Buffer;
+  if (located.container === "inline") {
+    text = located.text;
+    bytes = Buffer.from(text, "utf8");
+  } else {
+    const unsafe = checkTemplatePath(context.projectRoot, located.absolutePath);
+    if (unsafe) return { reason: unsafe };
+    if ((await stat(located.absolutePath)).size > MAX_TEMPLATE_BYTES) {
+      return { reason: "size_exceeded" };
+    }
+    bytes = await readFile(located.absolutePath);
+    const decoded = decodeTemplate(bytes);
+    if (decoded === undefined) return { reason: "template_parse_error" };
+    text = decoded;
+  }
+  // Shared cap: the external path also checks the size before reading, inline checks here.
+  if (bytes.length > MAX_TEMPLATE_BYTES) return { reason: "size_exceeded" };
+  return { text, bytes, offset: located.container === "inline" ? located.offset : 0 };
+}
+
+function toUsages(
+  context: ProjectContext,
+  cls: ClassDeclaration,
+  located: Exclude<Located, { reason: TemplateCoverageReason }>,
+  read: TemplateRead,
+  raw: readonly RawUsage[],
+): TemplateUsage[] {
+  const fileText = located.container === "inline" ? cls.getSourceFile().getFullText() : read.text;
+  const fileHash = createHash("sha256").update(read.bytes).digest("hex");
+  return raw.map((usage): TemplateUsage => {
+    const start = usage.start + read.offset;
+    return {
+      ...usage,
+      absolutePath: located.absolutePath,
+      file: path.relative(context.projectRoot, located.absolutePath),
+      container: located.container,
+      start,
+      end: usage.end + read.offset,
+      ...lineColumn(fileText, start),
+      fileHash,
+    };
+  });
+}
+
 /** Collects usages of a component member inside its declaring component's template. */
 export async function collectTemplateUsages(
   node: Node,
   context: ProjectContext,
   rc: RequestContext,
-): Promise<{ coverage: TemplateCoverage; usages: readonly TemplateUsage[] }> {
+): Promise<{
+  coverage: TemplateCoverage;
+  usages: readonly TemplateUsage[];
+}> {
   rc.checkpoint();
   if (!hasAngularCore(context)) return NOT_APPLICABLE;
   const fail = (status: "unfinished" | "unsupported", reason: TemplateCoverageReason) => ({
@@ -548,29 +615,11 @@ export async function collectTemplateUsages(
   if ("reason" in loaded) return fail("unfinished", loaded.reason);
   const located = locateTemplate(owner.cls);
   if ("reason" in located) return fail("unfinished", located.reason);
+  const read = await readTemplate(context, located);
+  if ("reason" in read) return fail("unfinished", read.reason);
 
-  let text: string;
-  let offset = 0;
-  let bytes: Buffer;
-  if (located.container === "inline") {
-    ({ text, offset } = located);
-    bytes = Buffer.from(text, "utf8");
-  } else {
-    const unsafe = checkTemplatePath(context.projectRoot, located.absolutePath);
-    if (unsafe) return fail("unfinished", unsafe);
-    if ((await stat(located.absolutePath)).size > MAX_TEMPLATE_BYTES) {
-      return fail("unfinished", "size_exceeded");
-    }
-    bytes = await readFile(located.absolutePath);
-    const decoded = decodeTemplate(bytes);
-    if (decoded === undefined) return fail("unfinished", "template_parse_error");
-    text = decoded;
-  }
-
-  // Shared cap: the external path also checks the size before reading, inline checks here.
-  if (bytes.length > MAX_TEMPLATE_BYTES) return fail("unfinished", "size_exceeded");
   rc.checkpoint();
-  const parsed = loaded.compiler.parseTemplate(text, located.absolutePath, {
+  const parsed = loaded.compiler.parseTemplate(read.text, located.absolutePath, {
     preserveWhitespaces: true,
   });
   if (parsed.errors?.length) return fail("unfinished", "template_parse_error");
@@ -582,22 +631,7 @@ export async function collectTemplateUsages(
     throw error;
   }
 
-  const fileText = located.container === "inline" ? owner.cls.getSourceFile().getFullText() : text;
-  const fileHash = createHash("sha256").update(bytes).digest("hex");
-  const usages = raw.map((usage): TemplateUsage => {
-    const start = usage.start + offset;
-    return {
-      absolutePath: located.absolutePath,
-      file: path.relative(context.projectRoot, located.absolutePath),
-      container: located.container,
-      start,
-      end: usage.end + offset,
-      ...lineColumn(fileText, start),
-      kind: usage.kind,
-      localsInScope: usage.localsInScope,
-      fileHash,
-    };
-  });
+  const usages = toUsages(context, owner.cls, located, read, raw);
   // Selector-public members are also bound in consuming templates, which are never read.
   const coverage: TemplateCoverage = selectorPublic
     ? { status: "unfinished", reason: "cross_component", templates: 1 }
