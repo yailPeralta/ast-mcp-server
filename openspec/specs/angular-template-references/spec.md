@@ -128,13 +128,13 @@ Angular MUST be considered present only when `@angular/core/package.json` resolv
 
 ### Requirement: Member usage extraction
 
-The system MUST report declaring-component member usages in templates (properties, methods, accessors, signals), including control flow, structural directives, `@let` values, and pipe arguments, each with exact source span, project-relative file, and a usage `kind`. Own-template usages keep kinds `TemplatePropertyRead`, `TemplatePropertyWrite` and `TemplateCall`; a signal call MUST be `TemplateCall`. Consumer usages MUST carry the kind `TemplateBinding`, covering `[x]`, `x="lit"`, `[(x)]`, `(y)` and `(xChange)`, with the span of the bound name only (not the value). Pipe name usages (S3) MUST carry the kind `TemplatePipeName` with the `nameSpan`. The reported `context` MUST be the template line text. Usages in inline templates MUST be reported with their spans but MUST NOT be writable. Existing items for non-Angular or plain-member outputs MUST NOT change.
+The system MUST report declaring-component member usages in templates (properties, methods, accessors, signals), including control flow, structural directives, `@let` values, and pipe arguments, each with exact source span, project-relative file, and a usage `kind`. Own-template usages keep kinds `TemplatePropertyRead`, `TemplatePropertyWrite` and `TemplateCall`; a signal call MUST be `TemplateCall`. Consumer usages MUST carry kinds `TemplateInputBinding` for `[x]`, `TemplateAttribute` for `x="lit"`, `TemplateTwoWayBinding` for `[(x)]` and `TemplateOutputBinding` for `(y)` and `(xChange)`, with the span of the bound name only (not the value). Pipe name usages (S3) MUST carry the kind `TemplatePipeName` with the `nameSpan`. The reported `context` MUST be the template line text. Usages in inline templates MUST be reported with their spans but MUST NOT be writable. Existing items for non-Angular or plain-member outputs MUST NOT change.
 
 #### Scenario: Consumer binding kinds
 
 - GIVEN a consumer template with `[x]`, `x="lit"`, `[(x)]` and `(y)`
 - WHEN references are collected
-- THEN each is reported with kind `TemplateBinding`, a span covering only the bound name, and `context` equal to the template line
+- THEN each is reported with its consumer binding kind (`TemplateInputBinding`, `TemplateAttribute`, `TemplateTwoWayBinding` or `TemplateOutputBinding`), a span covering only the bound name, and `context` equal to the template line
 
 #### Scenario: Consumer in an inline template
 
@@ -228,7 +228,7 @@ Each template MUST be limited to 512 KiB and 100,000 visited nodes, with cancell
 
 ### Requirement: Additive schema and TOON parity
 
-When coverage is not `not_applicable`, the response MUST add top-level `template_coverage` and `template_reference_count`, and every item MUST carry a uniform `origin` of `compiler`, `template_external`, or `template_inline`. `reference_count` MUST remain TypeScript-only, `total` MUST count both kinds, and `affected_files` MUST include template `.html` files, including consumer templates. New usage kinds (`TemplateBinding`, `TemplatePipeName`) are additive. No new tool inputs are introduced. TOON output MUST carry the same information as JSON. The inventory MUST be re-baselined only when the tool description changes (S5).
+When coverage is not `not_applicable`, the response MUST add top-level `template_coverage` and `template_reference_count`, and every item MUST carry a uniform `origin` of `compiler`, `template_external`, or `template_inline`. `reference_count` MUST remain TypeScript-only, `total` MUST count both kinds, and `affected_files` MUST include template `.html` files, including consumer templates. New usage kinds (`TemplateInputBinding`, `TemplateAttribute`, `TemplateTwoWayBinding`, `TemplateOutputBinding`, `TemplatePipeName`) are additive. No new tool inputs are introduced. TOON output MUST carry the same information as JSON. The inventory MUST be re-baselined only when the tool description changes (S5).
 
 #### Scenario: Counts with consumers
 
