@@ -410,12 +410,16 @@ ${PUBLIC(member, "Component")}`,
     });
   });
 
-  it("@Pipe class and its transform are unfinished/cross_component without usages", async () => {
-    const { context } = await setup({ "src/fmt.pipe.ts": PIPE });
+  it("@Pipe class and its transform are completed when no template uses the pipe", async () => {
+    const { context } = await setup({
+      "src/fmt.pipe.ts": PIPE,
+      "src/a.component.html": "<p>none</p>",
+    });
     for (const symbol of ["FmtPipe", "FmtPipe.transform"]) {
       expect(await usagesOf(context, symbol, NO_REQUEST_CONTEXT, "src/fmt.pipe.ts")).toEqual({
-        coverage: { status: "unfinished", reason: "cross_component", templates: 0 },
+        coverage: { status: "completed", templates: 1 },
         usages: [],
+        ...(symbol.includes(".") ? { crossComponent: true } : {}),
       });
     }
   });
@@ -866,6 +870,136 @@ describe("NgModule-scoped consumers", () => {
   });
 });
 
+const PIPE_CONSUMER = (html: string, imports = "[FmtPipe]", name = "b") => ({
+  [`src/${name}.component.ts`]: `import { Component } from "@angular/core";
+import { FmtPipe } from "./fmt.pipe";
+@Component({ selector: "app-${name}", standalone: true, imports: ${imports}, templateUrl: "./${name}.component.html" })
+export class ${name.toUpperCase()}Component {}
+`,
+  [`src/${name}.component.html`]: html,
+});
+const PIPE_FILES = { "src/fmt.pipe.ts": PIPE, "src/a.component.html": "<p>none</p>" };
+
+describe("pipe usages", () => {
+  const pipeUsages = async (
+    files: Record<string, string>,
+    symbol = "FmtPipe",
+    options?: Parameters<typeof setup>[1],
+  ) => {
+    const { context } = await setup({ ...PIPE_FILES, ...files }, options);
+    return usagesOf(context, symbol, NO_REQUEST_CONTEXT, "src/fmt.pipe.ts");
+  };
+
+  it.each(["FmtPipe", "FmtPipe.transform"])(
+    "lists in-scope `| fmt` usages for %s",
+    async (symbol) => {
+      const html = '{{ v | fmt: 1 }} <p [x]="v | fmt"></p>';
+      const { coverage, usages } = await pipeUsages(PIPE_CONSUMER(html), symbol);
+      expect(coverage).toEqual({ status: "completed", templates: 2 });
+      expect(usages.map((usage) => [usage.kind, usage.role, usage.container, usage.file])).toEqual([
+        ["TemplatePipeName", "consumer", "external", path.join("src", "b.component.html")],
+        ["TemplatePipeName", "consumer", "external", path.join("src", "b.component.html")],
+      ]);
+      expect(usages.map((usage) => html.slice(usage.start, usage.end))).toEqual(["fmt", "fmt"]);
+    },
+  );
+
+  it("lists a pipe used in an inline consumer template as inline", async () => {
+    const files = PIPE_CONSUMER("");
+    files["src/b.component.ts"] = files["src/b.component.ts"].replace(
+      'templateUrl: "./b.component.html"',
+      "template: '{{ v | fmt }}'",
+    );
+    const { usages } = await pipeUsages(files);
+    expect(usages.map((usage) => [usage.kind, usage.container])).toEqual([
+      ["TemplatePipeName", "inline"],
+    ]);
+  });
+
+  it("ignores the same pipe name in a component that does not import the pipe", async () => {
+    const files = {
+      ...PIPE_CONSUMER("{{ v | fmt }}", "[]"),
+      ...PIPE_CONSUMER("{{ v | fmt }}", "[FmtPipe]", "c"),
+    };
+    const { coverage, usages } = await pipeUsages(files);
+    expect(coverage).toEqual({ status: "completed", templates: 3 });
+    expect(usages.map((usage) => usage.file)).toEqual([path.join("src", "c.component.html")]);
+  });
+
+  it("an unrelated pipe with the same name in scope is not listed", async () => {
+    const files = {
+      "src/other.pipe.ts": PIPE.replace("FmtPipe", "OtherPipe"),
+      "src/b.component.ts": `import { Component } from "@angular/core";
+import { OtherPipe } from "./other.pipe";
+@Component({ selector: "app-b", standalone: true, imports: [OtherPipe], templateUrl: "./b.component.html" })
+export class BComponent {}
+`,
+      "src/b.component.html": "{{ v | fmt }}",
+    };
+    const { coverage, usages } = await pipeUsages(files);
+    expect(coverage).toMatchObject({ status: "completed" });
+    expect(usages).toEqual([]);
+  });
+
+  it("lists a pipe reached through an NgModule export", async () => {
+    const files = {
+      "src/p.module.ts": `import { NgModule } from "@angular/core";
+import { FmtPipe } from "./fmt.pipe";
+import { BComponent } from "./b.component";
+@NgModule({ imports: [FmtPipe], exports: [FmtPipe], declarations: [BComponent] })
+export class PModule {}
+`,
+      "src/b.component.ts": `import { Component } from "@angular/core";
+@Component({ selector: "app-b", standalone: false, templateUrl: "./b.component.html" })
+export class BComponent {}
+`,
+      "src/b.component.html": "{{ v | fmt }}",
+    };
+    const { coverage, usages } = await pipeUsages(files);
+    expect(coverage).toMatchObject({ status: "completed" });
+    expect(usages).toHaveLength(1);
+  });
+
+  it("a non-literal pipe name is unfinished/cross_component", async () => {
+    const pipe = PIPE.replace('name: "fmt"', "name: NAME").replace(
+      "@Pipe",
+      'const NAME = "fmt";\n@Pipe',
+    );
+    const { coverage, usages } = await pipeUsages({
+      "src/fmt.pipe.ts": pipe,
+      ...PIPE_CONSUMER("{{ v | fmt }}"),
+    });
+    expect(coverage).toEqual({ status: "unfinished", reason: "cross_component", templates: 0 });
+    expect(usages).toEqual([]);
+  });
+
+  it.each([
+    ["{{ v | fmt }}", "unfinished"],
+    ["<p>no pipe</p>", "completed"],
+  ])("an opaque consumer scope with template %s is %s", async (html, status) => {
+    const files = PIPE_CONSUMER(html, "[...SHARED]");
+    files["src/b.component.ts"] = `const SHARED: unknown[] = [];\n${files["src/b.component.ts"]}`;
+    expect((await pipeUsages(files)).coverage.status).toBe(status);
+  });
+
+  it("a consumer that cannot be read keeps its own reason", async () => {
+    const files = PIPE_CONSUMER("{{ v | fmt }}<p [x]=");
+    expect((await pipeUsages(files)).coverage).toMatchObject({
+      status: "unfinished",
+      reason: "template_parse_error",
+    });
+  });
+
+  it("other members of a pipe class stay unfinished/cross_component", async () => {
+    const pipe = PIPE.replace("transform", "helper = 1;\n  transform");
+    const { coverage } = await pipeUsages(
+      { "src/fmt.pipe.ts": pipe, ...PIPE_CONSUMER("{{ v | fmt }}") },
+      "FmtPipe.helper",
+    );
+    expect(coverage).toEqual({ status: "unfinished", reason: "cross_component", templates: 0 });
+  });
+});
+
 describe.each([
   ["v18", 18],
   ["v19", 19],
@@ -888,6 +1022,24 @@ describe.each([
     expect(usages.map((usage) => usage.kind)).toEqual(
       major === 18 ? CONSUMER_KINDS : ["TemplatePropertyRead"],
     );
+  });
+  run("pipe name spans slice to the name in arguments, nesting and control flow", async () => {
+    const html = `{{ a | fmt | fmt: 2 }} {{ b | slice: (c | fmt) }}
+@if (d | fmt) { @for (e of f; track e) { {{ e | fmt:(g | fmt) }} } }
+<p [x]="h | fmt"></p>`;
+    const { context } = await setup({ ...PIPE_FILES, ...PIPE_CONSUMER(html) }, { compiler: alias });
+    const { coverage, usages } = await usagesOf(
+      context,
+      "FmtPipe",
+      NO_REQUEST_CONTEXT,
+      "src/fmt.pipe.ts",
+    );
+    expect(coverage).toMatchObject({ status: "completed" });
+    expect(usages).toHaveLength(7);
+    expect(new Set(usages.map((usage) => html.slice(usage.start, usage.end)))).toEqual(
+      new Set(["fmt"]),
+    );
+    expect(usages.every((usage) => usage.kind === "TemplatePipeName")).toBe(true);
   });
   run("consumer bindings are listed next to own usages", async () => {
     const { context } = await setup(CONSUMER_FILES, { compiler: alias });

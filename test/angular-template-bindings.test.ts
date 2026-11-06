@@ -36,6 +36,32 @@ describe.each([18, 19, 20, 21, 22] as const)("template bindings with compiler v%
     );
   });
 
+  run("compiler contract: BindingPipe.nameSpan slices to the pipe name", async () => {
+    const compiler = await load();
+    const html = `{{ a | fmt | fmt: (b | fmt) }}<p [x]="c | fmt"></p>@if (d | fmt) {{{ e | fmt }}}`;
+    const spans: string[] = [];
+    class Pipes extends compiler.RecursiveAstVisitor {
+      visitPipe(ast: any, context?: any): void {
+        spans.push(html.slice(ast.nameSpan.start, ast.nameSpan.end));
+        super.visitPipe(ast, context);
+      }
+    }
+    class Nodes extends compiler.TmplAstRecursiveVisitor {
+      visitBoundText(text: any): void {
+        text.value.ast.visit(new Pipes());
+      }
+      visitBoundAttribute(attribute: any): void {
+        attribute.value.ast.visit(new Pipes());
+      }
+      visitIfBlockBranch(branch: any): void {
+        branch.expression.visit(new Pipes());
+        super.visitIfBlockBranch(branch);
+      }
+    }
+    compiler.tmplAstVisitAll(new Nodes(), compiler.parseTemplate(html, "t.html", OPTIONS).nodes);
+    expect(spans).toEqual(["fmt", "fmt", "fmt", "fmt", "fmt", "fmt"]);
+  });
+
   run.each([
     [`<app-card [x]="a">`, ["input:x"]],
     [`<app-card bind-x="a">`, ["input:x"]],

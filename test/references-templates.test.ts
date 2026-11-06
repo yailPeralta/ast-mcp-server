@@ -218,25 +218,35 @@ describe("collectSymbolReferencesWithTemplates", () => {
     });
   });
 
-  it("@Pipe transform reports unfinished/cross_component instead of an absent field", async () => {
-    const fixture = await open({
-      "src/fmt.pipe.ts": `import { Pipe } from "@angular/core";
+  it.each(["FmtPipe", "FmtPipe.transform"])(
+    "@Pipe %s lists `| fmt` usages of in-scope consumers",
+    async (symbolPath) => {
+      const fixture = await open({
+        "src/a.component.html": "<p>none</p>",
+        "src/fmt.pipe.ts": `import { Pipe } from "@angular/core";
 @Pipe({ name: "fmt" })
 export class FmtPipe {
   transform(value: string): string { return value; }
 }
 `,
-    });
-    const result = await collect(fixture, {
-      file: "src/fmt.pipe.ts",
-      symbolPath: "FmtPipe.transform",
-    });
-    expect(result).toMatchObject({
-      template_reference_count: 0,
-      template_coverage: { status: "unfinished", reason: "cross_component", templates: 0 },
-    });
-    expect(result.references.every((item) => item.origin === "compiler")).toBe(true);
-  });
+        "src/b.component.ts": `import { Component } from "@angular/core";
+import { FmtPipe } from "./fmt.pipe.js";
+@Component({ selector: "app-b", standalone: true, imports: [FmtPipe], templateUrl: "./b.component.html" })
+export class BComponent {}
+`,
+        "src/b.component.html": "<p>{{ v | fmt }}</p>\n",
+      });
+      const result = await collect(fixture, { file: "src/fmt.pipe.ts", symbolPath });
+      expect(result).toMatchObject({
+        template_reference_count: 1,
+        template_coverage: { status: "completed", templates: 2 },
+        affected_files: expect.arrayContaining(["src/b.component.html"]),
+      });
+      expect(result.references.filter((item) => item.origin === "template_external")).toMatchObject(
+        [{ kind: "TemplatePipeName", file: "src/b.component.html", line: 1 }],
+      );
+    },
+  );
 
   it("@Input directive member reports unfinished/cross_component with zero templates", async () => {
     const fixture = await open({
