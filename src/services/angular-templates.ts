@@ -8,6 +8,7 @@ import { Node, SyntaxKind, type ClassDeclaration } from "ts-morph";
 import {
   angularCoreMajor,
   componentDecorator,
+  isCoreDecorator,
   isDirectiveClass,
   isMetadataPublic,
   isPipeClass,
@@ -333,6 +334,10 @@ function hasDerivedComponent(context: ProjectContext, cls: ClassDeclaration): bo
 }
 
 class WorkExhausted extends Error {}
+/** A pipe name span that does not slice to the name: the usage cannot be edited exactly. */
+class SpanDrift extends Error {}
+/** A usage query: a component member, or a pipe by its literal `name` (the template text checks spans). */
+type UsageQuery = { readonly member: string } | { readonly pipe: string; readonly text: string };
 type RawUsage = Pick<TemplateUsage, "start" | "end" | "kind" | "localsInScope" | "role"> &
   Partial<Pick<TemplateUsage, "binding" | "bindingName">>;
 
@@ -340,15 +345,18 @@ type RawUsage = Pick<TemplateUsage, "start" | "end" | "kind" | "localsInScope" |
 function extractUsages(
   compiler: CompilerModule,
   nodes: any[],
-  memberName: string,
+  query: UsageQuery,
   rc: RequestContext,
+  onNode: () => void = () => {},
 ): RawUsage[] {
+  const memberName = "member" in query ? query.member : undefined;
   const usages = new Map<string, RawUsage>();
   const scopes: Set<string>[] = [];
   let visited = 0;
   const tick = (): void => {
     if (++visited > MAX_TEMPLATE_NODES) throw new WorkExhausted();
     if (visited % CHECKPOINT_EVERY_NODES === 0) rc.checkpoint();
+    onNode();
   };
   const isLocal = (name: string) => scopes.some((scope) => scope.has(name));
   const record = (ast: any, kind: RawUsage["kind"]): void => {
@@ -366,8 +374,9 @@ function extractUsages(
   // Explicit `this.` bypasses template locals; ThisReceiver only extends ImplicitReceiver in some majors.
   const isMemberReceiver = (receiver: any): boolean =>
     receiver instanceof compiler.ThisReceiver ||
-    (receiver instanceof compiler.ImplicitReceiver && !isLocal(memberName));
+    (receiver instanceof compiler.ImplicitReceiver && !isLocal(memberName!));
   const isMember = (ast: any): boolean =>
+    memberName !== undefined &&
     ast instanceof compiler.PropertyRead &&
     ast.name === memberName &&
     isMemberReceiver(ast.receiver);
@@ -376,6 +385,7 @@ function extractUsages(
     visitPropertyRead(ast: any, context?: any): void;
     visitCall(ast: any, context?: any): void;
     visitBinary(ast: any, context?: any): void;
+    visitPipe(ast: any, context?: any): void;
   }) {
     writeRoot: unknown;
     visit(ast: any, context?: any): void {
@@ -401,6 +411,15 @@ function extractUsages(
       }
       record(ast.left, "TemplatePropertyWrite");
       this.visit(ast.right, context);
+    }
+    override visitPipe(ast: any, context?: any): void {
+      if ("pipe" in query && ast.name === query.pipe) {
+        if (query.text.slice(ast.nameSpan.start, ast.nameSpan.end) !== query.pipe) {
+          throw new SpanDrift();
+        }
+        record(ast, "TemplatePipeName");
+      }
+      super.visitPipe(ast, context);
     }
     visitPropertyWrite(ast: any, context?: any): void {
       if (ast.name === memberName && isMemberReceiver(ast.receiver)) {
@@ -628,15 +647,61 @@ function bindingTarget(cls: ClassDeclaration, node: Node, name: string): Binding
   return { selector, inputs: names.inputs, outputs: names.outputs };
 }
 
+/** What a consumer template holds for the target: nothing to look at, or the usages found. */
+type Inspection =
+  | "skip"
+  | { readonly matched: boolean; readonly opaque: boolean; readonly usages: readonly RawUsage[] };
+type Inspector = (
+  text: string,
+  absolutePath: string,
+  tick: () => void,
+) => Inspection | "template_parse_error";
+
+/** Parses a consumer template, or returns undefined when the compiler reports errors. */
+function parseConsumer(compiler: CompilerModule, text: string, absolutePath: string) {
+  const parsed = compiler.parseTemplate(text, absolutePath, { preserveWhitespaces: true });
+  return parsed.errors?.length ? undefined : parsed.nodes;
+}
+
+function selectorInspector(compiler: SelectorCompiler, target: BindingTarget): Inspector {
+  return (text, absolutePath, tick) => {
+    if (!mayMatch(compiler, target.selector, text)) return "skip";
+    const nodes = parseConsumer(compiler, text, absolutePath);
+    if (!nodes) return "template_parse_error";
+    const scan = extractConsumerUsages(compiler, nodes, text, target, tick);
+    const usages = scan.usages.map((usage): RawUsage => ({
+      ...usage,
+      localsInScope: [],
+      role: "consumer",
+    }));
+    return { matched: scan.matched, opaque: scan.opaque, usages };
+  };
+}
+
+function pipeInspector(compiler: CompilerModule, name: string, rc: RequestContext): Inspector {
+  return (text, absolutePath, tick) => {
+    if (!text.includes(name)) return "skip";
+    const nodes = parseConsumer(compiler, text, absolutePath);
+    if (!nodes) return "template_parse_error";
+    try {
+      const raw = extractUsages(compiler, nodes, { pipe: name, text }, rc, tick);
+      const usages = raw.map((usage): RawUsage => ({ ...usage, role: "consumer" }));
+      return { matched: usages.length > 0, opaque: false, usages };
+    } catch (error) {
+      if (error instanceof SpanDrift) return { matched: true, opaque: true, usages: [] };
+      throw error;
+    }
+  };
+}
+
 /**
- * Scans every component template in the Project for bindings of the target. Matching the selector
- * comes first; scope only filters matches. Unreadable templates and unproven scopes are reported.
+ * Scans every component template in the Project with `inspect`. Matching comes first; scope only
+ * filters matches. Unreadable templates and unproven scopes are reported.
  */
 async function scanConsumers(
   context: ProjectContext,
   cls: ClassDeclaration,
-  target: BindingTarget,
-  compiler: SelectorCompiler,
+  inspect: Inspector,
   rc: RequestContext,
   limits: Partial<ScanLimits>,
 ): Promise<{ usages: TemplateUsage[]; failure?: TemplateCoverageReason; examined: number }> {
@@ -670,26 +735,18 @@ async function scanConsumers(
       remaining.bytes -= read.bytes.length;
       if (remaining.bytes < 0) throw new WorkExhausted();
       examined += 1;
-      if (!mayMatch(compiler, target.selector, read.text)) continue;
-      const parsed = compiler.parseTemplate(read.text, located.absolutePath, {
-        preserveWhitespaces: true,
-      });
-      if (parsed.errors?.length) {
-        failure ??= "template_parse_error";
+      const scan = inspect(read.text, located.absolutePath, tick);
+      if (scan === "skip") continue;
+      if (scan === "template_parse_error") {
+        failure ??= scan;
         continue;
       }
-      const scan = extractConsumerUsages(compiler, parsed.nodes, read.text, target, tick);
       if (scan.opaque) failure ??= "cross_component";
       if (!scan.matched) continue;
       const verdict = resolve(consumer);
       if (verdict === "opaque") failure ??= "cross_component";
       if (verdict === "includes") {
-        const raw = scan.usages.map((usage): RawUsage => ({
-          ...usage,
-          localsInScope: [],
-          role: "consumer",
-        }));
-        usages.push(...toUsages(context, consumer, located, read, raw));
+        usages.push(...toUsages(context, consumer, located, read, scan.usages));
       }
     }
   } catch (error) {
@@ -699,6 +756,43 @@ async function scanConsumers(
     throw error;
   }
   return { usages, failure, examined };
+}
+
+/** The literal `name` of a `@Pipe({ name })` class, or undefined when it is not a plain literal. */
+function pipeName(cls: ClassDeclaration): string | undefined {
+  const decorator = cls.getDecorators().find((candidate) => isCoreDecorator(candidate, "Pipe"));
+  const metadata = decorator?.getArguments()[0];
+  if (!Node.isObjectLiteralExpression(metadata)) return undefined;
+  const property = metadata.getProperty("name");
+  return literalString(Node.isPropertyAssignment(property) ? property.getInitializer() : undefined);
+}
+
+/** `| name` usages of a pipe class in the templates of components that have the class in scope. */
+async function collectPipeUsages(
+  cls: ClassDeclaration,
+  context: ProjectContext,
+  rc: RequestContext,
+  limits: Partial<ScanLimits>,
+) {
+  const unfinished = (reason: TemplateCoverageReason, templates = 0) => ({
+    coverage: { status: "unfinished", reason, templates } as TemplateCoverage,
+    usages: [] as readonly TemplateUsage[],
+  });
+  const name = pipeName(cls);
+  if (name === undefined) return unfinished("cross_component");
+  const loaded = await loadCompiler(context.tsConfigFilePath);
+  if ("reason" in loaded) return unfinished(loaded.reason);
+  const scan = await scanConsumers(
+    context,
+    cls,
+    pipeInspector(loaded.compiler, name, rc),
+    rc,
+    limits,
+  );
+  const coverage: TemplateCoverage = scan.failure
+    ? { status: "unfinished", reason: scan.failure, templates: scan.examined }
+    : { status: "completed", templates: scan.examined };
+  return { coverage, usages: scan.usages };
 }
 
 /** Collects usages of a component member inside its declaring component's template. */
@@ -720,11 +814,17 @@ export async function collectTemplateUsages(
     usages: [] as readonly TemplateUsage[],
   });
   if (Node.isClassDeclaration(node)) {
-    return isPipeClass(node) ? fail("unfinished", "cross_component") : NOT_APPLICABLE;
+    return isPipeClass(node) ? collectPipeUsages(node, context, rc, limits) : NOT_APPLICABLE;
   }
   const owner = memberOwner(node);
   if (!owner) return NOT_APPLICABLE;
-  if (isPipeClass(owner.cls)) return fail("unfinished", "cross_component");
+  if (isPipeClass(owner.cls)) {
+    // Only `transform` is the pipe contract: it reports the pipe's usages but a rename stays refused.
+    if (owner.name !== "transform" || componentDecorator(owner.cls)) {
+      return fail("unfinished", "cross_component");
+    }
+    return { ...(await collectPipeUsages(owner.cls, context, rc, limits)), crossComponent: true };
+  }
   const isComponent = componentDecorator(owner.cls) !== undefined;
   const selectorPublic = isSelectorPublic(node) || isMetadataPublic(owner.cls, owner.name);
   if (!isComponent && selectorPublic && isDirectiveClass(owner.cls)) {
@@ -748,7 +848,7 @@ export async function collectTemplateUsages(
   if (parsed.errors?.length) return fail("unfinished", "template_parse_error");
   let raw: RawUsage[];
   try {
-    raw = extractUsages(loaded.compiler, parsed.nodes, owner.name, rc);
+    raw = extractUsages(loaded.compiler, parsed.nodes, { member: owner.name }, rc);
   } catch (error) {
     if (error instanceof WorkExhausted) return fail("unfinished", "work_exhausted");
     throw error;
@@ -767,8 +867,7 @@ export async function collectTemplateUsages(
   const scan = await scanConsumers(
     context,
     owner.cls,
-    target,
-    loaded.compiler as SelectorCompiler,
+    selectorInspector(loaded.compiler as SelectorCompiler, target),
     rc,
     limits,
   );
