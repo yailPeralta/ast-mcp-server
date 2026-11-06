@@ -806,8 +806,8 @@ export async function collectTemplateUsages(
 ): Promise<{
   coverage: TemplateCoverage;
   usages: readonly TemplateUsage[];
-  /** The member is bound through its selector, so a rename must also edit other components. */
-  crossComponent?: boolean;
+  /** Rename must stay refused even though coverage is complete (a pipe `transform`, a metadata-listed name). */
+  renameBlocked?: boolean;
 }> {
   rc.checkpoint();
   if (!hasAngularCore(context)) return NOT_APPLICABLE;
@@ -825,7 +825,7 @@ export async function collectTemplateUsages(
     if (owner.name !== "transform" || componentDecorator(owner.cls)) {
       return fail("unfinished", "cross_component");
     }
-    return { ...(await collectPipeUsages(owner.cls, context, rc, limits)), crossComponent: true };
+    return { ...(await collectPipeUsages(owner.cls, context, rc, limits)), renameBlocked: true };
   }
   const isComponent = componentDecorator(owner.cls) !== undefined;
   const selectorPublic = isSelectorPublic(node) || isMetadataPublic(owner.cls, owner.name);
@@ -876,5 +876,7 @@ export async function collectTemplateUsages(
   const coverage: TemplateCoverage = scan.failure
     ? { status: "unfinished", reason: scan.failure, templates: scan.examined }
     : { status: "completed", templates: scan.examined };
-  return { coverage, usages: [...usages, ...scan.usages], crossComponent: true };
+  // Names listed in `inputs` / `outputs` metadata are strings that a TypeScript rename cannot follow.
+  const renameBlocked = isMetadataPublic(owner.cls, owner.name);
+  return { coverage, usages: [...usages, ...scan.usages], renameBlocked };
 }

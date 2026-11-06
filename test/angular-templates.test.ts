@@ -419,7 +419,7 @@ ${PUBLIC(member, "Component")}`,
       expect(await usagesOf(context, symbol, NO_REQUEST_CONTEXT, "src/fmt.pipe.ts")).toEqual({
         coverage: { status: "completed", templates: 1 },
         usages: [],
-        ...(symbol.includes(".") ? { crossComponent: true } : {}),
+        ...(symbol.includes(".") ? { renameBlocked: true } : {}),
       });
     }
   });

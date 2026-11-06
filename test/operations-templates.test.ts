@@ -355,20 +355,29 @@ describe("prepareRename across Angular templates (ATN-R1, R3-R7)", () => {
     ["model.required()", `title = model.required<string>();`],
     ["aliased @Input", `@Input("label") title = "x";`],
     ["aliased signal input()", `title = input("x", { alias: "label" });`],
-  ])("%s member blocks rename with INCOMPLETE_EVIDENCE before any edit", async (_, member) => {
-    const fixture = await renameFixture({
-      "src/a.component.ts": RENAME_COMPONENT()
-        .replace(
-          "import { Component }",
-          "import { Component, Input, Output, input, model, output }",
-        )
-        .replace('  title = "x";', `  ${member}`),
-    });
+  ])(
+    "%s member with completed coverage renames in TypeScript and its own template",
+    async (_, member) => {
+      const fixture = await renameFixture({
+        "src/a.component.ts": RENAME_COMPONENT()
+          .replace(
+            "import { Component }",
+            "import { Component, Input, Output, input, model, output }",
+          )
+          .replace('  title = "x";', `  ${member}`),
+      });
 
-    await expect(renameTitle(fixture)).rejects.toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
-    expect(await fixture.read("src/a.component.ts")).toContain(member);
-    expect(await fixture.read("src/a.component.html")).toBe(RENAME_TEMPLATE);
-  });
+      const prepared = await renameTitle(fixture);
+      await applyOperation(prepared.operation_id, prepared.plan_hash);
+
+      expect(await fixture.read("src/a.component.ts")).toContain(
+        member.replace("title", "heading"),
+      );
+      expect(await fixture.read("src/a.component.html")).toBe(
+        RENAME_TEMPLATE.replaceAll("{{ title }}", "{{ heading }}"),
+      );
+    },
+  );
 
   const PIPE_SOURCE = [
     'import { Pipe } from "@angular/core";',
