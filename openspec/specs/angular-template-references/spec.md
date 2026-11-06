@@ -220,5 +220,5 @@ Edit-aware diagnostic delta MUST remain TypeScript-only. Tool descriptions and d
 
 - GIVEN the tool inventory
 - WHEN the `ast_find_references` description is read
-- THEN it is exactly: `Finds type-resolved references and returns bounded project-relative locations, including declaration impact by default. When @angular/compiler resolves, it also reports Angular template usages tagged by origin with a template_coverage verdict; incomplete coverage does not prove absence, and template errors are not diagnosed.`
+- THEN it is exactly: `Finds type-resolved references and returns bounded project-relative locations, including declaration impact by default. When @angular/compiler resolves, it also reports Angular template usages, including consumer templates, tagged by origin with a template_coverage verdict; completed covers templates inside the Project only, incomplete coverage does not prove absence, and template errors are not diagnosed.`
 - AND this string is digest-sensitive: it MUST match the fixture declaration and the re-baselined inventory pins byte for byte
