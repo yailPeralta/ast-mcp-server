@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - `ast_find_references` lists the binding usages of a selector-public member (`@Input`, `@Output`, `input()`, `output()` without aliases) in the templates of consuming components whose literal `imports` include the declaring standalone component, and reports `completed` only when every component template in the Project was read and every match resolved; otherwise `unfinished` with `cross_component`, `work_exhausted` or the template's own reason. `ast_rename_symbol` still refuses these members with `INCOMPLETE_EVIDENCE` (#408).
+- Consumer template usages are also resolved through NgModules: a consumer declared in exactly one module with literal `declarations` sees that module's declarations plus the `exports` of its `imports`, followed through re-exported modules, and a standalone consumer importing a module sees its `exports`. When the `standalone` flag is absent, `@angular/core` 18 treats the consumer as module-declared and 19 or later as standalone. Spreads, variables, project calls such as `forRoot()`, a consumer declared in several modules or in none, and chains deeper than 32 modules stay `unfinished` with `cross_component` (#408).
 
 ### Fixed
 

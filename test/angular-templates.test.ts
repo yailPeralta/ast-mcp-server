@@ -681,6 +681,69 @@ describe("consumer template usages", () => {
   });
 });
 
+const MODULE = (name: string, metadata: string, imports = "") =>
+  `import { NgModule } from "@angular/core";
+import { AComponent } from "./a.component";
+import { BComponent } from "./b.component";
+${imports}
+@NgModule({ ${metadata} })
+export class ${name} {}
+`;
+const MODULE_CONSUMER = (flag: string) => ({
+  "src/b.component.ts": `import { Component } from "@angular/core";
+@Component({ selector: "app-b", ${flag}templateUrl: "./b.component.html" })
+export class BComponent {}
+`,
+  "src/b.component.html": BINDINGS,
+});
+const AMODULE = (exported: string) =>
+  MODULE("AModule", `declarations: [AComponent], exports: [${exported}]`);
+const APP_MODULE = MODULE(
+  "AppModule",
+  "declarations: [BComponent], imports: [AModule]",
+  `import { AModule } from "./a.module";`,
+);
+
+describe("NgModule-scoped consumers", () => {
+  const listed = async (files: Record<string, string>, options?: { coreVersion: string }) => {
+    const { context } = await setup({ ...TARGET_FILES, ...files }, { compiler: "v21", ...options });
+    return usagesOf(context, "AComponent.title");
+  };
+
+  it("lists a consumer declared in a module that imports the exporting module", async () => {
+    const { coverage, usages } = await listed({
+      ...MODULE_CONSUMER("standalone: false, "),
+      "src/a.module.ts": AMODULE("AComponent"),
+      "src/app.module.ts": APP_MODULE,
+    });
+    expect(coverage).toEqual({ status: "completed", templates: 2 });
+    expect(usages.map((usage) => usage.kind)).toEqual(CONSUMER_KINDS);
+  });
+
+  it("ignores a module consumer whose imported module does not export the target", async () => {
+    const { coverage, usages } = await listed({
+      ...MODULE_CONSUMER("standalone: false, "),
+      "src/a.module.ts": AMODULE(""),
+      "src/app.module.ts": APP_MODULE,
+    });
+    expect(coverage).toEqual({ status: "completed", templates: 2 });
+    expect(usages.map((usage) => usage.kind)).toEqual(["TemplatePropertyRead"]);
+  });
+
+  it("lists a standalone consumer importing an exporting module", async () => {
+    const files = CONSUMER(BINDINGS, "[AModule]");
+    files["src/b.component.ts"] =
+      `import { AModule } from "./a.module";\n${files["src/b.component.ts"]}`;
+    const { usages } = await listed({ ...files, "src/a.module.ts": AMODULE("AComponent") });
+    expect(usages.map((usage) => usage.kind)).toEqual(CONSUMER_KINDS);
+  });
+
+  it("a matching consumer declared in no module is unfinished/cross_component", async () => {
+    const { coverage } = await listed(MODULE_CONSUMER("standalone: false, "));
+    expect(coverage).toEqual({ status: "unfinished", reason: "cross_component", templates: 2 });
+  });
+});
+
 describe.each([
   ["v18", 18],
   ["v19", 19],
@@ -689,6 +752,21 @@ describe.each([
   ["v22", 22],
 ] as const)("usage extraction with compiler %s", (alias, major) => {
   const run = it.skipIf(!compilerMajorSupportedByNode(major));
+  run("an absent standalone flag declares the consumer in its module only on core 18", async () => {
+    const files = {
+      ...MODULE_CONSUMER(""),
+      "src/m.module.ts": MODULE("CModule", "declarations: [BComponent, AComponent]"),
+    };
+    const { context } = await setup(
+      { ...TARGET_FILES, ...files },
+      { compiler: alias, coreVersion: `${major}.0.0` },
+    );
+    const { coverage, usages } = await usagesOf(context, "AComponent.title");
+    expect(coverage).toEqual({ status: "completed", templates: 2 });
+    expect(usages.map((usage) => usage.kind)).toEqual(
+      major === 18 ? CONSUMER_KINDS : ["TemplatePropertyRead"],
+    );
+  });
   run("consumer bindings are listed next to own usages", async () => {
     const { context } = await setup(CONSUMER_FILES, { compiler: alias });
     const result = await usagesOf(context, "AComponent.title");
