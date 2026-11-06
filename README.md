@@ -81,7 +81,7 @@ These fields are additive: existing edge shapes, kind strings, defaults, and pub
 
 ### Angular templates
 
-In an Angular project, `ast_find_references` also reports usages of a component member in its template, and `ast_rename_symbol` rewrites external templates as part of the same reviewed plan. This needs the project's own `@angular/compiler`. The server does not bundle it: it is an optional peer dependency (`>=18.0.0 <23.0.0`, majors 18 to 22) that Angular projects already install next to `@angular/core`. Nothing changes for projects without `@angular/core`.
+In an Angular project, `ast_find_references` also reports usages of a component member in its own and consumer templates, and `ast_rename_symbol` rewrites external templates as part of the same reviewed plan. This needs the project's own `@angular/compiler`. The server does not bundle it: it is an optional peer dependency (`>=18.0.0 <23.0.0`, majors 18 to 22) that Angular projects already install next to `@angular/core`. Nothing changes for projects without `@angular/core`.
 
 Install or align it in the target project when the response reports `compiler_missing` or `compiler_unsupported`:
 
@@ -92,10 +92,12 @@ yarn add --dev @angular/compiler@^21   # or npm install --save-dev @angular/comp
 Template evidence is explicit about what it proves:
 
 - Each item carries `origin` (`compiler`, `template_external`, `template_inline`); the response adds `template_coverage` and `template_reference_count`. Only `template_coverage.status: "completed"` supports a claim that no template usage exists.
-- Members bound through the selector (`@Input`, `@Output`, `input()`, `output()`, `model()`, or listed in the `inputs` / `outputs` metadata of a `@Component` or `@Directive`) and `@Pipe` classes are used in other components' templates, which are never read: they report `unfinished` with reason `cross_component` (own-template usages are still listed for component inputs and outputs; directives report `templates: 0`). A non-literal `inputs` / `outputs` array makes every member of that class `cross_component`.
-- Rename returns `INCOMPLETE_EVIDENCE` when coverage is `unfinished` or `unsupported`, and `MUTATION_BLOCKED` for inline templates, a new name that collides with a template local, or `$any`. Inline templates are never rewritten.
+- Members bound through the selector (`@Input`, `@Output`, `input()`, `output()`, `model()`, literal aliases, or literal entries of the `inputs` / `outputs` metadata) also list their bindings (`[x]`, `x="lit"`, `[(x)]`, `(y)`, `(xChange)`, kind `TemplateBinding`) in consumer templates of components whose literal standalone `imports` or NgModule scope contains the declaring component. A `@Pipe` class with a literal `name` and its `transform` list `| name` usages (kind `TemplatePipeName`) in the same way. A same selector or pipe name outside that scope is ignored.
+- For these members, `completed` means every component template inside the Project was read and every match resolved. `hostDirectives`, `@Directive` inputs and outputs, and non-literal scopes, aliases, metadata or pipe names stay `unfinished` with reason `cross_component`. Runtime bindings (`setInput`, router input binding, `createComponent`) and consumers outside the Project are never examined.
+- Rename rewrites consumer bindings of a selector-bound member when coverage is `completed`, keeping the binding syntax, values and alias-keyed bindings. It returns `INCOMPLETE_EVIDENCE` when coverage is `unfinished` or `unsupported` (including `hostDirectives`, `@Directive` members and metadata-listed members), and `MUTATION_BLOCKED` for inline templates, a name collision with a template local or another binding of the element, `[(x)]` on a non-`model()` pair, `$any`, or a name in the selector. Inline templates are never rewritten.
+- Renaming a `@Pipe` class applies TypeScript edits only and keeps the `name` literal and every `| name` usage; renaming `transform` returns `INCOMPLETE_EVIDENCE`.
 - `ast_explore` stays TypeScript-only for references; template evidence there is tracked in #380. Use `ast_find_references` for template usages.
-- Diagnostics stay TypeScript-only: template errors are not detected, so run the project's Angular build or tests after a rename.
+- Diagnostics stay TypeScript-only: template errors are not detected, so run the project's Angular build or tests after a rename. Template type checking of rename plans is tracked in TEMPLATE_TYPECHECK_FOLLOWUP_ISSUE.
 - Yarn PnP projects without a `node_modules` directory cannot resolve the compiler and report `unfinished`; use `nodeLinker: node-modules` for template coverage.
 
 ## Why this helps
