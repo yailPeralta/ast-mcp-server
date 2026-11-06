@@ -13,6 +13,8 @@ export interface ConsumerUsage {
   readonly kind: string;
   readonly binding: ConsumerBinding;
   readonly bindingName: string;
+  /** Whether another directive selector also matches the element this binding sits on. */
+  readonly elementMatches: (selector: string) => boolean;
 }
 export interface ConsumerScan {
   /** An element matched the target selector, whatever it binds. */
@@ -68,18 +70,39 @@ export function extractConsumerUsages(
   const matcher = new compiler.SelectorMatcher();
   matcher.addSelectables(compiler.CssSelector.parse(target.selector));
   const scan: ConsumerScan = { matched: false, opaque: false, usages: [] };
-  const add = (binding: ConsumerBinding, name: string, keySpan: any): void => {
-    const start = keySpan?.start.offset;
-    const end = keySpan?.end.offset;
-    // Runtime check, not a typing: the key span must slice to exactly the binding name.
-    if (start === undefined || text.slice(start, end) !== name) scan.opaque = true;
-    else scan.usages.push({ start, end, kind: KINDS[binding], binding, bindingName: name });
-  };
   const consider = (element: any): void => {
+    const nodeSelector = compiler.createCssSelectorFromNode(element);
     let hit = false;
-    matcher.match(compiler.createCssSelectorFromNode(element), () => (hit = true));
+    matcher.match(nodeSelector, () => (hit = true));
     if (!hit) return;
     scan.matched = true;
+    const elementMatches = (selector: string): boolean => {
+      try {
+        const other = new compiler.SelectorMatcher();
+        other.addSelectables(compiler.CssSelector.parse(selector));
+        let found = false;
+        other.match(nodeSelector, () => (found = true));
+        return found;
+      } catch {
+        return false; // a selector the compiler cannot parse cannot match either
+      }
+    };
+    const add = (binding: ConsumerBinding, name: string, keySpan: any): void => {
+      const start = keySpan?.start.offset;
+      const end = keySpan?.end.offset;
+      // Runtime check, not a typing: the key span must slice to exactly the binding name.
+      if (start === undefined || text.slice(start, end) !== name) scan.opaque = true;
+      else {
+        scan.usages.push({
+          start,
+          end,
+          kind: KINDS[binding],
+          binding,
+          bindingName: name,
+          elementMatches,
+        });
+      }
+    };
     for (const input of element.inputs) {
       const twoWay = input.type === TWO_WAY;
       if ((input.type === PROPERTY || twoWay) && target.inputs.includes(input.name)) {

@@ -65,6 +65,8 @@ export interface TemplateUsage {
   readonly role: "own" | "consumer";
   readonly binding?: ConsumerBinding;
   readonly bindingName?: string;
+  /** Consumer usages only: whether a directive selector also matches the element of the binding. */
+  readonly elementMatches?: (selector: string) => boolean;
 }
 export interface ScanLimits {
   readonly templates: number;
@@ -301,7 +303,7 @@ export function listTemplateFiles(context: ProjectContext): readonly string[] {
   return [...files].sort();
 }
 
-function memberOwner(node: Node): { cls: ClassDeclaration; name: string } | undefined {
+export function memberOwner(node: Node): { cls: ClassDeclaration; name: string } | undefined {
   let owner: Node | undefined;
   if (Node.isParameterDeclaration(node)) {
     owner = node.isParameterProperty() ? node.getParent()?.getParent() : undefined;
@@ -339,7 +341,7 @@ class SpanDrift extends Error {}
 /** A usage query: a component member, or a pipe by its literal `name` (the template text checks spans). */
 type UsageQuery = { readonly member: string } | { readonly pipe: string; readonly text: string };
 type RawUsage = Pick<TemplateUsage, "start" | "end" | "kind" | "localsInScope" | "role"> &
-  Partial<Pick<TemplateUsage, "binding" | "bindingName">>;
+  Partial<Pick<TemplateUsage, "binding" | "bindingName" | "elementMatches">>;
 
 /** Walks parsed template nodes with a scope stack so template-local names shadow members. */
 function extractUsages(
