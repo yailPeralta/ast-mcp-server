@@ -5,6 +5,7 @@ import path from "node:path";
 import { createTwoFilesPatch } from "diff";
 import { LanguageVariant, Node, ScriptTarget, SyntaxKind, ts, type Project } from "ts-morph";
 import { isPipeClass } from "./angular-decorators.js";
+import { planTemplateEdits } from "./angular-template-rename.js";
 import { collectTemplateUsages, type TemplateUsage } from "./angular-templates.js";
 import { findNonDeclarationReferences } from "./references.js";
 import {
@@ -656,10 +657,9 @@ function assertTemplateRenameAllowed(
   coverageStatus: string,
   usages: readonly TemplateUsage[],
   newName: string,
-  crossComponent = false,
+  renameBlocked = false,
 ): void {
-  // Other components' templates bind the member through its selector; rename does not edit them yet.
-  if (crossComponent || coverageStatus === "unfinished" || coverageStatus === "unsupported") {
+  if (renameBlocked || coverageStatus === "unfinished" || coverageStatus === "unsupported") {
     throw new PublicOperationalError(
       "INCOMPLETE_EVIDENCE",
       "Template coverage is incomplete, so the rename cannot be proven safe.",
@@ -722,25 +722,29 @@ export async function prepareRename(
       // template edit and needs no template evidence.
       const pipeClass = Node.isClassDeclaration(node) && isPipeClass(node);
       // Template usages must be collected before the rename mutates the program.
-      const { coverage, usages, crossComponent } = pipeClass
+      const { coverage, usages, renameBlocked } = pipeClass
         ? {
             coverage: { status: "not_applicable" },
             usages: [] as TemplateUsage[],
-            crossComponent: false,
+            renameBlocked: false,
           }
         : await collectTemplateUsages(node, context, rc);
-      assertTemplateRenameAllowed(coverage.status, usages, args.newName, crossComponent);
+      assertTemplateRenameAllowed(coverage.status, usages, args.newName, renameBlocked);
+      const edits =
+        coverage.status === "completed" || usages.length > 0
+          ? planTemplateEdits(node, usages, args.newName, context)
+          : [];
       const tsReferenceCount = Node.isReferenceFindable(node)
         ? findNonDeclarationReferences(node).length
         : 0;
       node.rename(args.newName);
       return {
-        referenceCount: tsReferenceCount + usages.length,
-        auxiliaryEdits: usages.map((usage) => ({
+        referenceCount: tsReferenceCount + edits.length,
+        auxiliaryEdits: edits.map(({ usage, newText }) => ({
           absolutePath: usage.absolutePath,
           start: usage.start,
           end: usage.end,
-          newText: args.newName,
+          newText,
           expectedHash: usage.fileHash,
         })),
       };
