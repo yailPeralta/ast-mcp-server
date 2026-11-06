@@ -28,7 +28,7 @@ export function registerRenameSymbol(server: McpServer): void {
     {
       title: "Prepare a project-wide structural rename",
       description:
-        "Prepares an exact hash-bound rename plan without writing. Review the preview and apply its operation_id with ast_apply_operation. The plan also rewrites external Angular templates hash-bound to the workspace snapshot; diagnostics stay TypeScript-only.",
+        "Prepares an exact hash-bound rename plan without writing. Review the preview and apply its operation_id with ast_apply_operation. The plan also rewrites external Angular templates, including consumer templates when coverage is completed, hash-bound to the workspace snapshot; diagnostics stay TypeScript-only.",
       inputSchema: AstRenameSymbolInputSchema,
       outputSchema: PreparedOperationOutputSchema,
       annotations: {

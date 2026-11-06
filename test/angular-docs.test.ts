@@ -40,6 +40,42 @@ describe("Angular template documentation", () => {
     expect(skillDocs).toMatch(/diagnostics[^\n]*TypeScript-only/i);
   });
 
+  describe.each([
+    ["SKILL.md", skill],
+    ["references/operations.md", operations],
+  ])("%s documents consumer template usages (#408)", (_name, document) => {
+    it("lists consumer template usages and limits completed to the Project", () => {
+      expect(document).toMatch(/consumer templates?/i);
+      expect(document).toMatch(/`completed`[^\n]*inside the Project/);
+      expect(document).toMatch(/outside the Project/);
+    });
+
+    it("names the constructs that stay unfinished", () => {
+      expect(document).toContain("setInput");
+      expect(document).toMatch(/router input binding/i);
+      expect(document).toContain("createComponent");
+      expect(document).toContain("hostDirectives");
+      expect(document).toMatch(/`@Directive` inputs and outputs/);
+    });
+
+    it("states the pipe class and transform rename rules", () => {
+      expect(document).toMatch(/`@Pipe` class[^\n]*TypeScript edits only/);
+      expect(document).toMatch(/`transform`[^\n]*INCOMPLETE_EVIDENCE/);
+    });
+
+    it("keeps diagnostics TypeScript-only and links the template type-check follow-up", () => {
+      expect(document).toMatch(/diagnostics[^\n]*TypeScript-only/i);
+      expect(document).toMatch(/template type checking[^\n]*#421/i);
+    });
+  });
+
+  it("README documents consumer usages and the template type-check follow-up", () => {
+    expect(readme).toMatch(/consumer templates?/i);
+    expect(readme).toMatch(/`completed`[^\n]*inside the Project/);
+    expect(readme).toMatch(/`@Pipe` class[^\n]*TypeScript edits only/);
+    expect(readme).toContain("#421");
+  });
+
   it("README documents the supported range and install guidance for the compiler peer", () => {
     expect(readme).toContain("@angular/compiler");
     expect(readme).toContain(">=18.0.0 <23.0.0");

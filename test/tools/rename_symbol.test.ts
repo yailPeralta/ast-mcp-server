@@ -24,9 +24,10 @@ describe("ast_rename_symbol description", () => {
   it("description states external template edits and TS-only diagnostics", async () => {
     const tool = (await client.listTools()).tools.find((t) => t.name === "ast_rename_symbol");
     expect(tool?.description).toBe(
-      "Prepares an exact hash-bound rename plan without writing. Review the preview and apply its operation_id with ast_apply_operation. The plan also rewrites external Angular templates hash-bound to the workspace snapshot; diagnostics stay TypeScript-only.",
+      "Prepares an exact hash-bound rename plan without writing. Review the preview and apply its operation_id with ast_apply_operation. The plan also rewrites external Angular templates, including consumer templates when coverage is completed, hash-bound to the workspace snapshot; diagnostics stay TypeScript-only.",
     );
     expect(tool?.description).toMatch(/external Angular templates/u);
+    expect(tool?.description).toMatch(/consumer templates/u);
     expect(tool?.description).toMatch(/TypeScript-only/u);
   });
 });

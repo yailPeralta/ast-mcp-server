@@ -108,5 +108,5 @@ The `rename_symbol` tool description MUST state that template writes occur and t
 
 - GIVEN the tool inventory
 - WHEN the `ast_rename_symbol` description is read
-- THEN it is exactly: `Prepares an exact hash-bound rename plan without writing. Review the preview and apply its operation_id with ast_apply_operation. The plan also rewrites external Angular templates hash-bound to the workspace snapshot; diagnostics stay TypeScript-only.`
+- THEN it is exactly: `Prepares an exact hash-bound rename plan without writing. Review the preview and apply its operation_id with ast_apply_operation. The plan also rewrites external Angular templates, including consumer templates when coverage is completed, hash-bound to the workspace snapshot; diagnostics stay TypeScript-only.`
 - AND this string is digest-sensitive: it MUST match the fixture declaration and the re-baselined inventory pins byte for byte
