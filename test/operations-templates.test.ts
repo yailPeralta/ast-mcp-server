@@ -351,10 +351,17 @@ describe("prepareRename across Angular templates (ATN-R1, R3-R7)", () => {
     ["signal input()", `title = input("x");`],
     ["@Output", `@Output() title = output<string>();`],
     ["signal output()", `title = output<string>();`],
+    ["model()", `title = model("x");`],
+    ["model.required()", `title = model.required<string>();`],
+    ["aliased @Input", `@Input("label") title = "x";`],
+    ["aliased signal input()", `title = input("x", { alias: "label" });`],
   ])("%s member blocks rename with INCOMPLETE_EVIDENCE before any edit", async (_, member) => {
     const fixture = await renameFixture({
       "src/a.component.ts": RENAME_COMPONENT()
-        .replace("import { Component }", "import { Component, Input, Output, input, output }")
+        .replace(
+          "import { Component }",
+          "import { Component, Input, Output, input, model, output }",
+        )
         .replace('  title = "x";', `  ${member}`),
     });
 

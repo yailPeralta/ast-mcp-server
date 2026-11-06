@@ -121,20 +121,45 @@ export function isSelectorPublic(node: Node): boolean {
   return ["input", "output", "model"].some((name) => isAngularCoreExport(callee, name));
 }
 
+/** Public names a consumer template binds for one member. */
+export interface BindingNames {
+  readonly inputs: readonly string[];
+  readonly outputs: readonly string[];
+}
+
+/** The alias in a literal options object (or a literal string), the fallback when absent, else undefined. */
+function aliasOf(options: Node | undefined, fallback: string): string | undefined {
+  if (options === undefined) return fallback;
+  const text = literalString(options);
+  if (text !== undefined) return text;
+  if (!Node.isObjectLiteralExpression(options)) return undefined;
+  const properties = options.getProperties();
+  const computed = (property: Node): boolean =>
+    Node.isPropertyAssignment(property) && Node.isComputedPropertyName(property.getNameNode());
+  if (properties.some((property) => Node.isSpreadAssignment(property) || computed(property))) {
+    return undefined;
+  }
+  const alias = options.getProperty("alias");
+  if (alias === undefined) return fallback;
+  return Node.isPropertyAssignment(alias) ? literalString(alias.getInitializer()) : undefined;
+}
+
 /**
- * `input` or `output` for an unaliased `@Input()` / `@Output()` / `input()` / `output()` member;
- * undefined for `model()`, aliases and options, whose binding names need more than the member name.
+ * Public binding names of an `@Input` / `@Output` / `input()` / `output()` / `model()` member,
+ * following literal aliases. A `model()` binds `x` and `xChange`. Undefined when an alias or the
+ * options are not literal, because the binding name then cannot be known.
  */
-export function plainBindingKind(node: Node): "input" | "output" | undefined {
+export function bindingNames(node: Node, name: string): BindingNames | undefined {
   if (Node.isDecoratable(node)) {
     for (const decorator of node.getDecorators()) {
-      for (const [name, kind] of [
-        ["Input", "input"],
-        ["Output", "output"],
-      ] as const) {
-        if (isCoreDecorator(decorator, name))
-          return decorator.getArguments().length ? undefined : kind;
+      const kind = (["Input", "Output"] as const).find((id) => isCoreDecorator(decorator, id));
+      if (!kind) continue;
+      const args = decorator.getArguments();
+      const alias = args.length <= 1 ? aliasOf(args[0], name) : undefined;
+      if (alias === undefined || (kind === "Output" && args[0] && !literalString(args[0]))) {
+        return undefined;
       }
+      return kind === "Input" ? { inputs: [alias], outputs: [] } : { inputs: [], outputs: [alias] };
     }
   }
   const initializer = Node.isPropertyDeclaration(node) ? node.getInitializer() : undefined;
@@ -142,10 +167,63 @@ export function plainBindingKind(node: Node): "input" | "output" | undefined {
   let callee = initializer.getExpression();
   const required = Node.isPropertyAccessExpression(callee) && callee.getName() === "required";
   if (required) callee = (callee as PropertyAccessExpression).getExpression();
-  const budget = required ? 0 : 1;
-  if (isAngularCoreExport(callee, "input"))
-    return initializer.getArguments().length <= budget ? "input" : undefined;
-  return isAngularCoreExport(callee, "output") && !initializer.getArguments().length
-    ? "output"
-    : undefined;
+  const kind = (["input", "model", "output"] as const).find((id) =>
+    isAngularCoreExport(callee, id),
+  );
+  if (!kind) return undefined;
+  // The initial value comes first for input() and model(); required() and output() take options only.
+  const optionsAt = kind !== "output" && !required ? 1 : 0;
+  const args = initializer.getArguments();
+  if (args.length > optionsAt + 1) return undefined;
+  const alias = aliasOf(args[optionsAt], name);
+  if (alias === undefined) return undefined;
+  if (kind === "input") return { inputs: [alias], outputs: [] };
+  if (kind === "output") return { inputs: [], outputs: [alias] };
+  return { inputs: [alias], outputs: [`${alias}Change`] };
+}
+
+/**
+ * Public names of a member listed in the `inputs` / `outputs` metadata (`'x'`, `'x: alias'`,
+ * `{ name, alias }`). Undefined when any array or element is not literal, matching #410's fail-closed rule.
+ */
+export function metadataBindingNames(
+  cls: ClassDeclaration,
+  name: string,
+): BindingNames | undefined {
+  const found = { inputs: [] as string[], outputs: [] as string[] };
+  for (const decorator of cls.getDecorators()) {
+    if (!["Component", "Directive"].some((id) => isCoreDecorator(decorator, id))) continue;
+    const metadata = decorator.getArguments()[0];
+    if (!Node.isObjectLiteralExpression(metadata)) continue;
+    for (const key of ["inputs", "outputs"] as const) {
+      const property = metadata.getProperty(key);
+      if (!property) continue;
+      const list = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
+      if (!Node.isArrayLiteralExpression(list)) return undefined;
+      for (const element of list.getElements()) {
+        let listed: string;
+        let alias: string | undefined;
+        const text = literalString(element);
+        if (text !== undefined) {
+          const [member = "", rest] = text.split(":");
+          listed = member.trim();
+          alias = rest === undefined ? listed : rest.trim();
+        } else if (Node.isObjectLiteralExpression(element)) {
+          const nameProperty = element.getProperty("name");
+          const value = Node.isPropertyAssignment(nameProperty)
+            ? literalString(nameProperty.getInitializer())
+            : undefined;
+          if (value === undefined) return undefined;
+          listed = value;
+          alias = aliasOf(element, listed);
+        } else {
+          return undefined;
+        }
+        if (listed !== name) continue;
+        if (alias === undefined) return undefined;
+        found[key].push(alias);
+      }
+    }
+  }
+  return found;
 }
