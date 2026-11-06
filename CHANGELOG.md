@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.16.0] — not yet published (2026-11-06)
+
 ### Added
 
 - `ast_find_references` lists the binding usages of a selector-public member (`@Input`, `@Output`, `input()`, `output()` without aliases) in the templates of consuming components whose literal `imports` include the declaring standalone component, and reports `completed` only when every component template in the Project was read and every match resolved; otherwise `unfinished` with `cross_component`, `work_exhausted` or the template's own reason. (#408).
@@ -22,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Selector-public component members (`@Input`, `@Output`, `input()`, `output()`, `model()`) and `@Pipe` classes reported `template_coverage: completed` (pipes reported nothing), and a rename of an `@Input` was planned without blocking although the consuming templates were never read. They now report `unfinished` with the new reason `cross_component` (own-template usages are still listed for inputs and outputs), and `ast_rename_symbol` refuses them with `INCOMPLETE_EVIDENCE` (#407).
 - `@Directive` members declared with `@Input`, `@Output`, `input()`, `output()` or `model()` reported no `template_coverage`, and members listed in the `inputs` / `outputs` metadata arrays of a `@Component` or `@Directive` were treated as plain members, so `ast_rename_symbol` planned their rename without blocking. They now report `unfinished` with reason `cross_component` (directives with `templates: 0`; a non-literal metadata array marks every member of the class), and `ast_rename_symbol` refuses them with `INCOMPLETE_EVIDENCE` (#410).
+- Upgrading the `structural-code-editing` skill over an unmodified install from npm `0.11.0`–`0.15.1` failed with a conflict: `0.13.0`–`0.15.1` had no recorded predecessor, and the `0.11.0`–`0.12.0` predecessors did not list `references/operations.md`. Every published byte set is now recorded, and the skill version is `4.7.0` (#425).
 
 ## [0.15.1] — published to `next`, verification failed, not promoted (2026-11-05)
 
