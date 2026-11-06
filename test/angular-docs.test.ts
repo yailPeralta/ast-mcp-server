@@ -65,7 +65,7 @@ describe("Angular template documentation", () => {
 
     it("keeps diagnostics TypeScript-only and links the template type-check follow-up", () => {
       expect(document).toMatch(/diagnostics[^\n]*TypeScript-only/i);
-      expect(document).toMatch(/template type checking[^\n]*TEMPLATE_TYPECHECK_FOLLOWUP_ISSUE/i);
+      expect(document).toMatch(/template type checking[^\n]*#421/i);
     });
   });
 
@@ -73,7 +73,7 @@ describe("Angular template documentation", () => {
     expect(readme).toMatch(/consumer templates?/i);
     expect(readme).toMatch(/`completed`[^\n]*inside the Project/);
     expect(readme).toMatch(/`@Pipe` class[^\n]*TypeScript edits only/);
-    expect(readme).toContain("TEMPLATE_TYPECHECK_FOLLOWUP_ISSUE");
+    expect(readme).toContain("#421");
   });
 
   it("README documents the supported range and install guidance for the compiler peer", () => {

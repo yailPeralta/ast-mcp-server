@@ -60,7 +60,7 @@ Pipes: renaming a `@Pipe` class applies with TypeScript edits only; the `name` l
 Limits to state when reporting:
 
 - `ast_explore` is TypeScript-only: its references omit template usages. This is tracked in issue #380. Use `ast_find_references` for template evidence; rename still blocks independently.
-- Diagnostics stay TypeScript-only: `ast_get_diagnostics` and the post-apply delta do not detect template errors, including in rewritten consumer templates. A template-only breakage produces no diagnostic, so run the project's Angular build or tests after a rename. Template type checking of rename plans is tracked in issue TEMPLATE_TYPECHECK_FOLLOWUP_ISSUE.
+- Diagnostics stay TypeScript-only: `ast_get_diagnostics` and the post-apply delta do not detect template errors, including in rewritten consumer templates. A template-only breakage produces no diagnostic, so run the project's Angular build or tests after a rename. Template type checking of rename plans is tracked in issue #421.
 - Detection uses the user's own `@angular/compiler`, never a bundled one. It is an optional peer (`>=18.0.0 <23.0.0`) that the project already installs with Angular. If it is missing or out of range, coverage is `unfinished` and rename is blocked. Yarn PnP projects without `node_modules` resolve nothing and report `unfinished`.
 
 ## Contributor contract

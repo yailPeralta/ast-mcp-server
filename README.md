@@ -97,7 +97,7 @@ Template evidence is explicit about what it proves:
 - Rename rewrites consumer bindings of a selector-bound member when coverage is `completed`, keeping the binding syntax, values and alias-keyed bindings. It returns `INCOMPLETE_EVIDENCE` when coverage is `unfinished` or `unsupported` (including `hostDirectives`, `@Directive` members and metadata-listed members), and `MUTATION_BLOCKED` for inline templates, a name collision with a template local or another binding of the element, `[(x)]` on a non-`model()` pair, `$any`, or a name in the selector. Inline templates are never rewritten.
 - Renaming a `@Pipe` class applies TypeScript edits only and keeps the `name` literal and every `| name` usage; renaming `transform` returns `INCOMPLETE_EVIDENCE`.
 - `ast_explore` stays TypeScript-only for references; template evidence there is tracked in #380. Use `ast_find_references` for template usages.
-- Diagnostics stay TypeScript-only: template errors are not detected, so run the project's Angular build or tests after a rename. Template type checking of rename plans is tracked in TEMPLATE_TYPECHECK_FOLLOWUP_ISSUE.
+- Diagnostics stay TypeScript-only: template errors are not detected, so run the project's Angular build or tests after a rename. Template type checking of rename plans is tracked in #421.
 - Yarn PnP projects without a `node_modules` directory cannot resolve the compiler and report `unfinished`; use `nodeLinker: node-modules` for template coverage.
 
 ## Why this helps

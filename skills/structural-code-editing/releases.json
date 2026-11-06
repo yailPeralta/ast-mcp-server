@@ -6,11 +6,11 @@
     "files": [
       {
         "path": "SKILL.md",
-        "sha256": "b73aac3a4f831899b0b40b39bc09cf2c826a0a168f513549e0ecbd2e43d990d2"
+        "sha256": "1d4d5b4b706667b50224d4f29b5523e43ee20627665c34679c925fe8a0713c20"
       },
       {
         "path": "references/operations.md",
-        "sha256": "0ba507cb1e59042437425aae62b4862964c7bd6139c755e7ffd80706817572b8"
+        "sha256": "3841c99399911ecf79d4fd61bc42f22b5a24ab3ab8dc86acf0bea28fe90136ba"
       }
     ]
   },
