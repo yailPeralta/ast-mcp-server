@@ -4,6 +4,7 @@ import { open, readFile, stat, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { createTwoFilesPatch } from "diff";
 import { LanguageVariant, Node, ScriptTarget, SyntaxKind, ts, type Project } from "ts-morph";
+import { isPipeClass } from "./angular-decorators.js";
 import { collectTemplateUsages, type TemplateUsage } from "./angular-templates.js";
 import { findNonDeclarationReferences } from "./references.js";
 import {
@@ -717,8 +718,17 @@ export async function prepareRename(
           `Symbol "${args.symbolPath}" (${node.getKindName()}) does not support structural rename.`,
         );
       }
+      // Templates bind a pipe by its `name` literal, never by class, so a class rename has no
+      // template edit and needs no template evidence.
+      const pipeClass = Node.isClassDeclaration(node) && isPipeClass(node);
       // Template usages must be collected before the rename mutates the program.
-      const { coverage, usages, crossComponent } = await collectTemplateUsages(node, context, rc);
+      const { coverage, usages, crossComponent } = pipeClass
+        ? {
+            coverage: { status: "not_applicable" },
+            usages: [] as TemplateUsage[],
+            crossComponent: false,
+          }
+        : await collectTemplateUsages(node, context, rc);
       assertTemplateRenameAllowed(coverage.status, usages, args.newName, crossComponent);
       const tsReferenceCount = Node.isReferenceFindable(node)
         ? findNonDeclarationReferences(node).length

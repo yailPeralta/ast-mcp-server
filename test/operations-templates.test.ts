@@ -370,16 +370,70 @@ describe("prepareRename across Angular templates (ATN-R1, R3-R7)", () => {
     expect(await fixture.read("src/a.component.html")).toBe(RENAME_TEMPLATE);
   });
 
+  const PIPE_SOURCE = [
+    'import { Pipe } from "@angular/core";',
+    '@Pipe({ name: "fmt" })',
+    "export class FmtPipe {",
+    "  transform(value: string): string { return value; }",
+    "}",
+    "",
+  ].join("\n");
+  const PIPE_CONSUMER_TS = [
+    'import { Component } from "@angular/core";',
+    'import { FmtPipe } from "./fmt.pipe";',
+    '@Component({ selector: "app-b", standalone: true, imports: [FmtPipe], templateUrl: "./b.component.html" })',
+    "export class BComponent {}",
+    "",
+  ].join("\n");
+  const PIPE_CONSUMER_HTML = "<p>{{ value | fmt: 1 }}</p>\n";
+  const pipeFixture = () =>
+    renameFixture({
+      "src/fmt.pipe.ts": PIPE_SOURCE,
+      "src/b.component.ts": PIPE_CONSUMER_TS,
+      "src/b.component.html": PIPE_CONSUMER_HTML,
+    });
+
+  it("renames a pipe class with TypeScript edits only and leaves the name and usages", async () => {
+    const fixture = await pipeFixture();
+
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/fmt.pipe.ts",
+      symbolPath: "FmtPipe",
+      newName: "FormatPipe",
+    });
+    await applyOperation(prepared.operation_id, prepared.plan_hash);
+
+    expect(prepared.affected_files.map((file) => file.file)).toEqual([
+      "src/b.component.ts",
+      "src/fmt.pipe.ts",
+    ]);
+    const renamed = await fixture.read("src/fmt.pipe.ts");
+    expect(renamed).toContain("export class FormatPipe");
+    expect(renamed).toContain('@Pipe({ name: "fmt" })');
+    expect(await fixture.read("src/b.component.ts")).toContain("imports: [FormatPipe]");
+    expect(await fixture.read("src/b.component.html")).toBe(PIPE_CONSUMER_HTML);
+  });
+
+  it("renames a pipe class whose templates cannot be proven", async () => {
+    const fixture = await renameFixture({
+      "src/fmt.pipe.ts": PIPE_SOURCE,
+      "src/b.component.ts": PIPE_CONSUMER_TS,
+      "src/b.component.html": "{{ value | fmt }}<p [x]=",
+    });
+
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/fmt.pipe.ts",
+      symbolPath: "FmtPipe",
+      newName: "FormatPipe",
+    });
+
+    expect(prepared.affected_files.map((file) => file.file)).not.toContain("src/b.component.html");
+  });
+
   it("pipe transform blocks rename with INCOMPLETE_EVIDENCE", async () => {
-    const pipe = [
-      'import { Pipe } from "@angular/core";',
-      '@Pipe({ name: "fmt" })',
-      "export class FmtPipe {",
-      "  transform(value: string): string { return value; }",
-      "}",
-      "",
-    ].join("\n");
-    const fixture = await renameFixture({ "src/fmt.pipe.ts": pipe });
+    const fixture = await pipeFixture();
 
     await expect(
       prepareRename({
@@ -389,7 +443,8 @@ describe("prepareRename across Angular templates (ATN-R1, R3-R7)", () => {
         newName: "format",
       }),
     ).rejects.toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
-    expect(await fixture.read("src/fmt.pipe.ts")).toBe(pipe);
+    expect(await fixture.read("src/fmt.pipe.ts")).toBe(PIPE_SOURCE);
+    expect(await fixture.read("src/b.component.html")).toBe(PIPE_CONSUMER_HTML);
   });
 
   const RENAME_DIRECTIVE = (member: string, metadata = "") =>
