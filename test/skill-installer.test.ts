@@ -49,12 +49,54 @@ const publishedSkillFixtures = [
   },
 ] as const;
 
-async function publishedSkill(npmVersion: string): Promise<string> {
-  const fixture = await readFile(
-    new URL(`fixtures/structural-code-editing-${npmVersion}.md.gz.base64`, import.meta.url),
-    "utf8",
-  );
+const publishedBundleFixtures = [
+  {
+    npmVersions: ["0.13.0", "0.13.1"],
+    skillVersion: "4.6.0",
+    skillSha256: "df2ebc3f3903cf5abf4eb6612da527cad97a92f29f1a9a475ea6e8b4cf47abfb",
+    operationsFixture: "0.13.0",
+    operationsSha256: "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98",
+  },
+  {
+    npmVersions: ["0.14.0", "0.14.1", "0.14.2", "0.14.3"],
+    skillVersion: "4.6.0",
+    skillSha256: "33d0c6520c1ed54d42a502251a08baed86153bf9b6c275aed4525b2968f1553b",
+    operationsFixture: "0.13.0",
+    operationsSha256: "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98",
+  },
+  {
+    npmVersions: ["0.15.0"],
+    skillVersion: "4.6.0",
+    skillSha256: "94ff4ce2a97d33cad56b7c1ed8057d0ff7ca22988aebd7923b21319326307c18",
+    operationsFixture: "0.15.0",
+    operationsSha256: "ee5dd8138b4f4570ee256c820c69b94d650a3d454119fff80b1dc08a6297b380",
+  },
+  {
+    npmVersions: ["0.15.1"],
+    skillVersion: "4.6.0",
+    skillSha256: "afd054a923d9a4f825066e5c3fd2dfa7ae2269a8464819b032a5fbf19a9b14fd",
+    operationsFixture: "0.15.0",
+    operationsSha256: "ee5dd8138b4f4570ee256c820c69b94d650a3d454119fff80b1dc08a6297b380",
+  },
+] as const;
+
+async function archivedFixture(name: string): Promise<string> {
+  const fixture = await readFile(new URL(`fixtures/${name}.md.gz.base64`, import.meta.url), "utf8");
   return gunzipSync(Buffer.from(fixture, "base64")).toString("utf8");
+}
+
+async function publishedSkill(npmVersion: string): Promise<string> {
+  return archivedFixture(`structural-code-editing-${npmVersion}`);
+}
+
+async function publishedBundle(fixture: (typeof publishedBundleFixtures)[number]) {
+  const [skill, operations] = await Promise.all([
+    publishedSkill(fixture.npmVersions[0]),
+    archivedFixture(`structural-code-editing-operations-${fixture.operationsFixture}`),
+  ]);
+  expect(sha256(skill)).toBe(fixture.skillSha256);
+  expect(sha256(operations)).toBe(fixture.operationsSha256);
+  return { skill, operations };
 }
 
 function officialOptions(root: string) {
@@ -260,6 +302,63 @@ describe("skill installer", () => {
         installations: [{ status: "unchanged" }],
         physicalWrites: [],
       });
+    },
+  );
+
+  it.each(publishedBundleFixtures)(
+    "upgrades the unmodified published $npmVersions.0 bundle without force",
+    async (fixture) => {
+      const root = await temporaryDirectory();
+      const manifest = JSON.parse(
+        await readFile(path.join(bundledSkillRoot, "releases.json"), "utf8"),
+      );
+      expect(manifest.predecessors).toContainEqual({
+        version: fixture.skillVersion,
+        files: [
+          { path: "SKILL.md", sha256: fixture.skillSha256 },
+          { path: "references/operations.md", sha256: fixture.operationsSha256 },
+        ],
+        npm_versions: [...fixture.npmVersions],
+      });
+      const { skill, operations } = await publishedBundle(fixture);
+      const options = officialOptions(root);
+      const skillRoot = path.join(root, "claude", "skills", "structural-code-editing");
+      await mkdir(path.join(skillRoot, "references"), { recursive: true });
+      await writeFile(path.join(skillRoot, "SKILL.md"), skill);
+      await writeFile(path.join(skillRoot, "references", "operations.md"), operations);
+
+      await expect(installBundledSkill(options)).resolves.toMatchObject({
+        installations: [{ status: "updated" }],
+      });
+      for (const file of manifest.current.files) {
+        await expect(readFile(path.join(skillRoot, file.path), "utf8")).resolves.toBe(
+          await readFile(path.join(bundledSkillRoot, file.path), "utf8"),
+        );
+      }
+      await expect(installBundledSkill(options)).resolves.toMatchObject({
+        installations: [{ status: "unchanged" }],
+        physicalWrites: [],
+      });
+    },
+  );
+
+  it.each(publishedBundleFixtures)(
+    "preserves a locally edited published $npmVersions.0 bundle without force",
+    async (fixture) => {
+      const root = await temporaryDirectory();
+      const { skill, operations } = await publishedBundle(fixture);
+      const skillRoot = path.join(root, "claude", "skills", "structural-code-editing");
+      const reference = path.join(skillRoot, "references", "operations.md");
+      const edited = `${operations}\nlocal note\n`;
+      await mkdir(path.dirname(reference), { recursive: true });
+      await writeFile(path.join(skillRoot, "SKILL.md"), skill);
+      await writeFile(reference, edited);
+
+      await expect(installBundledSkill(officialOptions(root))).rejects.toThrow(
+        /already exists.*--force/i,
+      );
+      await expect(readFile(path.join(skillRoot, "SKILL.md"), "utf8")).resolves.toBe(skill);
+      await expect(readFile(reference, "utf8")).resolves.toBe(edited);
     },
   );
 

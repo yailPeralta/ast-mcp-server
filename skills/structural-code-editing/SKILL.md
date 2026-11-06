@@ -4,7 +4,7 @@ description: "Trigger: navegar, analizar o editar TypeScript/JavaScript con el c
 license: "ISC"
 metadata:
   author: "yail"
-  version: "4.6.0"
+  version: "4.7.0"
   hermes:
     tags: ["typescript", "javascript", "ast", "refactoring", "mcp"]
     homepage: "https://github.com/yailPeralta/ast-mcp-server"
