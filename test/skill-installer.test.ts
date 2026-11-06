@@ -27,41 +27,49 @@ const publishedSkillFixtures = [
     skillVersion: "4.4.0",
     sha256: "253b588c56d44c8f5565db3f33ce227d80c7c29aa6604d362844f44b1278385a",
   },
-  {
-    npmVersion: "0.11.0",
-    skillVersion: "4.5.0",
-    sha256: "be757e8bd98733c7ee952d63a2805dcd9877becf651b4fcb6ab63d20f6546f21",
-  },
-  {
-    npmVersion: "0.11.1",
-    skillVersion: "4.5.0",
-    sha256: "2729b30ff6b7344e6680c7ee02ab540bc6db9774ad7111f091cd356f8cc9d4ce",
-  },
-  {
-    npmVersion: "0.11.2",
-    skillVersion: "4.5.0",
-    sha256: "18132b4b747d135e4ccfbca9e2190a9afb41e144cc06c31c5e6bc0f1571e11da",
-  },
-  {
-    npmVersion: "0.12.0",
-    skillVersion: "4.6.0",
-    sha256: "d0048ffd9a585d00791540c6fa5e0bec91ff95b1448479678f85702e6b09be8a",
-  },
 ] as const;
 
 const publishedBundleFixtures = [
   {
+    npmVersions: ["0.11.0"],
+    skillVersion: "4.5.0",
+    skillSha256: "be757e8bd98733c7ee952d63a2805dcd9877becf651b4fcb6ab63d20f6546f21",
+    operationsFixture: "0.11.0",
+    operationsSha256: "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98",
+  },
+  {
+    npmVersions: ["0.11.1"],
+    skillVersion: "4.5.0",
+    skillSha256: "2729b30ff6b7344e6680c7ee02ab540bc6db9774ad7111f091cd356f8cc9d4ce",
+    operationsFixture: "0.11.0",
+    operationsSha256: "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98",
+  },
+  {
+    npmVersions: ["0.11.2"],
+    skillVersion: "4.5.0",
+    skillSha256: "18132b4b747d135e4ccfbca9e2190a9afb41e144cc06c31c5e6bc0f1571e11da",
+    operationsFixture: "0.11.0",
+    operationsSha256: "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98",
+  },
+  {
+    npmVersions: ["0.12.0"],
+    skillVersion: "4.6.0",
+    skillSha256: "d0048ffd9a585d00791540c6fa5e0bec91ff95b1448479678f85702e6b09be8a",
+    operationsFixture: "0.11.0",
+    operationsSha256: "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98",
+  },
+  {
     npmVersions: ["0.13.0", "0.13.1"],
     skillVersion: "4.6.0",
     skillSha256: "df2ebc3f3903cf5abf4eb6612da527cad97a92f29f1a9a475ea6e8b4cf47abfb",
-    operationsFixture: "0.13.0",
+    operationsFixture: "0.11.0",
     operationsSha256: "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98",
   },
   {
     npmVersions: ["0.14.0", "0.14.1", "0.14.2", "0.14.3"],
     skillVersion: "4.6.0",
     skillSha256: "33d0c6520c1ed54d42a502251a08baed86153bf9b6c275aed4525b2968f1553b",
-    operationsFixture: "0.13.0",
+    operationsFixture: "0.11.0",
     operationsSha256: "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98",
   },
   {
