@@ -53,6 +53,20 @@ describe.each([18, 19, 20, 21, 22] as const)("template bindings with compiler v%
   });
 
   run.each([
+    [`<app-card [x]="a">`, ["input:x"]],
+    [`<app-card [(x)]="a">`, ["two_way:x"]],
+    [`<app-card bindon-x="a">`, ["two_way:x"]],
+    [`<app-card (xChange)="f($event)">`, ["output:xChange"]],
+    [`<app-card on-xChange="f($event)">`, ["output:xChange"]],
+    [`<app-card [x]="a" (xChange)="b = $event">`, ["input:x", "output:xChange"]],
+    [`<app-card [(x)]="a" (xChange)="b = $event">`, ["two_way:x", "output:xChange"]],
+  ])("model pair x/xChange reports %s as %j", async (html, expected) => {
+    const result = await scan(html, { ...TARGET, inputs: ["x"], outputs: ["xChange"] });
+    expect(result.opaque).toBe(false);
+    expect(described(html, result)).toEqual(expected);
+  });
+
+  run.each([
     ["app-card", `<app-card [x]="1">`, true],
     ["app-card", `<app-other [x]="1">`, false],
     ["[appCard]", `<div appCard [x]="1">`, true],

@@ -1,6 +1,6 @@
 import type { CompilerModule } from "./angular-templates.js";
 
-/** What a consumer template can bind on the target: its selector and unaliased member names. */
+/** What a consumer template can bind on the target: its selector and public binding names. */
 export interface BindingTarget {
   readonly selector: string;
   readonly inputs: readonly string[];
@@ -49,6 +49,14 @@ export function mayMatch(compiler: SelectorCompiler, selector: string, text: str
   });
 }
 
+function pairedTwoWayInput(target: BindingTarget, event: string): boolean {
+  return (
+    target.outputs.includes(event) &&
+    event.endsWith("Change") &&
+    target.inputs.includes(event.slice(0, -"Change".length))
+  );
+}
+
 /** Pure: finds the bindings of `target` in a parsed consumer template, matching by selector. */
 export function extractConsumerUsages(
   compiler: SelectorCompiler,
@@ -83,6 +91,8 @@ export function extractConsumerUsages(
         add("static_input", attribute.name, attribute.keySpan);
     }
     for (const output of element.outputs) {
+      // The event half of `[(x)]` on a model pair is already reported through the input half.
+      if (output.type === TWO_WAY_EVENT && pairedTwoWayInput(target, output.name)) continue;
       const regular = output.type === REGULAR_EVENT || output.type === TWO_WAY_EVENT;
       if (regular && target.outputs.includes(output.name))
         add("output", output.name, output.keySpan);

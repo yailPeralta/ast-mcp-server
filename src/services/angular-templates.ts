@@ -13,7 +13,8 @@ import {
   isPipeClass,
   isSelectorPublic,
   literalString,
-  plainBindingKind,
+  bindingNames,
+  metadataBindingNames,
 } from "./angular-decorators.js";
 import {
   extractConsumerUsages,
@@ -607,7 +608,7 @@ function toUsages(
   });
 }
 
-/** Selector and unaliased member names, or undefined when bindings cannot be named from the member. */
+/** Selector and public binding names, or undefined when bindings cannot be named from the member. */
 function bindingTarget(cls: ClassDeclaration, node: Node, name: string): BindingTarget | undefined {
   const metadata = componentDecorator(cls)?.getArguments()[0];
   if (!Node.isObjectLiteralExpression(metadata) || metadata.getProperty("hostDirectives")) {
@@ -617,13 +618,14 @@ function bindingTarget(cls: ClassDeclaration, node: Node, name: string): Binding
   const selector = literalString(
     Node.isPropertyAssignment(property) ? property.getInitializer() : undefined,
   );
-  const kind = isMetadataPublic(cls, name) ? undefined : plainBindingKind(node);
-  if (!selector || !kind) return undefined;
-  return {
-    selector,
-    inputs: kind === "input" ? [name] : [],
-    outputs: kind === "output" ? [name] : [],
-  };
+  const names = isMetadataPublic(cls, name)
+    ? // A member both decorated and listed in metadata has ambiguous binding names.
+      isSelectorPublic(node)
+      ? undefined
+      : metadataBindingNames(cls, name)
+    : bindingNames(node, name);
+  if (!selector || !names) return undefined;
+  return { selector, inputs: names.inputs, outputs: names.outputs };
 }
 
 /**

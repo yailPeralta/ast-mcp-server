@@ -335,14 +335,20 @@ describe("selector-public members and pipes", () => {
   });
 
   it.each([
-    `title = model("x");`,
-    `title = model.required<string>();`,
-    `@Input("alias") title = "x";`,
-    `title = input("x", { alias: "a" });`,
-    `title = input.required<string>({ alias: "a" });`,
-    `title = output<string>({ alias: "a" });`,
-  ])("aliased or model member %s stays unfinished/cross_component", async (member) => {
-    const result = await publicUsages(member, "<p>{{ title() }}</p>");
+    `@Input(ALIAS) title = "x";`,
+    `@Input({ alias: ALIAS }) title = "x";`,
+    `@Input({ ...OPTIONS }) title = "x";`,
+    `@Output(\`a\${ALIAS}\`) title = output<string>();`,
+    `title = input("x", { alias: ALIAS });`,
+    `title = input("x", OPTIONS);`,
+    `title = model("x", { alias: ALIAS });`,
+    `title = output<string>({ [ALIAS]: "a" });`,
+  ])("non-literal alias %s stays unfinished/cross_component", async (member) => {
+    const { context } = await setup({
+      "src/a.component.ts": `const ALIAS = "a";\nconst OPTIONS = {};\n${PUBLIC(member)}`,
+      "src/a.component.html": "<p>{{ title() }}</p>",
+    });
+    const result = await usagesOf(context, "AComponent.title");
     expect(result.coverage).toEqual(CROSS_COMPONENT);
     expect(result.usages.map((usage) => usage.kind)).toEqual(["TemplateCall"]);
   });
@@ -510,10 +516,10 @@ describe("directive members and metadata inputs/outputs", () => {
     `inputs: ["title: alias"]`,
     `inputs: [{ name: "title", alias: "y" }]`,
   ])(
-    "component %s is cross_component with own usages; unlisted sibling stays completed",
+    "component %s keeps own usages and is completed without consumers; unlisted sibling too",
     async (metadata) => {
       const { title, other } = await metadataUsages(metadata);
-      expect(title.coverage).toEqual(CROSS_COMPONENT);
+      expect(title.coverage).toEqual({ status: "completed", templates: 1 });
       expect(title.usages.map((usage) => usage.kind)).toEqual(["TemplatePropertyRead"]);
       expect(other.coverage).toEqual({ status: "completed", templates: 1 });
     },
@@ -678,6 +684,122 @@ describe("consumer template usages", () => {
     await write("src/a.component.ts", COMPONENT());
     const fresh = createFreshProject(root);
     expect((await usagesOf(fresh, "AComponent.title")).coverage.status).toBe("completed");
+  });
+});
+
+describe("aliases, model() and metadata names in consumer templates", () => {
+  const consumerNames = async (
+    member: string,
+    html: string,
+    options: { metadata?: string; symbol?: string } = {},
+  ) => {
+    const source = options.metadata
+      ? METADATA(options.metadata)
+          .replace('title = "x"; other = 1;', member)
+          .replace("{ Component }", "{ Component, Input }")
+      : PUBLIC(member);
+    const { context } = await setup({
+      "src/a.component.ts": source,
+      "src/a.component.html": "<p>none</p>",
+      ...CONSUMER(html),
+    });
+    const node = findDeclarationByName(
+      getSourceFileOrThrow(context.project, "src/a.component.ts"),
+      options.symbol ?? "AComponent.title",
+    );
+    const { coverage, usages } = await collectTemplateUsages(node, context, NO_REQUEST_CONTEXT);
+    return { coverage, bound: usages.filter((usage) => usage.role === "consumer") };
+  };
+  const names = (bound: readonly { bindingName?: string; binding?: string }[]) =>
+    bound.map((usage) => `${usage.binding}:${usage.bindingName}`);
+  const HTML = `<app-a [a]="1" [title]="2"></app-a>`;
+
+  it.each([
+    `@Input("a") title = "x";`,
+    `@Input({ alias: "a" }) title = "x";`,
+    `@Input({ alias: "a", required: true }) title = "x";`,
+    `title = input("x", { alias: "a" });`,
+    `title = input.required<string>({ alias: "a" });`,
+  ])("input alias %s binds the alias, not the member name", async (member) => {
+    const { coverage, bound } = await consumerNames(member, HTML);
+    expect(coverage).toEqual({ status: "completed", templates: 2 });
+    expect(names(bound)).toEqual(["input:a"]);
+  });
+
+  it.each([
+    [`@Output("a") title = output<string>();`],
+    [`title = output<string>({ alias: "a" });`],
+  ])("output alias %s binds the alias", async (member) => {
+    const { coverage, bound } = await consumerNames(member, `<app-a (a)="f()" (title)="g()">`);
+    expect(coverage).toMatchObject({ status: "completed" });
+    expect(names(bound)).toEqual(["output:a"]);
+  });
+
+  it("an unaliased option object keeps the member name", async () => {
+    const { bound } = await consumerNames(`title = input("x", { transform: Boolean });`, HTML);
+    expect(names(bound)).toEqual(["input:title"]);
+  });
+
+  it.each([`title = model("x");`, `title = model.required<string>();`])(
+    "%s reports [x], [(x)] and (xChange) bindings",
+    async (member) => {
+      const html = `<app-a [title]="1"></app-a><app-a [(title)]="v"></app-a><app-a (titleChange)="f($event)"></app-a>`;
+      const { coverage, bound } = await consumerNames(member, html);
+      expect(coverage).toEqual({ status: "completed", templates: 2 });
+      expect(names(bound)).toEqual(["input:title", "two_way:title", "output:titleChange"]);
+    },
+  );
+
+  it("model() with a literal alias maps to alias and aliasChange", async () => {
+    const html = `<app-a [a]="1" [(a)]="v" (aChange)="f($event)" [title]="2" (titleChange)="g()">`;
+    const { bound } = await consumerNames(`title = model("x", { alias: "a" });`, html);
+    expect(names(bound)).toEqual(["input:a", "two_way:a", "output:aChange"]);
+  });
+
+  it.each([
+    [`inputs: ["title"]`, "input:title"],
+    [`inputs: ["title: a"]`, "input:a"],
+    [`inputs: [{ name: "title", alias: "a" }]`, "input:a"],
+    [`inputs: [{ name: "title" }]`, "input:title"],
+  ])("metadata %s binds the public name", async (metadata, expected) => {
+    const { coverage, bound } = await consumerNames(
+      `title = "x"; other = 1;`,
+      `<app-a [a]="1" [title]="2" [other]="3">`,
+      { metadata },
+    );
+    expect(coverage).toMatchObject({ status: "completed" });
+    expect(names(bound)).toEqual([expected]);
+  });
+
+  it("metadata outputs bind the public output name", async () => {
+    const { bound } = await consumerNames(`title = "x"; other = 1;`, `<app-a (a)="f()">`, {
+      metadata: `outputs: ["title: a"]`,
+    });
+    expect(names(bound)).toEqual(["output:a"]);
+  });
+
+  it.each([
+    `inputs: [...SHARED]`,
+    `inputs: ["title", NAME]`,
+    `inputs: [{ name: "title", alias: NAME }]`,
+    `outputs: SHARED`,
+  ])("non-literal metadata %s stays unfinished/cross_component", async (metadata) => {
+    const { context } = await setup({
+      "src/a.component.ts": METADATA(metadata, `const SHARED = ["title"];\nconst NAME = "a";\n`),
+      "src/a.component.html": "<p>{{ title }}</p>",
+      ...CONSUMER(HTML),
+    });
+    expect((await usagesOf(context, "AComponent.title")).coverage).toMatchObject({
+      status: "unfinished",
+      reason: "cross_component",
+    });
+  });
+
+  it("a member that is both decorated and listed in metadata stays unfinished", async () => {
+    const { coverage } = await consumerNames(`@Input() title = "x"; other = 1;`, HTML, {
+      metadata: `inputs: ["title"]`,
+    });
+    expect(coverage).toMatchObject({ status: "unfinished", reason: "cross_component" });
   });
 });
 
