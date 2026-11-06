@@ -142,3 +142,230 @@ describe("createScopeResolver (standalone)", () => {
     ).rejects.toBeInstanceOf(ScopeWorkExhausted);
   });
 });
+
+const NG = `import { NgModule, forwardRef } from "@angular/core";\n`;
+const IMPORT_CARD = `import { CardComponent } from "./card";\nimport { HostComponent } from "./host";\n`;
+const moduleHost = host("standalone: false");
+const ngModule = (name: string, metadata: string, prelude = "") =>
+  `${NG}${IMPORT_CARD}${prelude}\n@NgModule({ ${metadata} })\nexport class ${name} {}\n`;
+const chain = (length: number, tail: string) =>
+  Object.fromEntries(
+    Array.from({ length }, (_, index) => [
+      `src/m${index}.ts`,
+      `${NG}${index + 1 < length ? `import { M${index + 1} } from "./m${index + 1}";` : IMPORT_CARD}
+@NgModule({ exports: [${index + 1 < length ? `M${index + 1}` : tail}] })
+export class M${index} {}\n`,
+    ]),
+  );
+
+describe("createScopeResolver (NgModule)", () => {
+  it.each<[string, Record<string, string>, ScopeVerdict]>([
+    [
+      "declared next to the target",
+      { "src/a.ts": ngModule("A", "declarations: [HostComponent, CardComponent]") },
+      "includes",
+    ],
+    [
+      "declared in a module that does not declare the target",
+      { "src/a.ts": ngModule("A", "declarations: [HostComponent]") },
+      "excludes",
+    ],
+    [
+      "target exported by an imported module",
+      {
+        "src/a.ts": ngModule(
+          "A",
+          "declarations: [HostComponent], imports: [B]",
+          `import { B } from "./b";`,
+        ),
+        "src/b.ts": ngModule("B", "exports: [CardComponent]"),
+      },
+      "includes",
+    ],
+    [
+      "target declared but not exported by an imported module",
+      {
+        "src/a.ts": ngModule(
+          "A",
+          "declarations: [HostComponent], imports: [B]",
+          `import { B } from "./b";`,
+        ),
+        "src/b.ts": ngModule("B", "declarations: [CardComponent]"),
+      },
+      "excludes",
+    ],
+    [
+      "re-export chain A -> B -> C",
+      {
+        "src/a.ts": ngModule(
+          "A",
+          "declarations: [HostComponent], imports: [B]",
+          `import { B } from "./b";`,
+        ),
+        "src/b.ts": ngModule("B", "exports: [C]", `import { C } from "./c";`),
+        "src/c.ts": ngModule("C", "exports: [CardComponent]"),
+      },
+      "includes",
+    ],
+    [
+      "import without re-export hides the transitive export",
+      {
+        "src/a.ts": ngModule(
+          "A",
+          "declarations: [HostComponent], imports: [B]",
+          `import { B } from "./b";`,
+        ),
+        "src/b.ts": ngModule("B", "imports: [C]", `import { C } from "./c";`),
+        "src/c.ts": ngModule("C", "exports: [CardComponent]"),
+      },
+      "excludes",
+    ],
+    [
+      "export cycle terminates",
+      {
+        "src/a.ts": ngModule(
+          "A",
+          "declarations: [HostComponent], imports: [B]",
+          `import { B } from "./b";`,
+        ),
+        "src/b.ts": ngModule("B", "exports: [C]", `import { C } from "./c";`),
+        "src/c.ts": ngModule("C", "exports: [B]", `import { B } from "./b";`),
+      },
+      "excludes",
+    ],
+    [
+      "forwardRef in exports",
+      {
+        "src/a.ts": ngModule(
+          "A",
+          "declarations: [HostComponent], imports: [B]",
+          `import { B } from "./b";`,
+        ),
+        "src/b.ts": ngModule("B", "exports: [forwardRef(() => CardComponent)]"),
+      },
+      "includes",
+    ],
+    [
+      "external module import",
+      {
+        "src/a.ts": ngModule(
+          "A",
+          "declarations: [HostComponent], imports: [ExtModule]",
+          `import { ExtModule } from "ext-lib";`,
+        ),
+      },
+      "excludes",
+    ],
+    ["no declaring module", {}, "opaque"],
+    [
+      "declared in two modules",
+      {
+        "src/a.ts": ngModule("A", "declarations: [HostComponent]"),
+        "src/b.ts": ngModule("B", "declarations: [HostComponent]"),
+      },
+      "opaque",
+    ],
+    [
+      "spread in declarations",
+      {
+        "src/a.ts": ngModule(
+          "A",
+          "declarations: [HostComponent, ...LIST]",
+          "declare const LIST: never[];",
+        ),
+      },
+      "opaque",
+    ],
+    [
+      "variable imports",
+      {
+        "src/a.ts": ngModule(
+          "A",
+          "declarations: [HostComponent], imports: LIST",
+          "declare const LIST: never[];",
+        ),
+      },
+      "opaque",
+    ],
+    [
+      "in-project call in imports",
+      {
+        "src/a.ts": ngModule(
+          "A",
+          "declarations: [HostComponent], imports: [make()]",
+          "declare function make(): never;",
+        ),
+      },
+      "opaque",
+    ],
+    [
+      "non-literal exports of an imported module",
+      {
+        "src/a.ts": ngModule(
+          "A",
+          "declarations: [HostComponent], imports: [B]",
+          `import { B } from "./b";`,
+        ),
+        "src/b.ts": ngModule("B", "exports: LIST", "declare const LIST: never[];"),
+      },
+      "opaque",
+    ],
+    [
+      "another module with non-literal declarations",
+      {
+        "src/a.ts": ngModule("A", "declarations: [HostComponent]"),
+        "src/b.ts": ngModule("B", "declarations: LIST", "declare const LIST: never[];"),
+      },
+      "opaque",
+    ],
+    ["export chain within the depth cap", chain(30, "CardComponent"), "includes"],
+    ["export chain beyond the depth cap", chain(40, "CardComponent"), "opaque"],
+  ])("module-declared consumer: %s -> %s", async (_name, files, expected) => {
+    const withChain = Object.keys(files).some((file) => file.startsWith("src/m"));
+    const all = withChain
+      ? {
+          ...files,
+          "src/a.ts": ngModule(
+            "A",
+            "declarations: [HostComponent], imports: [M0]",
+            `import { M0 } from "./m0";`,
+          ),
+        }
+      : files;
+    expect(await verdictOf(moduleHost, { files: all })).toBe(expected);
+  });
+
+  it.each<[string, string, ScopeVerdict]>([
+    ["imports a module exporting the target", "exports: [CardComponent]", "includes"],
+    ["imports a module that only declares the target", "declarations: [CardComponent]", "excludes"],
+    ["imports a module with non-literal exports", "exports: LIST", "opaque"],
+  ])("standalone consumer %s -> %s", async (_name, metadata, expected) => {
+    const source = host(
+      "standalone: true, imports: [Shared]",
+      `import { Shared } from "./shared";`,
+    );
+    const shared = ngModule("Shared", metadata, "declare const LIST: never[];");
+    expect(await verdictOf(source, { files: { "src/shared.ts": shared } })).toBe(expected);
+  });
+
+  it("uses the core major to choose between module and standalone when the flag is absent", async () => {
+    const files = { "src/a.ts": ngModule("A", "declarations: [HostComponent, CardComponent]") };
+    const absent = host("");
+    expect(await verdictOf(absent, { files, coreVersion: "18.2.0" })).toBe("includes");
+    expect(await verdictOf(absent, { files, coreVersion: "19.0.0" })).toBe("excludes");
+  });
+
+  it("stops with ScopeWorkExhausted while flattening a deep export chain", async () => {
+    const files = {
+      ...chain(10, "CardComponent"),
+      "src/a.ts": ngModule(
+        "A",
+        "declarations: [HostComponent], imports: [M0]",
+        `import { M0 } from "./m0";`,
+      ),
+    };
+    await expect(verdictOf(moduleHost, { files, visits: 5 })).rejects.toBeInstanceOf(
+      ScopeWorkExhausted,
+    );
+  });
+});
