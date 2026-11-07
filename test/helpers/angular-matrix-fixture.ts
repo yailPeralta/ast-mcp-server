@@ -12,7 +12,7 @@ import path from "node:path";
 export interface MatrixProjectOptions {
   /** Number of widget components; each one gets two host components that consume it. */
   components: number;
-  /** Leave one consuming host out of the rename so it keeps the removed input name. */
+  /** Mis-rename the binding of one edited consumer host, so it no longer type-checks. */
   seedBrokenConsumer?: boolean;
   /** Add an invalid binding to an edited host, so the error exists before and after the rename. */
   seedPreexistingError?: boolean;
@@ -40,6 +40,7 @@ export interface MatrixProject {
 const HOSTS_PER_WIDGET = 2;
 const RENAME_FROM = "label";
 const RENAME_TO = "heading";
+const MISSPELLED_RENAME_TO = "headng";
 
 const TSCONFIG = {
   compilerOptions: {
@@ -128,11 +129,12 @@ export function generateMatrixProject(options: MatrixProjectOptions): MatrixProj
       files[`${hostBase}.html`] = hostHtml(widget, RENAME_FROM, extra);
       if (seedsError) seeded.preexistingError = `${hostBase}.html`;
       if (widget !== 0) continue;
-      if (host === 1 && options.seedBrokenConsumer === true) {
-        seeded.brokenConsumer = `${hostBase}.html`;
-        continue;
-      }
-      overlay.push({ path: `${hostBase}.html`, text: hostHtml(widget, RENAME_TO, extra) });
+      const broken = host === 1 && options.seedBrokenConsumer === true;
+      if (broken) seeded.brokenConsumer = `${hostBase}.html`;
+      overlay.push({
+        path: `${hostBase}.html`,
+        text: hostHtml(widget, broken ? MISSPELLED_RENAME_TO : RENAME_TO, extra),
+      });
     }
   }
 

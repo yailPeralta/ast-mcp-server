@@ -63,13 +63,17 @@ describe("Angular matrix fixture generator", () => {
     expect(rename.seeded).toEqual({});
   });
 
-  it("seeds one broken consumer by leaving a single host out of the rename overlay", () => {
+  it("seeds one broken consumer by mis-renaming the binding of a single edited host", () => {
     const project = generateMatrixProject({ components: 3, seedBrokenConsumer: true });
     const broken = project.rename.seeded.brokenConsumer;
     expect(broken).toBe("src/host-0-1.component.html");
-    expect(project.rename.overlay.map((entry) => entry.path)).not.toContain(broken);
-    expect(project.rename.overlay).toHaveLength(3);
-    expect(project.files[broken!]).toContain("[label]");
+    expect(project.rename.overlay).toHaveLength(4);
+    const edited = project.rename.overlay.find((entry) => entry.path === broken)!;
+    expect(edited.text).toContain("[headng]");
+    expect(edited.text).not.toContain("[heading]");
+    const clean = generateMatrixProject({ components: 3 });
+    expect(clean.rename.seeded.brokenConsumer).toBeUndefined();
+    expect(JSON.stringify(clean.rename.overlay)).not.toContain("headng");
   });
 
   it("seeds a pre-existing error that is present before and after and shifts with the rename", () => {
