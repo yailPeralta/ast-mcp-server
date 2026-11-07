@@ -2,11 +2,11 @@
   "schema_version": 2,
   "algorithm": "sha256",
   "current": {
-    "version": "4.6.0",
+    "version": "4.7.0",
     "files": [
       {
         "path": "SKILL.md",
-        "sha256": "65dffe74f63dcc2fbf93f7d6f89c4167f8735971b9b35ebe0d5c2beee75a4b18"
+        "sha256": "2606e5fc607a3063789c7c02c49aaf8b3129824fa5527b8654e50e95ed2a8556"
       },
       {
         "path": "references/operations.md",
@@ -82,23 +82,115 @@
     },
     {
       "version": "4.5.0",
-      "sha256": "be757e8bd98733c7ee952d63a2805dcd9877becf651b4fcb6ab63d20f6546f21",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "be757e8bd98733c7ee952d63a2805dcd9877becf651b4fcb6ab63d20f6546f21"
+        },
+        {
+          "path": "references/operations.md",
+          "sha256": "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98"
+        }
+      ],
       "npm_versions": ["0.11.0"]
     },
     {
       "version": "4.5.0",
-      "sha256": "2729b30ff6b7344e6680c7ee02ab540bc6db9774ad7111f091cd356f8cc9d4ce",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "2729b30ff6b7344e6680c7ee02ab540bc6db9774ad7111f091cd356f8cc9d4ce"
+        },
+        {
+          "path": "references/operations.md",
+          "sha256": "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98"
+        }
+      ],
       "npm_versions": ["0.11.1"]
     },
     {
       "version": "4.5.0",
-      "sha256": "18132b4b747d135e4ccfbca9e2190a9afb41e144cc06c31c5e6bc0f1571e11da",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "18132b4b747d135e4ccfbca9e2190a9afb41e144cc06c31c5e6bc0f1571e11da"
+        },
+        {
+          "path": "references/operations.md",
+          "sha256": "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98"
+        }
+      ],
       "npm_versions": ["0.11.2"]
     },
     {
       "version": "4.6.0",
-      "sha256": "d0048ffd9a585d00791540c6fa5e0bec91ff95b1448479678f85702e6b09be8a",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "d0048ffd9a585d00791540c6fa5e0bec91ff95b1448479678f85702e6b09be8a"
+        },
+        {
+          "path": "references/operations.md",
+          "sha256": "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98"
+        }
+      ],
       "npm_versions": ["0.12.0"]
+    },
+    {
+      "version": "4.6.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "df2ebc3f3903cf5abf4eb6612da527cad97a92f29f1a9a475ea6e8b4cf47abfb"
+        },
+        {
+          "path": "references/operations.md",
+          "sha256": "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98"
+        }
+      ],
+      "npm_versions": ["0.13.0", "0.13.1"]
+    },
+    {
+      "version": "4.6.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "33d0c6520c1ed54d42a502251a08baed86153bf9b6c275aed4525b2968f1553b"
+        },
+        {
+          "path": "references/operations.md",
+          "sha256": "d52f01637e33e65ce523d19a810ce9488ab92228809768ec66a584120c24ad98"
+        }
+      ],
+      "npm_versions": ["0.14.0", "0.14.1", "0.14.2", "0.14.3"]
+    },
+    {
+      "version": "4.6.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "94ff4ce2a97d33cad56b7c1ed8057d0ff7ca22988aebd7923b21319326307c18"
+        },
+        {
+          "path": "references/operations.md",
+          "sha256": "ee5dd8138b4f4570ee256c820c69b94d650a3d454119fff80b1dc08a6297b380"
+        }
+      ],
+      "npm_versions": ["0.15.0"]
+    },
+    {
+      "version": "4.6.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "afd054a923d9a4f825066e5c3fd2dfa7ae2269a8464819b032a5fbf19a9b14fd"
+        },
+        {
+          "path": "references/operations.md",
+          "sha256": "ee5dd8138b4f4570ee256c820c69b94d650a3d454119fff80b1dc08a6297b380"
+        }
+      ],
+      "npm_versions": ["0.15.1"]
     }
   ]
 }
