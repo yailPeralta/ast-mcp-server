@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.16.0] — not yet published (2026-11-06)
+## [0.16.0] — published to `next`, verification failed, not promoted (2026-11-07)
 
 ### Added
 
@@ -25,6 +25,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Selector-public component members (`@Input`, `@Output`, `input()`, `output()`, `model()`) and `@Pipe` classes reported `template_coverage: completed` (pipes reported nothing), and a rename of an `@Input` was planned without blocking although the consuming templates were never read. They now report `unfinished` with the new reason `cross_component` (own-template usages are still listed for inputs and outputs), and `ast_rename_symbol` refuses them with `INCOMPLETE_EVIDENCE` (#407).
 - `@Directive` members declared with `@Input`, `@Output`, `input()`, `output()` or `model()` reported no `template_coverage`, and members listed in the `inputs` / `outputs` metadata arrays of a `@Component` or `@Directive` were treated as plain members, so `ast_rename_symbol` planned their rename without blocking. They now report `unfinished` with reason `cross_component` (directives with `templates: 0`; a non-literal metadata array marks every member of the class), and `ast_rename_symbol` refuses them with `INCOMPLETE_EVIDENCE` (#410).
 - Upgrading the `structural-code-editing` skill over an unmodified install from npm `0.11.0`–`0.15.1` failed with a conflict: `0.13.0`–`0.15.1` had no recorded predecessor, and the `0.11.0`–`0.12.0` predecessors did not list `references/operations.md`. Every published byte set is now recorded, and the skill version is `4.7.0` (#425).
+
+### Release status
+
+- npm published these immutable bytes under `next` with provenance and the expected Git commit (`0f5a3f137703fdd673640d00a04087db3b2808af`, integrity `sha512-eyKYMudp0DisVhVJctgwXwZERA2GGsNPP8eU+P/Zh7A9aSf/0mGG9PoGY6qxtBAMW+1FJd+nFLizqo8Go7NLZA==`, publish run `42329276499`). Public-registry verification (run `42331039791`) then failed for the same reason as `0.14.3`–`0.15.1`: the consumer install resolves `minimatch@10.2.6` through `ts-morph@28.0.0`, flagged by `npm audit` for GHSA-g3hv-75wg-m249 (#361). `0.16.0` supersedes `0.15.1` on `next` and was not promoted to `latest`, tagged in Git, or released on GitHub.
 
 ## [0.15.1] — published to `next`, verification failed, not promoted (2026-11-05)
 
