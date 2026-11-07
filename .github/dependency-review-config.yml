@@ -1,0 +1,15 @@
+# Dependency review exceptions. Every entry needs a justification and an owner issue.
+#
+# @angular/compiler@18.2.14 (test/angular-matrix/v18) is the last Angular 18 release, so no
+# patched 18.x exists. The advisories below are browser runtime sanitization/XSS issues. The
+# matrix workspace only feeds the compiler to static template analysis in tests and is never
+# shipped or executed in a browser. `.yarnrc.yml` already excludes @angular/compiler from
+# `yarn audit` for the same reason. Remove these entries when Angular 18 leaves the matrix (#421).
+allow-ghsas:
+  - GHSA-v4hv-rgfq-gp49
+  - GHSA-jrmj-c5cx-3cw6
+  - GHSA-g93w-mfhg-p222
+  - GHSA-jj27-h5hq-8x99
+  - GHSA-f3m7-gqxr-g87x
+  - GHSA-58w9-8g37-x9v5
+  - GHSA-hh8m-fm6v-7cvg
