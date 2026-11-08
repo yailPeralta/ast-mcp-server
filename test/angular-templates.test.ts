@@ -1059,6 +1059,28 @@ describe.each([
   const prepare = (html: string, files: Record<string, string> = {}) =>
     setup({ "src/a.component.html": html, ...files }, { compiler: alias });
 
+  // Regression for #441: v18/v19 `tmplAstVisitAll` walked every subtree twice per level.
+  const DEPTH = 20;
+  const deep = (inner: string) => `${"<div>".repeat(DEPTH)}${inner}${"</div>".repeat(DEPTH)}`;
+  run("a pipe consumer with a deeply nested template completes", async () => {
+    const html = deep("{{ v | fmt }}");
+    const { context } = await setup({ ...PIPE_FILES, ...PIPE_CONSUMER(html) }, { compiler: alias });
+    const { coverage, usages } = await usagesOf(
+      context,
+      "FmtPipe",
+      NO_REQUEST_CONTEXT,
+      "src/fmt.pipe.ts",
+    );
+    expect(coverage).toMatchObject({ status: "completed" });
+    expect(usages.map((usage) => html.slice(usage.start, usage.end))).toEqual(["fmt"]);
+  });
+  run("a member used in its own deeply nested template completes", async () => {
+    const { context } = await prepare(deep("{{ title }}"));
+    const { coverage, usages } = await usagesOf(context, "AComponent.title");
+    expect(coverage).toEqual({ status: "completed", templates: 1 });
+    expect(usages.map((usage) => usage.kind)).toEqual(["TemplatePropertyRead"]);
+  });
+
   run("extracts TemplatePropertyRead/Write/Call", async () => {
     const html = `<p>{{ title }}</p>
 <button (click)="title = 'x'">a</button>

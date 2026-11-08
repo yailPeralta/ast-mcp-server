@@ -427,9 +427,12 @@ function extractUsages(
   };
 
   class Templates extends (compiler.TmplAstRecursiveVisitor as new () => object) {
-    visit(node: any): void {
+    // v18/v19 `tmplAstVisitAll` runs `visitor.visit(node) || node.visit(visitor)`; returning
+    // true marks the node handled so each subtree is walked once instead of twice per level.
+    visit(node: any): true {
       tick();
       node.visit(this);
+      return true;
     }
     view(locals: (string | undefined)[], children: any[], before?: () => void): void {
       const names = [...locals, ...referencesOf(children)].filter((name): name is string => !!name);
