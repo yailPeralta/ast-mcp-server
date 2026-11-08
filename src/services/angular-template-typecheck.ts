@@ -8,6 +8,11 @@ import {
   rangeVerdict,
   resolveFrom,
 } from "./angular-package-resolution.js";
+import {
+  MAX_OVERLAY_BYTES,
+  MAX_OVERLAY_FILES,
+  MAX_TEMPLATES,
+} from "./angular-template-typecheck-protocol.js";
 import type { DiagnosticDelta } from "./diagnostics.js";
 
 export type TemplateTypeCheckReason =
@@ -32,9 +37,6 @@ export interface TemplateTypeCheckInput {
   /** Changed files only: TypeScript `afterText` plus the edited templates. */
   readonly overlay: readonly TemplateOverlayFile[];
 }
-
-export const MAX_OVERLAY_BYTES = 32 * 1024 * 1024;
-export const MAX_TEMPLATES = 2000;
 
 export type Preflight =
   | { readonly ok: true; readonly cliDir: string; readonly cliEntry: string }
@@ -141,7 +143,11 @@ export async function checkTemplateTypes(
     (total, file) => total + Buffer.byteLength(file.text, "utf8"),
     0,
   );
-  if (input.templates.length > MAX_TEMPLATES || overlayBytes > MAX_OVERLAY_BYTES) {
+  if (
+    input.templates.length > MAX_TEMPLATES ||
+    input.overlay.length > MAX_OVERLAY_FILES ||
+    overlayBytes > MAX_OVERLAY_BYTES
+  ) {
     return emptyDelta("unfinished", "work_exhausted");
   }
   return emptyDelta("unfinished", "check_failed");
