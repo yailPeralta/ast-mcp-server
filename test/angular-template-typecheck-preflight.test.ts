@@ -1,7 +1,20 @@
 import { mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import os from "node:os";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const realpathFailures = vi.hoisted(() => ({ suffix: "" }));
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  const realpathSync = ((target: string, ...rest: never[]) => {
+    if (realpathFailures.suffix && String(target).endsWith(realpathFailures.suffix)) {
+      throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+    }
+    return actual.realpathSync(target, ...rest);
+  }) as typeof actual.realpathSync;
+  return { ...actual, realpathSync };
+});
 import {
   checkTemplateTypes,
   preflightTemplateTypeCheck,
@@ -16,7 +29,8 @@ interface FakeToolchain {
   compiler?: string | null;
   core?: string | null;
   /** Project-root TypeScript (found from the tsconfig) versus one nested under the compiler-cli (found by ngtsc). */
-  rootTypescript?: string;
+  rootTypescript?: string | null;
+  parentDir?: string;
   cliTypescript?: string | null;
   peer?: string;
   cliLocation?: "inside" | "outside";
@@ -44,7 +58,10 @@ async function writePackage(
 }
 
 async function setup(toolchain: FakeToolchain = {}): Promise<{ root: string; tsconfig: string }> {
-  const fixture = await createProjectFixture({}, { parentDir: ANGULAR_FIXTURE_ROOT });
+  const fixture = await createProjectFixture(
+    {},
+    { parentDir: toolchain.parentDir ?? ANGULAR_FIXTURE_ROOT },
+  );
   fixtures.push(fixture);
   const root = await realpath(fixture.root);
   const modules = path.join(root, "node_modules");
@@ -154,6 +171,26 @@ describe("preflightTemplateTypeCheck", () => {
     expect(preflightTemplateTypeCheck(inRangeNested.tsconfig).ok).toBe(true);
   });
 
+  it("reports typescript_incompatible when no typescript resolves from the compiler-cli", async () => {
+    const { tsconfig } = await setup({ rootTypescript: null, parentDir: os.tmpdir() });
+    expect(reasonOf(tsconfig)).toBe("typescript_incompatible");
+  });
+
+  it("fails closed when realpath of the compiler-cli entry throws", async () => {
+    const { tsconfig } = await setup();
+    realpathFailures.suffix = path.join("compiler-cli", "index.js");
+    try {
+      expect(reasonOf(tsconfig)).toBe("compiler_unsupported");
+    } finally {
+      realpathFailures.suffix = "";
+    }
+  });
+
+  it("fails closed on a peer range outside the supported grammar", async () => {
+    const { tsconfig } = await setup({ peer: "^5.9.0" });
+    expect(reasonOf(tsconfig)).toBe("compiler_unsupported");
+  });
+
   it("rejects a compiler-cli symlinked outside the project as compiler_unsupported", async () => {
     const { tsconfig } = await setup({ cliLocation: "outside" });
     expect(reasonOf(tsconfig)).toBe("compiler_unsupported");
@@ -179,30 +216,46 @@ describe("checkTemplateTypes limits and preflight", () => {
     });
   });
 
-  it("reports work_exhausted for more than 2000 templates", async () => {
+  const exhausted = {
+    status: "unfinished",
+    reason: "work_exhausted",
+    added: [],
+    removed: [],
+    addedErrors: [],
+  };
+  const MiB = 1024 * 1024;
+
+  it("accepts exactly 2000 templates and rejects 2001", async () => {
     const { root, tsconfig } = await setup();
-    const templates = Array.from({ length: 2001 }, (_, i) => path.join(root, `t${i}.html`));
-    expect(
-      await checkTemplateTypes({ tsConfigFilePath: tsconfig, templates, overlay: [] }),
-    ).toEqual({
-      status: "unfinished",
-      reason: "work_exhausted",
-      added: [],
-      removed: [],
-      addedErrors: [],
-    });
+    const run = (count: number) =>
+      checkTemplateTypes({
+        tsConfigFilePath: tsconfig,
+        templates: Array.from({ length: count }, (_, i) => path.join(root, `t${i}.html`)),
+        overlay: [],
+      });
+    expect(await run(2000)).not.toMatchObject({ reason: "work_exhausted" });
+    expect(await run(2001)).toEqual(exhausted);
   });
 
-  it("reports work_exhausted for an overlay above 32 MiB", async () => {
+  it.each([
+    [
+      "an overlay above 32 MiB",
+      (r: string) => [{ absolutePath: r, text: "a".repeat(32 * MiB + 1) }],
+    ],
+    [
+      "a multibyte overlay above 32 MiB in bytes only",
+      (r: string) => [{ absolutePath: r, text: "é".repeat(17 * MiB) }],
+    ],
+    [
+      "more than 10000 overlay files",
+      (r: string) =>
+        Array.from({ length: 10_001 }, (_, i) => ({ absolutePath: `${r}${i}`, text: "" })),
+    ],
+  ])("reports work_exhausted for %s", async (_label, build) => {
     const { root, tsconfig } = await setup();
-    const overlay = [
-      { absolutePath: path.join(root, "big.ts"), text: "a".repeat(32 * 1024 * 1024 + 1) },
-    ];
+    const overlay = build(path.join(root, "big.ts"));
     expect(
       await checkTemplateTypes({ tsConfigFilePath: tsconfig, templates: [], overlay }),
-    ).toMatchObject({
-      status: "unfinished",
-      reason: "work_exhausted",
-    });
+    ).toEqual(exhausted);
   });
 });

@@ -105,12 +105,18 @@ export function preflightTemplateTypeCheck(tsConfigFilePath: string): Preflight 
   }
 
   const entry = resolveFrom(tsConfigFilePath, "@angular/compiler-cli");
-  const cliEntry = entry && realpathSync(entry);
+  let cliEntry: string | undefined;
+  try {
+    cliEntry = entry && realpathSync(entry);
+  } catch {
+    return UNSUPPORTED;
+  }
   if (!cliEntry || !isWithin(cli.dir, cliEntry)) return UNSUPPORTED;
 
   const peer = (cli.manifest.peerDependencies as Record<string, unknown> | undefined)?.typescript;
   const typescript = resolveFrom(path.join(cli.dir, "package.json"), "typescript/package.json");
-  if (typeof peer !== "string" || !typescript) return UNSUPPORTED;
+  if (typeof peer !== "string") return UNSUPPORTED;
+  if (!typescript) return { ok: false, reason: "typescript_incompatible" };
   let typescriptVersion: unknown;
   try {
     typescriptVersion = JSON.parse(readFileSync(typescript, "utf8")).version;
