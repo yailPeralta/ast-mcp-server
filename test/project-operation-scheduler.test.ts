@@ -494,4 +494,29 @@ describe("project operation scheduler", () => {
     });
     expect(Object.isFrozen(scheduler.snapshot())).toBe(true);
   });
+
+  it("exposes remainingMs() that decreases with the clock and never goes negative", async () => {
+    let now = 0;
+    const scheduler = createScheduler({ operationDeadlineMs: 1_000, now: () => now });
+    const samples: number[] = [];
+    await scheduler.run((context) => {
+      samples.push(context.remainingMs());
+      now = 400;
+      samples.push(context.remainingMs());
+      now = 999;
+      samples.push(context.remainingMs());
+    });
+    expect(samples).toEqual([1_000, 600, 1]);
+
+    let lateNow = 0;
+    const late = createScheduler({ operationDeadlineMs: 1_000, now: () => lateNow });
+    let overdue = Number.NaN;
+    await late
+      .run((context) => {
+        lateNow = 5_000;
+        overdue = context.remainingMs();
+      })
+      .catch(() => undefined);
+    expect(overdue).toBe(0);
+  });
 });

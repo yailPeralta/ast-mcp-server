@@ -18,9 +18,11 @@ import {
   inspectPersistedPlan,
   persistOperationPlan,
 } from "../src/services/operation-plan-file.js";
+import type { TemplateDiagnostics } from "../src/services/angular-template-typecheck.js";
 import {
   applyOperation,
   clearOperationsForTests,
+  importOperationRecord,
   prepareRename,
   prepareScaffoldClass,
   setOperationStoreConfigForTests,
@@ -32,9 +34,9 @@ import { createProjectFixture, type ProjectFixture } from "./helpers/project-fix
 const fixtures: ProjectFixture[] = [];
 const stateDirectories: string[] = [];
 
-type PlanEnvelope = { schema_version: 1 | 2; operation: PersistedOperationRecord };
+type PlanEnvelope = { schema_version: 1 | 2 | 3; operation: PersistedOperationRecord };
 
-function planHashFor(operation: PersistedOperationRecord, version: 1 | 2): string {
+function planHashFor(operation: PersistedOperationRecord, version: 1 | 2 | 3): string {
   return createHash("sha256")
     .update(
       JSON.stringify({
@@ -51,6 +53,20 @@ function planHashFor(operation: PersistedOperationRecord, version: 1 | 2): strin
         diagnostics: operation.diagnostics,
         allow_new_errors: operation.allow_new_errors,
         blocked: operation.blocked,
+        ...(version === 3
+          ? {
+              template_diagnostics: {
+                status: operation.template_diagnostics?.status,
+                ...(operation.template_diagnostics?.status === "completed"
+                  ? {}
+                  : { reason: (operation.template_diagnostics as { reason?: string }).reason }),
+                added: operation.template_diagnostics?.added,
+                removed: operation.template_diagnostics?.removed,
+                addedErrors: operation.template_diagnostics?.addedErrors,
+              },
+              block_on_template_errors: operation.block_on_template_errors,
+            }
+          : {}),
         files: operation.files.map((file) => ({
           file: file.file,
           original_hash: file.original_hash,
@@ -62,7 +78,7 @@ function planHashFor(operation: PersistedOperationRecord, version: 1 | 2): strin
     .digest("hex");
 }
 
-async function rewritePlanVersion(planFile: string, version: 1 | 2): Promise<PlanEnvelope> {
+async function rewritePlanVersion(planFile: string, version: 1 | 2 | 3): Promise<PlanEnvelope> {
   const envelope = JSON.parse(await readFile(planFile, "utf8")) as PlanEnvelope;
   envelope.schema_version = version;
   envelope.operation.plan_hash = planHashFor(envelope.operation, version);
@@ -262,7 +278,7 @@ describe("persisted operation plans", () => {
       "formatValue",
     );
 
-    envelope.schema_version = 3;
+    (envelope as { schema_version: number }).schema_version = 4;
     await writeFile(planFile, JSON.stringify(envelope), { mode: 0o600 });
     await expect(inspectPersistedPlan(planFile)).rejects.toThrow(/schema_version|discriminator/i);
   });
@@ -310,4 +326,146 @@ describe("persisted operation plans", () => {
       await expect(inspectPersistedPlan(aliasedPlan)).rejects.toThrow(/symbolic links/i);
     },
   );
+});
+
+describe("version 3 plans that carry a template check", () => {
+  const templateError = {
+    code: 2339,
+    category: "Error",
+    file: "src/use.html",
+    line: 1,
+    column: 3,
+    message: "Property 'x' does not exist.",
+  };
+  const completed: TemplateDiagnostics = {
+    status: "completed",
+    added: [templateError],
+    removed: [],
+    addedErrors: [templateError],
+  };
+  const unfinished: TemplateDiagnostics = {
+    status: "unfinished",
+    reason: "deadline",
+    added: [],
+    removed: [],
+    addedErrors: [],
+  };
+
+  /** Turns a prepared TypeScript-only plan into the plan a template check would have produced. */
+  async function preparedV3(
+    template: TemplateDiagnostics,
+    blockOnTemplateErrors = false,
+  ): Promise<{ fixture: ProjectFixture; stateDirectory: string; planFile: string; hash: string }> {
+    const { fixture, stateDirectory } = await setup();
+    const prepared = await prepareRename({
+      projectRoot: fixture.root,
+      filePath: "src/value.ts",
+      symbolPath: "formatValue",
+      newName: "renderValue",
+    });
+    const planFile = await persistOperationPlan(prepared.operation_id, { stateDirectory });
+    const envelope = JSON.parse(await readFile(planFile, "utf8")) as PlanEnvelope;
+    envelope.schema_version = 3;
+    envelope.operation.template_diagnostics = template;
+    envelope.operation.block_on_template_errors = blockOnTemplateErrors;
+    envelope.operation.blocked = blockOnTemplateErrors && template.addedErrors.length > 0;
+    envelope.operation.block_reason = envelope.operation.blocked
+      ? "1 new template error(s) would be introduced. Prepare again with allow_new_errors=true only after explicit review."
+      : null;
+    envelope.operation.plan_hash = planHashFor(envelope.operation, 3);
+    await writeFile(planFile, `${JSON.stringify(envelope)}\n`, { mode: 0o600 });
+    await chmod(planFile, 0o600);
+    clearOperationsForTests();
+    return { fixture, stateDirectory, planFile, hash: envelope.operation.plan_hash };
+  }
+
+  it("round-trips a v3 plan through persist, import, apply and receipt", async () => {
+    const { fixture, stateDirectory, planFile, hash } = await preparedV3(completed);
+
+    expect(await inspectPersistedPlan(planFile)).toMatchObject({ schema_version: 3 });
+    const applied = await applyPersistedOperation(planFile, hash, { stateDirectory });
+
+    expect(applied.idempotent_replay).toBe(false);
+    expect(await readFile(path.join(fixture.root, "src/value.ts"), "utf8")).toContain(
+      "renderValue",
+    );
+    const receipt = JSON.parse(await readFile(planFile, "utf8")) as PlanEnvelope;
+    expect(receipt.schema_version).toBe(3);
+    expect(receipt.operation.template_diagnostics).toEqual(completed);
+    expect(receipt.operation.status).toBe("applied");
+  });
+
+  it("writes schema version 3 only for a plan that carries the check", async () => {
+    const { planFile, stateDirectory, hash } = await preparedV3(unfinished, true);
+    const record = (JSON.parse(await readFile(planFile, "utf8")) as PlanEnvelope).operation;
+
+    importOperationRecord(record, hash, 3);
+    const rewritten = await persistOperationPlan(record.operation_id, { stateDirectory });
+    const envelope = JSON.parse(await readFile(rewritten, "utf8")) as PlanEnvelope;
+
+    expect(envelope.schema_version).toBe(3);
+    expect(envelope.operation.block_on_template_errors).toBe(true);
+    expect(envelope.operation.template_diagnostics).toEqual(unfinished);
+  });
+
+  it("rejects a v3 plan whose template delta was tampered with", async () => {
+    const { planFile, stateDirectory, hash } = await preparedV3(completed);
+    const envelope = JSON.parse(await readFile(planFile, "utf8")) as PlanEnvelope;
+    envelope.operation.template_diagnostics = unfinished;
+    await writeFile(planFile, `${JSON.stringify(envelope)}\n`, { mode: 0o600 });
+    await chmod(planFile, 0o600);
+
+    await expect(applyPersistedOperation(planFile, hash, { stateDirectory })).rejects.toThrow(
+      /integrity mismatch/i,
+    );
+  });
+
+  it("rejects malformed v3 template records with the strict schema", async () => {
+    const { planFile } = await preparedV3(completed);
+    const base = JSON.parse(await readFile(planFile, "utf8")) as PlanEnvelope;
+    await expect(inspectPersistedPlan(planFile)).resolves.toMatchObject({ schema_version: 3 });
+    const variants: Record<string, (operation: Record<string, unknown>) => void> = {
+      "an unknown key": (operation) => {
+        (operation.template_diagnostics as Record<string, unknown>).extra = true;
+      },
+      "a reason on a completed check": (operation) => {
+        (operation.template_diagnostics as Record<string, unknown>).reason = "deadline";
+      },
+      "a non-completed check with diagnostics": (operation) => {
+        operation.template_diagnostics = { ...unfinished, added: [templateError] };
+      },
+      "a non-completed check without a reason": (operation) => {
+        operation.template_diagnostics = {
+          status: "unfinished",
+          added: [],
+          removed: [],
+          addedErrors: [],
+        };
+      },
+      "a missing block_on_template_errors": (operation) => {
+        delete operation.block_on_template_errors;
+      },
+      "a missing template_diagnostics": (operation) => {
+        delete operation.template_diagnostics;
+      },
+    };
+    for (const [name, mutate] of Object.entries(variants)) {
+      const envelope = structuredClone(base);
+      mutate(envelope.operation as unknown as Record<string, unknown>);
+      await writeFile(planFile, `${JSON.stringify(envelope)}\n`, { mode: 0o600 });
+      await chmod(planFile, 0o600);
+      await expect(inspectPersistedPlan(planFile), name).rejects.toThrow();
+    }
+  });
+
+  it("keeps v1 and v2 strict: neither accepts template fields", async () => {
+    const { planFile } = await preparedV3(completed);
+    for (const version of [1, 2] as const) {
+      const envelope = JSON.parse(await readFile(planFile, "utf8")) as PlanEnvelope;
+      envelope.schema_version = version;
+      await writeFile(planFile, `${JSON.stringify(envelope)}\n`, { mode: 0o600 });
+      await chmod(planFile, 0o600);
+      await expect(inspectPersistedPlan(planFile), `v${version}`).rejects.toThrow();
+    }
+  });
 });
