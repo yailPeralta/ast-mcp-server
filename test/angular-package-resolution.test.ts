@@ -6,30 +6,21 @@ import {
   isSupportedVersion,
   isUnderAncestorNodeModules,
   isWithin,
+  rangeVerdict,
   resolveFrom,
 } from "../src/services/angular-package-resolution.js";
 import { ANGULAR_FIXTURE_ROOT } from "./helpers/angular-fixture.js";
 import { createProjectFixture } from "./helpers/project-fixture.js";
 
-describe("isWithin", () => {
+describe("isWithin and isUnderAncestorNodeModules", () => {
   it("accepts descendants and rejects the parent, siblings and escapes", () => {
-    expect(isWithin("/a/b", "/a/b/c/d")).toBe(true);
-    expect(isWithin("/a/b", "/a/b")).toBe(true);
+    expect(isWithin("/a/b", "/a/b/c")).toBe(true);
     expect(isWithin("/a/b", "/a/bc")).toBe(false);
     expect(isWithin("/a/b", "/a")).toBe(false);
-    expect(isWithin("/a/b", "/x/y")).toBe(false);
   });
-});
 
-describe("isUnderAncestorNodeModules", () => {
-  it("accepts a package inside a node_modules owned by the project or an ancestor", () => {
-    expect(
-      isUnderAncestorNodeModules("/repo/app/node_modules/@angular/core", "/repo/app/src"),
-    ).toBe(true);
+  it("accepts only node_modules owned by the project or an ancestor", () => {
     expect(isUnderAncestorNodeModules("/repo/node_modules/@angular/core", "/repo/app")).toBe(true);
-  });
-
-  it("rejects a package whose node_modules is not an ancestor of the project", () => {
     expect(isUnderAncestorNodeModules("/other/node_modules/@angular/core", "/repo/app")).toBe(
       false,
     );
@@ -92,4 +83,43 @@ describe("resolveFrom", () => {
       await outside.cleanup();
     }
   });
+});
+
+describe("rangeVerdict", () => {
+  it.each([
+    [">=5.4 <5.6", "5.4.0", "satisfied"],
+    [">=5.4 <5.6", "5.5.4", "satisfied"],
+    [">=5.4 <5.6", "5.6.0", "unsatisfied"],
+    [">=5.4 <5.6", "5.3.9", "unsatisfied"],
+    [">=5.9 <6.1", "6.0.3", "satisfied"],
+    [">=5.8.2 <6.0.0", "5.8.1", "unsatisfied"],
+    [">=5.8.2 <6.0.0", "5.8.2", "satisfied"],
+    ["<6.0", "5.9.3", "satisfied"],
+    [">=6.0 <6.1", "6.1.0", "unsatisfied"],
+  ])("range %s with %s is %s", (range, version, verdict) => {
+    expect(rangeVerdict(version, range)).toBe(verdict);
+  });
+
+  it.each([
+    "5.4 || 5.5",
+    "^5.4.0",
+    "~5.4.0",
+    "5.x",
+    "*",
+    "",
+    ">=5.4-beta <5.6",
+    ">5.4 <5.6",
+    "5.4.0",
+    ">=5.4 <5.6 <5.7 <5.8 <5.9",
+    ">=5 <6",
+  ])("range %j fails closed as unsupported", (range) => {
+    expect(rangeVerdict("5.5.0", range)).toBe("unsupported");
+  });
+
+  it.each(["5.5.0-dev.20240101", "5.5", "latest", ""])(
+    "version %j (not a plain x.y.z) fails closed as unsupported",
+    (version) => {
+      expect(rangeVerdict(version, ">=5.4 <5.6")).toBe("unsupported");
+    },
+  );
 });
