@@ -206,7 +206,12 @@ describe("checkTemplateTypes limits and preflight", () => {
   it("returns the preflight reason as an unavailable delta with empty arrays", async () => {
     const { tsconfig } = await setup({ cli: null });
     expect(
-      await checkTemplateTypes({ tsConfigFilePath: tsconfig, templates: [], overlay: [] }),
+      await checkTemplateTypes({
+        tsConfigFilePath: tsconfig,
+        templates: [],
+        overlay: [],
+        changes: [],
+      }),
     ).toEqual({
       status: "unavailable",
       reason: "compiler_cli_missing",
@@ -225,16 +230,26 @@ describe("checkTemplateTypes limits and preflight", () => {
   };
   const MiB = 1024 * 1024;
 
-  it("accepts exactly 2000 templates and rejects 2001", async () => {
+  it("accepts exactly 2000 templates and rejects 2001 without spawning", async () => {
     const { root, tsconfig } = await setup();
+    const spawn = vi.fn(() => {
+      throw new Error("spawn is stubbed out in this test");
+    });
     const run = (count: number) =>
-      checkTemplateTypes({
-        tsConfigFilePath: tsconfig,
-        templates: Array.from({ length: count }, (_, i) => path.join(root, `t${i}.html`)),
-        overlay: [],
-      });
+      checkTemplateTypes(
+        {
+          tsConfigFilePath: tsconfig,
+          templates: Array.from({ length: count }, (_, i) => path.join(root, `t${i}.html`)),
+          overlay: [],
+          changes: [],
+        },
+        undefined,
+        { spawn },
+      );
     expect(await run(2000)).not.toMatchObject({ reason: "work_exhausted" });
+    expect(spawn).toHaveBeenCalledTimes(1);
     expect(await run(2001)).toEqual(exhausted);
+    expect(spawn).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -255,7 +270,7 @@ describe("checkTemplateTypes limits and preflight", () => {
     const { root, tsconfig } = await setup();
     const overlay = build(path.join(root, "big.ts"));
     expect(
-      await checkTemplateTypes({ tsConfigFilePath: tsconfig, templates: [], overlay }),
+      await checkTemplateTypes({ tsConfigFilePath: tsconfig, templates: [], overlay, changes: [] }),
     ).toEqual(exhausted);
   });
 });
