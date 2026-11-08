@@ -741,8 +741,12 @@ describe("apply-path guarantees for template files (ATN-R1/R2, EWS-R1/R2, TWF-R5
       [...snapshot.files].filter(([filePath]) => !filePath.endsWith(".html")),
     );
     expect(preUpgradeFiles.size).toBe(snapshot.files.size - 1);
+    // A pre-upgrade plan predates both the template check and its recorded fields.
+    const preUpgrade: PersistedOperationRecord = { ...record };
+    delete preUpgrade.template_diagnostics;
+    delete preUpgrade.block_on_template_errors;
     const legacy: PersistedOperationRecord = {
-      ...record,
+      ...preUpgrade,
       workspace_hash: hashWorkspaceFiles(preUpgradeFiles),
       workspace_file_count: preUpgradeFiles.size,
     };
