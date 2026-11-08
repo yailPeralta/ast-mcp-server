@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -29,6 +29,12 @@ import {
   MAX_SCOPE_VISITS,
   ScopeWorkExhausted,
 } from "./angular-template-scope.js";
+import {
+  isSupportedVersion,
+  isUnderAncestorNodeModules,
+  isWithin,
+  resolveFrom,
+} from "./angular-package-resolution.js";
 import type { ProjectContext } from "./project.js";
 import type { RequestContext } from "./request-context.js";
 import { assertSafeOperationFile } from "./safe-file.js";
@@ -77,8 +83,6 @@ export interface ScanLimits {
 const MAX_TEMPLATE_BYTES = 512 * 1024;
 const MAX_TEMPLATE_NODES = 100_000;
 const CHECKPOINT_EVERY_NODES = 1000;
-const MIN_COMPILER_MAJOR = 18;
-const MAX_COMPILER_MAJOR = 22;
 const TWO_WAY_BINDING = 5; // BindingType.TwoWay, stable across supported majors
 const TWO_WAY_EVENT = 2; // ParsedEventType.TwoWay, stable across supported majors
 const SCAN_LIMITS: ScanLimits = { templates: 2000, bytes: 32 * 1024 * 1024, nodes: 1_000_000 };
@@ -110,42 +114,6 @@ type CompilerLoad =
   | { readonly reason: "compiler_missing" | "compiler_unsupported" };
 
 const compilerCache = new Map<string, Promise<CompilerModule>>();
-
-function resolveFrom(tsConfigFilePath: string, request: string): string | undefined {
-  try {
-    const resolved = createRequire(tsConfigFilePath).resolve(request);
-    return existsSync(resolved) ? resolved : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function isWithin(parent: string, child: string): boolean {
-  const relative = path.relative(parent, child);
-  return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
-}
-
-/** True when `packageDir` sits in a node_modules directory owned by `projectDir` or an ancestor. */
-function isUnderAncestorNodeModules(packageDir: string, projectDir: string): boolean {
-  const segments = packageDir.split(path.sep);
-  return segments.some(
-    (segment, index) =>
-      segment === "node_modules" &&
-      isWithin(segments.slice(0, index).join(path.sep) || path.sep, projectDir),
-  );
-}
-
-function isSupportedVersion(version: unknown): boolean {
-  const match = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?(?:\+.*)?$/u.exec(String(version));
-  if (!match) return false;
-  const [major, minor, patch] = [match[1], match[2], match[3]].map(Number) as [
-    number,
-    number,
-    number,
-  ];
-  const belowFloor = major === MIN_COMPILER_MAJOR && minor === 0 && patch === 0 && !!match[4];
-  return major >= MIN_COMPILER_MAJOR && major <= MAX_COMPILER_MAJOR && !belowFloor;
-}
 
 async function loadCompiler(tsConfigFilePath: string): Promise<CompilerLoad> {
   const unsupported = { reason: "compiler_unsupported" } as const;
