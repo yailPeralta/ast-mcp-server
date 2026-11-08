@@ -24,6 +24,10 @@ async function readFixture(): Promise<{ baseline: string; tools: Record<string, 
   return JSON.parse(await readFile(FIXTURE_PATH, "utf8"));
 }
 
+// Lifecycle: the fixture declares what the candidate adds over the published baseline, including
+// the `block_on_template_errors` input of `ast_rename_symbol` (#421). Remove an entry once
+// PUBLIC_BASELINE_VERSION advances to a release containing it. Only description and input schema
+// live here; the rename-only `template_diagnostics` output is pinned by the tool inventory digest.
 describe("declared tool contracts fixture", () => {
   it("committed fixture baseline equals PUBLIC_BASELINE_VERSION in the smoke source", async () => {
     const source = await readFile(SMOKE_PATH, "utf8");

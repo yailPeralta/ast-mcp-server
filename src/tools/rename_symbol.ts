@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { prepareRename } from "../services/operations.js";
 import { createRequestContext } from "../services/request-context.js";
-import { PreparedOperationOutputSchema, serializePreparedOperation } from "./operation-schema.js";
+import { RenameOperationOutputSchema, serializePreparedOperation } from "./operation-schema.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 
 const TOOL_NAME = "ast_rename_symbol";
@@ -20,6 +20,12 @@ const AstRenameSymbolInputSchema = z.object({
     .boolean()
     .default(false)
     .describe("Permit a plan with new TypeScript errors after explicit review."),
+  block_on_template_errors: z
+    .boolean()
+    .default(false)
+    .describe(
+      "Block the plan when a completed template check adds template errors. allow_new_errors still waives it.",
+    ),
 });
 
 export function registerRenameSymbol(server: McpServer): void {
@@ -30,7 +36,7 @@ export function registerRenameSymbol(server: McpServer): void {
       description:
         "Prepares an exact hash-bound rename plan without writing. Review the preview and apply its operation_id with ast_apply_operation. The plan also rewrites external Angular templates, including consumer templates when coverage is completed, hash-bound to the workspace snapshot; diagnostics stay TypeScript-only.",
       inputSchema: AstRenameSymbolInputSchema,
-      outputSchema: PreparedOperationOutputSchema,
+      outputSchema: RenameOperationOutputSchema,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -39,7 +45,15 @@ export function registerRenameSymbol(server: McpServer): void {
       },
     },
     async (
-      { project_root, file_path, symbol_path, new_name, dry_run, allow_new_errors },
+      {
+        project_root,
+        file_path,
+        symbol_path,
+        new_name,
+        dry_run,
+        allow_new_errors,
+        block_on_template_errors,
+      },
       extra,
     ) => {
       const requestContext = createRequestContext(extra.signal);
@@ -56,6 +70,7 @@ export function registerRenameSymbol(server: McpServer): void {
             symbolPath: symbol_path,
             newName: new_name,
             allowNewErrors: allow_new_errors,
+            blockOnTemplateErrors: block_on_template_errors,
           },
           requestContext,
         );
