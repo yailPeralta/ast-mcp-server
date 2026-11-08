@@ -73,7 +73,7 @@ export class H05LifecycleFixtureController {
     const eventIdentity = { callId: identity.callId, correlationId: identity.correlationId, fixtureId: identity.fixtureId, generation: identity.generation, ownerToken: identity.ownerToken };
     const generationSignal = this.#generationAbort.signal, signal = AbortSignal.any([context.signal, generationSignal]);
     const checkpoint = () => { if (!this.accepts(identity) || generationSignal.aborted) throw new H03TimeoutFixtureError(); context.checkpoint(); };
-    const hooked = Object.freeze({ get sequence() { return context.sequence; }, get phase() { return context.phase; }, signal, checkpoint, markExecuting: () => context.markExecuting(), enterCompletionCritical: () => { checkpoint(); context.enterCompletionCritical(); } });
+    const hooked = Object.freeze({ get sequence() { return context.sequence; }, get phase() { return context.phase; }, signal, checkpoint, markExecuting: () => context.markExecuting(), remainingMs: () => context.remainingMs(), enterCompletionCritical: () => { checkpoint(); context.enterCompletionCritical(); } });
     this.#active += 1; this.#emit({ ...eventIdentity, phase: "started" });
     try { const gate = this.#gates.get(this.#key(identity)); if (gate) await this.#awaitGate(identity, gate, hooked); checkpoint(); const result = await operation(hooked); checkpoint(); this.#emit({ ...eventIdentity, phase: "terminal", outcome: "succeeded" }); return result; }
     catch (error) { const code = (error as { code?: unknown } | null)?.code, stale = !this.accepts(identity) || generationSignal.aborted, deadline = code === "OPERATION_DEADLINE_EXCEEDED", cancelled = code === "REQUEST_CANCELLED" || context.signal.aborted; if (stale) this.#staleSettlements += 1; this.#emit({ ...eventIdentity, phase: "terminal", outcome: stale ? "STALE_GENERATION" : deadline ? code : cancelled ? "REQUEST_CANCELLED" : "failed" }); if (stale) this.#staleSettlements -= 1; throw stale ? new H03TimeoutFixtureError() : error; }
@@ -217,6 +217,7 @@ export class H03TimeoutFixtureController implements H03FixtureHook {
       signal,
       checkpoint,
       markExecuting: () => context.markExecuting(),
+      remainingMs: () => context.remainingMs(),
       enterCompletionCritical: () => {
         checkpoint();
         context.enterCompletionCritical();

@@ -41,6 +41,8 @@ export interface ProjectOperationContext extends CompletionCriticalRequestContex
   readonly sequence: number;
   readonly phase: ProjectOperationPhase;
   markExecuting(): void;
+  /** Milliseconds left before the execution deadline; never negative. */
+  remainingMs(): number;
 }
 
 export interface ProjectOperationSchedulerOptions {
@@ -467,6 +469,10 @@ export class ProjectOperationScheduler {
       },
       checkpoint: (): void => {
         this.#checkpoint(node);
+      },
+      remainingMs: (): number => {
+        const startedAt = node.executionStartedAt ?? this.#readNow();
+        return Math.max(0, this.#operationDeadlineMs - (this.#readNow() - startedAt));
       },
       markExecuting: (): void => {
         this.#checkpoint(node);
