@@ -18,6 +18,8 @@ import {
 } from "./runtime-state.js";
 
 export const PLAN_SCHEMA_VERSION = 2 as const;
+/** Plans that carry a template type-check delta persist as this version. */
+export const TEMPLATE_PLAN_SCHEMA_VERSION = 3 as const;
 export const MAX_PLAN_BYTES = 50 * 1024 * 1024;
 
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -51,41 +53,70 @@ const PersistedFileSchema = AffectedFileSchema.extend({
   updated_bytes_base64: z.string(),
   mode: z.number().int().nonnegative(),
 }).strict();
-const PersistedOperationSchema = z
+const TemplateReasonSchema = z.enum([
+  "compiler_cli_missing",
+  "compiler_unsupported",
+  "typescript_incompatible",
+  "work_exhausted",
+  "deadline",
+  "check_failed",
+]);
+const TemplateDiagnosticsSchema = z.discriminatedUnion("status", [
+  DiagnosticDeltaSchema.extend({ status: z.literal("completed") }).strict(),
+  z
+    .object({
+      status: z.enum(["unavailable", "unfinished"]),
+      reason: TemplateReasonSchema,
+      added: z.array(DiagnosticSchema).max(0),
+      removed: z.array(DiagnosticSchema).max(0),
+      addedErrors: z.array(DiagnosticSchema).max(0),
+    })
+    .strict(),
+]);
+const PersistedOperationShape = {
+  operation_id: z.string().uuid(),
+  plan_hash: HashSchema,
+  kind: z.enum(["rename_symbol", "replace_symbol_body", "scaffold_class"]),
+  status: z.enum(["prepared", "applied"]),
+  project_root: z.string().min(1),
+  created_at: IsoDateSchema,
+  expires_at: IsoDateSchema,
+  affected_files: z.array(AffectedFileSchema).min(1),
+  reference_count: z.number().int().nonnegative(),
+  workspace_hash: HashSchema,
+  post_workspace_hash: HashSchema,
+  workspace_file_count: z.number().int().positive(),
+  diagnostics: DiagnosticDeltaSchema,
+  allow_new_errors: z.boolean(),
+  blocked: z.boolean(),
+  block_reason: z.string().nullable(),
+  preview: z.string().nullable(),
+  preview_truncated: z.boolean(),
+  applied_at: IsoDateSchema.optional(),
+  files: z.array(PersistedFileSchema).min(1),
+};
+const PersistedOperationSchema = z.object(PersistedOperationShape).strict();
+const PersistedOperationV3Schema = z
   .object({
-    operation_id: z.string().uuid(),
-    plan_hash: HashSchema,
-    kind: z.enum(["rename_symbol", "replace_symbol_body", "scaffold_class"]),
-    status: z.enum(["prepared", "applied"]),
-    project_root: z.string().min(1),
-    created_at: IsoDateSchema,
-    expires_at: IsoDateSchema,
-    affected_files: z.array(AffectedFileSchema).min(1),
-    reference_count: z.number().int().nonnegative(),
-    workspace_hash: HashSchema,
-    post_workspace_hash: HashSchema,
-    workspace_file_count: z.number().int().positive(),
-    diagnostics: DiagnosticDeltaSchema,
-    allow_new_errors: z.boolean(),
-    blocked: z.boolean(),
-    block_reason: z.string().nullable(),
-    preview: z.string().nullable(),
-    preview_truncated: z.boolean(),
-    applied_at: IsoDateSchema.optional(),
-    files: z.array(PersistedFileSchema).min(1),
+    ...PersistedOperationShape,
+    template_diagnostics: TemplateDiagnosticsSchema,
+    block_on_template_errors: z.boolean(),
   })
   .strict();
 const PlanEnvelopeSchema = z.discriminatedUnion("schema_version", [
   z.object({ schema_version: z.literal(1), operation: PersistedOperationSchema }).strict(),
   z.object({ schema_version: z.literal(2), operation: PersistedOperationSchema }).strict(),
+  z.object({ schema_version: z.literal(3), operation: PersistedOperationV3Schema }).strict(),
 ]);
 
 type PlanEnvelope =
   | { schema_version: 1; operation: PersistedOperationRecord }
-  | { schema_version: 2; operation: PersistedOperationRecord };
+  | { schema_version: 2; operation: PersistedOperationRecord }
+  | { schema_version: 3; operation: PersistedOperationRecord };
 
-function planEnvelope(version: 1 | 2, operation: PersistedOperationRecord): PlanEnvelope {
-  return version === 1 ? { schema_version: 1, operation } : { schema_version: 2, operation };
+function planEnvelope(version: 1 | 2 | 3, operation: PersistedOperationRecord): PlanEnvelope {
+  if (version === 1) return { schema_version: 1, operation };
+  return version === 2 ? { schema_version: 2, operation } : { schema_version: 3, operation };
 }
 
 export type PersistPlanOptions = RuntimeStateOptions;
@@ -176,9 +207,15 @@ export async function persistOperationPlan(
 ): Promise<string> {
   const plansDirectory = path.join(stateDirectory(options), "plans");
   const planFile = path.join(plansDirectory, `${operationId}.astplan`);
+  const record = exportOperationRecord(operationId);
   await atomicWritePlan(
     planFile,
-    planEnvelope(PLAN_SCHEMA_VERSION, exportOperationRecord(operationId)),
+    planEnvelope(
+      record.template_diagnostics === undefined
+        ? PLAN_SCHEMA_VERSION
+        : TEMPLATE_PLAN_SCHEMA_VERSION,
+      record,
+    ),
   );
   return planFile;
 }
@@ -211,7 +248,7 @@ export async function applyPersistedOperation(
 }
 
 export async function inspectPersistedPlan(planFileInput: string): Promise<{
-  schema_version: 1 | 2;
+  schema_version: 1 | 2 | 3;
   operation_id: string;
   plan_hash: string;
   status: "prepared" | "applied";

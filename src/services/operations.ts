@@ -7,6 +7,8 @@ import { LanguageVariant, Node, ScriptTarget, SyntaxKind, ts, type Project } fro
 import { isPipeClass } from "./angular-decorators.js";
 import { planTemplateEdits } from "./angular-template-rename.js";
 import { collectTemplateUsages, type TemplateUsage } from "./angular-templates.js";
+import type { TemplateDiagnostics } from "./angular-template-typecheck.js";
+import { evaluateBlock } from "./operation-block-policy.js";
 import { findNonDeclarationReferences } from "./references.js";
 import {
   compareObservedDiagnostics,
@@ -50,7 +52,7 @@ const DEFAULT_NEW_FILE_MODE = 0o644;
 
 export type OperationKind = "rename_symbol" | "replace_symbol_body" | "scaffold_class";
 export type OperationStatus = "prepared" | "applied";
-export type OperationPlanVersion = 1 | 2;
+export type OperationPlanVersion = 1 | 2 | 3;
 
 interface PlannedFileInternal {
   absolutePath: string;
@@ -90,6 +92,10 @@ export interface PreparedOperation {
   block_reason: string | null;
   preview: string | null;
   preview_truncated: boolean;
+  /** Present only when the template type check ran; such plans hash as version 3. */
+  template_diagnostics?: TemplateDiagnostics;
+  /** Recorded with `template_diagnostics` (version 3) because it decides `blocked`. */
+  block_on_template_errors?: boolean;
 }
 
 interface OperationRecord extends PreparedOperation {
@@ -163,6 +169,8 @@ function planHashFor(
     diagnostics: DiagnosticDelta;
     allow_new_errors: boolean;
     blocked: boolean;
+    template_diagnostics?: TemplateDiagnostics;
+    block_on_template_errors?: boolean;
     files: ReadonlyArray<{
       file: string;
       originalHash: string;
@@ -187,6 +195,7 @@ function planHashFor(
       diagnostics: operation.diagnostics,
       allow_new_errors: operation.allow_new_errors,
       blocked: operation.blocked,
+      ...(version === 3 ? templateHashFields(operation) : {}),
       files: operation.files.map((file) => ({
         file: file.file,
         original_hash: file.originalHash,
@@ -195,6 +204,32 @@ function planHashFor(
       })),
     }),
   );
+}
+
+/** The version 3 additions, in a fixed key order so equal deltas always hash equal. */
+function templateHashFields(operation: {
+  template_diagnostics?: TemplateDiagnostics;
+  block_on_template_errors?: boolean;
+}) {
+  const delta = operation.template_diagnostics;
+  if (delta === undefined || operation.block_on_template_errors === undefined) {
+    throw new Error("A version 3 plan requires template_diagnostics and block_on_template_errors.");
+  }
+  return {
+    template_diagnostics: {
+      status: delta.status,
+      ...(delta.status === "completed" ? {} : { reason: delta.reason }),
+      added: delta.added,
+      removed: delta.removed,
+      addedErrors: delta.addedErrors,
+    },
+    block_on_template_errors: operation.block_on_template_errors,
+  };
+}
+
+/** Plans without a template check keep hashing as version 2; only a check upgrades them. */
+function planVersionOf(operation: { template_diagnostics?: TemplateDiagnostics }): 2 | 3 {
+  return operation.template_diagnostics === undefined ? 2 : 3;
 }
 
 function pruneOperations(): void {
@@ -579,7 +614,11 @@ export async function createPlan(
       }
 
       const fullPreview = files.map((file) => file.diff).join("\n");
-      const blocked = !allowNewErrors && diagnosticDelta.addedErrors.length > 0;
+      const verdict = evaluateBlock({
+        allowNewErrors,
+        typescriptErrors: diagnosticDelta.addedErrors.length,
+        blockOnTemplateErrors: false,
+      });
       const now = operationNow();
       const operationId = randomUUID();
       const recordWithoutHash = {
@@ -601,10 +640,8 @@ export async function createPlan(
         workspace_file_count: workspaceBefore.fileCount,
         diagnostics: diagnosticDelta,
         allow_new_errors: allowNewErrors,
-        blocked,
-        block_reason: blocked
-          ? `${diagnosticDelta.addedErrors.length} new TypeScript error(s) would be introduced. Prepare again with allow_new_errors=true only after explicit review.`
-          : null,
+        blocked: verdict.blocked,
+        block_reason: verdict.reason,
         preview: fullPreview.length <= MAX_INLINE_PREVIEW_CHARS ? fullPreview : null,
         preview_truncated: fullPreview.length > MAX_INLINE_PREVIEW_CHARS,
         files,
@@ -647,6 +684,12 @@ function publicOperation(record: OperationRecord): PreparedOperation {
     block_reason: record.block_reason,
     preview: record.preview,
     preview_truncated: record.preview_truncated,
+    ...(record.template_diagnostics === undefined
+      ? {}
+      : {
+          template_diagnostics: record.template_diagnostics,
+          block_on_template_errors: record.block_on_template_errors,
+        }),
   };
 }
 
@@ -1446,7 +1489,7 @@ export function exportOperationRecord(operationId: string): PersistedOperationRe
 export function importOperationRecord(
   persisted: PersistedOperationRecord,
   expectedPlanHash: string,
-  planVersion: OperationPlanVersion = 2,
+  planVersion: OperationPlanVersion = planVersionOf(persisted),
 ): PreparedOperation {
   if (persisted.plan_hash !== expectedPlanHash) {
     throw new Error(
@@ -1533,8 +1576,25 @@ export function importOperationRecord(
   if (JSON.stringify(addedErrors) !== JSON.stringify(persisted.diagnostics.addedErrors)) {
     throw new Error("Persisted diagnostic error delta is inconsistent.");
   }
-  const blocked = !persisted.allow_new_errors && addedErrors.length > 0;
-  if (persisted.blocked !== blocked) {
+  const templateDelta = persisted.template_diagnostics;
+  if (templateDelta !== undefined) {
+    const templateErrors = templateDelta.added.filter(
+      (diagnostic) => diagnostic.category === "Error",
+    );
+    if (JSON.stringify(templateErrors) !== JSON.stringify(templateDelta.addedErrors)) {
+      throw new Error("Persisted template diagnostic error delta is inconsistent.");
+    }
+  }
+  if ((planVersion === 3) !== (templateDelta !== undefined)) {
+    throw new Error("Persisted template diagnostics are inconsistent with the plan version.");
+  }
+  const verdict = evaluateBlock({
+    allowNewErrors: persisted.allow_new_errors,
+    typescriptErrors: addedErrors.length,
+    template: templateDelta,
+    blockOnTemplateErrors: persisted.block_on_template_errors ?? false,
+  });
+  if (persisted.blocked !== verdict.blocked) {
     throw new Error("Persisted blocked status is inconsistent with diagnostics policy.");
   }
 
@@ -1542,10 +1602,8 @@ export function importOperationRecord(
   const record: OperationRecord = {
     ...persisted,
     affected_files: affectedFiles,
-    blocked,
-    block_reason: blocked
-      ? `${addedErrors.length} new TypeScript error(s) would be introduced. Prepare again with allow_new_errors=true only after explicit review.`
-      : null,
+    blocked: verdict.blocked,
+    block_reason: verdict.reason,
     preview: fullPreview.length <= MAX_INLINE_PREVIEW_CHARS ? fullPreview : null,
     preview_truncated: fullPreview.length > MAX_INLINE_PREVIEW_CHARS,
     tsConfigFilePath: context.tsConfigFilePath,
