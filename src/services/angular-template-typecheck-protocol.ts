@@ -7,7 +7,7 @@ export const MAX_OVERLAY_BYTES = 32 * 1024 * 1024;
 export const MAX_TEMPLATES = 2000;
 export const MAX_OVERLAY_FILES = 10_000;
 const MAX_PATH_CHARS = 4096;
-const MAX_MESSAGE_CHARS = 8192;
+export const MAX_MESSAGE_CHARS = 8192;
 
 const absolutePath = z
   .string()
