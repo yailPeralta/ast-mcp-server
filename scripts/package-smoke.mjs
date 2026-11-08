@@ -3,7 +3,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Buffer } from "node:buffer";
-import { execFile } from "node:child_process";
+import { execFile, fork } from "node:child_process";
 import { createHash } from "node:crypto";
 import console from "node:console";
 import {
@@ -132,6 +132,37 @@ function assertAngularCompilerIsOptionalPeer(packedMetadata) {
   }
 }
 
+/** The template type-check child must ship and answer an invalid request without any project. */
+async function assertTemplateTypeCheckEntryRuns(installedPackageRoot) {
+  const entry = path.join(installedPackageRoot, "dist", "angular-template-typecheck-entry.js");
+  await lstat(entry).catch(() => {
+    throw new Error("packed artifact is missing dist/angular-template-typecheck-entry.js");
+  });
+  const child = fork(entry, [], { env: {}, stdio: ["ignore", "ignore", "ignore", "ipc"] });
+  const outcome = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("packed template type-check entry did not answer in time"));
+    }, 20_000);
+    let reply;
+    child.once("message", (message) => {
+      reply = message;
+    });
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      resolve({ code, reply });
+    });
+    child.send({ v: 1 });
+  });
+  if (
+    outcome.code !== 0 ||
+    JSON.stringify(outcome.reply) !== JSON.stringify({ v: 1, ok: false, reason: "check_failed" })
+  ) {
+    throw new Error(`packed template type-check entry misbehaved: ${JSON.stringify(outcome)}`);
+  }
+}
+
 async function assertAngularCompilerNotInstalled(consumerRoot) {
   const installedCompiler = path.join(consumerRoot, "node_modules", "@angular", "compiler");
   const present = await lstat(installedCompiler).then(
@@ -214,6 +245,7 @@ try {
   );
   assertAngularCompilerIsOptionalPeer(installedMetadata);
   await assertAngularCompilerNotInstalled(consumerDirectory);
+  await assertTemplateTypeCheckEntryRuns(installedPackageRoot);
   const [packagedSkill, packagedGuidance, packagedReleases] = await Promise.all([
     readFile(
       path.join(installedPackageRoot, "skills", "structural-code-editing", "SKILL.md"),
