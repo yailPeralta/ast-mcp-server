@@ -1179,13 +1179,26 @@ describe("workflow policy check", () => {
 
     const unreviewedActionInput = {
       ...documents,
-      "security.yml": documents["security.yml"].replace(
-        /(- uses: actions\/dependency-review-action@[0-9a-f]{40} # v5\.0\.0)/u,
-        "$1\n        with:\n          allow-ghsas: '*'",
+      "security.yml": replaceRequired(
+        documents["security.yml"],
+        "          config-file: ./.github/dependency-review-config.yml\n",
+        "          config-file: ./.github/dependency-review-config.yml\n          allow-ghsas: '*'\n",
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(unreviewedActionInput)).toThrow(
-      /action step keys|unreviewed inputs/u,
+      /reviewed configuration/u,
+    );
+
+    const redirectedReviewConfig = {
+      ...documents,
+      "security.yml": replaceRequired(
+        documents["security.yml"],
+        "config-file: ./.github/dependency-review-config.yml",
+        "config-file: octo/policy/review.yml@main",
+      ),
+    };
+    expect(() => validateWorkflowPolicyDocuments(redirectedReviewConfig)).toThrow(
+      /reviewed configuration/u,
     );
 
     const commentedCodeqlDecoy = {

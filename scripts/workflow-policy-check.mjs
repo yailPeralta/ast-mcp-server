@@ -732,7 +732,13 @@ function validateSecurityWorkflow(lines, jobs, actions) {
     { "node-version": '"24"' },
     "security.yml",
   );
-  validateActionInputs(lines, actions, "actions/dependency-review-action", {}, "security.yml");
+  validateActionInputs(
+    lines,
+    actions,
+    "actions/dependency-review-action",
+    { "config-file": "./.github/dependency-review-config.yml" },
+    "security.yml",
+  );
   validateActionInputs(
     lines,
     actions,

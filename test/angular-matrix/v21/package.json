@@ -1,0 +1,17 @@
+{
+  "name": "ast-mcp-angular-matrix-v21",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Angular 21 toolchain used only by template type-check tests (#421).",
+  "installConfig": {
+    "hoistingLimits": "workspaces"
+  },
+  "dependencies": {
+    "@angular/compiler": "21.2.25",
+    "@angular/compiler-cli": "21.2.25",
+    "@angular/core": "21.2.25",
+    "rxjs": "7.8.2",
+    "tslib": "2.8.1",
+    "typescript": "5.9.3"
+  }
+}
