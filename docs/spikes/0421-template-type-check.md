@@ -4,7 +4,7 @@ Issue #421. Question: can a one-shot child process run ngtsc over a project, bef
 in-memory rename overlay, using only the public `@angular/compiler-cli` entry, within the accepted
 ceiling (p95 added latency <= 10 s, <= 1 GiB RSS on 100 components / 300 templates)?
 
-**Verdict: proceed.** Every STOP gate passed on Angular 18, 19, 20, 21 and 22.
+**Verdict: proceed.** Final verdict: proceed, shipped in PRs 2 to 4 (see [ADR 0017](../adr/0017-template-type-check-worker.md)). Every STOP gate passed on Angular 18, 19, 20, 21 and 22.
 
 ## How it was run
 
