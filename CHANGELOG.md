@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `ast_rename_symbol` runs an Angular template type check for renames that edit templates and reports the result as `template_diagnostics` (`status`, `reason`, `added`, `removed`, `added_errors`). The check is on by default and best-effort: it runs ngtsc in a one-shot child process that never writes to the workspace, within a time budget, and `unavailable` or `unfinished` statuses mean unknown, so run the project's build or tests. The field is absent for non-Angular projects and renames that edit no template; the `diagnostics` field stays TypeScript-only (#421).
+- New `ast_rename_symbol` input `block_on_template_errors` (default `false`). It blocks the plan only when a `completed` check adds template errors, and `allow_new_errors` waives it (#421).
+- The check needs `@angular/compiler-cli` to resolve from the project (same version as `@angular/compiler`, TypeScript within its peer range); it is not a declared peer, and without it the status is `unavailable` with `compiler_cli_missing`. `template_diagnostics[].file` is relative to the directory of the tsconfig, while `diagnostics[].file` is relative to `project_root` (#421).
+- Spike results and the design decision are in `docs/spikes/0421-template-type-check.md` and `docs/adr/0017-template-type-check-worker.md` (#421).
+
+### Changed
+
+- Plans from a template-editing rename persist as plan schema v3 (the hash adds `template_diagnostics` and `block_on_template_errors`), even when the status is `unavailable` or `unfinished`. Plans without a check keep schema v2 and the same hash. After a downgrade or revert, schema v3 plans are rejected on import (#421).
+- The `ast_rename_symbol` and `ast_find_references` tool descriptions no longer say template errors are not diagnosed; `ast_find_references` still reports usages only and points to `template_diagnostics` (#421).
+
 ### Fixed
 
 - With `@angular/compiler` 18 or 19, template usage scans walked every subtree twice per nesting level, so `ast_find_references` on a `@Pipe` class or a component member reported `unfinished` with `work_exhausted` on deeply nested templates, and `ast_rename_symbol` refused the rename. Each template is now walked once on every supported major (#441).
