@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- With `@angular/compiler` 18 or 19, template usage scans walked every subtree twice per nesting level, so `ast_find_references` on a `@Pipe` class or a component member reported `unfinished` with `work_exhausted` on deeply nested templates, and `ast_rename_symbol` refused the rename. Each template is now walked once on every supported major (#441).
+
 ## [0.16.0] — published to `next`, verification failed, not promoted (2026-11-07)
 
 ### Added
