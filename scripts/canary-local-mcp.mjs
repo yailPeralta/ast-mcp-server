@@ -170,7 +170,7 @@ const EXPECTED_TOOL_NAMES = Object.freeze([
   "ast_apply_operation",
 ]);
 const EXPECTED_TOOLS_LIST_SHA256 =
-  "35591b8be14ea0bca2f1c0c66e4c72c985ae4ee1bafadc7bde8c99c8cdd9c605";
+  "fc834b4b0177fada509ab0f5df5b4e64dfb21a5e8833b47527eaf893314a9fe7";
 
 function fail(message) {
   throw new Error(message);
