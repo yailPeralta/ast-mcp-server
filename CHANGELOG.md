@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.17.0] — not yet published (2026-11-09)
+
 ### Added
 
 - `ast_rename_symbol` runs an Angular template type check for renames that edit templates and reports the result as `template_diagnostics` (`status`, `reason`, `added`, `removed`, `added_errors`). The check is on by default and best-effort: it runs ngtsc in a one-shot child process that never writes to the workspace, within a time budget, and `unavailable` or `unfinished` statuses mean unknown, so run the project's build or tests. The field is absent for non-Angular projects and renames that edit no template; the `diagnostics` field stays TypeScript-only (#421).
@@ -21,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - With `@angular/compiler` 18 or 19, template usage scans walked every subtree twice per nesting level, so `ast_find_references` on a `@Pipe` class or a component member reported `unfinished` with `work_exhausted` on deeply nested templates, and `ast_rename_symbol` refused the rename. Each template is now walked once on every supported major (#441).
+- Upgrading the `structural-code-editing` skill over an unmodified install from npm `0.16.0` would have failed with a conflict: its content changed after `0.16.0` (#443) while the skill version stayed `4.7.0`, and the `0.16.0` byte set had no recorded predecessor. The published `0.16.0` bytes are now recorded, and the skill version is `4.8.0` (#447).
 
 ## [0.16.0] — published to `next`, verification failed, not promoted (2026-11-07)
 
