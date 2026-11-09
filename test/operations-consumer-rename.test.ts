@@ -195,7 +195,17 @@ describe("consumer binding rewrite with per-usage newText (S4)", () => {
       "block_reason",
       "preview",
       "preview_truncated",
+      // The fixture has no compiler-cli, so the check ran and reported it unavailable.
+      "template_diagnostics",
+      "block_on_template_errors",
     ]);
+    expect(prepared.template_diagnostics).toEqual({
+      status: "unavailable",
+      reason: "compiler_cli_missing",
+      added: [],
+      removed: [],
+      addedErrors: [],
+    });
     const record = exportOperationRecord(prepared.operation_id);
     expect(record.files.map((file) => file.file)).toEqual([CONSUMER_HTML, TARGET_TS]);
     expect(record.files[0]!.original_hash).not.toBe(record.files[0]!.updated_hash);

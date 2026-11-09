@@ -7,7 +7,7 @@ import { LanguageVariant, Node, ScriptTarget, SyntaxKind, ts, type Project } fro
 import { isPipeClass } from "./angular-decorators.js";
 import { planTemplateEdits } from "./angular-template-rename.js";
 import { collectTemplateUsages, type TemplateUsage } from "./angular-templates.js";
-import type { TemplateDiagnostics } from "./angular-template-typecheck.js";
+import { checkTemplateTypes, type TemplateDiagnostics } from "./angular-template-typecheck.js";
 import { evaluateBlock } from "./operation-block-policy.js";
 import { findNonDeclarationReferences } from "./references.js";
 import {
@@ -453,6 +453,30 @@ async function planAuxiliaryFiles(
   return planned;
 }
 
+/** Maps the planned files to the check input; paths are relative to the tsconfig directory. */
+function templateCheckInput(
+  tsConfigFilePath: string,
+  files: readonly PlannedFileInternal[],
+  auxiliaryFiles: readonly PlannedFileInternal[],
+) {
+  const base = path.dirname(tsConfigFilePath);
+  return {
+    tsConfigFilePath,
+    templates: auxiliaryFiles.map((file) => file.absolutePath),
+    overlay: files.map((file) => ({ absolutePath: file.absolutePath, text: file.updatedText })),
+    changes: files.map((file) => ({
+      file: path.relative(base, file.absolutePath),
+      beforeText: isCreatedFile(file) ? null : file.originalText,
+      afterText: file.updatedText,
+    })),
+  };
+}
+
+export interface PlanOptions {
+  /** Block the plan when a completed template check adds template errors. Defaults to false. */
+  readonly blockOnTemplateErrors?: boolean;
+}
+
 /** Internal seam shared by the prepare functions; exported so tests can drive `mutate` directly. */
 export async function createPlan(
   projectRootInput: string,
@@ -460,6 +484,7 @@ export async function createPlan(
   allowNewErrors: boolean,
   mutate: (context: ProjectContext, requestContext: RequestContext) => Promise<PlanMutation>,
   requestContext: RequestContext,
+  planOptions: PlanOptions = {},
 ): Promise<PreparedOperation> {
   requestContext.checkpoint();
   let retainedOperationId: string | undefined;
@@ -605,6 +630,17 @@ export async function createPlan(
       }
       const postWorkspaceHash = hashWorkspaceFiles(postWorkspaceFiles);
 
+      // Only a rename that edits templates is checked; the check runs inside the project lock and
+      // before the digest check below, which proves the child's disk reads saw an unchanged tree.
+      const templateDiagnostics =
+        kind === "rename_symbol" && auxiliaryFiles.length > 0
+          ? await checkTemplateTypes(
+              templateCheckInput(context.tsConfigFilePath, files, auxiliaryFiles),
+              operationContext,
+            )
+          : undefined;
+      operationContext.checkpoint();
+
       const workspaceAfter = createWorkspaceSnapshot(createFreshProject(context.tsConfigFilePath));
       operationContext.checkpoint();
       if (workspaceAfter.digest !== workspaceBefore.digest) {
@@ -614,10 +650,12 @@ export async function createPlan(
       }
 
       const fullPreview = files.map((file) => file.diff).join("\n");
+      const blockOnTemplateErrors = planOptions.blockOnTemplateErrors ?? false;
       const verdict = evaluateBlock({
         allowNewErrors,
         typescriptErrors: diagnosticDelta.addedErrors.length,
-        blockOnTemplateErrors: false,
+        template: templateDiagnostics,
+        blockOnTemplateErrors,
       });
       const now = operationNow();
       const operationId = randomUUID();
@@ -644,11 +682,17 @@ export async function createPlan(
         block_reason: verdict.reason,
         preview: fullPreview.length <= MAX_INLINE_PREVIEW_CHARS ? fullPreview : null,
         preview_truncated: fullPreview.length > MAX_INLINE_PREVIEW_CHARS,
+        ...(templateDiagnostics === undefined
+          ? {}
+          : {
+              template_diagnostics: templateDiagnostics,
+              block_on_template_errors: blockOnTemplateErrors,
+            }),
         files,
       } satisfies Omit<OperationRecord, "plan_hash">;
       const record: OperationRecord = {
         ...recordWithoutHash,
-        plan_hash: planHashFor(recordWithoutHash),
+        plan_hash: planHashFor(recordWithoutHash, planVersionOf(recordWithoutHash)),
       };
       operationContext.checkpoint();
       operations.set(operationId, record);
@@ -733,6 +777,7 @@ export async function prepareRename(
     symbolPath: string;
     newName: string;
     allowNewErrors?: boolean;
+    blockOnTemplateErrors?: boolean;
   },
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): Promise<PreparedOperation> {
@@ -793,6 +838,7 @@ export async function prepareRename(
       };
     },
     requestContext,
+    { blockOnTemplateErrors: args.blockOnTemplateErrors },
   );
 }
 
