@@ -60,6 +60,11 @@
             "description": "Permit a plan with new TypeScript errors after explicit review.",
             "type": "boolean"
           },
+          "block_on_template_errors": {
+            "default": false,
+            "description": "Block the plan when a completed template check adds template errors. allow_new_errors still waives it.",
+            "type": "boolean"
+          },
           "dry_run": {
             "default": true,
             "description": "Compatibility field. Direct application is disabled; this tool always prepares.",

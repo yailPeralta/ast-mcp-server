@@ -273,6 +273,23 @@ describe("blocked rule", () => {
     expect(prepared.template_diagnostics).toEqual(unfinishedDeadline);
   });
 
+  it("does not block when the check hit its work bound, whatever the opt-in", async () => {
+    const fixture = await angularFixture();
+    const exhausted: TemplateDiagnostics = {
+      status: "unfinished",
+      reason: "work_exhausted",
+      added: [],
+      removed: [],
+      addedErrors: [],
+    };
+    stubCheck(exhausted);
+
+    const prepared = await plan(fixture, { blockOnTemplateErrors: true });
+
+    expect(prepared.blocked).toBe(false);
+    expect(prepared.template_diagnostics).toEqual(exhausted);
+  });
+
   it("does not block a clean completed delta or a warning-only one", async () => {
     const fixture = await angularFixture();
     stubCheck(completedClean);

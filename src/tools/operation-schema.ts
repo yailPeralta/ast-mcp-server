@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { TemplateDiagnostics } from "../services/angular-template-typecheck.js";
 import type { PreparedOperation } from "../services/operations.js";
 
 export const NormalizedDiagnosticSchema = z.object({
@@ -40,6 +41,52 @@ export const PreparedOperationOutputSchema = z.object({
   preview_truncated: z.boolean(),
 });
 
+const TemplateDiagnosticsListSchema = z.array(NormalizedDiagnosticSchema);
+const NonCompletedTemplateListSchema = z.array(NormalizedDiagnosticSchema).max(0);
+
+/** Template type-check delta of a rename; present only when the check ran or tried to. */
+export const TemplateDiagnosticsSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("completed"),
+      added: TemplateDiagnosticsListSchema,
+      removed: TemplateDiagnosticsListSchema,
+      added_errors: TemplateDiagnosticsListSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.enum(["unavailable", "unfinished"]),
+      reason: z.enum([
+        "compiler_cli_missing",
+        "compiler_unsupported",
+        "typescript_incompatible",
+        "work_exhausted",
+        "deadline",
+        "check_failed",
+      ]),
+      added: NonCompletedTemplateListSchema,
+      removed: NonCompletedTemplateListSchema,
+      added_errors: NonCompletedTemplateListSchema,
+    })
+    .strict(),
+]);
+
+/** Only `ast_rename_symbol` can carry template diagnostics, so only its contract changes. */
+export const RenameOperationOutputSchema = PreparedOperationOutputSchema.extend({
+  template_diagnostics: TemplateDiagnosticsSchema.optional(),
+});
+
+/** The one place that turns the record shape (`addedErrors`) into the wire shape. */
+export function toTemplateDiagnosticsOutput(
+  delta: TemplateDiagnostics,
+): z.infer<typeof TemplateDiagnosticsSchema> {
+  const lists = { added: delta.added, removed: delta.removed, added_errors: delta.addedErrors };
+  return delta.status === "completed"
+    ? { status: "completed", ...lists }
+    : { status: delta.status, reason: delta.reason, ...lists };
+}
+
 export function serializePreparedOperation(operation: PreparedOperation) {
   if (operation.status !== "prepared") {
     throw new Error(`Operation ${operation.operation_id} is not in prepared state.`);
@@ -66,5 +113,8 @@ export function serializePreparedOperation(operation: PreparedOperation) {
     block_reason: operation.block_reason,
     preview: operation.preview,
     preview_truncated: operation.preview_truncated,
+    ...(operation.template_diagnostics === undefined
+      ? {}
+      : { template_diagnostics: toTemplateDiagnosticsOutput(operation.template_diagnostics) }),
   };
 }
