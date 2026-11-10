@@ -69,7 +69,8 @@ const ReferenceOutputBase = {
   template_reference_count: z.number().int().min(0).optional(),
   ...PaginationOutputSchema,
 };
-const ReferenceOutputSchemas = {
+/** Exported so a golden test can pin the output JSON schema bytes; not a tool contract. */
+export const ReferenceOutputSchemas = {
   locations: z.object({
     ...ReferenceOutputBase,
     references: z.array(LocationReferenceSchema),
