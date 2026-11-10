@@ -118,8 +118,10 @@ describe("Angular template documentation", () => {
     });
   });
 
-  it("CHANGELOG Unreleased records ast_explore template evidence (#380)", () => {
-    const section = releaseSection("Unreleased");
+  // The ast_explore template evidence shipped in the 0.18.0 section (moved out of Unreleased when
+  // the candidate was cut).
+  it("CHANGELOG 0.18.0 records ast_explore template evidence (#380)", () => {
+    const section = releaseSection("0.18.0");
     expect(section).toContain("#380");
     expect(section).toMatch(/`ast_explore`[^\n]*`template_coverage`/);
     expect(section).toContain("template_coverage_incomplete");
