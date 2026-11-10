@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -67,6 +69,7 @@ interface Explored {
     total: number;
   };
   completeness: { complete: boolean; evidence_complete: boolean; unresolved: unknown[] };
+  call_spines?: unknown;
 }
 
 let client: Client;
@@ -273,5 +276,23 @@ describe("ast_explore template evidence", () => {
       { files },
     );
     expect(references!.template_coverage!.status).toMatch(/^(completed|unfinished|unsupported)$/);
+  });
+
+  it("keeps template usages out of impact, test candidates and call spines", async () => {
+    const spines = await explore("AComponent.title", { call_spines: { direction: "incoming" } });
+    const outputs = [
+      (await call("AComponent.title", {}, { tool: "ast_get_impact" })).structuredContent,
+      (await call("AComponent.title", {}, { tool: "ast_find_test_candidates" })).structuredContent,
+      spines.content.call_spines,
+    ];
+    expect(spines.references!.template_reference_count).toBe(4);
+    for (const output of outputs) {
+      expect(output).toBeTypeOf("object");
+      expect(JSON.stringify(output)).not.toMatch(/\.html|template_/);
+    }
+    for (const service of ["impact", "test-candidates", "call-spines", "relationships"]) {
+      const file = path.join(import.meta.dirname, "..", "src", "services", `${service}.ts`);
+      expect(await readFile(file, "utf8")).not.toContain("./references.js");
+    }
   });
 });
