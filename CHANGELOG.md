@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.18.0] — not yet published (2026-11-10)
+
 ### Added
 
 - `ast_explore` reports Angular template evidence in `evidence[].references` whenever it expands references: each item carries `origin` (`compiler`, `template_external`, `template_inline`) and the block adds `template_coverage` and `template_reference_count`, with the verdict `ast_find_references` gives for the same symbol. The fields are additive and absent when coverage is `not_applicable`, so output for non-Angular projects is unchanged (#380).
