@@ -87,8 +87,8 @@ describe("ast_explore output without template evidence", () => {
   );
 });
 
-describe("ast_explore stays TypeScript-only", () => {
-  it("ast_explore output for an Angular member equals pre-change output", async () => {
+describe("ast_explore reports template evidence", () => {
+  it("ast_explore output for an Angular member includes its template usages", async () => {
     fixture = await createAngularFixture(FILES, { compiler: "v21" });
     const explored = await client.callTool({
       name: "ast_explore",
@@ -104,29 +104,21 @@ describe("ast_explore stays TypeScript-only", () => {
       explored.structuredContent as { evidence: { references: Record<string, unknown> }[] }
     ).evidence;
     expect(evidence).toHaveLength(1);
-    const references = evidence[0]!.references as {
-      reference_count: number;
-      total: number;
-      affected_files: string[];
-      references: Record<string, unknown>[];
-    };
-    // One TypeScript use in user.ts plus the declaration: the two template usages are absent.
-    expect(references.reference_count).toBe(1);
-    expect(references.total).toBe(2);
-    expect(references.affected_files).toEqual(["src/a.component.ts", "src/user.ts"]);
-    const serialized = JSON.stringify(explored.structuredContent);
-    expect(serialized).not.toContain("template_coverage");
-    expect(serialized).not.toContain("template_reference_count");
-    expect(serialized).not.toContain("origin");
-    expect(serialized).not.toContain(".html");
+    // One TypeScript use in user.ts plus the declaration, and the two template usages.
+    expect(evidence[0]!.references).toMatchObject({
+      reference_count: 1,
+      template_reference_count: 2,
+      total: 4,
+      affected_files: ["src/a.component.html", "src/a.component.ts", "src/user.ts"],
+      template_coverage: { status: "completed", templates: 1 },
+    });
   });
 
-  it("keeps context-builder on the synchronous TypeScript-only references function", async () => {
+  it("routes context-builder through the template verdict collection", async () => {
     const source = await readFile(
       path.join(import.meta.dirname, "..", "src", "services", "context-builder.ts"),
       "utf8",
     );
-    expect(source).toContain("collectSymbolReferences(");
-    expect(source).not.toContain("collectSymbolReferencesWithTemplates");
+    expect(source).toContain("collectSymbolReferencesWithTemplateVerdict(");
   });
 });

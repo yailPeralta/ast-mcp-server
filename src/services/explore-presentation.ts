@@ -13,6 +13,7 @@ export const EXPLORE_OMISSION_REASONS = [
   "depth_limit",
   "node_limit",
   "edge_limit",
+  "template_coverage_incomplete",
 ] as const;
 export type ExploreOmissionReason = (typeof EXPLORE_OMISSION_REASONS)[number];
 
