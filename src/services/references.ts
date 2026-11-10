@@ -8,7 +8,11 @@ import {
 } from "./angular-templates.js";
 import { paginate, type Page } from "./pagination.js";
 import type { ProjectContext } from "./project.js";
-import { NO_REQUEST_CONTEXT, type RequestContext } from "./request-context.js";
+import {
+  isCooperativeInterruption,
+  NO_REQUEST_CONTEXT,
+  type RequestContext,
+} from "./request-context.js";
 
 export type ReferenceDetail = "locations" | "context";
 
@@ -195,19 +199,37 @@ async function templateLocation(
   };
 }
 
-/**
- * Collects TypeScript references and, for Angular component members, template usages.
- * Without Angular evidence the result is identical to {@link collectSymbolReferences}.
- */
-export async function collectSymbolReferencesWithTemplates(
+interface TemplateHalf {
+  readonly coverage: TemplateCoverage;
+  readonly items: readonly SymbolReference[];
+}
+
+/** Template usages of `node` as reference items, with the coverage verdict that qualifies them. */
+async function collectTemplateHalf(
   node: Node,
   context: ProjectContext,
-  query: TemplateReferenceQuery,
-  requestContext: RequestContext = NO_REQUEST_CONTEXT,
-): Promise<SymbolReferencesWithTemplates> {
-  const { projectRoot } = context;
+  detail: ReferenceDetail,
+  requestContext: RequestContext,
+): Promise<TemplateHalf> {
   const { coverage, usages } = await collectTemplateUsages(node, context, requestContext);
-  if (coverage.status === "not_applicable") {
+  const lineCache = new Map<string, Promise<string[]>>();
+  const items: SymbolReference[] = [];
+  for (const usage of usages) {
+    requestContext.checkpoint();
+    items.push(await templateLocation(usage, detail, lineCache));
+  }
+  return { coverage, items };
+}
+
+/** Merges the TypeScript references of `node` with an already collected template half. */
+function mergeWithTemplateHalf(
+  node: Node,
+  projectRoot: string,
+  query: TemplateReferenceQuery,
+  template: TemplateHalf,
+  requestContext: RequestContext,
+): SymbolReferencesWithTemplates {
+  if (template.coverage.status === "not_applicable") {
     return collectSymbolReferences(
       node,
       projectRoot,
@@ -228,18 +250,12 @@ export async function collectSymbolReferencesWithTemplates(
     query.detail,
     requestContext,
   );
-  const lineCache = new Map<string, Promise<string[]>>();
-  const templateItems: SymbolReference[] = [];
-  for (const usage of usages) {
-    requestContext.checkpoint();
-    templateItems.push(await templateLocation(usage, query.detail, lineCache));
-  }
   const merged = [
     ...ts.locations.map((item): SymbolReference => ({ ...item, origin: "compiler" })),
-    ...templateItems,
+    ...template.items,
   ].sort(compareLocations);
   const affectedFiles = [
-    ...new Set([ts.declaration, ...ts.references, ...templateItems].map((item) => item.file)),
+    ...new Set([ts.declaration, ...ts.references, ...template.items].map((item) => item.file)),
   ].sort();
   const page = paginate(merged, query.offset, query.limit);
 
@@ -256,7 +272,45 @@ export async function collectSymbolReferencesWithTemplates(
     total: page.total,
     has_more: page.has_more,
     next_offset: page.next_offset,
-    template_coverage: coverage,
-    template_reference_count: templateItems.length,
+    template_coverage: template.coverage,
+    template_reference_count: template.items.length,
   };
+}
+
+/**
+ * Collects TypeScript references and, for Angular component members, template usages.
+ * Without Angular evidence the result is identical to {@link collectSymbolReferences}.
+ */
+export async function collectSymbolReferencesWithTemplates(
+  node: Node,
+  context: ProjectContext,
+  query: TemplateReferenceQuery,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): Promise<SymbolReferencesWithTemplates> {
+  const template = await collectTemplateHalf(node, context, query.detail, requestContext);
+  return mergeWithTemplateHalf(node, context.projectRoot, query, template, requestContext);
+}
+
+/**
+ * Same result as {@link collectSymbolReferencesWithTemplates}, but a failing template half is
+ * reported as an `unfinished` / `template_unresolved` verdict next to the TypeScript references
+ * instead of failing the call. TypeScript failures and cooperative interruptions still throw.
+ */
+export async function collectSymbolReferencesWithTemplateVerdict(
+  node: Node,
+  context: ProjectContext,
+  query: TemplateReferenceQuery,
+  requestContext: RequestContext = NO_REQUEST_CONTEXT,
+): Promise<SymbolReferencesWithTemplates> {
+  let template: TemplateHalf;
+  try {
+    template = await collectTemplateHalf(node, context, query.detail, requestContext);
+  } catch (error) {
+    if (isCooperativeInterruption(error)) throw error;
+    template = {
+      coverage: { status: "unfinished", reason: "template_unresolved", templates: 0 },
+      items: [],
+    };
+  }
+  return mergeWithTemplateHalf(node, context.projectRoot, query, template, requestContext);
 }
