@@ -289,15 +289,11 @@ export function memberOwner(node: Node): { cls: ClassDeclaration; name: string }
     : undefined;
 }
 
-function hasDerivedComponent(
-  context: ProjectContext,
-  cls: ClassDeclaration,
-  cache: TemplateScanCache,
-): boolean {
+function hasDerivedComponent(cls: ClassDeclaration, cache: TemplateScanCache): boolean {
   const identity = (node: ClassDeclaration) =>
     `${node.getSourceFile().getFilePath()}:${node.getPos()}`;
   const target = identity(cls);
-  return cache.components(context).some((candidate) => {
+  return cache.components().some((candidate) => {
     let base = candidate.getBaseClass();
     for (let depth = 0; base && depth < 32; depth += 1) {
       if (identity(base) === target) return true;
@@ -558,8 +554,9 @@ type ParsedTemplate = ReturnType<CompilerModule["parseTemplate"]>;
 
 /**
  * Template work that does not depend on the queried symbol, shared by the collections of one
- * request over one {@link ProjectContext}: the component list, each located template, each read
- * and each parse. It never outlives the request, so nothing is invalidated.
+ * request: the component list, each located template, each read and each parse. It is bound to the
+ * {@link ProjectContext} it was created for, and a collection over another context refuses it. It
+ * never outlives the request, so nothing is invalidated.
  *
  * Only whole results are kept. An entry is stored after its step returned, so a step that threw is
  * run again by the next collection, and a scan that stopped early leaves complete entries for the
@@ -575,9 +572,12 @@ export class TemplateScanCache {
     TemplateRead | { readonly reason: TemplateCoverageReason }
   >();
   readonly #parsed = new WeakMap<TemplateRead, ParsedTemplate>();
+  readonly #lines = new Map<string, string[]>();
 
-  components(context: ProjectContext): ClassDeclaration[] {
-    return (this.#components ??= componentClasses(context));
+  constructor(readonly context: ProjectContext) {}
+
+  components(): ClassDeclaration[] {
+    return (this.#components ??= componentClasses(this.context));
   }
 
   locate(cls: ClassDeclaration): Located {
@@ -590,16 +590,31 @@ export class TemplateScanCache {
   }
 
   async read(
-    context: ProjectContext,
     located: LocatedTemplate,
   ): Promise<TemplateRead | { readonly reason: TemplateCoverageReason }> {
     const key = located.container === "external" ? located.absolutePath : located;
     let read = this.#reads.get(key);
     if (!read) {
-      read = await readTemplate(context, located);
+      read = await readTemplate(this.context, located);
       this.#reads.set(key, read);
     }
     return read;
+  }
+
+  /**
+   * The lines of the file that holds a usage, for context lines. An external template that the
+   * scan read is split from that text; any other file (a source file with an inline template) is
+   * read from disk once.
+   */
+  async lines(absolutePath: string): Promise<string[]> {
+    let lines = this.#lines.get(absolutePath);
+    if (!lines) {
+      const read = this.#reads.get(absolutePath);
+      const text = read && "text" in read ? read.text : await readFile(absolutePath, "utf8");
+      lines = text.split(/\r?\n/);
+      this.#lines.set(absolutePath, lines);
+    }
+    return lines;
   }
 
   /** The parse of a template returned by {@link read}, errors included. */
@@ -752,7 +767,7 @@ async function scanConsumers(
     if (remaining.nodes % CHECKPOINT_EVERY_NODES === 0) rc.checkpoint();
   };
   try {
-    for (const consumer of cache.components(context)) {
+    for (const consumer of cache.components()) {
       rc.checkpoint();
       if (--remaining.templates < 0) throw new WorkExhausted();
       const located = cache.locate(consumer);
@@ -760,7 +775,7 @@ async function scanConsumers(
         failure ??= located.reason;
         continue;
       }
-      const read = await cache.read(context, located);
+      const read = await cache.read(located);
       if ("reason" in read) {
         failure ??= read.reason;
         continue;
@@ -847,7 +862,7 @@ export async function collectTemplateUsages(
   context: ProjectContext,
   rc: RequestContext,
   limits: Partial<ScanLimits> = {},
-  cache: TemplateScanCache = new TemplateScanCache(),
+  cache: TemplateScanCache = new TemplateScanCache(context),
 ): Promise<{
   coverage: TemplateCoverage;
   usages: readonly TemplateUsage[];
@@ -855,6 +870,9 @@ export async function collectTemplateUsages(
   renameBlocked?: boolean;
 }> {
   rc.checkpoint();
+  if (cache.context !== context) {
+    throw new Error("The template scan cache was created for another ProjectContext.");
+  }
   if (!hasAngularCore(context)) return NOT_APPLICABLE;
   const fail = (status: "unfinished" | "unsupported", reason: TemplateCoverageReason) => ({
     coverage: { status, reason, templates: 0 } as TemplateCoverage,
@@ -880,7 +898,7 @@ export async function collectTemplateUsages(
   if (!isComponent && selectorPublic && isDirectiveClass(owner.cls)) {
     return fail("unfinished", "cross_component");
   }
-  const derived = hasDerivedComponent(context, owner.cls, cache);
+  const derived = hasDerivedComponent(owner.cls, cache);
   if (!isComponent && !derived) return NOT_APPLICABLE;
   if (derived) return fail("unsupported", "inherited_member");
 
@@ -888,7 +906,7 @@ export async function collectTemplateUsages(
   if ("reason" in loaded) return fail("unfinished", loaded.reason);
   const located = cache.locate(owner.cls);
   if ("reason" in located) return fail("unfinished", located.reason);
-  const read = await cache.read(context, located);
+  const read = await cache.read(located);
   if ("reason" in read) return fail("unfinished", read.reason);
 
   rc.checkpoint();

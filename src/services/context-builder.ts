@@ -323,7 +323,7 @@ export async function buildExploreContext(
   const evidence: ExploreEvidence[] = [];
   let callSpines: CallSpineResult | undefined;
   // Lives for this request only: the selected symbols share template reads, never a scan budget.
-  const templateCache = new TemplateScanCache();
+  const templateCache = new TemplateScanCache(effectiveContext);
 
   if (request.callSpines) {
     if (!request.filePath || !request.symbolPath || routed.route !== "symbol") {

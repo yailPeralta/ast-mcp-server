@@ -1,10 +1,9 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Node } from "ts-morph";
 import {
   collectTemplateUsages,
   type TemplateCoverage,
-  type TemplateScanCache,
+  TemplateScanCache,
   type TemplateUsage,
 } from "./angular-templates.js";
 import { paginate, type Page } from "./pagination.js";
@@ -178,16 +177,12 @@ export function collectSymbolReferences(
 async function templateLocation(
   usage: TemplateUsage,
   detail: ReferenceDetail,
-  lineCache: Map<string, Promise<string[]>>,
+  templateCache: TemplateScanCache,
 ): Promise<SymbolReference> {
   let context: string | undefined;
   if (detail === "context") {
-    let lines = lineCache.get(usage.absolutePath);
-    if (!lines) {
-      lines = readFile(usage.absolutePath, "utf8").then((text) => text.split(/\r?\n/));
-      lineCache.set(usage.absolutePath, lines);
-    }
-    context = ((await lines)[usage.line - 1] ?? "").trim().slice(0, 500);
+    const lines = await templateCache.lines(usage.absolutePath);
+    context = (lines[usage.line - 1] ?? "").trim().slice(0, 500);
   }
   return {
     file: usage.file,
@@ -211,7 +206,7 @@ async function collectTemplateHalf(
   context: ProjectContext,
   detail: ReferenceDetail,
   requestContext: RequestContext,
-  templateCache?: TemplateScanCache,
+  templateCache: TemplateScanCache = new TemplateScanCache(context),
 ): Promise<TemplateHalf> {
   const { coverage, usages } = await collectTemplateUsages(
     node,
@@ -220,11 +215,10 @@ async function collectTemplateHalf(
     undefined,
     templateCache,
   );
-  const lineCache = new Map<string, Promise<string[]>>();
   const items: SymbolReference[] = [];
   for (const usage of usages) {
     requestContext.checkpoint();
-    items.push(await templateLocation(usage, detail, lineCache));
+    items.push(await templateLocation(usage, detail, templateCache));
   }
   return { coverage, items };
 }
