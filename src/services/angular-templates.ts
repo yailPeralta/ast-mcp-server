@@ -289,11 +289,11 @@ export function memberOwner(node: Node): { cls: ClassDeclaration; name: string }
     : undefined;
 }
 
-function hasDerivedComponent(context: ProjectContext, cls: ClassDeclaration): boolean {
+function hasDerivedComponent(cls: ClassDeclaration, cache: TemplateScanCache): boolean {
   const identity = (node: ClassDeclaration) =>
     `${node.getSourceFile().getFilePath()}:${node.getPos()}`;
   const target = identity(cls);
-  return componentClasses(context).some((candidate) => {
+  return cache.components().some((candidate) => {
     let base = candidate.getBaseClass();
     for (let depth = 0; base && depth < 32; depth += 1) {
       if (identity(base) === target) return true;
@@ -549,11 +549,89 @@ interface TemplateRead {
   readonly bytes: Buffer;
   readonly offset: number;
 }
+type LocatedTemplate = Exclude<Located, { reason: TemplateCoverageReason }>;
+type ParsedTemplate = ReturnType<CompilerModule["parseTemplate"]>;
+
+/**
+ * Template work that does not depend on the queried symbol, shared by the collections of one
+ * request: the component list, each located template, each read and each parse. It is bound to the
+ * {@link ProjectContext} it was created for, and a collection over another context refuses it. It
+ * never outlives the request, so nothing is invalidated.
+ *
+ * Only whole results are kept. An entry is stored after its step returned, so a step that threw is
+ * run again by the next collection, and a scan that stopped early leaves complete entries for the
+ * templates it reached and none for the rest. Scan budgets are not part of it: every collection
+ * charges its own budget for each template, cached or not.
+ */
+export class TemplateScanCache {
+  #components: ClassDeclaration[] | undefined;
+  readonly #located = new Map<ClassDeclaration, Located>();
+  /** External templates by path, so a file shared by two components is read once; inline by location. */
+  readonly #reads = new Map<
+    string | LocatedTemplate,
+    TemplateRead | { readonly reason: TemplateCoverageReason }
+  >();
+  readonly #parsed = new WeakMap<TemplateRead, ParsedTemplate>();
+  readonly #lines = new Map<string, string[]>();
+
+  constructor(readonly context: ProjectContext) {}
+
+  components(): ClassDeclaration[] {
+    return (this.#components ??= componentClasses(this.context));
+  }
+
+  locate(cls: ClassDeclaration): Located {
+    let located = this.#located.get(cls);
+    if (!located) {
+      located = locateTemplate(cls);
+      this.#located.set(cls, located);
+    }
+    return located;
+  }
+
+  async read(
+    located: LocatedTemplate,
+  ): Promise<TemplateRead | { readonly reason: TemplateCoverageReason }> {
+    const key = located.container === "external" ? located.absolutePath : located;
+    let read = this.#reads.get(key);
+    if (!read) {
+      read = await readTemplate(this.context, located);
+      this.#reads.set(key, read);
+    }
+    return read;
+  }
+
+  /**
+   * The lines of the file that holds a usage, for context lines. An external template that the
+   * scan read is split from that text; any other file (a source file with an inline template) is
+   * read from disk once.
+   */
+  async lines(absolutePath: string): Promise<string[]> {
+    let lines = this.#lines.get(absolutePath);
+    if (!lines) {
+      const read = this.#reads.get(absolutePath);
+      const text = read && "text" in read ? read.text : await readFile(absolutePath, "utf8");
+      lines = text.split(/\r?\n/);
+      this.#lines.set(absolutePath, lines);
+    }
+    return lines;
+  }
+
+  /** The parse of a template returned by {@link read}, errors included. */
+  parse(compiler: CompilerModule, read: TemplateRead, absolutePath: string): ParsedTemplate {
+    let parsed = this.#parsed.get(read);
+    if (!parsed) {
+      parsed = compiler.parseTemplate(read.text, absolutePath, { preserveWhitespaces: true });
+      this.#parsed.set(read, parsed);
+    }
+    return parsed;
+  }
+}
 
 /** Reads a located template within the per-template size cap. */
 async function readTemplate(
   context: ProjectContext,
-  located: Exclude<Located, { reason: TemplateCoverageReason }>,
+  located: LocatedTemplate,
 ): Promise<TemplateRead | { readonly reason: TemplateCoverageReason }> {
   let text: string;
   let bytes: Buffer;
@@ -579,7 +657,7 @@ async function readTemplate(
 function toUsages(
   context: ProjectContext,
   cls: ClassDeclaration,
-  located: Exclude<Located, { reason: TemplateCoverageReason }>,
+  located: LocatedTemplate,
   read: TemplateRead,
   raw: readonly RawUsage[],
 ): TemplateUsage[] {
@@ -624,22 +702,17 @@ function bindingTarget(cls: ClassDeclaration, node: Node, name: string): Binding
 type Inspection =
   | "skip"
   | { readonly matched: boolean; readonly opaque: boolean; readonly usages: readonly RawUsage[] };
+/** `parse` gives the nodes of the consumer template, or undefined when the compiler reports errors. */
 type Inspector = (
   text: string,
-  absolutePath: string,
+  parse: () => any[] | undefined,
   tick: () => void,
 ) => Inspection | "template_parse_error";
 
-/** Parses a consumer template, or returns undefined when the compiler reports errors. */
-function parseConsumer(compiler: CompilerModule, text: string, absolutePath: string) {
-  const parsed = compiler.parseTemplate(text, absolutePath, { preserveWhitespaces: true });
-  return parsed.errors?.length ? undefined : parsed.nodes;
-}
-
 function selectorInspector(compiler: SelectorCompiler, target: BindingTarget): Inspector {
-  return (text, absolutePath, tick) => {
+  return (text, parse, tick) => {
     if (!mayMatch(compiler, target.selector, text)) return "skip";
-    const nodes = parseConsumer(compiler, text, absolutePath);
+    const nodes = parse();
     if (!nodes) return "template_parse_error";
     const scan = extractConsumerUsages(compiler, nodes, text, target, tick);
     const usages = scan.usages.map((usage): RawUsage => ({
@@ -652,9 +725,9 @@ function selectorInspector(compiler: SelectorCompiler, target: BindingTarget): I
 }
 
 function pipeInspector(compiler: CompilerModule, name: string, rc: RequestContext): Inspector {
-  return (text, absolutePath, tick) => {
+  return (text, parse, tick) => {
     if (!text.includes(name)) return "skip";
-    const nodes = parseConsumer(compiler, text, absolutePath);
+    const nodes = parse();
     if (!nodes) return "template_parse_error";
     try {
       const raw = extractUsages(compiler, nodes, { pipe: name, text }, rc, tick);
@@ -674,9 +747,11 @@ function pipeInspector(compiler: CompilerModule, name: string, rc: RequestContex
 async function scanConsumers(
   context: ProjectContext,
   cls: ClassDeclaration,
+  compiler: CompilerModule,
   inspect: Inspector,
   rc: RequestContext,
   limits: Partial<ScanLimits>,
+  cache: TemplateScanCache,
 ): Promise<{ usages: TemplateUsage[]; failure?: TemplateCoverageReason; examined: number }> {
   const remaining = { ...SCAN_LIMITS, ...limits };
   const usages: TemplateUsage[] = [];
@@ -692,23 +767,28 @@ async function scanConsumers(
     if (remaining.nodes % CHECKPOINT_EVERY_NODES === 0) rc.checkpoint();
   };
   try {
-    for (const consumer of componentClasses(context)) {
+    for (const consumer of cache.components()) {
       rc.checkpoint();
       if (--remaining.templates < 0) throw new WorkExhausted();
-      const located = locateTemplate(consumer);
+      const located = cache.locate(consumer);
       if ("reason" in located) {
         failure ??= located.reason;
         continue;
       }
-      const read = await readTemplate(context, located);
+      const read = await cache.read(located);
       if ("reason" in read) {
         failure ??= read.reason;
         continue;
       }
+      // The budget is charged for every template, whether or not the cache already held it.
       remaining.bytes -= read.bytes.length;
       if (remaining.bytes < 0) throw new WorkExhausted();
       examined += 1;
-      const scan = inspect(read.text, located.absolutePath, tick);
+      const parse = (): any[] | undefined => {
+        const parsed = cache.parse(compiler, read, located.absolutePath);
+        return parsed.errors?.length ? undefined : parsed.nodes;
+      };
+      const scan = inspect(read.text, parse, tick);
       if (scan === "skip") continue;
       if (scan === "template_parse_error") {
         failure ??= scan;
@@ -746,6 +826,7 @@ async function collectPipeUsages(
   context: ProjectContext,
   rc: RequestContext,
   limits: Partial<ScanLimits>,
+  cache: TemplateScanCache,
 ) {
   const unfinished = (reason: TemplateCoverageReason, templates = 0) => ({
     coverage: { status: "unfinished", reason, templates } as TemplateCoverage,
@@ -758,9 +839,11 @@ async function collectPipeUsages(
   const scan = await scanConsumers(
     context,
     cls,
+    loaded.compiler,
     pipeInspector(loaded.compiler, name, rc),
     rc,
     limits,
+    cache,
   );
   const coverage: TemplateCoverage = scan.failure
     ? { status: "unfinished", reason: scan.failure, templates: scan.examined }
@@ -768,12 +851,18 @@ async function collectPipeUsages(
   return { coverage, usages: scan.usages };
 }
 
-/** Collects usages of a component member inside its declaring component's template. */
+/**
+ * Collects usages of a component member inside its declaring component's template.
+ *
+ * Pass one `cache` to every collection of a request to share symbol-independent work between
+ * them; the result is the same with or without it. By default each call works alone.
+ */
 export async function collectTemplateUsages(
   node: Node,
   context: ProjectContext,
   rc: RequestContext,
   limits: Partial<ScanLimits> = {},
+  cache: TemplateScanCache = new TemplateScanCache(context),
 ): Promise<{
   coverage: TemplateCoverage;
   usages: readonly TemplateUsage[];
@@ -781,13 +870,16 @@ export async function collectTemplateUsages(
   renameBlocked?: boolean;
 }> {
   rc.checkpoint();
+  if (cache.context !== context) {
+    throw new Error("The template scan cache was created for another ProjectContext.");
+  }
   if (!hasAngularCore(context)) return NOT_APPLICABLE;
   const fail = (status: "unfinished" | "unsupported", reason: TemplateCoverageReason) => ({
     coverage: { status, reason, templates: 0 } as TemplateCoverage,
     usages: [] as readonly TemplateUsage[],
   });
   if (Node.isClassDeclaration(node)) {
-    return isPipeClass(node) ? collectPipeUsages(node, context, rc, limits) : NOT_APPLICABLE;
+    return isPipeClass(node) ? collectPipeUsages(node, context, rc, limits, cache) : NOT_APPLICABLE;
   }
   const owner = memberOwner(node);
   if (!owner) return NOT_APPLICABLE;
@@ -796,28 +888,29 @@ export async function collectTemplateUsages(
     if (owner.name !== "transform" || componentDecorator(owner.cls)) {
       return fail("unfinished", "cross_component");
     }
-    return { ...(await collectPipeUsages(owner.cls, context, rc, limits)), renameBlocked: true };
+    return {
+      ...(await collectPipeUsages(owner.cls, context, rc, limits, cache)),
+      renameBlocked: true,
+    };
   }
   const isComponent = componentDecorator(owner.cls) !== undefined;
   const selectorPublic = isSelectorPublic(node) || isMetadataPublic(owner.cls, owner.name);
   if (!isComponent && selectorPublic && isDirectiveClass(owner.cls)) {
     return fail("unfinished", "cross_component");
   }
-  const derived = hasDerivedComponent(context, owner.cls);
+  const derived = hasDerivedComponent(owner.cls, cache);
   if (!isComponent && !derived) return NOT_APPLICABLE;
   if (derived) return fail("unsupported", "inherited_member");
 
   const loaded = await loadCompiler(context.tsConfigFilePath);
   if ("reason" in loaded) return fail("unfinished", loaded.reason);
-  const located = locateTemplate(owner.cls);
+  const located = cache.locate(owner.cls);
   if ("reason" in located) return fail("unfinished", located.reason);
-  const read = await readTemplate(context, located);
+  const read = await cache.read(located);
   if ("reason" in read) return fail("unfinished", read.reason);
 
   rc.checkpoint();
-  const parsed = loaded.compiler.parseTemplate(read.text, located.absolutePath, {
-    preserveWhitespaces: true,
-  });
+  const parsed = cache.parse(loaded.compiler, read, located.absolutePath);
   if (parsed.errors?.length) return fail("unfinished", "template_parse_error");
   let raw: RawUsage[];
   try {
@@ -840,9 +933,11 @@ export async function collectTemplateUsages(
   const scan = await scanConsumers(
     context,
     owner.cls,
+    loaded.compiler,
     selectorInspector(loaded.compiler as SelectorCompiler, target),
     rc,
     limits,
+    cache,
   );
   const coverage: TemplateCoverage = scan.failure
     ? { status: "unfinished", reason: scan.failure, templates: scan.examined }

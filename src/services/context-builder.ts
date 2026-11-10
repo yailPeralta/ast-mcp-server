@@ -1,5 +1,6 @@
 import path from "node:path";
 import { Node, type SourceFile } from "ts-morph";
+import { TemplateScanCache } from "./angular-templates.js";
 import { buildFileOutline, nodeSourceWithLocation, type OutlineSymbol } from "./outline.js";
 import { paginate, type Page } from "./pagination.js";
 import { resolveImpactRoot } from "./impact.js";
@@ -321,6 +322,8 @@ export async function buildExploreContext(
   const unresolved: ExploreUnresolvedItem[] = [];
   const evidence: ExploreEvidence[] = [];
   let callSpines: CallSpineResult | undefined;
+  // Lives for this request only: the selected symbols share template reads, never a scan budget.
+  const templateCache = new TemplateScanCache(effectiveContext);
 
   if (request.callSpines) {
     if (!request.filePath || !request.symbolPath || routed.route !== "symbol") {
@@ -389,6 +392,7 @@ export async function buildExploreContext(
             limit: request.referenceLimit,
           },
           requestContext,
+          templateCache,
         );
       } catch (error) {
         if (isCooperativeInterruption(error)) throw error;
