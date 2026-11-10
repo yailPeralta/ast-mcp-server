@@ -1619,9 +1619,10 @@ export function formatValue(value: number): string { return String(value); }
     });
   });
 
-  it("keeps Angular ast_explore template evidence equal across direct, batch, JSON, and TOON", async () => {
+  /** Runs one Angular explore request directly and in a batch and proves the outputs are equal. */
+  async function exploreAngularDirectAndBatch(template: string) {
     const component = `import { Component } from "@angular/core";
-@Component({ selector: "app-a", template: "<p>{{ title </div>" })
+@Component({ selector: "app-a", template: ${JSON.stringify(template)} })
 export class AComponent { title = "x"; }
 `;
     const angular = await createAngularFixture({ "src/a.ts": component }, { compiler: "v21" });
@@ -1641,15 +1642,40 @@ export class AComponent { title = "x"; }
     await angular.cleanup();
     const timeless = (value: unknown) => ({ ...(value as object), freshness: null });
     expect(timeless(batch.result)).toEqual(timeless(direct));
+    const json = JSON.parse(serializeCliSuccess(batch, "json")) as { result: unknown };
+    const toonResult = decode(serializeCliSuccess(batch, "toon")) as { result: unknown };
+    expect(json.result).toEqual(batch.result);
+    expect(toonResult.result).toEqual(batch.result);
+    return batch.result;
+  }
+
+  it("keeps Angular ast_explore template evidence equal across direct, batch, JSON, and TOON", async () => {
+    const result = await exploreAngularDirectAndBatch("<p>{{ title </div>");
     const coverage = { status: "unfinished", reason: "template_parse_error", templates: 0 };
     const references = { template_coverage: coverage, references: [{ origin: "compiler" }] };
-    expect(batch.result).toMatchObject({
+    expect(result).toMatchObject({
       evidence: [{ references }],
       omissions: { details: [{ reason: "template_coverage_incomplete" }] },
       completeness: { complete: false, evidence_complete: false },
     });
-    const toonResult = decode(serializeCliSuccess(batch, "toon")) as { result: unknown };
-    expect(toonResult.result).toEqual(batch.result);
+  });
+
+  it("keeps Angular ast_explore template items equal across direct, batch, JSON, and TOON", async () => {
+    const result = await exploreAngularDirectAndBatch("<p>{{ title }}{{ title }}</p>");
+    const inline = { origin: "template_inline", file: "src/a.ts" };
+    expect(result).toMatchObject({
+      evidence: [
+        {
+          references: {
+            template_coverage: { status: "completed", templates: 1 },
+            template_reference_count: 2,
+            references: [inline, inline, { origin: "compiler" }],
+          },
+        },
+      ],
+      omissions: { details: [], total: 0 },
+      completeness: { complete: true, evidence_complete: true },
+    });
   });
 
   it("cancels queued ast_explore work without returning partial evidence", async () => {

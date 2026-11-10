@@ -257,6 +257,8 @@ describe("ast_explore template evidence", () => {
 
   it.each([
     ["REQUEST_CANCELLED", "template"],
+    ["REQUEST_CANCELLED", "TypeScript"],
+    ["OPERATION_DEADLINE_EXCEEDED", "template"],
     ["OPERATION_DEADLINE_EXCEEDED", "TypeScript"],
   ] as const)("propagates %s raised by the %s step", async (code, half) => {
     const interruption = new RequestContextError(code);
@@ -279,13 +281,42 @@ describe("ast_explore template evidence", () => {
   });
 
   it("keeps template usages out of impact, test candidates and call spines", async () => {
-    const spines = await explore("AComponent.title", { call_spines: { direction: "incoming" } });
+    // `go` is called from TypeScript and from the template, so its incoming spine is not empty
+    // and a template caller would show up in it.
+    const setup = {
+      files: {
+        "src/a.component.ts": BASE["src/a.component.ts"].replace(
+          `title = "x";`,
+          `title = "x";\n  go(): void {}`,
+        ),
+        "src/a.component.html": `${BASE["src/a.component.html"]}<button (click)="go()">go</button>\n`,
+        "src/caller.ts": `import { AComponent } from "./a.component.js";
+export function trigger(): void {
+  new AComponent().go();
+}
+`,
+      },
+    };
+    const spines = await explore(
+      "AComponent.go",
+      { call_spines: { direction: "incoming" } },
+      setup,
+    );
+    const callSpines = spines.content.call_spines as { paths: unknown[] };
+    expect(spines.references!.template_reference_count).toBe(1);
+    expect(spines.references!.references.map((item) => item.origin)).toContain("template_external");
+    expect(JSON.stringify(callSpines.paths)).toContain("src/caller.ts");
+
+    // Test candidates fail closed for a called method whatever the template says, so they are
+    // probed on `title`, which has four template usages.
+    const title = await explore("AComponent.title");
+    expect(title.references!.template_reference_count).toBe(4);
     const outputs = [
+      callSpines,
+      (await call("AComponent.go", {}, { tool: "ast_get_impact" })).structuredContent,
       (await call("AComponent.title", {}, { tool: "ast_get_impact" })).structuredContent,
       (await call("AComponent.title", {}, { tool: "ast_find_test_candidates" })).structuredContent,
-      spines.content.call_spines,
     ];
-    expect(spines.references!.template_reference_count).toBe(4);
     for (const output of outputs) {
       expect(output).toBeTypeOf("object");
       expect(JSON.stringify(output)).not.toMatch(/\.html|template_/);
