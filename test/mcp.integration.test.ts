@@ -31,6 +31,7 @@ import {
   SYMBOL_INDEX_SCHEMA_VERSION,
 } from "../src/services/symbol-index.js";
 import { createToolErrorContext, errorResult } from "../src/tools/result.js";
+import { createAngularFixture } from "./helpers/angular-fixture.js";
 import { createProjectFixture, type ProjectFixture } from "./helpers/project-fixture.js";
 
 const PUBLIC_ERROR_UUID_PATTERN =
@@ -1616,6 +1617,39 @@ export function formatValue(value: number): string { return String(value); }
       code: "TOOL_ERROR",
       stepId: "explore",
     });
+  });
+
+  it("keeps Angular ast_explore template evidence equal across direct, batch, JSON, and TOON", async () => {
+    const component = `import { Component } from "@angular/core";
+@Component({ selector: "app-a", template: "<p>{{ title </div>" })
+export class AComponent { title = "x"; }
+`;
+    const angular = await createAngularFixture({ "src/a.ts": component }, { compiler: "v21" });
+    const input = { file_path: "src/a.ts", symbol_path: "AComponent.title", detail: "full" };
+    const arguments_ = { project_root: angular.root, ...input };
+    const direct = structured(
+      await client.callTool({ name: "ast_explore", arguments: arguments_ }),
+    );
+    const batch = await runBatchDocument(
+      parseBatchDocument({
+        version: 1,
+        project_root: angular.root,
+        steps: [{ id: "explore", tool: "ast_explore", input }],
+        emit: { $ref: "#/steps/explore" },
+      }),
+    );
+    await angular.cleanup();
+    const timeless = (value: unknown) => ({ ...(value as object), freshness: null });
+    expect(timeless(batch.result)).toEqual(timeless(direct));
+    const coverage = { status: "unfinished", reason: "template_parse_error", templates: 0 };
+    const references = { template_coverage: coverage, references: [{ origin: "compiler" }] };
+    expect(batch.result).toMatchObject({
+      evidence: [{ references }],
+      omissions: { details: [{ reason: "template_coverage_incomplete" }] },
+      completeness: { complete: false, evidence_complete: false },
+    });
+    const toonResult = decode(serializeCliSuccess(batch, "toon")) as { result: unknown };
+    expect(toonResult.result).toEqual(batch.result);
   });
 
   it("cancels queued ast_explore work without returning partial evidence", async () => {

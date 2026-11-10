@@ -15,7 +15,10 @@ import {
   reportSymbolIndexFailure,
   type ProjectContext,
 } from "./project.js";
-import { collectSymbolReferences, type SymbolReferences } from "./references.js";
+import {
+  collectSymbolReferencesWithTemplateVerdict,
+  type SymbolReferencesWithTemplates,
+} from "./references.js";
 import { collectCompilerCallRelationships } from "./relationships.js";
 import { presentExploreClusters, type ExploreOmission } from "./explore-presentation.js";
 import {
@@ -73,7 +76,7 @@ export interface ExploreSymbol {
 export interface ExploreEvidence {
   readonly selector: string;
   readonly source?: ReturnType<typeof nodeSourceWithLocation>;
-  readonly references?: SymbolReferences;
+  readonly references?: SymbolReferencesWithTemplates;
 }
 
 export interface ExploreUnresolvedItem {
@@ -369,20 +372,22 @@ export async function buildExploreContext(
       continue;
     }
     let source: ReturnType<typeof nodeSourceWithLocation> | undefined;
-    let references: SymbolReferences | undefined;
+    let references: SymbolReferencesWithTemplates | undefined;
     if (expansion.source) {
       source = nodeSourceWithLocation(node, effectiveContext.projectRoot, requestContext);
     }
     if (expansion.references) {
       try {
-        references = collectSymbolReferences(
+        references = await collectSymbolReferencesWithTemplateVerdict(
           node,
-          effectiveContext.projectRoot,
-          record.selector,
-          true,
-          request.referenceDetail,
-          0,
-          request.referenceLimit,
+          effectiveContext,
+          {
+            symbolPath: record.selector,
+            includeDeclaration: true,
+            detail: request.referenceDetail,
+            offset: 0,
+            limit: request.referenceLimit,
+          },
           requestContext,
         );
       } catch (error) {
@@ -426,6 +431,16 @@ export async function buildExploreContext(
         category: "budget",
         component: "references",
         reason: "reference_limit",
+      });
+    }
+    // Absent coverage means not applicable; anything short of completed leaves usages unknown.
+    const coverage = item.references?.template_coverage?.status;
+    if (coverage !== undefined && coverage !== "completed" && coverage !== "not_applicable") {
+      omissions.push({
+        subject: item.selector,
+        category: "incomplete",
+        component: "references",
+        reason: "template_coverage_incomplete",
       });
     }
   }
