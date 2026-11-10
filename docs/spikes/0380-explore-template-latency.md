@@ -78,8 +78,12 @@ A first run on the same machine, before the script was committed, gave an added 
 Issue #454 took the lever named in finding 3. One `ast_explore` request now creates a
 `TemplateScanCache` and passes it to the template collection of every selected symbol. The cache
 holds the work that does not depend on the symbol: the component list, each located template, each
-template read (with its path check and size check) and each parse. Nothing is kept after the
-request. `ast_find_references` passes no cache, so each of its calls works alone.
+template read (with its path check and size check) and each parse. With
+`reference_detail: "context"` the context lines of an external template come from the text the
+scan already read, so the file is not read a second time; a source file with an inline template is
+read from disk once per request for its context lines. The cache is bound to one project context
+and nothing is kept after the request. `ast_find_references` passes no cache, so each of its calls
+works alone.
 
 Scan budgets stay per symbol. A collection charges its own template, byte and node budget for
 every template, whether the cache held it or not, so each symbol stops at the same point as before
@@ -150,11 +154,14 @@ last value comes from a single 3338 ms sample among the ten. The p50 is the stea
    reducing it needs state that lives across requests, which #454 excludes. These two figures are
    estimates from one profile, not benchmark results.
 5. **Memory.** The cache keeps the bytes and text of the templates read during the request. Peak
-   RSS of the 501-component case rose from 475 to 494 MiB. The per-symbol byte budget (32 MiB)
-   bounds what one request reads.
-6. **Not shared.** Loading the compiler, the base-class walk for inherited members, the scope
-   resolver and the context-line reads for `reference_detail: "context"` still run per symbol.
-   They depend on the symbol or were too small in the profile to justify a change.
+   RSS of the 501-component case rose from 475 to 494 MiB. The cache also keeps the parsed
+   templates until the request ends. Retention is bounded by the part of the project that one
+   symbol's scan budget reaches, and peak RSS was measured on the benchmark fixture only.
+6. **Not shared.** Loading the compiler, the base-class walk for inherited members and the scope
+   resolver still run per symbol. They depend on the symbol or were too small in the profile to
+   justify a change.
+7. **Not measured.** The benchmark request uses the default `reference_detail`, so the numbers
+   above do not include the context-line change.
 
 ## Reproduce
 
