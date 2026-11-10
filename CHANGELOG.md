@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.18.0] — not yet published (2026-11-10)
+## [0.18.0] — published to `next`, verification failed, not promoted (2026-11-10)
 
 ### Added
 
@@ -20,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The `tools/list` digest changed because the `ast_explore` output schema gained the optional fields and the new omission reason. Tool descriptions and input schemas are unchanged. `ast_get_impact`, `ast_find_test_candidates` and the `ast_explore` call spines stay compiler-only (#380).
 - The `structural-code-editing` skill is `4.9.0`: it and the README describe the `ast_explore` template evidence instead of the former TypeScript-only limit. The published npm `0.17.0` bytes (skill `4.8.0`) are recorded as a predecessor (#380).
 - `ast_explore` reads and parses each Angular template at most once per request: the selected symbols share the component list, the template reads and the parses through a cache that lives for that request only. Items, order, per-symbol scan budgets and `template_coverage` verdicts are the same as before, and `ast_find_references` is unaffected. In the recorded run the added p50 for `detail: "full"`, `limit: 20` falls from 1040 ms to 179 ms on 501 components and from 4238 ms to 698 ms on 2001 components, where every symbol still ends with `work_exhausted`; see `docs/spikes/0380-explore-template-latency.md` (#454).
+
+### Release status
+
+- npm published these immutable bytes under `next` with provenance and the expected Git commit (`9154dc7bd17f326e04c7b7e4dbfb9fcde9a66cdf`, integrity `sha512-uqp5zaRnSCcW5JLHA/nAGaYgPUGwLcGnC17SpaE2npJPEowmL4yelqB1feyjSiDgbvVDAWybwYB8pDyJkUGW8Q==`, publish run `42901940061`). Public-registry verification (run `42902516235`) then failed for the same reason as `0.14.3`–`0.17.0`: the consumer install resolves `minimatch@10.2.6` through `ts-morph@28.0.0`, flagged by `npm audit` for GHSA-g3hv-75wg-m249 (#361). `0.18.0` supersedes `0.17.0` on `next` and was not promoted to `latest`, tagged in Git, or released on GitHub.
 
 ## [0.17.0] — published to `next`, verification failed, not promoted (2026-11-10)
 
