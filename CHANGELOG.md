@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.17.0] — not yet published (2026-11-09)
+## [0.17.0] — published to `next`, verification failed, not promoted (2026-11-10)
 
 ### Added
 
@@ -24,6 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - With `@angular/compiler` 18 or 19, template usage scans walked every subtree twice per nesting level, so `ast_find_references` on a `@Pipe` class or a component member reported `unfinished` with `work_exhausted` on deeply nested templates, and `ast_rename_symbol` refused the rename. Each template is now walked once on every supported major (#441).
 - Upgrading the `structural-code-editing` skill over an unmodified install from npm `0.16.0` would have failed with a conflict: its content changed after `0.16.0` (#443) while the skill version stayed `4.7.0`, and the `0.16.0` byte set had no recorded predecessor. The published `0.16.0` bytes are now recorded, and the skill version is `4.8.0` (#447).
+
+### Release status
+
+- npm published these immutable bytes under `next` with provenance and the expected Git commit (`e49987bd1fd36432aa76ecb27ca8359eedb613ad`, integrity `sha512-NmjdENfdfLCSqdMJyazxHfx1XuFHgQeJlAB2XIpHGklqCKkwVw43xKMlXmDfdT7m1XT/b4mokx1MefFdj/AIyw==`, publish run `42753818346`). Public-registry verification (run `42754346795`) then failed for the same reason as `0.14.3`–`0.16.0`: the consumer install resolves `minimatch@10.2.6` through `ts-morph@28.0.0`, flagged by `npm audit` for GHSA-g3hv-75wg-m249 (#361). `0.17.0` supersedes `0.16.0` on `next` and was not promoted to `latest`, tagged in Git, or released on GitHub.
 
 ## [0.16.0] — published to `next`, verification failed, not promoted (2026-11-07)
 
