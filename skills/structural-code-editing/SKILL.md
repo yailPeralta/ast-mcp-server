@@ -4,7 +4,7 @@ description: "Trigger: navegar, analizar o editar TypeScript/JavaScript con el c
 license: "ISC"
 metadata:
   author: "yail"
-  version: "4.8.0"
+  version: "4.9.0"
   hermes:
     tags: ["typescript", "javascript", "ast", "refactoring", "mcp"]
     homepage: "https://github.com/yailPeralta/ast-mcp-server"
@@ -49,6 +49,11 @@ In an Angular project (`@angular/core` resolvable from the tsconfig directory), 
 
 Read `template_coverage` before inferring absence. Only `completed` proves every template it covers was examined. `unfinished` (for example `compiler_missing`, `compiler_unsupported`, `template_unresolved`, `template_parse_error`, `size_exceeded`, `cross_component`, `work_exhausted`) and `unsupported` (for example an inherited member) never prove that no template usage exists. `not_applicable` means the feature is off and the response is unchanged.
 
+`ast_explore` reports the same template evidence in `evidence[].references` whenever it expands references (`detail: "full"` or `include_references: true`): each item carries `origin`, and the block adds `template_coverage` and `template_reference_count` with the verdict `ast_find_references` gives for the same symbol. None of these keys appear when coverage is `not_applicable`. Read `template_coverage` before trusting explore references, and treat every status other than `completed` as unknown.
+
+- In `ast_explore`, `reference_limit` bounds the merged list of TypeScript and template items, even though its input description still says "compiler references". `reference_count` counts TypeScript items only, and a list cut by the limit raises the usual `reference_limit` omission. `ast_explore` has no reference offset: page the remaining items through `ast_find_references`.
+- Any `template_coverage.status` other than `completed` adds one `template_coverage_incomplete` omission (category `incomplete`, component `references`) per symbol and sets `evidence_complete: false`. The reason code (for example `compiler_missing`) is in `template_coverage`. `omissions.details` lists the omission only when the detail limit leaves room; `omissions.counts` and `omissions.total` always count it, also when `max_bytes` drops the references block.
+
 Consumer templates: for a member bound through the selector (`@Input`, `@Output`, `input()`, `output()`, `model()`, a literal alias, or a literal entry of the `inputs` / `outputs` metadata), the binding keys `[x]`, `x="lit"`, `[(x)]`, `(y)` and `(xChange)` are listed with kinds `TemplateInputBinding` for `[x]`, `TemplateAttribute` for `x="lit"`, `TemplateTwoWayBinding` for `[(x)]` and `TemplateOutputBinding` for `(y)` and `(xChange)` in the templates of components whose resolved scope contains the declaring component (literal standalone `imports`, or NgModule `declarations` plus the `exports` of imported modules). For a `@Pipe` class with a literal `name`, and for its `transform` member, `| name` usages in in-scope templates are listed with kind `TemplatePipeName`. A same selector or pipe name outside that scope is ignored.
 
 For these members, `completed` means template evidence inside the Project only: every component template of the Project (the tsconfig passed as `project_root`) was read and every match resolved. `hostDirectives`, `@Directive` inputs and outputs, and non-literal scopes, aliases, metadata or pipe names stay `unfinished` with `cross_component`. Runtime bindings (`setInput`, router input binding, `createComponent` and other dynamic component APIs) and consumers outside the Project (other tsconfigs, libraries, other applications) are never examined, so `completed` does not cover them.
@@ -59,7 +64,7 @@ Pipes: renaming a `@Pipe` class applies with TypeScript edits only; the `name` l
 
 Limits to state when reporting:
 
-- `ast_explore` is TypeScript-only: its references omit template usages. This is tracked in issue #380. Use `ast_find_references` for template evidence; rename still blocks independently.
+- `ast_get_impact`, `ast_find_test_candidates` and the `ast_explore` call spines stay compiler-only: they never contain a template usage. Rename blocks on its own evidence, independently of these tools.
 - The `diagnostics` field stays TypeScript-only. When a rename edits a template, the plan also carries `template_diagnostics`, a best-effort template type-check delta (`status`, `reason`, `added`, `removed`, `added_errors`) from the project's own `@angular/compiler-cli`; it is absent for non-Angular projects and for renames that edit no template. `completed` is the only status with data; `unavailable` (`compiler_cli_missing`, `compiler_unsupported`, `typescript_incompatible`) and `unfinished` (`work_exhausted`, `deadline`, `check_failed`) mean unknown, so run the project's build or tests before applying. `block_on_template_errors` (default `false`) blocks only a `completed` delta with `added_errors`, and `allow_new_errors` waives it. `template_diagnostics[].file` is relative to the directory of the tsconfig, while `diagnostics[].file` is relative to `project_root`. `@angular/compiler-cli` is not a declared peer and must resolve from the project, otherwise the status is `unavailable/compiler_cli_missing`. Template-editing renames persist as plan schema v3, which is rejected on import after a downgrade.
 - Detection uses the user's own `@angular/compiler`, never a bundled one. It is an optional peer (`>=18.0.0 <23.0.0`) that the project already installs with Angular. If it is missing or out of range, coverage is `unfinished` and rename is blocked. Yarn PnP projects without `node_modules` resolve nothing and report `unfinished`.
 

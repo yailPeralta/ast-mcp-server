@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `ast_explore` reports Angular template evidence in `evidence[].references` whenever it expands references: each item carries `origin` (`compiler`, `template_external`, `template_inline`) and the block adds `template_coverage` and `template_reference_count`, with the verdict `ast_find_references` gives for the same symbol. The fields are additive and absent when coverage is `not_applicable`, so output for non-Angular projects is unchanged (#380).
+- New `ast_explore` omission reason `template_coverage_incomplete` (category `incomplete`, component `references`). Any coverage status other than `completed` raises it once per symbol and sets `evidence_complete: false`; the reason code is in `template_coverage`, and the omission is still counted when `max_bytes` drops the references block. A failure of the template step alone keeps the TypeScript references and reports `unfinished` with `template_unresolved` (#380).
+- `yarn benchmark:explore-templates` measures the added latency on demand. The recorded run adds 1059 ms at p95 for `detail: "full"`, `limit: 20` on 501 components (threshold 2 s), and every request on 2001 components returns a typed result with `work_exhausted`; see `docs/spikes/0380-explore-template-latency.md` (#380).
+
+### Changed
+
+- In `ast_explore`, `reference_limit` now bounds the merged list of TypeScript and template items, with the same ordering as `ast_find_references`. Its input description still says "compiler references", and `reference_count` counts TypeScript items only. Page the remaining items through `ast_find_references` (#380).
+- The `tools/list` digest changed because the `ast_explore` output schema gained the optional fields and the new omission reason. Tool descriptions and input schemas are unchanged. `ast_get_impact`, `ast_find_test_candidates` and the `ast_explore` call spines stay compiler-only (#380).
+- The `structural-code-editing` skill is `4.9.0`: it and the README describe the `ast_explore` template evidence instead of the former TypeScript-only limit. The published npm `0.17.0` bytes (skill `4.8.0`) are recorded as a predecessor (#380).
+
 ## [0.17.0] — published to `next`, verification failed, not promoted (2026-11-10)
 
 ### Added

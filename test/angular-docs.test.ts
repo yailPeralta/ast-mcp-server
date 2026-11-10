@@ -6,13 +6,14 @@ import { describe, expect, it } from "vitest";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const skillRoot = path.join(repositoryRoot, "skills", "structural-code-editing");
 
-const [readme, skill, operations, changelog, adr, spike] = await Promise.all([
+const [readme, skill, operations, changelog, adr, spike, latencySpike] = await Promise.all([
   readFile(path.join(repositoryRoot, "README.md"), "utf8"),
   readFile(path.join(skillRoot, "SKILL.md"), "utf8"),
   readFile(path.join(skillRoot, "references", "operations.md"), "utf8"),
   readFile(path.join(repositoryRoot, "CHANGELOG.md"), "utf8"),
   readFile(path.join(repositoryRoot, "docs", "adr", "0017-template-type-check-worker.md"), "utf8"),
   readFile(path.join(repositoryRoot, "docs", "spikes", "0421-template-type-check.md"), "utf8"),
+  readFile(path.join(repositoryRoot, "docs", "spikes", "0380-explore-template-latency.md"), "utf8"),
 ]);
 const skillDocs = `${skill}\n${operations}`;
 
@@ -26,9 +27,7 @@ function releaseSection(version: string): string {
 }
 
 describe("Angular template documentation", () => {
-  it("skill documents ast_explore TS-only limit and compiler optional peer", () => {
-    expect(skillDocs).toMatch(/ast_explore[^\n]*TypeScript-only/i);
-    expect(skillDocs).toMatch(/issue #380/);
+  it("skill documents the compiler optional peer", () => {
     expect(skillDocs).toContain("@angular/compiler");
     expect(skillDocs).toMatch(/optional peer/i);
     expect(skillDocs).toMatch(/Yarn PnP/);
@@ -84,6 +83,57 @@ describe("Angular template documentation", () => {
       expect(document).toMatch(/schema v3|plan schema version 3/i);
       expect(document).toMatch(/@angular\/compiler-cli[^\n]*(?:resolve|peer)/i);
     });
+  });
+
+  describe.each([
+    ["README.md", readme],
+    ["SKILL.md", skill],
+    ["references/operations.md", operations],
+  ])("%s documents ast_explore template evidence (#380)", (_name, document) => {
+    it("no longer states the TypeScript-only limit", () => {
+      expect(document).not.toMatch(/ast_explore[^\n]*TypeScript-only/i);
+      expect(document).not.toMatch(/#380/);
+    });
+
+    it("names the fields and the shared reference_limit", () => {
+      expect(document).toMatch(/`ast_explore`[^\n]*`origin`/);
+      expect(document).toMatch(/`ast_explore`[^\n]*`template_coverage`/);
+      expect(document).toMatch(/`ast_explore`[^\n]*`template_reference_count`/);
+      expect(document).toMatch(/`reference_limit`[^\n]*TypeScript and template items/);
+      expect(document).toMatch(/"compiler references"/);
+      expect(document).toMatch(/pag(?:e|ing)[^\n]*`ast_find_references`/i);
+    });
+
+    it("states the incomplete coverage omission and where the reason code is", () => {
+      expect(document).toMatch(/other than `completed`[^\n]*`template_coverage_incomplete`/);
+      expect(document).toMatch(/`evidence_complete: false`/);
+      expect(document).toMatch(/reason code[^\n]*`template_coverage`/);
+      expect(document).toMatch(/`omissions\.details`[^\n]*detail limit/);
+    });
+
+    it("keeps impact and test candidates compiler-only", () => {
+      expect(document).toMatch(
+        /`ast_get_impact`[^\n]*`ast_find_test_candidates`[^\n]*(?:compiler-only|no template)/i,
+      );
+    });
+  });
+
+  it("CHANGELOG Unreleased records ast_explore template evidence (#380)", () => {
+    const section = releaseSection("Unreleased");
+    expect(section).toContain("#380");
+    expect(section).toMatch(/`ast_explore`[^\n]*`template_coverage`/);
+    expect(section).toContain("template_coverage_incomplete");
+    expect(section).toMatch(/`reference_limit`[^\n]*TypeScript and template items/);
+    expect(section).toMatch(/descriptions and input schemas (?:are|stay) unchanged/i);
+    expect(section).toContain("docs/spikes/0380-explore-template-latency.md");
+    expect(section).toMatch(/`structural-code-editing`[^\n]*`4\.9\.0`/);
+  });
+
+  it("latency spike doc records the threshold verdict (#380)", () => {
+    expect(latencySpike).toMatch(/\*\*Verdict: (?:pass|fail)\.\*\*/);
+    expect(latencySpike).toContain("yarn benchmark:explore-templates");
+    expect(latencySpike).toMatch(/501 components/);
+    expect(latencySpike).toMatch(/2001/);
   });
 
   it("README documents consumer usages and the template type check", () => {
