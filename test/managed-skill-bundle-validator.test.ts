@@ -24,7 +24,7 @@ function currentBundle() {
 
 describe("managed skill bundle validation", () => {
   it("accepts the exact current bundled contract and installed copies", () => {
-    expect(validateManagedSkillBundle(currentBundle())).toEqual({ version: "4.7.0" });
+    expect(validateManagedSkillBundle(currentBundle())).toEqual({ version: "4.8.0" });
   });
 
   it("rejects a stale release-manifest version independently", () => {

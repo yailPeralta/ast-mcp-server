@@ -113,15 +113,15 @@ describe("Angular template documentation", () => {
     expect(unreleased).toMatch(/dsh-adapter smoke now declares/i);
   });
 
-  it("CHANGELOG Unreleased records the template type check (#421)", () => {
-    const start = changelog.indexOf("## [Unreleased]");
-    const end = changelog.indexOf("\n## [", start + 1);
-    const unreleased = changelog.slice(start, end === -1 ? undefined : end);
-    expect(unreleased).toContain("template_diagnostics");
-    expect(unreleased).toContain("block_on_template_errors");
-    expect(unreleased).toContain("@angular/compiler-cli");
-    expect(unreleased).toMatch(/schema v3|schema version 3/i);
-    expect(unreleased).toContain("#421");
+  // The template type check shipped in the 0.17.0 section (moved out of Unreleased when the
+  // candidate was cut).
+  it("CHANGELOG 0.17.0 records the template type check (#421)", () => {
+    const section = releaseSection("0.17.0");
+    expect(section).toContain("template_diagnostics");
+    expect(section).toContain("block_on_template_errors");
+    expect(section).toContain("@angular/compiler-cli");
+    expect(section).toMatch(/schema v3|schema version 3/i);
+    expect(section).toContain("#421");
   });
 
   it("ADR 0017 records the process model, the public API rule, the hash rule and rollback", () => {
