@@ -91,6 +91,7 @@
     "benchmark:corpus": "yarn build && node scripts/benchmark-corpus.mjs",
     "benchmark:batch": "yarn build && node scripts/benchmark-batch.mjs",
     "benchmark:formats": "yarn build && node scripts/benchmark-formats.mjs",
+    "benchmark:explore-templates": "yarn build && node scripts/benchmark-explore-templates.mjs",
     "benchmark:shapes": "yarn build && node scripts/benchmark-result-shapes.mjs",
     "benchmark:agent-workflows": "yarn build && node scripts/benchmark-agent-workflows.mjs",
     "benchmark:index-storage": "yarn build && node scripts/benchmark-index-storage.mjs",
