@@ -10,6 +10,7 @@ import {
   formattedResult,
   ToolOutputFormatInputSchema,
 } from "./result.js";
+import { ReferenceOriginSchema, templateEvidenceFields } from "./template-evidence-schema.js";
 
 const TOOL_NAME = "ast_find_references";
 
@@ -39,34 +40,16 @@ const ContextReferenceSchema = z.object({
 });
 
 const ContextReferenceSchemaWithOrigin = ContextReferenceSchema.extend({
-  origin: z.enum(["compiler", "template_external", "template_inline"]).optional(),
+  origin: ReferenceOriginSchema.optional(),
 });
 const LocationReferenceSchema = ContextReferenceSchemaWithOrigin.omit({ context: true });
-const TemplateCoverageSchema = z.object({
-  status: z.enum(["completed", "unfinished", "unsupported"]),
-  reason: z
-    .enum([
-      "compiler_missing",
-      "compiler_unsupported",
-      "template_unresolved",
-      "template_unsafe",
-      "template_parse_error",
-      "size_exceeded",
-      "work_exhausted",
-      "inherited_member",
-      "cross_component",
-    ])
-    .optional(),
-  templates: z.number().int().min(0).optional(),
-});
 const ReferenceOutputBase = {
   symbol: z.string(),
   include_declaration: z.boolean(),
   declaration_count: z.number().int().min(0),
   reference_count: z.number().int().min(0),
   affected_files: z.array(z.string()),
-  template_coverage: TemplateCoverageSchema.optional(),
-  template_reference_count: z.number().int().min(0).optional(),
+  ...templateEvidenceFields,
   ...PaginationOutputSchema,
 };
 /** Exported so a golden test can pin the output JSON schema bytes; not a tool contract. */
