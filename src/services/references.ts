@@ -4,6 +4,7 @@ import { Node } from "ts-morph";
 import {
   collectTemplateUsages,
   type TemplateCoverage,
+  type TemplateScanCache,
   type TemplateUsage,
 } from "./angular-templates.js";
 import { paginate, type Page } from "./pagination.js";
@@ -210,8 +211,15 @@ async function collectTemplateHalf(
   context: ProjectContext,
   detail: ReferenceDetail,
   requestContext: RequestContext,
+  templateCache?: TemplateScanCache,
 ): Promise<TemplateHalf> {
-  const { coverage, usages } = await collectTemplateUsages(node, context, requestContext);
+  const { coverage, usages } = await collectTemplateUsages(
+    node,
+    context,
+    requestContext,
+    undefined,
+    templateCache,
+  );
   const lineCache = new Map<string, Promise<string[]>>();
   const items: SymbolReference[] = [];
   for (const usage of usages) {
@@ -295,16 +303,26 @@ export async function collectSymbolReferencesWithTemplates(
  * Same result as {@link collectSymbolReferencesWithTemplates}, but a failing template half is
  * reported as an `unfinished` / `template_unresolved` verdict next to the TypeScript references
  * instead of failing the call. TypeScript failures and cooperative interruptions still throw.
+ *
+ * A caller that collects several symbols in one request passes the same `templateCache` to each
+ * call; it shares template reads between them and does not change any result.
  */
 export async function collectSymbolReferencesWithTemplateVerdict(
   node: Node,
   context: ProjectContext,
   query: TemplateReferenceQuery,
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
+  templateCache?: TemplateScanCache,
 ): Promise<SymbolReferencesWithTemplates> {
   let template: TemplateHalf;
   try {
-    template = await collectTemplateHalf(node, context, query.detail, requestContext);
+    template = await collectTemplateHalf(
+      node,
+      context,
+      query.detail,
+      requestContext,
+      templateCache,
+    );
   } catch (error) {
     if (isCooperativeInterruption(error)) throw error;
     template = {
