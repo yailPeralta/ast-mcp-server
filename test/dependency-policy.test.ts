@@ -77,7 +77,7 @@ it("pins minimatch above every admitted parent range as a documented advisory ex
     "@eslint/config-array": "npm:^10.2.4",
     "@ts-morph/common": "npm:^10.0.1",
     "@typescript-eslint/typescript-estree": "npm:^10.2.2",
-    eslint: "npm:^10.2.5",
+    eslint: "npm:^10.2.6",
   };
   for (const [name, range] of Object.entries(parents)) {
     const entry = Object.entries(lock).find(([key]) =>
@@ -107,7 +107,7 @@ it("admits the patched Hono and Vitest family without installation-policy except
     const entries = Object.entries(lock).filter(([key]) =>
       key.split(", ").some((selector) => selector.startsWith(`${name}@npm:`)),
     );
-    const version = name === "hono" ? "4.13.13" : "5.0.5";
+    const version = name === "hono" ? "4.13.13" : "5.1.0";
     expect.soft(entries, name).toHaveLength(1);
     expect
       .soft(entries[0]?.[1], name)
