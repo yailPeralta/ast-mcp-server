@@ -163,11 +163,73 @@ last value comes from a single 3338 ms sample among the ten. The p50 is the stea
 7. **Not measured.** The benchmark request uses the default `reference_detail`, so the numbers
    above do not include the context-line change.
 
+## Template scan limit (#464)
+
+Issue #464 raised the template scan limit from 2000 to 10 000 consumer components per symbol. The
+byte limit (32 MiB) and the node limit (1 000 000) are unchanged. The sections above describe the
+2000 limit: with it, the 2001-component fixture ended with `work_exhausted`.
+
+### How it was run
+
+Same machine, Node version (v24.16.0), fixture and request as above, with
+`yarn benchmark:explore-templates --widgets 167,667,1667,3334 --runs 10`. 1667 widgets give 5001
+components and 3334 give 10 002.
+
+- Limit 2000: `27d2b8996d0b8913f60a1525c0df1ec316c9fe20` (`main`, clean tree), sizes 2001 to
+  10 002 only.
+- Limit 10 000: `eab9b1620e64306eefa3328f5c29fc25704b5903` (clean tree).
+
+### Measurements
+
+Limit 10 000 (`eab9b16`):
+
+| Case           | Components | Symbols | Cold ms | p50 ms | p95 ms | Peak RSS MiB | Typed | Coverage of the 20 symbols |
+| -------------- | ---------- | ------- | ------- | ------ | ------ | ------------ | ----- | -------------------------- |
+| baseline-501   | 501        | 20      | 667     | 170    | 236    | 360          | yes   | none (`not_applicable`)    |
+| angular-501    | 501        | 20      | 789     | 321    | 382    | 485          | yes   | `completed` x20            |
+| baseline-2001  | 2001       | 20      | 1113    | 575    | 581    | 665          | yes   | none (`not_applicable`)    |
+| angular-2001   | 2001       | 20      | 1946    | 1245   | 1377   | 667          | yes   | `completed` x20            |
+| baseline-5001  | 5001       | 20      | 2987    | 1773   | 1848   | 817          | yes   | none (`not_applicable`)    |
+| angular-5001   | 5001       | 20      | 4668    | 3341   | 3657   | 1016         | yes   | `completed` x20            |
+| baseline-10002 | 10002      | 20      | 4538    | 2941   | 3127   | 1146         | yes   | none (`not_applicable`)    |
+| angular-10002  | 10002      | 20      | 8799    | 6305   | 6438   | 1464         | yes   | `work_exhausted` x20       |
+
+Added by template evidence, next to the run with the 2000 limit:
+
+| Components | Limit 2000: added p50 ms | Coverage         | Limit 10 000: added p50 ms | Added p95 ms | Coverage         |
+| ---------- | ------------------------ | ---------------- | -------------------------- | ------------ | ---------------- |
+| 501        | not run                  | not run          | 151                        | 146          | `completed`      |
+| 2001       | 623                      | `work_exhausted` | 671                        | 796          | `completed`      |
+| 5001       | 1350                     | `work_exhausted` | 1567                       | 1810         | `completed`      |
+| 10002      | 2553                     | `work_exhausted` | 3364                       | 3311         | `work_exhausted` |
+
+### Findings
+
+1. **A completed scan costs little more than a stopped one.** With the 2000 limit the added time
+   still grows with the project, because most of it is spent outside the limited scan (see finding
+   4 of the #454 section). At 5001 components the completed scan adds about 220 ms at p50 over the
+   stopped one.
+2. **Why 10 000.** A run with the limit lifted by a temporary patch (not committed) completed all
+   20 symbols at 10 002 components with an added p50 of 3513 ms and an added p95 of 3530 ms. Past
+   that size the added time for a 20-symbol request goes over 3.5 s, so the limit stays at a size
+   that was measured.
+3. **The byte and node limits were not reached.** The lifted run completed 10 002 components
+   without reaching either. They remain the bound for projects with large or dense templates.
+4. **The 501-component threshold still passes.** The added p95 is 146 ms against the 2 s limit.
+5. **Past the limit the result is still typed.** At 10 002 components every request returns a
+   typed result with `work_exhausted`.
+6. **Not measured.** This fixture parses few templates, because a template is parsed only when the
+   selector prefilter matches. A project where many templates match costs more per component.
+   Peak RSS is cumulative across the cases of one process, so it is not a per-case figure.
+7. **Not changed.** `ast_find_references` uses the same limit without the shared cache. The
+   template limit of the rename-plan type check (`MAX_TEMPLATES`, 2000) is a separate limit.
+
 ## Reproduce
 
 ```bash
 yarn benchmark:explore-templates
 yarn benchmark:explore-templates --widgets 167 --runs 10 --json result.json
+yarn benchmark:explore-templates --widgets 167,667,1667,3334
 ```
 
 Exit code 0 means both checks passed, 1 means a check failed, 2 means the harness failed. The
