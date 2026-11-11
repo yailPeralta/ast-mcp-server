@@ -8,6 +8,9 @@ updates:
       time: "06:00"
       timezone: America/Argentina/Buenos_Aires
     open-pull-requests-limit: 5
+    # The Angular matrix workspaces pin one exact toolchain per major (#421).
+    exclude-paths:
+      - "test/angular-matrix/**"
     groups:
       production-dependencies:
         dependency-type: production

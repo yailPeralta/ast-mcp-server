@@ -797,12 +797,12 @@ describe("workflow policy check", () => {
     [
       "CodeQL init",
       "security.yml",
-      "github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1",
+      "github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3",
     ],
     [
       "CodeQL analyze",
       "security.yml",
-      "github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1",
+      "github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3",
     ],
   ])("rejects a conditional skip on the %s action", async (_label, workflowName, marker) => {
     const documents = await loadWorkflowDocuments();
@@ -1301,6 +1301,11 @@ describe("workflow policy check", () => {
     expect(dependabotPolicy.match(/interval: weekly/gu)).toHaveLength(2);
     expect(dependabotPolicy).toContain("open-pull-requests-limit: 5");
     expect(dependabotPolicy).toContain("open-pull-requests-limit: 3");
+    // The Angular matrix workspaces pin one exact toolchain per major (#421); a grouped update
+    // would collapse every major onto the newest one, so they stay out of version updates.
+    expect(dependabotPolicy).toMatch(
+      /package-ecosystem: npm\n(?: {4}.*\n)*? {4}exclude-paths:\n {6}- "test\/angular-matrix\/\*\*"\n/u,
+    );
     expect(dependabotPolicy).not.toMatch(/\$\{\{\s*secrets/u);
   });
 });
