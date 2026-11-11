@@ -3,6 +3,7 @@
 //
 //   yarn benchmark:explore-templates                 501 and 2001 components, 10 measured runs
 //   options: --widgets 167,667 --runs 10 --json <file>
+//   past the template scan limit of 10 000 components: --widgets 3334 (10 002 components)
 //
 // Each fixture size runs twice: the matrix project without `@angular/core` (baseline, template
 // coverage `not_applicable`) and the same tree as an Angular project. Run on demand only; it is
