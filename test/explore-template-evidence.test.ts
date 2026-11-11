@@ -270,14 +270,20 @@ describe("ast_explore template evidence", () => {
     expect(JSON.stringify(result.content)).toContain(code);
   });
 
-  it("returns a typed result one component past the template scan limit", async () => {
+  it("completes template coverage on a project of more than 2000 components", async () => {
+    // 667 widgets give more than 2000 components. The template scan limit used to be 2000
+    // components per symbol, so this project ended with `work_exhausted` (#464). Stopping at a
+    // smaller limit is covered with an explicit limit in explore-template-read-cache.test.ts.
     const { files } = generateMatrixProject({ components: 667 });
     const { references } = await explore(
       "Widget0Component.label",
       { file_path: "src/widget-0.component.ts" },
       { files },
     );
-    expect(references!.template_coverage!.status).toMatch(/^(completed|unfinished|unsupported)$/);
+    expect(references!.template_coverage).toEqual({
+      status: "completed",
+      templates: expect.toSatisfy((count: number) => count > 2000),
+    });
   });
 
   it("keeps template usages out of impact, test candidates and call spines", async () => {

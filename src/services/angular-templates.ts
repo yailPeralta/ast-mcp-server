@@ -85,7 +85,9 @@ const MAX_TEMPLATE_NODES = 100_000;
 const CHECKPOINT_EVERY_NODES = 1000;
 const TWO_WAY_BINDING = 5; // BindingType.TwoWay, stable across supported majors
 const TWO_WAY_EVENT = 2; // ParsedEventType.TwoWay, stable across supported majors
-const SCAN_LIMITS: ScanLimits = { templates: 2000, bytes: 32 * 1024 * 1024, nodes: 1_000_000 };
+// `templates` counts consumer components per symbol. 10 000 comes from the measurements in
+// docs/spikes/0380-explore-template-latency.md (#464); `bytes` and `nodes` bound dense projects.
+const SCAN_LIMITS: ScanLimits = { templates: 10_000, bytes: 32 * 1024 * 1024, nodes: 1_000_000 };
 const NOT_APPLICABLE = { coverage: { status: "not_applicable" }, usages: [] } as const;
 const ASSIGNMENT_OPERATION = /^(?:=|(?:\*\*|&&|\|\||\?\?|<<|>>>|>>|[+\-*/%&|^])=)$/u;
 
