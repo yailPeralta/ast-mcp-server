@@ -20,11 +20,11 @@ const REVIEWED_ACTION_REVISIONS = new Map([
   ],
   [
     "github/codeql-action/init",
-    { revision: "9b3254085494b55a0f7c4c2b3d2d52cc712ce370", version: "v4.39.1" },
+    { revision: "33d7b85da1a04171e211befe2c739303b9a4c066", version: "v4.39.3" },
   ],
   [
     "github/codeql-action/analyze",
-    { revision: "9b3254085494b55a0f7c4c2b3d2d52cc712ce370", version: "v4.39.1" },
+    { revision: "33d7b85da1a04171e211befe2c739303b9a4c066", version: "v4.39.3" },
   ],
   [
     "actions/upload-artifact",
