@@ -1,5 +1,12 @@
 import path from "node:path";
-import { Node } from "ts-morph";
+import {
+  type ClassDeclaration,
+  type ClassExpression,
+  type InterfaceDeclaration,
+  Node,
+  type SourceFile,
+  type Type,
+} from "ts-morph";
 import {
   collectTemplateUsages,
   type TemplateCoverage,
@@ -35,7 +42,19 @@ export interface SymbolReferences extends Omit<Page<SymbolReference>, "items"> {
   readonly declaration_count: number;
   readonly reference_count: number;
   readonly affected_files: readonly string[];
+  /** Present only when at least one location was left out of the list and the counts. */
+  readonly omitted_references?: OmittedReferences;
   readonly references: readonly SymbolReference[];
+}
+
+/** Locations the compiler groups with the symbol that are not listed as its references. */
+export interface OmittedReferences {
+  /** Locations in external-library files. */
+  readonly external_library: number;
+  /** Declarations of the same member in a supertype or in an unrelated implementer. */
+  readonly unrelated_declarations: number;
+  /** Property accesses on a receiver whose type cannot reach the requested member. */
+  readonly unrelated_usages: number;
 }
 
 export interface SymbolReferencesWithTemplates extends SymbolReferences {
@@ -56,6 +75,7 @@ interface TsLocations {
   readonly references: readonly SymbolReference[];
   /** Declaration (when requested) plus references, in discovery order. */
   readonly locations: SymbolReference[];
+  readonly omitted: OmittedReferences | undefined;
 }
 
 /**
@@ -77,6 +97,132 @@ export function findNonDeclarationReferences(
         declaration.getStart() === reference.getStart(),
     );
   return node.findReferencesAsNodes().filter((reference) => !isDeclaration(reference));
+}
+
+type MemberOwner = ClassDeclaration | ClassExpression | InterfaceDeclaration;
+
+/** Upper bound of types visited while walking the heritage of one declaration. */
+const MAX_HERITAGE_TYPES = 256;
+
+function isExternal(sourceFile: SourceFile): boolean {
+  return sourceFile.isInNodeModules() || sourceFile.isFromExternalLibrary();
+}
+
+function isMemberOwner(node: Node | undefined): node is MemberOwner {
+  return (
+    Node.isClassDeclaration(node) ||
+    Node.isClassExpression(node) ||
+    Node.isInterfaceDeclaration(node)
+  );
+}
+
+/** The class or interface that declares `node`, when `node` is one of its named members. */
+function memberOwner(node: Node): MemberOwner | undefined {
+  const isMember =
+    Node.isMethodDeclaration(node) ||
+    Node.isPropertyDeclaration(node) ||
+    Node.isGetAccessorDeclaration(node) ||
+    Node.isSetAccessorDeclaration(node) ||
+    Node.isMethodSignature(node) ||
+    Node.isPropertySignature(node);
+  const parent = node.getParent();
+  return isMember && isMemberOwner(parent) ? parent : undefined;
+}
+
+/** Every declaration of the type `owner` declares; merged declarations share one symbol. */
+function declarationsOf(owner: Node): Node[] {
+  return owner.getSymbol()?.getDeclarations() ?? [owner];
+}
+
+/** Declarations named by the `extends` and `implements` clauses of `declaration`. */
+function directSupertypes(declaration: MemberOwner): Node[] {
+  if (Node.isInterfaceDeclaration(declaration)) return declaration.getBaseDeclarations();
+  const implemented = declaration
+    .getImplements()
+    .flatMap((clause) => clause.getType().getSymbol()?.getDeclarations() ?? []);
+  const baseClass = declaration.getBaseClass();
+  return baseClass ? [baseClass, ...implemented] : implemented;
+}
+
+/**
+ * Whether `candidate` is `owner` or names it, directly or transitively, in its heritage clauses.
+ * The check is nominal on purpose: two unrelated types with the same shape are not related.
+ * A heritage chain longer than the bound counts as related, so its declaration stays listed.
+ */
+function isSameOrSubtype(candidate: MemberOwner, owner: ReadonlySet<Node>): boolean {
+  const visited = new Set<Node>();
+  const pending: Node[] = [candidate];
+  for (let current = pending.pop(); current; current = pending.pop()) {
+    for (const declaration of declarationsOf(current)) {
+      if (owner.has(declaration)) return true;
+      if (visited.has(declaration) || !isMemberOwner(declaration)) continue;
+      if (visited.size >= MAX_HERITAGE_TYPES) return true;
+      visited.add(declaration);
+      pending.push(...directSupertypes(declaration));
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether `reference` names the same member declared in a type that neither is the requested
+ * owner nor derives from it: the contract the requested member implements, or a sibling
+ * implementation of that contract.
+ */
+function isUnrelatedMemberDeclaration(reference: Node, owner: ReadonlySet<Node>): boolean {
+  const member = reference.getParent();
+  if (!member || !Node.hasName(member) || member.getNameNode() !== reference) return false;
+  const declaringType = memberOwner(member);
+  return declaringType !== undefined && !isSameOrSubtype(declaringType, owner);
+}
+
+/**
+ * The class and interface declarations a receiver type names, or `undefined` when any part of it
+ * resolves to something else (any, a type parameter without a constraint, a mapped or literal
+ * object type, a primitive): such a receiver is never used to omit a usage.
+ */
+function receiverOwners(type: Type): MemberOwner[][] | undefined {
+  const present = type.getNonNullableType();
+  // Both getters return an empty list for a type of another kind.
+  const parts = [...present.getUnionTypes(), ...present.getIntersectionTypes()];
+  if (parts.length > 0) {
+    const owners: MemberOwner[][] = [];
+    for (const part of parts) {
+      const resolved = receiverOwners(part);
+      if (!resolved) return undefined;
+      owners.push(...resolved);
+    }
+    return owners;
+  }
+  if (present.isTypeParameter()) {
+    const constraint = present.getConstraint();
+    return constraint ? receiverOwners(constraint) : undefined;
+  }
+  const declarations = present.getSymbol()?.getDeclarations() ?? [];
+  return declarations.length > 0 && declarations.every(isMemberOwner) ? [declarations] : undefined;
+}
+
+/**
+ * Whether `reference` is a property access on a receiver that cannot hold the requested member:
+ * every type the receiver names is neither the owner, a subtype of it, nor one of its supertypes.
+ * A call through the contract or a base type can dispatch to the requested member, so it stays.
+ */
+function isUnrelatedUsage(
+  reference: Node,
+  requestedOwner: MemberOwner,
+  owner: ReadonlySet<Node>,
+): boolean {
+  const access = reference.getParent();
+  if (!Node.isPropertyAccessExpression(access) || access.getNameNode() !== reference) return false;
+  const receiver = access.getExpression();
+  if (Node.isThisExpression(receiver) || Node.isSuperExpression(receiver)) return false;
+  const owners = receiverOwners(receiver.getType());
+  if (!owners) return false;
+  return owners.every(
+    (declarations) =>
+      !declarations.some((declaration) => isSameOrSubtype(declaration, owner)) &&
+      !isSameOrSubtype(requestedOwner, new Set<Node>(declarations)),
+  );
 }
 
 function collectTsLocations(
@@ -118,14 +264,39 @@ function collectTsLocations(
   };
 
   requestContext.checkpoint();
-  const references = findNonDeclarationReferences(node).map((reference) =>
-    location(reference, false),
-  );
+  // A library symbol keeps its library locations; a project symbol never lists them.
+  const omitExternal = !isExternal(node.getSourceFile());
+  const requestedOwner = memberOwner(node);
+  const owner = requestedOwner ? new Set(declarationsOf(requestedOwner)) : undefined;
+  let externalLibrary = 0;
+  let unrelatedDeclarations = 0;
+  let unrelatedUsages = 0;
+  const references: SymbolReference[] = [];
+  for (const reference of findNonDeclarationReferences(node)) {
+    requestContext.checkpoint();
+    if (omitExternal && isExternal(reference.getSourceFile())) {
+      externalLibrary += 1;
+    } else if (owner && isUnrelatedMemberDeclaration(reference, owner)) {
+      unrelatedDeclarations += 1;
+    } else if (requestedOwner && owner && isUnrelatedUsage(reference, requestedOwner, owner)) {
+      unrelatedUsages += 1;
+    } else {
+      references.push(location(reference, false));
+    }
+  }
   const declaration = location(node, true);
   return {
     declaration,
     references,
     locations: includeDeclaration ? [declaration, ...references] : [...references],
+    omitted:
+      externalLibrary + unrelatedDeclarations + unrelatedUsages > 0
+        ? {
+            external_library: externalLibrary,
+            unrelated_declarations: unrelatedDeclarations,
+            unrelated_usages: unrelatedUsages,
+          }
+        : undefined,
   };
 }
 
@@ -145,7 +316,7 @@ export function collectSymbolReferences(
   limit: number,
   requestContext: RequestContext = NO_REQUEST_CONTEXT,
 ): SymbolReferences {
-  const { declaration, references, locations } = collectTsLocations(
+  const { declaration, references, locations, omitted } = collectTsLocations(
     node,
     projectRoot,
     symbolPath,
@@ -165,6 +336,7 @@ export function collectSymbolReferences(
     declaration_count: 1,
     reference_count: references.length,
     affected_files: affectedFiles,
+    ...(omitted ? { omitted_references: omitted } : {}),
     references: page.items,
     offset: page.offset,
     limit: page.limit,
@@ -268,6 +440,7 @@ function mergeWithTemplateHalf(
     declaration_count: 1,
     reference_count: ts.references.length,
     affected_files: affectedFiles,
+    ...(ts.omitted ? { omitted_references: ts.omitted } : {}),
     references: page.items,
     offset: page.offset,
     limit: page.limit,

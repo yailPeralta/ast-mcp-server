@@ -28,6 +28,7 @@ import {
 } from "../services/read-contracts.js";
 import { createToolErrorContext, errorResult, structuredResult } from "./result.js";
 import { RelationshipEndpointSchema } from "./relationship-schema.js";
+import { referenceOmissionFields } from "./reference-omission-schema.js";
 import { ReferenceOriginSchema, templateEvidenceFields } from "./template-evidence-schema.js";
 
 const TOOL_NAME = "ast_explore";
@@ -150,6 +151,7 @@ const ExploreEvidenceSchema = z.object({
       declaration_count: z.number().int().min(0),
       reference_count: z.number().int().min(0),
       affected_files: z.array(z.string()),
+      ...referenceOmissionFields,
       ...templateEvidenceFields,
       references: z.array(ExploreReferenceSchema),
       offset: z.number().int().min(0),

@@ -118,6 +118,89 @@ describe("ast_find_references non-Angular output", () => {
   });
 });
 
+const PIPE_FILES = {
+  "node_modules/pipe-lib/package.json": JSON.stringify({
+    name: "pipe-lib",
+    version: "1.0.0",
+    types: "index.d.ts",
+  }),
+  "node_modules/pipe-lib/index.d.ts": `export interface PipeTransform {
+  transform(value: unknown): unknown;
+}
+export declare class LibPipe implements PipeTransform {
+  transform(value: unknown): unknown;
+}
+`,
+  "src/cuit.pipe.ts": `import type { PipeTransform } from "pipe-lib";
+export class CuitPipe implements PipeTransform {
+  transform(value: unknown): unknown {
+    return value;
+  }
+}
+`,
+  "src/other.pipe.ts": `import type { PipeTransform } from "pipe-lib";
+export class OtherPipe implements PipeTransform {
+  transform(value: unknown): unknown {
+    return value;
+  }
+}
+`,
+  "src/use.ts": `import { CuitPipe } from "./cuit.pipe.js";
+export const direct = new CuitPipe().transform(1);
+`,
+  "src/other.use.ts": `import { OtherPipe } from "./other.pipe.js";
+export const sibling = new OtherPipe().transform(1);
+`,
+};
+
+describe("ast_find_references omissions", () => {
+  const args = { file_path: "src/cuit.pipe.ts", symbol_path: "CuitPipe.transform" };
+
+  it("omits and counts library locations, sibling implementations and sibling calls", async () => {
+    const result = await call(PIPE_FILES, args);
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({
+      symbol: "CuitPipe.transform",
+      include_declaration: true,
+      declaration_count: 1,
+      reference_count: 1,
+      affected_files: ["src/cuit.pipe.ts", "src/use.ts"],
+      omitted_references: { external_library: 2, unrelated_declarations: 1, unrelated_usages: 1 },
+      references: [
+        {
+          file: "src/cuit.pipe.ts",
+          line: 3,
+          column: 3,
+          kind: "ClassDeclaration",
+          is_declaration: true,
+        },
+        {
+          file: "src/use.ts",
+          line: 2,
+          column: 38,
+          kind: "PropertyAccessExpression",
+          is_declaration: false,
+        },
+      ],
+      offset: 0,
+      limit: 100,
+      total: 2,
+      has_more: false,
+      next_offset: null,
+    });
+  });
+
+  it("reports the same omissions in TOON", async () => {
+    const json = await call(PIPE_FILES, args);
+    const toon = await client.callTool({
+      name: "ast_find_references",
+      arguments: { project_root: fixture!.root, ...args, output_format: "toon" },
+    });
+    const envelope = toon.structuredContent as { format: string; data: string };
+    expect(decode(envelope.data)).toEqual(json.structuredContent);
+  });
+});
+
 const ANGULAR_FILES = {
   "src/a.component.ts": `import { Component } from "@angular/core";
 @Component({ selector: "app-a", templateUrl: "./a.component.html" })
