@@ -6,11 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.18.1] — not yet published (2026-11-12)
+## [0.18.1] — published to `next`, verification failed, not promoted (2026-11-12)
 
 ### Changed
 
 - Angular template evidence scans up to 10 000 consumer components per symbol, up from 2000. Projects between those sizes now reach a `completed` template coverage verdict in `ast_explore` and `ast_find_references` where they ended with `work_exhausted`. The byte and node limits of the scan are unchanged. On the benchmark fixture the completed scan adds 671 ms at p50 on 2001 components and 1567 ms on 5001 for a 20-symbol `ast_explore` request; see `docs/spikes/0380-explore-template-latency.md` (#464).
+
+### Release status
+
+- npm published these immutable bytes under `next` with provenance and the expected Git commit (`82769b6d8bbacb2990a9f644ec0fbdf6e5e41bab`, integrity `sha512-O3YU3nVdD3pm81etI8vS7qFfv2HyZlvv2w3Zr/TBW9zuMw1szKp+XCeB4LseOTayQF53M+jv8NOJESayoGeTOw==`, publish run `43252848723`). Public-registry verification (run `43253468863`) then failed for the same reason as `0.14.3`–`0.18.0`: the consumer install resolves `minimatch@10.2.6` through `ts-morph@28.0.0`, flagged by `npm audit` for GHSA-g3hv-75wg-m249 (#361). `0.18.1` supersedes `0.18.0` on `next` and was not promoted to `latest`, tagged in Git, or released on GitHub.
 
 ## [0.18.0] — published to `next`, verification failed, not promoted (2026-11-10)
 
