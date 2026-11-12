@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.18.1] — not yet published (2026-11-12)
+
 ### Changed
 
 - Angular template evidence scans up to 10 000 consumer components per symbol, up from 2000. Projects between those sizes now reach a `completed` template coverage verdict in `ast_explore` and `ast_find_references` where they ended with `work_exhausted`. The byte and node limits of the scan are unchanged. On the benchmark fixture the completed scan adds 671 ms at p50 on 2001 components and 1567 ms on 5001 for a 20-symbol `ast_explore` request; see `docs/spikes/0380-explore-template-latency.md` (#464).
