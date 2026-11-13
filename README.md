@@ -453,6 +453,8 @@ Exact `file_path` plus `symbol_path` requests may opt into bounded static `call_
 
 Symbol search is relevance-ranked and defaults to at most 20 `summary` records containing `file`, a directly reusable `selector`, `kind`, and body-free `signature`. Request `detail: "selectors"` for routing coordinates only, or `detail: "full", limit: 100` for the v0.4.0 fields/page. References default to `detail: "locations"`; request `detail: "context"` only when the bounded source line is needed.
 
+`ast_find_references` lists usages of the requested symbol only. Three kinds of location are left out of `references`, `reference_count`, `total` and `affected_files`, and counted in `omitted_references: { external_library, unrelated_declarations, unrelated_usages }`: locations in external-library files (`node_modules`), declarations of the same member in the contract it implements or in sibling implementers, and property accesses on a receiver whose type is unrelated to the declaring class or interface, such as a call on a sibling implementer. Calls through the contract or a base type stay listed, and so does any usage whose receiver type is not resolved to classes or interfaces. The field is absent when nothing was omitted, and `ast_explore` reports it in `evidence[].references` for the same symbol. A non-zero count usually means the member implements or overrides a contract declared elsewhere, which a rename of that member alone would break.
+
 ### Optional TOON results
 
 `ast_search_symbols`, `ast_find_references`, `ast_get_impact`, and `ast_get_diagnostics` accept `output_format: "toon"` for collection-heavy results consumed directly by a model. JSON remains the default and preserves the canonical structured object.

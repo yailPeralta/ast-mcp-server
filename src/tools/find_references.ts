@@ -10,6 +10,7 @@ import {
   formattedResult,
   ToolOutputFormatInputSchema,
 } from "./result.js";
+import { referenceOmissionFields } from "./reference-omission-schema.js";
 import { ReferenceOriginSchema, templateEvidenceFields } from "./template-evidence-schema.js";
 
 const TOOL_NAME = "ast_find_references";
@@ -49,6 +50,7 @@ const ReferenceOutputBase = {
   declaration_count: z.number().int().min(0),
   reference_count: z.number().int().min(0),
   affected_files: z.array(z.string()),
+  ...referenceOmissionFields,
   ...templateEvidenceFields,
   ...PaginationOutputSchema,
 };

@@ -269,4 +269,47 @@ describe("ast_explore", () => {
     expect(result.symbols.length).toBeGreaterThan(0);
     expect(result.symbols.length).toBeLessThan(20);
   });
+
+  it("reports the reference omissions ast_find_references gives for the same symbol", async () => {
+    await fixture.write(
+      "node_modules/pipe-lib/package.json",
+      JSON.stringify({ name: "pipe-lib", version: "1.0.0", types: "index.d.ts" }),
+    );
+    await fixture.write(
+      "node_modules/pipe-lib/index.d.ts",
+      "export interface PipeTransform { transform(value: unknown): unknown }\n",
+    );
+    const pipe = (name: string) =>
+      `import type { PipeTransform } from "pipe-lib";\nexport class ${name} implements PipeTransform {\n  transform(value: unknown): unknown { return value; }\n}\n`;
+    await fixture.write("src/cuit.pipe.ts", pipe("CuitPipe"));
+    await fixture.write("src/other.pipe.ts", pipe("OtherPipe"));
+    await fixture.write(
+      "src/use.ts",
+      `import { OtherPipe } from "./other.pipe.js";\nexport const sibling = new OtherPipe().transform(1);\n`,
+    );
+    clearProjectSessions();
+    const symbol = { file_path: "src/cuit.pipe.ts", symbol_path: "CuitPipe.transform" };
+
+    const explored = await client.callTool({
+      name: "ast_explore",
+      arguments: { project_root: fixture.root, ...symbol, detail: "full", reference_limit: 100 },
+    });
+    const found = await client.callTool({
+      name: "ast_find_references",
+      arguments: { project_root: fixture.root, ...symbol },
+    });
+
+    expect(explored.isError).not.toBe(true);
+    const evidence = (explored.structuredContent as { evidence: { references: unknown }[] })
+      .evidence;
+    expect(evidence[0]!.references).toMatchObject({
+      reference_count: 0,
+      affected_files: ["src/cuit.pipe.ts"],
+      omitted_references: { external_library: 1, unrelated_declarations: 1, unrelated_usages: 1 },
+    });
+    expect(evidence[0]!.references).toEqual({
+      ...(found.structuredContent as object),
+      symbol: expect.any(String) as string,
+    });
+  });
 });

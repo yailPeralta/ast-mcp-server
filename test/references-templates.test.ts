@@ -248,6 +248,48 @@ export class BComponent {}
     },
   );
 
+  it("@Pipe transform that implements a library contract omits library and sibling declarations", async () => {
+    const pipe = (className: string, name: string) => `import { Pipe } from "@angular/core";
+import type { PipeTransform } from "pipe-lib";
+@Pipe({ name: "${name}" })
+export class ${className} implements PipeTransform {
+  transform(value: string): string { return value; }
+}
+`;
+    const fixture = await open({
+      "node_modules/pipe-lib/package.json": JSON.stringify({
+        name: "pipe-lib",
+        version: "1.0.0",
+        types: "index.d.ts",
+      }),
+      "node_modules/pipe-lib/index.d.ts": `export interface PipeTransform { transform(value: string): string }
+export declare class LibPipe implements PipeTransform { transform(value: string): string }
+`,
+      "src/a.component.html": "<p>none</p>",
+      "src/fmt.pipe.ts": pipe("FmtPipe", "fmt"),
+      "src/other.pipe.ts": pipe("OtherPipe", "other"),
+      "src/b.component.ts": `import { Component } from "@angular/core";
+import { FmtPipe } from "./fmt.pipe.js";
+@Component({ selector: "app-b", standalone: true, imports: [FmtPipe], templateUrl: "./b.component.html" })
+export class BComponent {}
+`,
+      "src/b.component.html": "<p>{{ v | fmt }}</p>\n",
+    });
+    const result = await collect(fixture, {
+      file: "src/fmt.pipe.ts",
+      symbolPath: "FmtPipe.transform",
+    });
+    expect(result).toMatchObject({
+      reference_count: 0,
+      template_reference_count: 1,
+      total: 2,
+      affected_files: ["src/b.component.html", "src/fmt.pipe.ts"],
+      omitted_references: { external_library: 2, unrelated_declarations: 1, unrelated_usages: 0 },
+      template_coverage: { status: "completed" },
+    });
+    expect(result.references.map((item) => item.origin)).toEqual(["template_external", "compiler"]);
+  });
+
   it("@Input directive member reports unfinished/cross_component with zero templates", async () => {
     const fixture = await open({
       "src/a.directive.ts": `import { Directive, Input } from "@angular/core";
