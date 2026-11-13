@@ -30,6 +30,7 @@ const CORE_DECLARATIONS = `export interface DirectiveMetadata {
   standalone?: boolean;
   inputs?: (string | { name: string; alias?: string; required?: boolean })[];
   outputs?: string[];
+  hostDirectives?: unknown[];
 }
 export interface ComponentMetadata extends DirectiveMetadata {
   template?: string;

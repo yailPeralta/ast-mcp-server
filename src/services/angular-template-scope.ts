@@ -1,5 +1,10 @@
 import { Node, SyntaxKind, type ClassDeclaration, type ObjectLiteralExpression } from "ts-morph";
-import { componentDecorator, isAngularCoreExport, isCoreDecorator } from "./angular-decorators.js";
+import {
+  componentDecorator,
+  declarableDecorator,
+  isAngularCoreExport,
+  isCoreDecorator,
+} from "./angular-decorators.js";
 import type { RequestContext } from "./request-context.js";
 
 /** Whether a consumer component's compilation scope contains the target class. */
@@ -39,6 +44,43 @@ function listOf(metadata: ObjectLiteralExpression, key: string): Node[] | "opaqu
   if (!property) return [];
   const list = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
   return Node.isArrayLiteralExpression(list) ? list.getElements() : "opaque";
+}
+
+/**
+ * Whether a class in `declarables` may apply `target` as a host directive: its `hostDirectives`
+ * names the target, or cannot be read as a literal list of resolved classes. A host directive
+ * publishes the target's inputs and outputs on another selector, under names of its choosing.
+ */
+export function mayBeHostDirective(
+  target: ClassDeclaration,
+  declarables: readonly ClassDeclaration[],
+): boolean {
+  const namesTarget = (element: Node): boolean => {
+    let reference: Node | undefined = element;
+    if (Node.isObjectLiteralExpression(element)) {
+      const property = element.getProperty("directive");
+      const spread = element.getProperties().some((entry) => Node.isSpreadAssignment(entry));
+      reference =
+        !spread && Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
+    }
+    if (!Node.isIdentifier(reference)) return true;
+    const declarations = declarationsOf(reference);
+    const [declaration] = declarations;
+    if (declarations.length !== 1 || !Node.isClassDeclaration(declaration)) return true;
+    return declaration === target;
+  };
+  return declarables.some((cls) => {
+    if (cls === target) return false;
+    const decorator = declarableDecorator(cls);
+    const metadata = decorator?.getArguments()[0];
+    if (!decorator || metadata === undefined) return false;
+    if (!Node.isObjectLiteralExpression(metadata)) return true;
+    if (metadata.getProperties().some((entry) => Node.isSpreadAssignment(entry))) return true;
+    const property = metadata.getProperty("hostDirectives");
+    if (!property) return false;
+    const list = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
+    return !Node.isArrayLiteralExpression(list) || list.getElements().some(namesTarget);
+  });
 }
 
 function merge(results: readonly Contribution[]): Contribution {

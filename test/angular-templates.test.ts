@@ -468,10 +468,6 @@ export class AComponent {
   title = "x"; other = 1;
 }
 `;
-const DIRECTIVE_CROSS = {
-  coverage: { status: "unfinished", reason: "cross_component", templates: 0 },
-  usages: [],
-};
 
 describe("directive members and metadata inputs/outputs", () => {
   const directiveUsages = async (source: string) => {
@@ -494,8 +490,18 @@ describe("directive members and metadata inputs/outputs", () => {
     `@Output() title = output<string>();`,
     `title = input("x");`,
     `title = model.required<string>();`,
-  ])("directive member %s is unfinished/cross_component without usages", async (member) => {
-    expect(await directiveUsages(DIRECTIVE(member))).toEqual(DIRECTIVE_CROSS);
+  ])("directive member %s without consumers is completed without usages", async (member) => {
+    const { context } = await setup({
+      "src/a.component.html": "<p>none</p>",
+      "src/a.directive.ts": DIRECTIVE(member),
+    });
+    expect(
+      await usagesOf(context, "ADirective.title", NO_REQUEST_CONTEXT, "src/a.directive.ts"),
+    ).toEqual({
+      coverage: { status: "completed", templates: 1 },
+      usages: [],
+      renameBlocked: false,
+    });
   });
 
   it("plain directive member stays not_applicable", async () => {
@@ -539,10 +545,347 @@ describe("directive members and metadata inputs/outputs", () => {
     },
   );
 
-  it("directive outputs metadata is unfinished/cross_component", async () => {
-    expect(await directiveUsages(DIRECTIVE(`title = "x";`, `, outputs: ["title"]`))).toEqual(
-      DIRECTIVE_CROSS,
+  it("directive outputs metadata lists consumer bindings and keeps rename blocked", async () => {
+    const { context } = await setup({
+      "src/a.component.html": "<p>none</p>",
+      "src/a.directive.ts": DIRECTIVE(`title = "x";`, `, outputs: ["title"]`),
+      ...DIRECTIVE_CONSUMER(`<p appA (title)="f()"></p>`),
+    });
+    const result = await usagesOf(
+      context,
+      "ADirective.title",
+      NO_REQUEST_CONTEXT,
+      "src/a.directive.ts",
     );
+    expect(result.coverage).toEqual({ status: "completed", templates: 2 });
+    expect(result.usages.map((usage) => usage.kind)).toEqual(["TemplateOutputBinding"]);
+    expect(result.renameBlocked).toBe(true);
+  });
+});
+
+const DIRECTIVE_CONSUMER = (
+  html: string,
+  imports = "[ADirective]",
+  name = "b",
+  flag = "standalone: true, ",
+) => ({
+  [`src/${name}.component.ts`]: `import { Component } from "@angular/core";
+import { ADirective } from "./a.directive";
+@Component({ selector: "app-${name}", ${flag}imports: ${imports}, templateUrl: "./${name}.component.html" })
+export class ${name.toUpperCase()}Component {}
+`,
+  [`src/${name}.component.html`]: html,
+});
+const DIRECTIVE_MEMBERS = `@Input() title = "x"; @Output() save = output<string>(); value = model("x"); @Input("label") text = "";`;
+const DIRECTIVE_BINDINGS = `<p appA [title]="1"></p><p appA title="lit"></p><p appA (save)="f()"></p><p appA [(value)]="v"></p><p appA [label]="2" [text]="3"></p>`;
+const UNFINISHED_CROSS = { status: "unfinished", reason: "cross_component" };
+
+describe("directive consumer template usages (#478)", () => {
+  const directiveFiles = (
+    files: Record<string, string>,
+    directive = DIRECTIVE(DIRECTIVE_MEMBERS),
+  ) => ({
+    "src/a.component.html": "<p>none</p>",
+    "src/a.directive.ts": directive,
+    ...files,
+  });
+  const collect = async (
+    files: Record<string, string>,
+    symbol = "ADirective.title",
+    options?: Parameters<typeof setup>[1],
+  ) => {
+    const { context } = await setup(files, options);
+    return usagesOf(context, symbol, NO_REQUEST_CONTEXT, "src/a.directive.ts");
+  };
+  const summary = (usages: Awaited<ReturnType<typeof collect>>["usages"]) =>
+    usages.map((usage) => `${usage.kind}:${usage.bindingName}@${path.basename(usage.file)}`);
+
+  it("lists [x], static, (y), [(m)] and alias-keyed bindings of a standalone consumer", async () => {
+    const files = directiveFiles(DIRECTIVE_CONSUMER(DIRECTIVE_BINDINGS));
+    const title = await collect(files);
+    // `templates` counts the consumer templates examined; a directive has no own template.
+    expect(title.coverage).toEqual({ status: "completed", templates: 2 });
+    expect(summary(title.usages)).toEqual([
+      "TemplateInputBinding:title@b.component.html",
+      "TemplateAttribute:title@b.component.html",
+    ]);
+    expect(title.usages.every((usage) => usage.role === "consumer")).toBe(true);
+    expect(title.renameBlocked).toBe(false);
+    expect(summary((await collect(files, "ADirective.save")).usages)).toEqual([
+      "TemplateOutputBinding:save@b.component.html",
+    ]);
+    expect(summary((await collect(files, "ADirective.value")).usages)).toEqual([
+      "TemplateTwoWayBinding:value@b.component.html",
+    ]);
+    expect(summary((await collect(files, "ADirective.text")).usages)).toEqual([
+      "TemplateInputBinding:label@b.component.html",
+    ]);
+  });
+
+  it("lists a consumer declared in the same NgModule as the directive", async () => {
+    const { coverage, usages } = await collect(
+      directiveFiles({
+        ...MODULE_CONSUMER("standalone: false, "),
+        "src/b.component.html": DIRECTIVE_BINDINGS,
+        "src/app.module.ts": `import { NgModule } from "@angular/core";
+import { ADirective } from "./a.directive";
+import { BComponent } from "./b.component";
+@NgModule({ declarations: [ADirective, BComponent] })
+export class AppModule {}
+`,
+      }),
+    );
+    expect(coverage).toEqual({ status: "completed", templates: 2 });
+    expect(usages.map((usage) => usage.kind)).toEqual([
+      "TemplateInputBinding",
+      "TemplateAttribute",
+    ]);
+  });
+
+  it("ignores a decoy directive with the same selector whose consumer lacks the target", async () => {
+    const files = directiveFiles({
+      ...DIRECTIVE_CONSUMER(DIRECTIVE_BINDINGS),
+      "src/decoy.directive.ts": DIRECTIVE(`@Input() title = "x";`).replace(
+        "ADirective",
+        "DecoyDirective",
+      ),
+      "src/c.component.ts": `import { Component } from "@angular/core";
+import { DecoyDirective } from "./decoy.directive";
+@Component({ selector: "app-c", standalone: true, imports: [DecoyDirective], templateUrl: "./c.component.html" })
+export class CComponent {}
+`,
+      "src/c.component.html": `<p appA [title]="9"></p>`,
+    });
+    const { coverage, usages } = await collect(files);
+    expect(coverage).toEqual({ status: "completed", templates: 3 });
+    expect(summary(usages)).toEqual([
+      "TemplateInputBinding:title@b.component.html",
+      "TemplateAttribute:title@b.component.html",
+    ]);
+  });
+
+  it.each([
+    ["app-thing", `<app-thing [title]="1"></app-thing><p [title]="2"></p>`],
+    [".card", `<p class="card" [title]="1"></p><p class="other" [title]="2"></p>`],
+    ["input[appA]:not(.skip)", `<input appA [title]="1" /><input appA class="skip" [title]="2" />`],
+  ])("matches a directive with selector %s", async (selector, html) => {
+    const directive = DIRECTIVE(DIRECTIVE_MEMBERS).replace("[appA]", selector);
+    const { coverage, usages } = await collect(directiveFiles(DIRECTIVE_CONSUMER(html), directive));
+    expect(coverage).toEqual({ status: "completed", templates: 2 });
+    expect(usages.map((usage) => html.slice(usage.start, usage.end + 4))).toEqual([`title]="1`]);
+  });
+
+  it("the motivating case: an alias equal to the selector attribute in an Angular 18 NgModule", async () => {
+    const html = `<input [appPasswordTooltip]="form.get('password')" />`;
+    const { context } = await setup(
+      {
+        "src/a.component.html": "<p>none</p>",
+        "src/password-tooltip.directive.ts": `import { Directive, Input } from "@angular/core";
+@Directive({ selector: '[appPasswordTooltip]' })
+export class PasswordTooltipDirective { @Input('appPasswordTooltip') control!: unknown; }
+`,
+        "src/form.component.ts": `import { Component } from "@angular/core";
+@Component({ selector: "app-form", templateUrl: "./form.component.html" })
+export class FormComponent { form = { get: (name: string) => name }; }
+`,
+        "src/form.component.html": html,
+        "src/app.module.ts": `import { NgModule } from "@angular/core";
+import { PasswordTooltipDirective } from "./password-tooltip.directive";
+import { FormComponent } from "./form.component";
+@NgModule({ declarations: [PasswordTooltipDirective, FormComponent] })
+export class AppModule {}
+`,
+      },
+      { compiler: "v18", coreVersion: "18.2.0" },
+    );
+    const result = await usagesOf(
+      context,
+      "PasswordTooltipDirective.control",
+      NO_REQUEST_CONTEXT,
+      "src/password-tooltip.directive.ts",
+    );
+    expect(result.coverage).toMatchObject({ status: "completed" });
+    expect(result.usages).toHaveLength(1);
+    expect(result.usages[0]).toMatchObject({
+      kind: "TemplateInputBinding",
+      binding: "input",
+      bindingName: "appPasswordTooltip",
+      role: "consumer",
+      file: path.join("src", "form.component.html"),
+    });
+    expect(html.slice(result.usages[0]!.start, result.usages[0]!.end)).toBe("appPasswordTooltip");
+  });
+
+  it("a selector that matches nothing in the Project is completed with zero usages", async () => {
+    const files = directiveFiles(DIRECTIVE_CONSUMER(`<p [title]="1"></p>`));
+    expect(await collect(files)).toEqual({
+      coverage: { status: "completed", templates: 2 },
+      usages: [],
+      renameBlocked: false,
+    });
+  });
+
+  it.each([
+    ["inline microsyntax", `<p *appA="1"></p>`],
+    ["explicit ng-template", `<ng-template appA [title]="1"></ng-template>`],
+    ["a structural use next to a plain one", `<p appA [title]="1"></p><p *appA></p>`],
+  ])("a structural use (%s) is unfinished/cross_component", async (_, html) => {
+    const { coverage } = await collect(directiveFiles(DIRECTIVE_CONSUMER(html)));
+    expect(coverage).toEqual({ ...UNFINISHED_CROSS, templates: 2 });
+  });
+
+  it("a structural use in a template without the directive in scope does not count", async () => {
+    const files = directiveFiles({
+      ...DIRECTIVE_CONSUMER(`<p appA [title]="1"></p>`),
+      ...DIRECTIVE_CONSUMER(`<p *appA="1"></p><ng-template appA></ng-template>`, "[]", "c"),
+    });
+    expect((await collect(files)).coverage).toEqual({ status: "completed", templates: 3 });
+  });
+
+  const HOST = (hostDirectives: string, decorator = "Directive", prelude = "") =>
+    `import { ${decorator} } from "@angular/core";
+import { ADirective } from "./a.directive";
+import { OtherDirective } from "./other.directive";
+${prelude}
+@${decorator}({ selector: "[appHost]", hostDirectives: ${hostDirectives} })
+export class HostThing {}
+`;
+  const OTHER = DIRECTIVE(`@Input() title = "x";`)
+    .replace("ADirective", "OtherDirective")
+    .replace("[appA]", "[appOther]");
+
+  it.each([
+    ["names the target", HOST("[ADirective]")],
+    ["names the target with mappings", HOST(`[{ directive: ADirective, inputs: ["title"] }]`)],
+    ["names the target from a component", HOST("[OtherDirective, ADirective]", "Component")],
+    ["is not an array literal", HOST("HOSTS", "Directive", "const HOSTS = [OtherDirective];")],
+    ["spreads a list", HOST("[...HOSTS]", "Directive", "const HOSTS = [OtherDirective];")],
+    [
+      "has a non-literal entry",
+      HOST("[{ directive: pick() }]", "Directive", "declare function pick(): any;"),
+    ],
+    ["hides in spread metadata", HOST("[] , ...EXTRA", "Directive", "const EXTRA = {};")],
+  ])("hostDirectives elsewhere that %s is unfinished/cross_component", async (_, host) => {
+    const files = directiveFiles({
+      ...DIRECTIVE_CONSUMER(`<p appA [title]="1"></p>`),
+      "src/other.directive.ts": OTHER,
+      "src/host.ts": host,
+    });
+    const { coverage } = await collect(files);
+    expect(coverage).toMatchObject(UNFINISHED_CROSS);
+  });
+
+  it("hostDirectives elsewhere that provably names other classes does not block", async () => {
+    const files = directiveFiles({
+      ...DIRECTIVE_CONSUMER(`<p appA [title]="1"></p>`),
+      "src/other.directive.ts": OTHER,
+      "src/host.ts": HOST("[OtherDirective, { directive: OtherDirective }]"),
+    });
+    const { coverage, usages } = await collect(files);
+    expect(coverage).toEqual({ status: "completed", templates: 2 });
+    expect(usages).toHaveLength(1);
+  });
+
+  it("hostDirectives on the target directive stays unfinished/cross_component", async () => {
+    const directive = DIRECTIVE(DIRECTIVE_MEMBERS, ", hostDirectives: []");
+    const files = directiveFiles(DIRECTIVE_CONSUMER(`<p appA [title]="1"></p>`), directive);
+    expect((await collect(files)).coverage).toMatchObject(UNFINISHED_CROSS);
+  });
+
+  const DERIVED = (decorator: string, base = "ADirective") =>
+    `import { Component, Directive } from "@angular/core";
+import { ADirective } from "./a.directive";
+export class Middle extends ADirective {}
+${decorator}
+export class Derived extends ${base} {}
+`;
+
+  it.each([
+    ["a derived directive", DERIVED(`@Directive({ selector: "[appDerived]" })`)],
+    [
+      "a directive derived through a plain class",
+      DERIVED(`@Directive({ selector: "[appDerived]" })`, "Middle"),
+    ],
+    ["a derived component", DERIVED(`@Component({ selector: "app-derived", template: "" })`)],
+  ])("%s is unsupported/inherited_member", async (_, derived) => {
+    const files = directiveFiles({
+      ...DIRECTIVE_CONSUMER(`<p appA [title]="1"></p>`),
+      "src/derived.ts": derived,
+    });
+    const result = await collect(files);
+    expect(result.coverage).toEqual({
+      status: "unsupported",
+      reason: "inherited_member",
+      templates: 0,
+    });
+    expect(result.usages).toEqual([]);
+  });
+
+  it("a declarable whose base class cannot be resolved is unfinished/cross_component", async () => {
+    const files = directiveFiles({
+      ...DIRECTIVE_CONSUMER(`<p appA [title]="1"></p>`),
+      "src/derived.ts": `import { Directive } from "@angular/core";
+import { ADirective } from "./a.directive";
+const Base: any = ADirective;
+@Directive({ selector: "[appDerived]" })
+export class Derived extends Base {}
+`,
+    });
+    expect((await collect(files)).coverage).toMatchObject(UNFINISHED_CROSS);
+  });
+
+  it.each([
+    [
+      "a non-literal selector",
+      `const SELECTOR = "[appA]";\n${DIRECTIVE(DIRECTIVE_MEMBERS).replace('"[appA]"', "SELECTOR")}`,
+    ],
+    ["a non-literal alias", `const ALIAS = "a";\n${DIRECTIVE(`@Input(ALIAS) title = "x";`)}`],
+    [
+      "non-literal metadata",
+      `const META = { selector: "[appA]" };\n${DIRECTIVE(DIRECTIVE_MEMBERS).replace('{ selector: "[appA]" }', "META")}`,
+    ],
+    ["no selector", DIRECTIVE(DIRECTIVE_MEMBERS).replace('{ selector: "[appA]" }', "")],
+    ["a member both decorated and listed", DIRECTIVE(DIRECTIVE_MEMBERS, `, inputs: ["title"]`)],
+  ])("a target with %s is unfinished/cross_component", async (_, directive) => {
+    const files = directiveFiles(DIRECTIVE_CONSUMER(`<p appA [title]="1"></p>`), directive);
+    const result = await collect(files);
+    expect(result.coverage).toEqual({ ...UNFINISHED_CROSS, templates: 0 });
+    expect(result.usages).toEqual([]);
+  });
+
+  it.each([
+    [
+      "an opaque consumer scope",
+      DIRECTIVE_CONSUMER(`<p appA [title]="1"></p>`, "[...SHARED]"),
+      "cross_component",
+    ],
+    [
+      "a consumer declared in no module",
+      DIRECTIVE_CONSUMER(`<p appA [title]="1"></p>`, "[]", "b", "standalone: false, "),
+      "cross_component",
+    ],
+    ["an unparseable consumer", DIRECTIVE_CONSUMER(`<p appA [title]=`), "template_parse_error"],
+  ])("%s keeps coverage unfinished", async (_, consumer, reason) => {
+    const { coverage } = await collect(directiveFiles(consumer));
+    expect(coverage).toEqual({ status: "unfinished", reason, templates: 2 });
+  });
+
+  it("a missing compiler is unfinished/compiler_missing", async () => {
+    const files = directiveFiles(DIRECTIVE_CONSUMER(`<p appA [title]="1"></p>`));
+    expect((await collect(files, "ADirective.title", { compiler: null })).coverage).toEqual({
+      status: "unfinished",
+      reason: "compiler_missing",
+      templates: 0,
+    });
+  });
+
+  it("a plain member of a directive with consumers stays not_applicable", async () => {
+    const directive = DIRECTIVE(`${DIRECTIVE_MEMBERS} plain = 1;`);
+    const files = directiveFiles(DIRECTIVE_CONSUMER(DIRECTIVE_BINDINGS), directive);
+    expect(await collect(files, "ADirective.plain")).toEqual({
+      coverage: { status: "not_applicable" },
+      usages: [],
+    });
   });
 });
 
@@ -1047,15 +1390,52 @@ describe.each([
     expect(result.coverage).toEqual({ status: "completed", templates: 2 });
     expect(result.usages.map((usage) => usage.kind)).toEqual(CONSUMER_KINDS);
   });
-  run("@Input directive member is unfinished/cross_component", async () => {
+  run("@Input directive member lists its consumer bindings", async () => {
+    const html = `<p appA [title]="1" (save)="f()"></p><div><p appA title="lit"></p></div>`;
     const { context } = await setup(
-      { "src/a.directive.ts": DIRECTIVE(`@Input() title = "x";`) },
-      { compiler: alias },
+      {
+        "src/a.component.html": "<p>none</p>",
+        "src/a.directive.ts": DIRECTIVE(DIRECTIVE_MEMBERS),
+        ...DIRECTIVE_CONSUMER(html),
+      },
+      { compiler: alias, coreVersion: `${major}.0.0` },
     );
-    expect(
-      await usagesOf(context, "ADirective.title", NO_REQUEST_CONTEXT, "src/a.directive.ts"),
-    ).toEqual(DIRECTIVE_CROSS);
+    const result = await usagesOf(
+      context,
+      "ADirective.title",
+      NO_REQUEST_CONTEXT,
+      "src/a.directive.ts",
+    );
+    expect(result.coverage).toEqual({ status: "completed", templates: 2 });
+    expect(result.usages.map((usage) => usage.kind)).toEqual([
+      "TemplateInputBinding",
+      "TemplateAttribute",
+    ]);
+    expect(result.usages.map((usage) => html.slice(usage.start, usage.end))).toEqual([
+      "title",
+      "title",
+    ]);
   });
+  run.each([`<p *appA="1"></p>`, `<ng-template appA [title]="1"></ng-template>`])(
+    "a structural directive use %s is unfinished/cross_component",
+    async (html) => {
+      const { context } = await setup(
+        {
+          "src/a.component.html": "<p>none</p>",
+          "src/a.directive.ts": DIRECTIVE(DIRECTIVE_MEMBERS),
+          ...DIRECTIVE_CONSUMER(`<p appA [title]="1"></p>${html}`),
+        },
+        { compiler: alias, coreVersion: `${major}.0.0` },
+      );
+      const result = await usagesOf(
+        context,
+        "ADirective.title",
+        NO_REQUEST_CONTEXT,
+        "src/a.directive.ts",
+      );
+      expect(result.coverage).toEqual({ ...UNFINISHED_CROSS, templates: 2 });
+    },
+  );
   const prepare = (html: string, files: Record<string, string> = {}) =>
     setup({ "src/a.component.html": html, ...files }, { compiler: alias });
 

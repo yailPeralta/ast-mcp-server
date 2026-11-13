@@ -17,10 +17,15 @@ export interface ConsumerUsage {
   readonly elementMatches: (selector: string) => boolean;
 }
 export interface ConsumerScan {
-  /** An element matched the target selector, whatever it binds. */
+  /** An element or embedded template matched the target selector, whatever it binds. */
   matched: boolean;
   /** Something could not be proven (a span drifted or a selectorless node appeared). */
   opaque: boolean;
+  /**
+   * The selector matched an embedded template (`*x` microsyntax or `<ng-template x>`). Its bindings
+   * are not read, so the usages are incomplete wherever the target is in scope.
+   */
+  structural: boolean;
   usages: ConsumerUsage[];
 }
 export type SelectorCompiler = CompilerModule &
@@ -69,7 +74,7 @@ export function extractConsumerUsages(
 ): ConsumerScan {
   const matcher = new compiler.SelectorMatcher();
   matcher.addSelectables(compiler.CssSelector.parse(target.selector));
-  const scan: ConsumerScan = { matched: false, opaque: false, usages: [] };
+  const scan: ConsumerScan = { matched: false, opaque: false, structural: false, usages: [] };
   const consider = (element: any): void => {
     const nodeSelector = compiler.createCssSelectorFromNode(element);
     let hit = false;
@@ -132,6 +137,10 @@ export function extractConsumerUsages(
     }
     visitTemplate(template: any): void {
       tick();
+      // A structural use binds through microsyntax or the `<ng-template>` itself: not extracted.
+      let hit = false;
+      matcher.match(compiler.createCssSelectorFromNode(template), () => (hit = true));
+      if (hit) scan.matched = scan.structural = true;
       super.visitTemplate(template);
     }
     // Selectorless nodes reference classes by name, which selector matching cannot see.

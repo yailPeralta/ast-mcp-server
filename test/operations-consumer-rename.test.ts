@@ -325,20 +325,205 @@ describe("consumer rename refuses before any byte is written (S4)", () => {
 
     await expectRefused(fixture, "INCOMPLETE_EVIDENCE");
   });
+});
 
-  it("a @Directive member is INCOMPLETE_EVIDENCE", async () => {
-    const fixture = await setup(INPUT, '<app-a appX [other]="1"></app-a>\n', {
-      "src/a-child.component.ts": CHILD("[AComponent, XDirective]"),
+describe("@Directive member rename in consumer templates (#478)", () => {
+  const DIRECTIVE_TS = "src/x.directive.ts";
+  const TARGET_DIRECTIVE = (member: string, selector = '"[appX]"', metadata = "", prelude = "") =>
+    [
+      'import { Directive, Input, Output, input, model, output } from "@angular/core";',
+      prelude,
+      `@Directive({ selector: ${selector}, standalone: true${metadata} })`,
+      "export class XDirective {",
+      `  ${member}`,
+      "}",
+      "",
+    ].join("\n");
+  const BOTH = { "src/a-child.component.ts": CHILD("[AComponent, XDirective]") };
+  const directiveSetup = (
+    member: string,
+    html: string,
+    files: Record<string, string> = {},
+    componentMember = INPUT,
+  ) =>
+    setup(componentMember, html, { ...BOTH, [DIRECTIVE_TS]: TARGET_DIRECTIVE(member), ...files });
+  const renameDirective = (fixture: AngularFixture, symbol: string, newName: string) =>
+    prepareRename({
+      projectRoot: fixture.root,
+      filePath: DIRECTIVE_TS,
+      symbolPath: `XDirective.${symbol}`,
+      newName,
+    });
+  const refused = async (
+    fixture: AngularFixture,
+    symbol: string,
+    code: string,
+    newName = "extra",
+  ) => {
+    const read = () => Promise.all([DIRECTIVE_TS, CONSUMER_HTML].map((file) => fixture.read(file)));
+    const before = await read();
+    await expect(renameDirective(fixture, symbol, newName)).rejects.toMatchObject({ code });
+    expect(await read()).toEqual(before);
+  };
+
+  it("an alias-keyed binding keeps the template and plans the TypeScript edits", async () => {
+    const html = '<input [appX]="form" />\n<p appX></p>\n';
+    const fixture = await directiveSetup('@Input("appX") control: unknown = null;', html);
+
+    const prepared = await renameDirective(fixture, "control", "field");
+    await applyOperation(prepared.operation_id, prepared.plan_hash);
+
+    expect(prepared.affected_files.map((file) => file.file)).toEqual([DIRECTIVE_TS]);
+    expect(await fixture.read(CONSUMER_HTML)).toBe(html);
+    expect(await fixture.read(DIRECTIVE_TS)).toContain('@Input("appX") field: unknown = null;');
+  });
+
+  it("rewrites property-named input, static, output and model bindings of the directive", async () => {
+    const fixture = await directiveSetup(
+      '@Input() other = ""; @Output() changed = output<string>(); value = model("x");',
+      '<p appX [other]="1" (changed)="f()" [(value)]="v"></p>\n<p appX other="lit" (valueChange)="g()"></p>\n<p [other]="2"></p>\n',
+    );
+
+    for (const [symbol, newName] of [
+      ["other", "extra"],
+      ["changed", "saved"],
+      ["value", "amount"],
+    ] as const) {
+      const prepared = await renameDirective(fixture, symbol, newName);
+      await applyOperation(prepared.operation_id, prepared.plan_hash);
+      expect(prepared.affected_files.map((file) => file.file)).toEqual([
+        CONSUMER_HTML,
+        DIRECTIVE_TS,
+      ]);
+    }
+
+    expect(await fixture.read(CONSUMER_HTML)).toBe(
+      '<p appX [extra]="1" (saved)="f()" [(amount)]="v"></p>\n<p appX extra="lit" (amountChange)="g()"></p>\n<p [other]="2"></p>\n',
+    );
+    expect(await fixture.read(DIRECTIVE_TS)).toContain(
+      '@Input() extra = ""; @Output() saved = output<string>(); amount = model("x");',
+    );
+  });
+
+  it("a sibling on the same element that publishes the old name is MUTATION_BLOCKED", async () => {
+    // `[title]` feeds both the component and the directive: rewriting it would unbind the component.
+    const fixture = await directiveSetup(
+      '@Input() title = "";',
+      '<app-a appX [title]="1"></app-a>\n',
+    );
+
+    await refused(fixture, "title", "MUTATION_BLOCKED");
+    // The same holds in the other direction, for the component member.
+    await expectRefused(fixture, "MUTATION_BLOCKED");
+  });
+
+  it("a sibling that publishes the old name on another element does not block", async () => {
+    const fixture = await directiveSetup(
+      '@Input() title = "";',
+      '<p appX [title]="1"></p>\n<app-a [title]="2"></app-a>\n',
+    );
+
+    const prepared = await renameDirective(fixture, "title", "extra");
+    await applyOperation(prepared.operation_id, prepared.plan_hash);
+
+    expect(await fixture.read(CONSUMER_HTML)).toBe(
+      '<p appX [extra]="1"></p>\n<app-a [title]="2"></app-a>\n',
+    );
+  });
+
+  it("the old name in the directive's own selector is MUTATION_BLOCKED", async () => {
+    const fixture = await directiveSetup('@Input() appX = "";', '<p [appX]="1"></p>\n');
+
+    await refused(fixture, "appX", "MUTATION_BLOCKED");
+  });
+
+  const HOST = (hostDirectives: string) =>
+    [
+      'import { Directive } from "@angular/core";',
+      'import { XDirective } from "./x.directive";',
+      "const HOSTS: unknown[] = [];",
+      `@Directive({ selector: "[appHost]", standalone: true, hostDirectives: ${hostDirectives} })`,
+      "export class HostDirective {}",
+      "",
+    ].join("\n");
+  const DERIVED = [
+    'import { Directive } from "@angular/core";',
+    'import { XDirective } from "./x.directive";',
+    '@Directive({ selector: "[appDerived]", standalone: true })',
+    "export class DerivedDirective extends XDirective {}",
+    "",
+  ].join("\n");
+  const PLAIN = '<p appX [other]="1"></p>\n';
+  const OTHER = '@Input() other = "";';
+
+  it.each([
+    ["an inline microsyntax use", `${PLAIN}<p *appX="1"></p>\n`, {}],
+    ["an explicit ng-template use", `${PLAIN}<ng-template appX [other]="1"></ng-template>\n`, {}],
+    [
+      "hostDirectives elsewhere naming the directive",
+      PLAIN,
+      { "src/host.ts": HOST("[XDirective]") },
+    ],
+    [
+      "hostDirectives elsewhere with input mappings",
+      PLAIN,
+      { "src/host.ts": HOST('[{ directive: XDirective, inputs: ["other: alias"] }]') },
+    ],
+    ["non-literal hostDirectives elsewhere", PLAIN, { "src/host.ts": HOST("HOSTS") }],
+    ["a derived directive", PLAIN, { "src/derived.ts": DERIVED }],
+    [
+      "a non-literal selector",
+      PLAIN,
+      { [DIRECTIVE_TS]: TARGET_DIRECTIVE(OTHER, "SELECTOR", "", 'const SELECTOR = "[appX]";') },
+    ],
+    [
+      "a non-literal alias",
+      PLAIN,
+      {
+        [DIRECTIVE_TS]: TARGET_DIRECTIVE(
+          '@Input(ALIAS) other = "";',
+          '"[appX]"',
+          "",
+          'const ALIAS = "a";',
+        ),
+      },
+    ],
+    [
+      "a metadata-listed member",
+      PLAIN,
+      { [DIRECTIVE_TS]: TARGET_DIRECTIVE('other = "";', '"[appX]"', ', inputs: ["other"]') },
+    ],
+    [
+      "an opaque consumer scope",
+      PLAIN,
+      {
+        "src/a-child.component.ts": CHILD("SHARED", "const SHARED = [AComponent, XDirective];"),
+      },
+    ],
+  ])("%s is INCOMPLETE_EVIDENCE", async (_, html, files) => {
+    const fixture = await directiveSetup(OTHER, html, files);
+
+    await refused(fixture, "other", "INCOMPLETE_EVIDENCE");
+  });
+
+  it("an inline consumer template is MUTATION_BLOCKED", async () => {
+    const fixture = await directiveSetup(OTHER, "", {
+      "src/a-child.component.ts": CHILD(
+        "[AComponent, XDirective]",
+        "",
+        "template: '<p appX [other]=\"1\"></p>'",
+      ),
     });
 
-    await expect(
-      prepareRename({
-        projectRoot: fixture.root,
-        filePath: "src/x.directive.ts",
-        symbolPath: "XDirective.other",
-        newName: "extra",
-      }),
-    ).rejects.toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
+    await refused(fixture, "other", "MUTATION_BLOCKED");
+  });
+
+  it("a plain member of a directive renames without template evidence", async () => {
+    const fixture = await directiveSetup(`${OTHER} plain = 1;`, `${PLAIN}<p *appX="1"></p>\n`);
+
+    const prepared = await renameDirective(fixture, "plain", "simple");
+
+    expect(prepared.affected_files.map((file) => file.file)).toEqual([DIRECTIVE_TS]);
   });
 });
 

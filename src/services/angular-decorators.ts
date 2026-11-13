@@ -63,6 +63,14 @@ export function componentDecorator(cls: ClassDeclaration): Decorator | undefined
   return cls.getDecorators().find(isComponentDecorator);
 }
 
+/** The `@Component` decorator of a class, or else its `@Directive` decorator. */
+export function declarableDecorator(cls: ClassDeclaration): Decorator | undefined {
+  return (
+    componentDecorator(cls) ??
+    cls.getDecorators().find((decorator) => isCoreDecorator(decorator, "Directive"))
+  );
+}
+
 /** Pipe usages live in other components' templates, which are never read. */
 export function isPipeClass(cls: ClassDeclaration): boolean {
   return cls.getDecorators().some((decorator) => isCoreDecorator(decorator, "Pipe"));

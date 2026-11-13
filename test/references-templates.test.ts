@@ -290,24 +290,65 @@ export class BComponent {}
     expect(result.references.map((item) => item.origin)).toEqual(["template_external", "compiler"]);
   });
 
-  it("@Input directive member reports unfinished/cross_component with zero templates", async () => {
-    const fixture = await open({
-      "src/a.directive.ts": `import { Directive, Input } from "@angular/core";
+  const DIRECTIVE_FILES = {
+    "src/a.component.html": "<p>none</p>",
+    "src/a.directive.ts": `import { Directive, Input } from "@angular/core";
 @Directive({ selector: "[appA]" })
 export class ADirective {
   @Input() title = "x";
+  @Input("appA") control: unknown;
 }
 `,
+    "src/b.component.ts": `import { Component } from "@angular/core";
+import { ADirective } from "./a.directive.js";
+@Component({ selector: "app-b", standalone: true, imports: [ADirective], templateUrl: "./b.component.html" })
+export class BComponent {}
+`,
+  };
+
+  it("@Input directive member lists its consumer bindings and reports completed (#478)", async () => {
+    const fixture = await open({
+      ...DIRECTIVE_FILES,
+      "src/b.component.html": `<p appA [title]="1"></p>\n<input [appA]="2" title="lit" />\n`,
+    });
+    const title = await collect(fixture, {
+      file: "src/a.directive.ts",
+      symbolPath: "ADirective.title",
+    });
+    expect(title).toMatchObject({
+      template_reference_count: 2,
+      template_coverage: { status: "completed", templates: 2 },
+      affected_files: ["src/a.directive.ts", "src/b.component.html"],
+    });
+    expect(title.references.filter((item) => item.origin === "template_external")).toMatchObject([
+      { kind: "TemplateInputBinding", file: "src/b.component.html", line: 1, column: 10 },
+      { kind: "TemplateAttribute", file: "src/b.component.html", line: 2, column: 19 },
+    ]);
+    const control = await collect(fixture, {
+      file: "src/a.directive.ts",
+      symbolPath: "ADirective.control",
+    });
+    expect(control.template_coverage).toEqual({ status: "completed", templates: 2 });
+    // The bare selector attribute is also a static binding of the input aliased to it.
+    expect(control.references.filter((item) => item.origin === "template_external")).toMatchObject([
+      { kind: "TemplateAttribute", file: "src/b.component.html", line: 1, column: 4 },
+      { kind: "TemplateInputBinding", file: "src/b.component.html", line: 2, column: 9 },
+    ]);
+  });
+
+  it("@Input directive member used structurally reports unfinished/cross_component (#478)", async () => {
+    const fixture = await open({
+      ...DIRECTIVE_FILES,
+      "src/b.component.html": `<p appA [title]="1"></p>\n<p *appA="2"></p>\n`,
     });
     const result = await collect(fixture, {
       file: "src/a.directive.ts",
       symbolPath: "ADirective.title",
     });
     expect(result).toMatchObject({
-      template_reference_count: 0,
-      template_coverage: { status: "unfinished", reason: "cross_component", templates: 0 },
+      template_reference_count: 1,
+      template_coverage: { status: "unfinished", reason: "cross_component", templates: 2 },
     });
-    expect(result.references.every((item) => item.origin === "compiler")).toBe(true);
   });
 
   it("many usages paginate", async () => {

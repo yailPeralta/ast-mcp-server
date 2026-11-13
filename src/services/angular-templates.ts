@@ -8,6 +8,7 @@ import { Node, SyntaxKind, type ClassDeclaration } from "ts-morph";
 import {
   angularCoreMajor,
   componentDecorator,
+  declarableDecorator,
   isCoreDecorator,
   isDirectiveClass,
   isMetadataPublic,
@@ -26,6 +27,7 @@ import {
 } from "./angular-template-bindings.js";
 import {
   createScopeResolver,
+  mayBeHostDirective,
   MAX_SCOPE_VISITS,
   ScopeWorkExhausted,
 } from "./angular-template-scope.js";
@@ -243,17 +245,25 @@ function checkTemplatePath(
   }
 }
 
-function componentClasses(context: ProjectContext): ClassDeclaration[] {
+/** Project classes whose text can hold `marker` and that satisfy `keep`. */
+function projectClasses(
+  context: ProjectContext,
+  markers: readonly string[],
+  keep: (cls: ClassDeclaration) => boolean,
+): ClassDeclaration[] {
   return context.project
     .getSourceFiles()
-    .filter(
-      (file) =>
-        !file.isDeclarationFile() &&
-        !file.isFromExternalLibrary() &&
-        file.getFullText().includes("Component"),
-    )
+    .filter((file) => {
+      if (file.isDeclarationFile() || file.isFromExternalLibrary()) return false;
+      const text = file.getFullText();
+      return markers.some((marker) => text.includes(marker));
+    })
     .flatMap((file) => file.getDescendantsOfKind(SyntaxKind.ClassDeclaration))
-    .filter((cls) => componentDecorator(cls) !== undefined);
+    .filter(keep);
+}
+
+function componentClasses(context: ProjectContext): ClassDeclaration[] {
+  return projectClasses(context, ["Component"], (cls) => componentDecorator(cls) !== undefined);
 }
 
 /** Existing, contained external template files of every component. Sync and compiler-free. */
@@ -291,18 +301,31 @@ export function memberOwner(node: Node): { cls: ClassDeclaration; name: string }
     : undefined;
 }
 
-function hasDerivedComponent(cls: ClassDeclaration, cache: TemplateScanCache): boolean {
+/**
+ * Whether a class in `candidates` extends `cls`. `unknown` when none provably does but a base
+ * class of a candidate cannot be resolved (a mixin call, for example), so it cannot be ruled out.
+ */
+function derivedAmong(
+  cls: ClassDeclaration,
+  candidates: readonly ClassDeclaration[],
+): boolean | "unknown" {
   const identity = (node: ClassDeclaration) =>
     `${node.getSourceFile().getFilePath()}:${node.getPos()}`;
   const target = identity(cls);
-  return cache.components().some((candidate) => {
-    let base = candidate.getBaseClass();
-    for (let depth = 0; base && depth < 32; depth += 1) {
+  let unknown = false;
+  for (const candidate of candidates) {
+    let current = candidate;
+    for (let depth = 0; depth < 32; depth += 1) {
+      const base = current.getBaseClass();
+      if (!base) {
+        unknown ||= current.getExtends() !== undefined;
+        break;
+      }
       if (identity(base) === target) return true;
-      base = base.getBaseClass();
+      current = base;
     }
-    return false;
-  });
+  }
+  return unknown ? "unknown" : false;
 }
 
 class WorkExhausted extends Error {}
@@ -567,6 +590,7 @@ type ParsedTemplate = ReturnType<CompilerModule["parseTemplate"]>;
  */
 export class TemplateScanCache {
   #components: ClassDeclaration[] | undefined;
+  #declarables: ClassDeclaration[] | undefined;
   readonly #located = new Map<ClassDeclaration, Located>();
   /** External templates by path, so a file shared by two components is read once; inline by location. */
   readonly #reads = new Map<
@@ -580,6 +604,15 @@ export class TemplateScanCache {
 
   components(): ClassDeclaration[] {
     return (this.#components ??= componentClasses(this.context));
+  }
+
+  /** Every `@Component` and `@Directive` class of the Project. */
+  declarables(): ClassDeclaration[] {
+    return (this.#declarables ??= projectClasses(
+      this.context,
+      ["Component", "Directive"],
+      (cls) => declarableDecorator(cls) !== undefined,
+    ));
   }
 
   locate(cls: ClassDeclaration): Located {
@@ -682,7 +715,7 @@ function toUsages(
 
 /** Selector and public binding names, or undefined when bindings cannot be named from the member. */
 function bindingTarget(cls: ClassDeclaration, node: Node, name: string): BindingTarget | undefined {
-  const metadata = componentDecorator(cls)?.getArguments()[0];
+  const metadata = declarableDecorator(cls)?.getArguments()[0];
   if (!Node.isObjectLiteralExpression(metadata) || metadata.getProperty("hostDirectives")) {
     return undefined;
   }
@@ -703,7 +736,13 @@ function bindingTarget(cls: ClassDeclaration, node: Node, name: string): Binding
 /** What a consumer template holds for the target: nothing to look at, or the usages found. */
 type Inspection =
   | "skip"
-  | { readonly matched: boolean; readonly opaque: boolean; readonly usages: readonly RawUsage[] };
+  | {
+      readonly matched: boolean;
+      readonly opaque: boolean;
+      /** The target selector matched an embedded template, whose bindings are not read. */
+      readonly structural?: boolean;
+      readonly usages: readonly RawUsage[];
+    };
 /** `parse` gives the nodes of the consumer template, or undefined when the compiler reports errors. */
 type Inspector = (
   text: string,
@@ -722,7 +761,7 @@ function selectorInspector(compiler: SelectorCompiler, target: BindingTarget): I
       localsInScope: [],
       role: "consumer",
     }));
-    return { matched: scan.matched, opaque: scan.opaque, usages };
+    return { matched: scan.matched, opaque: scan.opaque, structural: scan.structural, usages };
   };
 }
 
@@ -801,6 +840,8 @@ async function scanConsumers(
       const verdict = resolve(consumer);
       if (verdict === "opaque") failure ??= "cross_component";
       if (verdict === "includes") {
+        // A structural use binds through microsyntax or `<ng-template>`, which is not extracted.
+        if (scan.structural) failure ??= "cross_component";
         usages.push(...toUsages(context, consumer, located, read, scan.usages));
       }
     }
@@ -854,7 +895,8 @@ async function collectPipeUsages(
 }
 
 /**
- * Collects usages of a component member inside its declaring component's template.
+ * Collects usages of a component member inside its declaring component's template and, for a
+ * selector-public member of a component or directive, its bindings in consumer templates.
  *
  * Pass one `cache` to every collection of a request to share symbol-independent work between
  * them; the result is the same with or without it. By default each call works alone.
@@ -897,40 +939,49 @@ export async function collectTemplateUsages(
   }
   const isComponent = componentDecorator(owner.cls) !== undefined;
   const selectorPublic = isSelectorPublic(node) || isMetadataPublic(owner.cls, owner.name);
-  if (!isComponent && selectorPublic && isDirectiveClass(owner.cls)) {
-    return fail("unfinished", "cross_component");
-  }
-  const derived = hasDerivedComponent(owner.cls, cache);
-  if (!isComponent && !derived) return NOT_APPLICABLE;
-  if (derived) return fail("unsupported", "inherited_member");
+  // A directive has no template of its own: its selector-public members are bound by consumers only.
+  const directive = !isComponent && selectorPublic && isDirectiveClass(owner.cls);
+  // Derived classes publish the member under their own selector, which is not followed.
+  const derived = derivedAmong(owner.cls, directive ? cache.declarables() : cache.components());
+  if (derived === true) return fail("unsupported", "inherited_member");
+  if (!isComponent && !directive) return NOT_APPLICABLE;
+  if (directive && derived === "unknown") return fail("unfinished", "cross_component");
 
   const loaded = await loadCompiler(context.tsConfigFilePath);
   if ("reason" in loaded) return fail("unfinished", loaded.reason);
-  const located = cache.locate(owner.cls);
-  if ("reason" in located) return fail("unfinished", located.reason);
-  const read = await cache.read(located);
-  if ("reason" in read) return fail("unfinished", read.reason);
+  let usages: TemplateUsage[] = [];
+  if (!directive) {
+    const located = cache.locate(owner.cls);
+    if ("reason" in located) return fail("unfinished", located.reason);
+    const read = await cache.read(located);
+    if ("reason" in read) return fail("unfinished", read.reason);
 
-  rc.checkpoint();
-  const parsed = cache.parse(loaded.compiler, read, located.absolutePath);
-  if (parsed.errors?.length) return fail("unfinished", "template_parse_error");
-  let raw: RawUsage[];
-  try {
-    raw = extractUsages(loaded.compiler, parsed.nodes, { member: owner.name }, rc);
-  } catch (error) {
-    if (error instanceof WorkExhausted) return fail("unfinished", "work_exhausted");
-    throw error;
+    rc.checkpoint();
+    const parsed = cache.parse(loaded.compiler, read, located.absolutePath);
+    if (parsed.errors?.length) return fail("unfinished", "template_parse_error");
+    let raw: RawUsage[];
+    try {
+      raw = extractUsages(loaded.compiler, parsed.nodes, { member: owner.name }, rc);
+    } catch (error) {
+      if (error instanceof WorkExhausted) return fail("unfinished", "work_exhausted");
+      throw error;
+    }
+    usages = toUsages(context, owner.cls, located, read, raw);
+    if (!selectorPublic) return { coverage: { status: "completed", templates: 1 }, usages };
   }
 
-  const usages = toUsages(context, owner.cls, located, read, raw);
-  if (!selectorPublic) return { coverage: { status: "completed", templates: 1 }, usages };
   // Selector-public members are also bound in consuming templates: scan every component template.
+  const own = directive ? 0 : 1;
   const target = bindingTarget(owner.cls, node, owner.name);
-  const unfinished = (reason: TemplateCoverageReason, templates = 1) => ({
+  const unfinished = (reason: TemplateCoverageReason, templates = own) => ({
     coverage: { status: "unfinished", reason, templates } as TemplateCoverage,
     usages,
   });
   if (!target) return unfinished("cross_component");
+  // Only a directive can be applied through `hostDirectives`, on selectors that are not matched.
+  if (directive && mayBeHostDirective(owner.cls, cache.declarables())) {
+    return unfinished("cross_component");
+  }
   if (!loaded.selectors) return unfinished("compiler_unsupported");
   const scan = await scanConsumers(
     context,

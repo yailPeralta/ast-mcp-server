@@ -1,7 +1,7 @@
 import { Node, SyntaxKind, type ClassDeclaration } from "ts-morph";
 import {
   bindingNames,
-  componentDecorator,
+  declarableDecorator,
   isCoreDecorator,
   isMetadataPublic,
   isSelectorPublic,
@@ -24,10 +24,7 @@ const blocked = (reason: string): PublicOperationalError =>
 const CHANGE = "Change";
 
 function selectorOf(cls: ClassDeclaration): string | undefined {
-  const decorator =
-    componentDecorator(cls) ??
-    cls.getDecorators().find((candidate) => isCoreDecorator(candidate, "Directive"));
-  const metadata = decorator?.getArguments()[0];
+  const metadata = declarableDecorator(cls)?.getArguments()[0];
   if (!Node.isObjectLiteralExpression(metadata)) return undefined;
   const property = metadata.getProperty("selector");
   return literalString(Node.isPropertyAssignment(property) ? property.getInitializer() : undefined);
@@ -83,7 +80,8 @@ function hasHostDirectives(cls: ClassDeclaration): boolean {
  * Plans the template edit of every usage with its own `newText`, or throws `MUTATION_BLOCKED` when
  * the rewrite cannot be proven safe. Must run before the TypeScript rename mutates the program.
  * Own-template usages are the member name itself. Consumer bindings use the public binding name:
- * an alias-keyed binding is left alone, and a `model()` event key becomes `<newName>Change`.
+ * an alias-keyed binding is left alone, and a `model()` event key becomes `<newName>Change`. A
+ * binding key that another directive on the same element also publishes is never rewritten.
  */
 export function planTemplateEdits(
   node: Node,
@@ -154,6 +152,10 @@ function assertNewNamesFree(
         throw blocked(
           "Another directive on the same element binds the new name or cannot be listed.",
         );
+      }
+      // The binding key feeds both directives: rewriting it would unbind the sibling.
+      if ([...renamed.keys()].some((name) => theirs.has(name))) {
+        throw blocked("Another directive on the same element binds the name being renamed.");
       }
     }
   }

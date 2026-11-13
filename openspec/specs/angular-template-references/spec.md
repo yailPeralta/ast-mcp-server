@@ -289,7 +289,7 @@ Template and consumer usages MUST NOT enter `ast_get_impact` or `ast_find_test_c
 
 ### Requirement: Docs and skill state the cross-component contract
 
-The structural-code-editing skill and operation docs MUST describe consumer usages, the meaning of `completed` for cross-component (templates inside the Project only), the constructs that stay `unfinished` (`setInput`, router input binding, `createComponent`, `hostDirectives`, directive inputs/outputs, consumers outside the Project), and the pipe and `transform` rules.
+The structural-code-editing skill and operation docs MUST describe consumer usages, the meaning of `completed` for cross-component (templates inside the Project only), the constructs that stay `unfinished` (`setInput`, router input binding, `createComponent`, `hostDirectives`, structural uses and derived classes of a directive, consumers outside the Project), and the pipe and `transform` rules.
 
 #### Scenario: Skill text
 

@@ -56,7 +56,6 @@ describe("Angular template documentation", () => {
       expect(document).toMatch(/router input binding/i);
       expect(document).toContain("createComponent");
       expect(document).toContain("hostDirectives");
-      expect(document).toMatch(/`@Directive` inputs and outputs/);
     });
 
     it("states the pipe class and transform rename rules", () => {
@@ -82,6 +81,31 @@ describe("Angular template documentation", () => {
       expect(document).toMatch(/relative to the (?:directory of the )?tsconfig/i);
       expect(document).toMatch(/schema v3|plan schema version 3/i);
       expect(document).toMatch(/@angular\/compiler-cli[^\n]*(?:resolve|peer)/i);
+    });
+  });
+
+  describe.each([
+    ["README.md", readme],
+    ["SKILL.md", skill],
+    ["references/operations.md", operations],
+  ])("%s documents @Directive members in consumer templates (#478)", (_name, document) => {
+    it("no longer lists every @Directive member as unfinished", () => {
+      expect(document).not.toMatch(/`@Directive` inputs and outputs/);
+      expect(document).not.toMatch(/`hostDirectives`, `@Directive` members/);
+      expect(document).toMatch(/`@Directive`[^\n]*consumer templates/);
+    });
+
+    it("names the three fail-closed cases", () => {
+      expect(document).toMatch(/`\*appX`[^\n]*`<ng-template appX>`/);
+      expect(document).toMatch(/`cross_component`[^\n]*`hostDirectives`/);
+      expect(document).toMatch(/`inherited_member`[^\n]*extends/);
+    });
+
+    it("states the rename refusal for a name another directive on the element publishes", () => {
+      expect(document).toMatch(/structural uses and derived classes of a directive/);
+      expect(document).toMatch(
+        /`MUTATION_BLOCKED`[^\n]*also publishes|also publishes[^\n]*`MUTATION_BLOCKED`/,
+      );
     });
   });
 
