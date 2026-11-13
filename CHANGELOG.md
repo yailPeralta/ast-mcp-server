@@ -6,12 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.19.0] — not yet published (2026-11-13)
+## [0.19.0] — published to `next`, verification failed, not promoted (2026-11-13)
 
 ### Fixed
 
 - `ast_find_references` and the `ast_explore` references block no longer list locations that are not usages of the requested symbol. For a method or property that implements an interface member or overrides a base member, the compiler groups the symbol with that contract and with every other implementation of it, so the result also held the declarations and call sites of sibling implementations and every match in `node_modules` declaration files; for an Angular lifecycle hook it listed the calls on every other component. Three kinds of location are now left out of `references`, `reference_count`, `total` and `affected_files`: locations in external-library files, unless the requested declaration is itself in one; declarations of the same member in a class or interface that does not extend or implement the requested member's owner (the contract itself and sibling implementers); and property accesses whose receiver type names only classes or interfaces that are neither the owner, a subtype of it, nor one of its supertypes. Overrides and implementations in subtypes of the owner are still listed, and so are calls through the contract or a base type, because they can reach the requested member. Subtyping is read from `extends` and `implements` clauses, not from type shape. A usage stays listed when its receiver type does not resolve to class or interface declarations, or when any member of a union or intersection is related or unresolved. The result reports what it left out in the new optional field `omitted_references: { external_library, unrelated_declarations, unrelated_usages }`, which is absent when every count is zero, so results without omissions are unchanged. The rename path is unchanged. The `ast_explore` output schema gained the field, so the tool-inventory, registry-consumer and canary digests were re-baselined (#470).
 - Updated the pinned resolutions of `hono` to the patched `4.13.16` (GHSA-4m76-xfj5-7975, GHSA-h7mg-cq63-vhpq, GHSA-3gg2-335m-rxc6, GHSA-46wx-v44x-9hh2, GHSA-4h7h-rv7c-7m2v) and of `@hono/node-server` to the patched `2.1.6` (GHSA-qv5m-9pm6-hqp3, GHSA-jpvv-r467-5p4w). Both reach the server only through `@modelcontextprotocol/sdk`, and they moved from `4.13.13` and `2.1.5`. `yarn audit` reports no suggestions again (#472).
+
+### Release status
+
+- npm published these immutable bytes under `next` with provenance and the expected Git commit (`ef48af309822a28611bbe408a2c7f5aeb2819699`, integrity `sha512-UIoHx0zzFwXA3PmN7IadCWEl7NqH2wE8eYJY5LAm6z3VZB4zV0nAPyh1L1B6eFcbrLQQtMtlAqTpFyc9J7xggQ==`, publish run `43378972045`). Public-registry verification (run `43379395753`) then failed for the same reason as `0.14.3`–`0.18.1`: the consumer install resolves `minimatch@10.2.6` through `ts-morph@28.0.0`, flagged by `npm audit` for GHSA-g3hv-75wg-m249 (#361). `0.19.0` supersedes `0.18.1` on `next` and was not promoted to `latest`, tagged in Git, or released on GitHub.
 
 ## [0.18.1] — published to `next`, verification failed, not promoted (2026-11-12)
 
