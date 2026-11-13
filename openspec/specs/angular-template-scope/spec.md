@@ -164,7 +164,13 @@ A consumer binding MUST be reported only when its element is matched by the decl
 
 ### Requirement: Fail-closed completeness for cross-component
 
-For a selector-bound member, coverage MAY be `completed` only when all of the following hold: the declaring class's own templates were read; the scope of every candidate component in the Project was resolved from literal data; every in-scope consumer template was resolved, parsed and within bounds; and no unsupported construct below applies. Otherwise coverage MUST be `unfinished` with the most specific reason (`cross_component` for an unresolved scope, or the template-read reason). `completed` for cross-component MUST mean template evidence inside the ts-morph Project only. The following MUST keep coverage `unfinished` and MUST NOT be claimed as covered: runtime bindings (`setInput`, router input binding, `createComponent`, dynamic component APIs), `hostDirectives`, inputs and outputs declared on `@Directive` classes (until a later slice), inline consumer templates for rename purposes, and consumers outside the Project.
+For a selector-bound member, coverage MAY be `completed` only when all of the following hold: the declaring class's own templates were read; the scope of every candidate component in the Project was resolved from literal data; every in-scope consumer template was resolved, parsed and within bounds; and no unsupported construct below applies. A `@Directive` class has no template of its own, so for its members only the consumer templates are read and counted in `templates`. Otherwise coverage MUST be `unfinished` with the most specific reason (`cross_component` for an unresolved scope, or the template-read reason). `completed` for cross-component MUST mean template evidence inside the ts-morph Project only. The following MUST keep coverage `unfinished` and MUST NOT be claimed as covered: runtime bindings (`setInput`, router input binding, `createComponent`, dynamic component APIs), `hostDirectives`, inline consumer templates for rename purposes, and consumers outside the Project.
+
+Inputs and outputs declared on a `@Directive` class (`@Input`, `@Output`, `input()`, `output()`, `model()`, or literal `inputs` / `outputs` metadata, including literal aliases) MUST be resolved in consumer templates under the same scope, selector and alias rules as component members (#478). For such a member coverage MUST stay non-`completed`, with reason `cross_component` unless stated otherwise, in each of these cases:
+
+- Structural use: the directive selector matches an embedded template (inline `*appX` microsyntax or an explicit `<ng-template appX>`) in a template that has the directive in scope. Microsyntax and `<ng-template>` bindings are not extracted.
+- Host directive: any `@Component` or `@Directive` in the Project names the directive in `hostDirectives`, or has `hostDirectives` (or decorator metadata) that cannot be read as a literal list of resolved classes, so the directive cannot be ruled out. `hostDirectives` on the declaring directive itself also keeps coverage `unfinished`.
+- Inheritance: a `@Component` or `@Directive` in the Project extends the declaring directive (status `unsupported`, reason `inherited_member`), or the base class of one of them cannot be resolved (`unfinished`, `cross_component`).
 
 #### Scenario: Fully resolved scope completes
 
@@ -178,11 +184,35 @@ For a selector-bound member, coverage MAY be `completed` only when all of the fo
 - WHEN references to a member of that directive are collected
 - THEN coverage is `unfinished`
 
+#### Scenario: Non-literal hostDirectives elsewhere
+
+- GIVEN a directive declaring `@Input() x`, and another class in the Project with `hostDirectives: HOSTS` where `HOSTS` is not an array literal
+- WHEN references to `x` are collected
+- THEN coverage is `unfinished` with reason `cross_component`
+
 #### Scenario: Directive-declared input
 
-- GIVEN `@Directive({ selector: '[appX]' })` declaring `@Input() appX`
-- WHEN references to `appX` are collected (S1 to S3)
-- THEN coverage is `unfinished`
+- GIVEN `@Directive({ selector: '[appX]' })` declaring `@Input('appX') control`, declared in the same `NgModule` as a component whose template has `<input [appX]="v" />`
+- WHEN references to `control` are collected
+- THEN the `[appX]` key is reported as a usage of `control`, coverage is `completed`, and `templates` counts the consumer templates examined
+
+#### Scenario: Directive selector matches nothing
+
+- GIVEN a directive declaring `@Input() x` whose selector matches no element of any template in the Project
+- WHEN references to `x` are collected
+- THEN coverage is `completed` with zero template usages
+
+#### Scenario: Structural use of a directive
+
+- GIVEN a directive with selector `[appX]` in scope of a template that has `<p *appX="v">` or `<ng-template appX>`
+- WHEN references to an input of that directive are collected
+- THEN coverage is `unfinished` with reason `cross_component`
+
+#### Scenario: Derived directive
+
+- GIVEN a `@Directive` class that extends the directive declaring the member
+- WHEN references to that member are collected
+- THEN coverage is `unsupported` with reason `inherited_member`
 
 #### Scenario: Runtime binding is not covered
 

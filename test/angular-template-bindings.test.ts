@@ -120,6 +120,32 @@ describe.each([18, 19, 20, 21, 22] as const)("template bindings with compiler v%
     ]);
   });
 
+  run.each([
+    ["[appCard]", `<div *appCard="a"></div>`],
+    ["[appCard]", `<div *appCard="a; x: b"></div>`],
+    ["[appCard]", `<ng-template appCard [x]="a"></ng-template>`],
+    ["[appCard]", `<ng-template [appCard]="a"></ng-template>`],
+    ["ng-template[appCard]", `<ng-template appCard></ng-template>`],
+    [".card", `<ng-template class="card" [x]="a"></ng-template>`],
+    ["[appCardX]", `<div *appCard="a; x: b"></div>`],
+  ])("a Template node matching %s in %s is matched and structural", async (selector, html) => {
+    const result = await scan(html, { ...TARGET, selector });
+    expect(result).toMatchObject({ matched: true, structural: true, opaque: false, usages: [] });
+  });
+
+  run.each([
+    ["[appCard]", `<ng-template><div appCard [x]="1"></div></ng-template>`, ["input:x"]],
+    ["[appCard]", `<div *ngIf="c" appCard [x]="1"></div>`, ["input:x"]],
+    ["[appCard]", `<ng-template let-item></ng-template><div *ngIf="c"></div>`, []],
+  ])(
+    "a Template node that does not match %s in %s stays provable",
+    async (selector, html, expected) => {
+      const result = await scan(html, { ...TARGET, selector });
+      expect(result).toMatchObject({ opaque: false, structural: false });
+      expect(described(html, result)).toEqual(expected);
+    },
+  );
+
   run("a span that does not slice to the binding name is opaque", async () => {
     const result = await scan(`<app-card [x]="a">`, TARGET, `  <app-card [x]="a">`);
     expect(result).toMatchObject({ matched: true, opaque: true, usages: [] });

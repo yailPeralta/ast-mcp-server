@@ -468,8 +468,28 @@ describe("prepareRename across Angular templates (ATN-R1, R3-R7)", () => {
   const WITH_INPUTS = (inputs: string) => `templateUrl: "./a.component.html", inputs: [${inputs}]`;
 
   it.each([
-    ["directive @Input", "src/a.directive.ts", RENAME_DIRECTIVE(`@Input() title = "x";`)],
-    ["directive signal input()", "src/a.directive.ts", RENAME_DIRECTIVE(`title = input("x");`)],
+    ["@Input", `@Input() title = "x";`, `@Input() heading = "x";`],
+    ["signal input()", `title = input("x");`, `heading = input("x");`],
+  ])(
+    "directive %s without consumers renames in TypeScript only (#478)",
+    async (_, member, expected) => {
+      const fixture = await renameFixture({ "src/a.directive.ts": RENAME_DIRECTIVE(member) });
+
+      const prepared = await prepareRename({
+        projectRoot: fixture.root,
+        filePath: "src/a.directive.ts",
+        symbolPath: "ADirective.title",
+        newName: "heading",
+      });
+      await applyOperation(prepared.operation_id, prepared.plan_hash);
+
+      expect(prepared.affected_files.map((file) => file.file)).toEqual(["src/a.directive.ts"]);
+      expect(await fixture.read("src/a.directive.ts")).toContain(expected);
+      expect(await fixture.read("src/a.component.html")).toBe(RENAME_TEMPLATE);
+    },
+  );
+
+  it.each([
     [
       "directive outputs metadata",
       "src/a.directive.ts",

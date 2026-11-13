@@ -100,6 +100,13 @@ const publishedBundleFixtures = [
     operationsFixture: "0.17.0",
     operationsSha256: "dd633a24e9aabeb1d9e9d1f93e261906e7b30eb721fadfb3d317d6acc60db2ca",
   },
+  {
+    npmVersions: ["0.18.0", "0.18.1", "0.19.0"],
+    skillVersion: "4.9.0",
+    skillSha256: "451670dcaa0bbfc11273fe9bd507de61865dbaac80e1d586306bcd30962d90d4",
+    operationsFixture: "0.18.0",
+    operationsSha256: "363ccb2332a42c68f21073a568a96d3000eff98954eaebff3d92e65d87c4f14c",
+  },
 ] as const;
 
 async function archivedFixture(name: string): Promise<string> {

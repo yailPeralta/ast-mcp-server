@@ -217,12 +217,18 @@ If a selector-bound member has a usage in an inline consumer template, rename MU
 
 ### Requirement: Consumer new-name collisions block rename
 
-If the new name, or `<newName>Change` for `model()`, is in the template-local scope at any consumer usage where the rewrite would change meaning, or is `$any`, the whole rename MUST be blocked with `MUTATION_BLOCKED`. A new name that duplicates another input, output or alias of the same declaring directive, or of another directive matched on the same consumer element, MUST be blocked with `MUTATION_BLOCKED`.
+If the new name, or `<newName>Change` for `model()`, is in the template-local scope at any consumer usage where the rewrite would change meaning, or is `$any`, the whole rename MUST be blocked with `MUTATION_BLOCKED`. A new name that duplicates another input, output or alias of the same declaring directive, or of another directive matched on the same consumer element, MUST be blocked with `MUTATION_BLOCKED`. A rewrite of a binding key that another component or directive matched on the same consumer element also publishes under the old name MUST be blocked with `MUTATION_BLOCKED`, because the key would stop binding that sibling (#478).
 
 #### Scenario: New name equals another input
 
 - GIVEN a child with `@Input() x` and `@Input() y`
 - WHEN rename `x` to `y` is prepared
+- THEN it returns `MUTATION_BLOCKED`
+
+#### Scenario: Sibling publishes the old name
+
+- GIVEN `<app-child appX [x]="v">` where both the `app-child` component and the `[appX]` directive declare `@Input() x`
+- WHEN rename of either `x` is prepared
 - THEN it returns `MUTATION_BLOCKED`
 
 #### Scenario: model() change name collides
@@ -233,7 +239,7 @@ If the new name, or `<newName>Change` for `model()`, is in the template-local sc
 
 ### Requirement: Unsupported cross-component rename constructs stay blocked
 
-Rename of a selector-bound member MUST remain `INCOMPLETE_EVIDENCE` when coverage is not `completed`, when `hostDirectives` references the declaring directive, when the member is on a `@Directive`, or when a runtime binding is detectable. `completed` is limited to template evidence in the Project. Post-apply diagnostics remain TypeScript-only; prepare-time `template_diagnostics` is a best-effort warning whose status may be non-`completed`, so docs MUST direct users to run the project's build or tests.
+Rename of a selector-bound member MUST remain `INCOMPLETE_EVIDENCE` when coverage is not `completed`, when `hostDirectives` references the declaring directive, or when a runtime binding is detectable. A member of a `@Directive` is renamed like a component member when its coverage is `completed` (#478): property-named consumer bindings are rewritten and alias-keyed bindings stay. It MUST remain `INCOMPLETE_EVIDENCE` when the directive is used structurally (`*appX` or `<ng-template appX>`), may be applied through `hostDirectives` of another class, or is extended by another component or directive. `completed` is limited to template evidence in the Project. Post-apply diagnostics remain TypeScript-only; prepare-time `template_diagnostics` is a best-effort warning whose status may be non-`completed`, so docs MUST direct users to run the project's build or tests.
 
 #### Scenario: Opaque scope blocks rename
 
@@ -245,6 +251,18 @@ Rename of a selector-bound member MUST remain `INCOMPLETE_EVIDENCE` when coverag
 
 - GIVEN a component using the declaring directive in `hostDirectives`
 - WHEN rename of its input is prepared
+- THEN it returns `INCOMPLETE_EVIDENCE`
+
+#### Scenario: Directive member with an alias-keyed binding
+
+- GIVEN `@Directive({ selector: '[appX]' })` declaring `@Input('appX') control` and a consumer template with `<input [appX]="v" />`
+- WHEN rename of `control` is prepared
+- THEN the plan edits the TypeScript declaration and leaves the template untouched
+
+#### Scenario: Structural directive use blocks rename
+
+- GIVEN a directive with selector `[appX]` used as `<p *appX="v">` in an in-scope template
+- WHEN rename of one of its inputs is prepared
 - THEN it returns `INCOMPLETE_EVIDENCE`
 
 #### Scenario: Docs direct users to build or tests
