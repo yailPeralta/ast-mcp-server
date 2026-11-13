@@ -23,7 +23,7 @@ it("locks patched transitives within every admitted parent range", async () => {
   expect.soft(manifest.packageManager).toBe("yarn@4.15.0");
   expect.soft(manifest.resolutions?.["fast-uri"]).toBe("3.1.9");
   expect.soft(manifest.resolutions?.qs).toBe("6.16.1");
-  expect.soft(manifest.resolutions?.["@hono/node-server"]).toBe("2.1.5");
+  expect.soft(manifest.resolutions?.["@hono/node-server"]).toBe("2.1.6");
 
   expect.soft(lock["fast-uri@npm:3.1.9"]).toMatchObject({
     version: "3.1.9",
@@ -33,9 +33,9 @@ it("locks patched transitives within every admitted parent range", async () => {
     version: "6.16.1",
     resolution: "qs@npm:6.16.1",
   });
-  expect.soft(lock["@hono/node-server@npm:2.1.5"]).toMatchObject({
-    version: "2.1.5",
-    resolution: "@hono/node-server@npm:2.1.5",
+  expect.soft(lock["@hono/node-server@npm:2.1.6"]).toMatchObject({
+    version: "2.1.6",
+    resolution: "@hono/node-server@npm:2.1.6",
   });
   expect
     .soft(lockBytes)
@@ -96,7 +96,7 @@ it("admits the patched Hono and Vitest family without installation-policy except
   const manifest = JSON.parse(manifestBytes!);
   const lock = yaml.parse(lockBytes!) as Record<string, { version: string; resolution: string }>;
   const config = yaml.parse(configBytes!);
-  expect.soft(manifest.resolutions.hono).toBe("4.13.13");
+  expect.soft(manifest.resolutions.hono).toBe("4.13.16");
   expect.soft(manifest.devDependencies.vitest).toBe("^5.0.5");
   expect.soft(config.enableScripts).toBe(false);
   expect.soft(config.npmPreapprovedPackages ?? []).toEqual([]);
@@ -107,7 +107,7 @@ it("admits the patched Hono and Vitest family without installation-policy except
     const entries = Object.entries(lock).filter(([key]) =>
       key.split(", ").some((selector) => selector.startsWith(`${name}@npm:`)),
     );
-    const version = name === "hono" ? "4.13.13" : "5.1.0";
+    const version = name === "hono" ? "4.13.16" : "5.1.0";
     expect.soft(entries, name).toHaveLength(1);
     expect
       .soft(entries[0]?.[1], name)
