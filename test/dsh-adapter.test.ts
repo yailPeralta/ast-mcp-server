@@ -87,7 +87,7 @@ describe("DeepSeek Harness adapter patch", () => {
   it("keeps the dsh manifest exact and records compatibility identity outside it", async () => {
     const metadata = JSON.parse(await readFile(PACKAGE_PATH, "utf8"));
 
-    expect(metadata.version).toBe("0.18.1");
+    expect(metadata.version).toBe("0.19.0");
     expect(metadata.dsh).toEqual({ bundle: { patch: "./cordis.patch.yml" } });
     expect(metadata.deepseekHarness).toEqual({
       revision: "cd5ef8148158c3a752a658978873241fdf8e2bbc",
@@ -235,7 +235,7 @@ describe("pinned Harness smoke contract", () => {
     expect(source).not.toContain("const source = process.env.DSH_HARNESS_SOURCE");
     expect(source).toContain("observedCliSha256");
     expect(source).toContain('const PUBLIC_BASELINE_VERSION = "0.13.0"');
-    expect(source).toContain('const CANDIDATE_PACKAGE_VERSION = "0.18.1"');
+    expect(source).toContain('const CANDIDATE_PACKAGE_VERSION = "0.19.0"');
     expect(source).toContain("`ast-mcp-server@${PUBLIC_BASELINE_VERSION}`");
     expect(source).toContain("PUBLIC_PACKAGE_INTEGRITY");
     expect(source).toContain(
@@ -437,8 +437,8 @@ describe("pinned Harness smoke contract", () => {
 
     expect(readme).toContain("yarn pack --out ast-mcp-server-%v.tgz");
     expect(readme).toContain("--env AST_MCP_APPLY_GUARD=allow");
-    expect(patch).toContain("./ast-mcp-server-0.18.1.tgz");
-    expect(patch).not.toContain("ast-mcp-server@0.18.1");
+    expect(patch).toContain("./ast-mcp-server-0.19.0.tgz");
+    expect(patch).not.toContain("ast-mcp-server@0.19.0");
   });
 });
 
