@@ -6,11 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.20.0] — not yet published (2026-11-13)
+## [0.20.0] — published to `next`, verification failed, not promoted (2026-11-13)
 
 ### Added
 
 - `ast_find_references` and `ast_rename_symbol` now resolve `@Directive` members declared with `@Input`, `@Output`, `input()`, `output()` or `model()`, or listed in literal `inputs` / `outputs` metadata, in the consumer templates of the Project, with the scope, selector and alias rules already used for component members. These members reported `unfinished` with reason `cross_component` and `templates: 0`, and their rename returned `INCOMPLETE_EVIDENCE`. They now list `[x]`, `x="lit"`, `[(x)]` and `(y)` bindings on elements matched by the directive selector and reach `completed`, where `templates` counts the consumer templates examined because a directive has no template of its own. Rename rewrites property-named bindings and leaves alias-keyed bindings alone, so renaming the `control` property of `@Input('appPasswordTooltip') control` plans the TypeScript edits and keeps `[appPasswordTooltip]="..."`. Three cases stay fail-closed and keep rename at `INCOMPLETE_EVIDENCE`: a structural use in an in-scope template (`*appX` or `<ng-template appX>`, whose bindings are not read) and a directive that any component or directive of the Project names in `hostDirectives`, or could name through `hostDirectives` that are not a literal list of classes, stay `unfinished` with `cross_component`; a directive extended by another component or directive is `unsupported` with `inherited_member`. Rename also returns `MUTATION_BLOCKED` when another component or directive matched on the same element publishes the binding name being rewritten, for component members too: the rewritten key would stop binding that sibling. Metadata-listed members still list usages and refuse rename. Tool descriptions and schemas are unchanged. The README and the `structural-code-editing` skill describe the new contract; the skill is `4.10.0`, and the `4.9.0` bytes published in npm `0.18.0`, `0.18.1` and `0.19.0` are recorded as a predecessor (#478).
+
+### Release status
+
+- npm published these immutable bytes under `next` with provenance and the expected Git commit (`be93ea161bdfd9a594b6ac26ef0cd1779a8910da`, integrity `sha512-VaJ4daYCWVU+HoMMtDy/Iig8D+OTyRXCCxfHu9x4HCROicMMPFp9urKzbP7vYMqqg9DY4mTkkcwi+3xK3wrkng==`, publish run `43478636731`). Public-registry verification (run `43479233323`) then failed for the same reason as `0.14.3`–`0.19.0`: the consumer install resolves `minimatch@10.2.6` through `ts-morph@28.0.0`, flagged by `npm audit` for GHSA-g3hv-75wg-m249 (#361). `0.20.0` supersedes `0.19.0` on `next` and was not promoted to `latest`, tagged in Git, or released on GitHub.
 
 ## [0.19.0] — published to `next`, verification failed, not promoted (2026-11-13)
 
