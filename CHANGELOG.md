@@ -6,11 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.20.1] — not yet published (2026-11-16)
+## [0.20.1] — published to `latest` and `next`, registry verified (2026-11-16)
 
 ### Changed
 
 - No functional change. This release exists so that publication, public-registry verification and promotion run on one commit. `@ts-morph/common@0.29.1` now depends on `minimatch ^11.0.1`, so a consumer install resolves a `minimatch` version that GHSA-g3hv-75wg-m249 does not affect, and the cause that blocked promotion since `0.14.3` is gone. `0.20.0` could not be verified again because the `Release` workflow requires the release commit to be the head of `main` (#361).
+
+### Release status
+
+- npm published immutable `0.20.1` bytes with integrity `sha512-ZryoVAuggBSbDdC69UP10Bwmok2xTJ5guGKUH98nlETNViRU3uAYrgRAajmifCmslbulx98jOCxXR34D7rlqTg==` (publish run `43970477556`). Public-registry verification passed (run `43971830721`); `latest` and `next` both resolve to `0.20.1` (promotion run `43977738216`); and npm `gitHead`, the annotated `v0.20.1` tag, and the GitHub Release target exact commit `5fbf76ed20ee932b2e1838472cc685c08ce0f8eb`. It is the first release promoted to `latest` since `0.14.2`.
+- A first verification (run `43971046559`) failed because the registry tarball returned HTTP 404 for about eight minutes after the publish. Three promotion attempts (runs `43972887989`, `43974943612`, `43975174353`) failed at `npm dist-tag` or at the credential check because of the promotion token, before any change to the registry. The token must be a granular access token with read and write access to the package and bypass of two-factor authentication.
 
 ## [0.20.0] — published to `next`, verification failed, not promoted (2026-11-13)
 
