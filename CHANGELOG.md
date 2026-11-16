@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.20.1] — not yet published (2026-11-16)
+
+### Changed
+
+- No functional change. This release exists so that publication, public-registry verification and promotion run on one commit. `@ts-morph/common@0.29.1` now depends on `minimatch ^11.0.1`, so a consumer install resolves a `minimatch` version that GHSA-g3hv-75wg-m249 does not affect, and the cause that blocked promotion since `0.14.3` is gone. `0.20.0` could not be verified again because the `Release` workflow requires the release commit to be the head of `main` (#361).
+
 ## [0.20.0] — published to `next`, verification failed, not promoted (2026-11-13)
 
 ### Added
