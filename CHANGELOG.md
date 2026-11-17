@@ -6,7 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.20.2] — not yet published (2026-11-17)
+## [0.20.2] — published to `latest` and `next`, registry verified (2026-11-17)
+
+### Release status
+
+- npm published immutable `0.20.2` bytes with integrity `sha512-m28f3p9i7uw8G717zn8xd3YkQHNtC8gTUoMym0Ra1dXrhRaf9vd1oss/mWBylLzwqYikhcbnrPvt+YB5BPJAWw==` (publish run `44063599579`). Public-registry verification passed (run `44064102535`); `latest` and `next` both resolve to `0.20.2` (promotion run `44064724959`); and npm `gitHead`, the annotated `v0.20.2` tag, and the GitHub Release target exact commit `4d814b9b4c973655b79baffee5214874cd1d820f`.
+- A first publish dispatch (run `44061613028`) stopped at the preflight, before any change to the registry, because the `ci.yml` run on the `main` push of the release commit had not finished.
 
 ### Fixed
 
