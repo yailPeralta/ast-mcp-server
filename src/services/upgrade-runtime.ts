@@ -177,7 +177,9 @@ export async function createUpgradeRuntime(
                 "version",
                 "--json",
               ]);
-        const value: unknown = JSON.parse(stdout);
+        const parsed: unknown = JSON.parse(stdout);
+        // npm <= 11 prints a JSON string; npm 12 wraps the single version in an array.
+        const value = Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed;
         if (typeof value !== "string") throw new Error("invalid registry response");
         return value;
       },
