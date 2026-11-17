@@ -95,7 +95,7 @@ async function writeFakeCompiler(
 }
 
 describe("detection and compiler gate", () => {
-  it("core absent returns not_applicable and lists no templates", async () => {
+  it("core absent fails closed for a component member and lists no templates", async () => {
     const fixture = await createProjectFixture({
       "src/a.component.ts": COMPONENT(),
       "src/a.component.html": "<p>{{ title }}</p>",
@@ -103,12 +103,74 @@ describe("detection and compiler gate", () => {
     try {
       const context = createFreshProject(fixture.root);
       expect(await usagesOf(context, "AComponent.title")).toEqual({
-        coverage: { status: "not_applicable" },
+        coverage: { status: "unfinished", reason: "compiler_missing", templates: 0 },
         usages: [],
       });
       expect(listTemplateFiles(context)).toEqual([]);
     } finally {
       await fixture.cleanup();
+    }
+  });
+
+  it("core absent fails closed for selector-public directive members and pipe members", async () => {
+    const fixture = await createProjectFixture({
+      "src/a.directive.ts": `import { Directive, Input } from "@angular/core";
+@Directive({ selector: "[appA]" })
+export class ADirective {
+  @Input() label = "";
+  internal = 1;
+}
+`,
+      "src/fmt.pipe.ts": `import { Pipe } from "@angular/core";
+@Pipe({ name: "fmt" })
+export class FmtPipe {
+  transform(value: string): string { return value; }
+  helper(): void {}
+}
+`,
+    });
+    created.push(fixture);
+    const context = createFreshProject(fixture.root);
+    const coverage = async (file: string, symbol: string) =>
+      (await usagesOf(context, symbol, NO_REQUEST_CONTEXT, file)).coverage;
+    const failClosed = { status: "unfinished", reason: "compiler_missing", templates: 0 };
+    expect(await coverage("src/a.directive.ts", "ADirective.label")).toEqual(failClosed);
+    expect(await coverage("src/fmt.pipe.ts", "FmtPipe.transform")).toEqual(failClosed);
+    expect(await coverage("src/fmt.pipe.ts", "FmtPipe.helper")).toEqual(failClosed);
+    // A directive member that is not selector-public stays not_applicable, as with core.
+    expect(await coverage("src/a.directive.ts", "ADirective.internal")).toEqual({
+      status: "not_applicable",
+    });
+  });
+
+  it("core absent keeps non-Angular symbols not_applicable", async () => {
+    const fixture = await createProjectFixture({
+      "src/plain.ts": `export class Plain {
+  title = "x";
+  save(): void {}
+}
+export function helper(): number { return 1; }
+`,
+      "src/other.ts": `import { Component, Pipe } from "other-framework";
+@Component({ selector: "app-b", template: "<p>{{ title }}</p>" })
+export class BComponent { title = "x"; }
+@Pipe({ name: "fmt" })
+export class OtherPipe { transform(value: string): string { return value; } }
+`,
+    });
+    created.push(fixture);
+    const context = createFreshProject(fixture.root);
+    const notApplicable = { coverage: { status: "not_applicable" }, usages: [] };
+    for (const [file, symbol] of [
+      ["src/plain.ts", "Plain"],
+      ["src/plain.ts", "Plain.title"],
+      ["src/plain.ts", "Plain.save"],
+      ["src/plain.ts", "helper"],
+      ["src/other.ts", "BComponent.title"],
+      ["src/other.ts", "OtherPipe"],
+      ["src/other.ts", "OtherPipe.transform"],
+    ] as const) {
+      expect(await usagesOf(context, symbol, NO_REQUEST_CONTEXT, file)).toEqual(notApplicable);
     }
   });
 
@@ -439,12 +501,12 @@ ${PUBLIC(member, "Component")}`,
     });
   });
 
-  it("@Pipe without @angular/core stays not_applicable", async () => {
+  it("@Pipe without @angular/core fails closed with compiler_missing", async () => {
     const fixture = await createProjectFixture({ "src/fmt.pipe.ts": PIPE });
     created.push(fixture);
     const context = createFreshProject(fixture.root);
     expect(await usagesOf(context, "FmtPipe", NO_REQUEST_CONTEXT, "src/fmt.pipe.ts")).toEqual({
-      coverage: { status: "not_applicable" },
+      coverage: { status: "unfinished", reason: "compiler_missing", templates: 0 },
       usages: [],
     });
   });

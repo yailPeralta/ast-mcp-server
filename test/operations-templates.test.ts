@@ -346,6 +346,57 @@ describe("prepareRename across Angular templates (ATN-R1, R3-R7)", () => {
     ).rejects.toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
   });
 
+  it("Angular-shaped symbols without a resolvable @angular/core block rename", async () => {
+    const fixture = await createProjectFixture({
+      "src/a.component.ts": RENAME_COMPONENT(
+        'templateUrl: "./a.component.html"',
+        '  @Input() label = "";',
+      ).replace("import { Component }", "import { Component, Input }"),
+      "src/a.component.html": RENAME_TEMPLATE,
+      "src/fmt.pipe.ts": [
+        'import { Pipe } from "@angular/core";',
+        '@Pipe({ name: "fmt" })',
+        "export class FmtPipe {",
+        "  transform(value: string): string { return value; }",
+        "}",
+        "",
+      ].join("\n"),
+      "src/plain.ts": "export class Plain {\n  title = 1;\n}\n",
+    });
+    try {
+      for (const [filePath, symbolPath] of [
+        ["src/a.component.ts", "AComponent.title"],
+        ["src/a.component.ts", "AComponent.label"],
+        ["src/fmt.pipe.ts", "FmtPipe.transform"],
+      ] as const) {
+        await expect(
+          prepareRename({ projectRoot: fixture.root, filePath, symbolPath, newName: "renamed" }),
+        ).rejects.toMatchObject({ code: "INCOMPLETE_EVIDENCE" });
+      }
+      expect(await readFile(path.join(fixture.root, "src/a.component.html"), "utf8")).toBe(
+        RENAME_TEMPLATE,
+      );
+      // A pipe class is bound by its `name` literal, so its rename needs no template evidence.
+      const pipeClass = await prepareRename({
+        projectRoot: fixture.root,
+        filePath: "src/fmt.pipe.ts",
+        symbolPath: "FmtPipe",
+        newName: "FormatPipe",
+      });
+      expect(pipeClass.affected_files.map((file) => file.file)).toEqual(["src/fmt.pipe.ts"]);
+      // A non-Angular symbol in the same project still renames as before.
+      const plain = await prepareRename({
+        projectRoot: fixture.root,
+        filePath: "src/plain.ts",
+        symbolPath: "Plain.title",
+        newName: "renamed",
+      });
+      expect(plain.affected_files.map((file) => file.file)).toEqual(["src/plain.ts"]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it.each([
     ["@Input", `@Input() title = "x";`],
     ["signal input()", `title = input("x");`],
