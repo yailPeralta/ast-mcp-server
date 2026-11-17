@@ -186,6 +186,46 @@ describe("collectSymbolReferencesWithTemplates", () => {
     expect(result.references[0]).not.toHaveProperty("origin");
   });
 
+  it("fails closed with compiler_missing when @angular/core does not resolve", async () => {
+    const fixture = await createProjectFixture({
+      "src/a.component.ts": `import { Component, Input } from "@angular/core";
+@Component({ selector: "app-a", template: "<p>{{ label }}</p>" })
+export class AComponent {
+  @Input() label = "";
+}
+`,
+      "src/parent.component.ts": `import { Component } from "@angular/core";
+@Component({ selector: "app-parent", templateUrl: "./parent.component.html" })
+export class ParentComponent {
+  heading = "x";
+}
+`,
+      "src/parent.component.html": `<app-a [label]="heading"></app-a>\n`,
+    });
+    created.push(fixture);
+    const context = createFreshProject(fixture.root);
+    const node = findDeclarationByName(
+      getSourceFileOrThrow(context.project, "src/a.component.ts"),
+      "AComponent.label",
+    );
+    const result = await collectSymbolReferencesWithTemplates(
+      node,
+      context,
+      {
+        symbolPath: "AComponent.label",
+        includeDeclaration: true,
+        detail: "locations",
+        offset: 0,
+        limit: 100,
+      },
+      NO_REQUEST_CONTEXT,
+    );
+    expect(result).toMatchObject({
+      template_reference_count: 0,
+      template_coverage: { status: "unfinished", reason: "compiler_missing", templates: 0 },
+    });
+  });
+
   it("reports unfinished coverage and keeps TS references when the template cannot be parsed", async () => {
     const result = await collect(await open({ "src/a.component.html": "<p>{{ title </div>" }));
     expect(result).toMatchObject({

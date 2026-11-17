@@ -42,7 +42,8 @@ describe("explore template latency benchmark", () => {
       });
     }
     const [baseline, angular] = report.cases;
-    expect(baseline.coverage).toEqual({});
+    // Without @angular/core the baseline fails closed before any template is read.
+    expect(baseline.coverage).toEqual({ compiler_missing: 3 });
     expect(angular.coverage).toEqual({ completed: 3 });
     expect(report.added).toEqual([
       { components: 9, added_p50_ms: expect.any(Number), added_p95_ms: expect.any(Number) },

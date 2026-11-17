@@ -302,6 +302,21 @@ export function memberOwner(node: Node): { cls: ClassDeclaration; name: string }
 }
 
 /**
+ * Whether templates could bind `node` judging from syntax alone: a pipe class, a member of a
+ * component or pipe, or a selector-public directive member. Needs no resolvable `@angular/core`.
+ */
+function isTemplateBindable(node: Node): boolean {
+  if (Node.isClassDeclaration(node)) return isPipeClass(node);
+  const owner = memberOwner(node);
+  if (!owner) return false;
+  if (isPipeClass(owner.cls) || componentDecorator(owner.cls)) return true;
+  return (
+    isDirectiveClass(owner.cls) &&
+    (isSelectorPublic(node) || isMetadataPublic(owner.cls, owner.name))
+  );
+}
+
+/**
  * Whether a class in `candidates` extends `cls`. `unknown` when none provably does but a base
  * class of a candidate cannot be resolved (a mixin call, for example), so it cannot be ruled out.
  */
@@ -917,11 +932,14 @@ export async function collectTemplateUsages(
   if (cache.context !== context) {
     throw new Error("The template scan cache was created for another ProjectContext.");
   }
-  if (!hasAngularCore(context)) return NOT_APPLICABLE;
   const fail = (status: "unfinished" | "unsupported", reason: TemplateCoverageReason) => ({
     coverage: { status, reason, templates: 0 } as TemplateCoverage,
     usages: [] as readonly TemplateUsage[],
   });
+  if (!hasAngularCore(context)) {
+    // Fail closed: templates may bind an Angular-shaped symbol even when core does not resolve.
+    return isTemplateBindable(node) ? fail("unfinished", "compiler_missing") : NOT_APPLICABLE;
+  }
   if (Node.isClassDeclaration(node)) {
     return isPipeClass(node) ? collectPipeUsages(node, context, rc, limits, cache) : NOT_APPLICABLE;
   }
