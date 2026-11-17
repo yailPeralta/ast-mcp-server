@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.20.2] — not yet published (2026-11-17)
+
 ### Fixed
 
 - Template evidence now fails closed when `@angular/core` does not resolve from the tsconfig but the symbol is declared with `@angular/core` decorators: a component or pipe member, a `@Pipe` class, or a selector-public directive member reports `template_coverage` `unfinished` with reason `compiler_missing` instead of `not_applicable`, so `ast_find_references` and `ast_explore` no longer omit template evidence and `ast_rename_symbol` returns `INCOMPLETE_EVIDENCE` for those members instead of planning a TypeScript-only rename (a `@Pipe` class rename stays TypeScript-only, as before). Other symbols stay `not_applicable`.
