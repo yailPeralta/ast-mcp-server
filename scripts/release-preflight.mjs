@@ -9,7 +9,10 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { REGISTRY_CONSUMER_GATE_NAMES } from "./registry-consumer-gates.mjs";
+import {
+  REGISTRY_CONSUMER_GATE_NAMES,
+  validateAcceptedAuditAdvisories,
+} from "./registry-consumer-gates.mjs";
 
 const execFileAsync = promisify(execFile);
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -616,7 +619,16 @@ export function validateConsumerReport(report, expectedVersion, expectedSha) {
   const sha = requireSha(expectedSha);
   const object = requireExactKeys(
     report,
-    ["schema_version", "status", "package_name", "version", "git_head", "registry", "gates"],
+    [
+      "schema_version",
+      "status",
+      "package_name",
+      "version",
+      "git_head",
+      "registry",
+      "gates",
+      "accepted_audit_advisories",
+    ],
     "registry consumer report",
   );
   if (
@@ -636,6 +648,9 @@ export function validateConsumerReport(report, expectedVersion, expectedSha) {
   );
   for (const gate of REGISTRY_CONSUMER_GATE_NAMES) {
     if (gates[gate] !== true) releaseFailure(`consumer gate ${gate} did not pass.`);
+  }
+  if (!validateAcceptedAuditAdvisories(object.accepted_audit_advisories)) {
+    releaseFailure("accepted consumer audit advisories do not match the reviewed exception list.");
   }
   requireJsonValue(object, "registry consumer report");
   return object;

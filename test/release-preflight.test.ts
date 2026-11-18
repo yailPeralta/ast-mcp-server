@@ -7,7 +7,10 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { createPassedRegistryConsumerGates } from "../scripts/registry-consumer-gates.mjs";
+import {
+  CONSUMER_AUDIT_ACCEPTED_ADVISORIES,
+  createPassedRegistryConsumerGates,
+} from "../scripts/registry-consumer-gates.mjs";
 import {
   OFFICIAL_NPM_REGISTRY,
   PROMOTION_AUTHORIZATION_FILE,
@@ -97,6 +100,7 @@ function consumerReport(overrides: Record<string, unknown> = {}): Record<string,
     git_head: RELEASE_SHA,
     registry: OFFICIAL_NPM_REGISTRY,
     gates: createPassedRegistryConsumerGates(),
+    accepted_audit_advisories: [...CONSUMER_AUDIT_ACCEPTED_ADVISORIES],
     ...overrides,
   };
 }
@@ -927,6 +931,35 @@ describe("release preflight", () => {
     expect(() =>
       validateAuditSignaturesReport({ ...auditReport(), exit_code: 1 }, OFFICIAL_NPM_REGISTRY),
     ).toThrow(/audit signatures/u);
+  });
+
+  it("requires consumer audit exceptions to be recorded and to match the reviewed list", () => {
+    expect(
+      validateConsumerReport(
+        consumerReport({ accepted_audit_advisories: [] }),
+        RELEASE_VERSION,
+        RELEASE_SHA,
+      ).accepted_audit_advisories,
+    ).toEqual([]);
+    const withoutEvidence = consumerReport();
+    delete withoutEvidence.accepted_audit_advisories;
+    expect(() => validateConsumerReport(withoutEvidence, RELEASE_VERSION, RELEASE_SHA)).toThrow(
+      /reviewed keys/u,
+    );
+    for (const accepted of [
+      null,
+      [{ ...CONSUMER_AUDIT_ACCEPTED_ADVISORIES[0], expires: "2099-12-31" }],
+      [{ ...CONSUMER_AUDIT_ACCEPTED_ADVISORIES[0], package: "minimatch" }],
+      [CONSUMER_AUDIT_ACCEPTED_ADVISORIES[0], CONSUMER_AUDIT_ACCEPTED_ADVISORIES[0]],
+    ]) {
+      expect(() =>
+        validateConsumerReport(
+          consumerReport({ accepted_audit_advisories: accepted }),
+          RELEASE_VERSION,
+          RELEASE_SHA,
+        ),
+      ).toThrow(/accepted consumer audit advisories/u);
+    }
   });
 
   it("builds and validates SHA/version/run-bound evidence with exact member hashes", () => {
