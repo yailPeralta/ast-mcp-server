@@ -6,7 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.20.4] — not yet published (2026-11-18)
+## [0.20.4] — published to `latest` and `next`, registry verified (2026-11-18)
+
+### Release status
+
+- npm published immutable `0.20.4` bytes with integrity `sha512-gkz3nyQ+hnp/VowOaUw2mOwzNGrYOyZ0UU6yVP8EI2LtuLR/HFqg8mdUHnjXXxYIwRV3+gUYc5ILHt5AzUDmsA==` (publish run `44354345836`). Public-registry verification passed (run `44355310666`) with every consumer gate run, and its evidence records the one accepted consumer audit advisory (`picomatch` GHSA-fc5q-39xc-vjpf, expiring 2027-02-18); `latest` and `next` both resolve to `0.20.4` (promotion run `44355910135`); and npm `gitHead`, the annotated `v0.20.4` tag, and the GitHub Release target exact commit `601b172cda8c1e32d2b7c2e002755a65da24b242`.
 
 ### Fixed
 
