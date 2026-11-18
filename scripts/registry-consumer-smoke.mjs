@@ -21,7 +21,10 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { applyPatch } from "diff";
 
-import { createPassedRegistryConsumerGates } from "./registry-consumer-gates.mjs";
+import {
+  createPassedRegistryConsumerGates,
+  evaluateConsumerAudit,
+} from "./registry-consumer-gates.mjs";
 import { validateManagedSkillBundle } from "./managed-skill-bundle-validator.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -466,12 +469,27 @@ async function verifySetupIdempotency(consumerRoot, installedPackageRoot) {
   }
 }
 
-function auditHasNoVulnerabilities(report) {
-  const metadata = object(report?.metadata, "consumer audit metadata");
-  const vulnerabilities = object(metadata.vulnerabilities, "consumer audit vulnerability counts");
-  return Object.values(vulnerabilities).every(
-    (count) => Number.isSafeInteger(count) && count === 0,
-  );
+// `npm audit` exits 1 whenever it reports any vulnerability, including accepted ones, so
+// the JSON report on stdout is the authority and the policy decides the outcome.
+async function runConsumerAudit(cwd, env) {
+  try {
+    const { stdout } = await execFileAsync("npm", ["audit", "--omit=dev", "--json"], {
+      cwd,
+      env,
+      encoding: "utf8",
+      maxBuffer: MAX_JSON_BYTES,
+      timeout: COMMAND_TIMEOUT_MS,
+    });
+    return stdout;
+  } catch (error) {
+    if (error?.code === 1 && typeof error.stdout === "string" && error.stdout.trim() !== "") {
+      return error.stdout;
+    }
+    const stderr = typeof error?.stderr === "string" ? error.stderr.slice(0, 2_000) : "";
+    throw new Error(`Registry consumer command failed: npm audit${stderr ? `\n${stderr}` : ""}`, {
+      cause: error,
+    });
+  }
 }
 
 function minimalChildEnvironment(home, temp) {
@@ -1284,12 +1302,12 @@ async function runOuter(options) {
       result: signatureResult,
     };
 
-    const audit = await execute("npm", ["audit", "--omit=dev", "--json"], {
-      cwd: consumerRoot,
-      env: npmEnvironment,
-    });
-    if (!auditHasNoVulnerabilities(parseJson(audit.stdout, "consumer npm audit output"))) {
-      fail("clean consumer audit contains vulnerabilities.");
+    const audit = evaluateConsumerAudit(
+      parseJson(await runConsumerAudit(consumerRoot, npmEnvironment), "consumer npm audit output"),
+      new Date(),
+    );
+    if (!audit.ok) {
+      fail(`clean consumer audit contains vulnerabilities: ${audit.reason}`);
     }
 
     await verifySetupIdempotency(consumerRoot, installedPackageRoot);
@@ -1323,6 +1341,7 @@ async function runOuter(options) {
       git_head: options.sha,
       registry: options.registry,
       gates,
+      accepted_audit_advisories: audit.accepted_advisories,
     };
 
     await writeJsonExclusive(options.outputs.metadata, metadata);
