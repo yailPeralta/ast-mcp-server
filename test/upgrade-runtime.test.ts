@@ -67,6 +67,39 @@ describe("upgrade runtime", () => {
     await expect(access(boundary)).rejects.toThrow();
   });
 
+  async function leaseWithRegistryOutput(stdout: string) {
+    const files = await runtimeFiles("ast-upgrade-registry-", "");
+    return createUpgradeRuntime(files.cliPath, {
+      nodeExecutable: files.nodePath,
+      environment: { HOME: files.home },
+      temporaryParent: files.root,
+      execute: async () => ({ stdout, stderr: "" }),
+    });
+  }
+
+  it("accepts the single-element array npm 12 prints for a version view", async () => {
+    const lease = await leaseWithRegistryOutput('[\n  "0.20.2"\n]\n');
+    try {
+      await expect(lease.runtime.latestVersion("npm")).resolves.toBe("0.20.2");
+    } finally {
+      await lease.dispose();
+    }
+  });
+
+  it.each([["[]"], ['["0.20.2", "0.20.1"]'], ["[20]"], ["null"], ['{"version":"0.20.2"}']])(
+    "rejects ambiguous registry output %s",
+    async (stdout) => {
+      const lease = await leaseWithRegistryOutput(stdout);
+      try {
+        await expect(lease.runtime.latestVersion("npm")).rejects.toThrow(
+          "invalid registry response",
+        );
+      } finally {
+        await lease.dispose();
+      }
+    },
+  );
+
   it("removes credential bytes after restoring owner access", async () => {
     const files = await runtimeFiles("ast-upgrade-cleanup-", "token=private-token\n");
     let userConfig = "";
