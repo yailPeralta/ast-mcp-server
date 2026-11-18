@@ -42,15 +42,48 @@ export interface UpgradePlan extends UpgradeInspection {
 
 type UpgradeErrorCode =
   "UPGRADE_PROVENANCE_UNSUPPORTED" | "UPGRADE_INSPECTION_FAILED" | "UPGRADE_VERIFICATION_FAILED";
+export type UpgradeRegistryFailureReason = "registry_command_failed" | "registry_response_invalid";
+export type UpgradeInspectionFailureReason = UpgradeRegistryFailureReason | "version_invalid";
+
+const ISSUES_URL = "https://github.com/yailPeralta/ast-mcp-server/issues";
+const INSPECTION_CONTINUATIONS: Record<UpgradeInspectionFailureReason, string> = {
+  registry_command_failed:
+    "Check that `npm view ast-mcp-server version` works in this shell, then run: ast-tool upgrade --check",
+  registry_response_invalid: `Report the output of \`npm --version\` at ${ISSUES_URL}, then run: ast-tool upgrade --check`,
+  version_invalid: `Report the output of \`npm view ast-mcp-server version\` at ${ISSUES_URL}, then run: ast-tool upgrade --check`,
+};
+
 export class UpgradeError extends Error {
   constructor(
     readonly code: UpgradeErrorCode,
     message: string,
     readonly continuation = CONTINUATION,
+    readonly reason?: UpgradeInspectionFailureReason,
   ) {
     super(message);
     this.name = "UpgradeError";
   }
+}
+
+/** Thrown by a runtime's latestVersion; carries only a typed reason, never host output. */
+export class UpgradeRegistryError extends Error {
+  constructor(readonly reason: UpgradeRegistryFailureReason) {
+    super(
+      reason === "registry_command_failed"
+        ? "registry command failed"
+        : "invalid registry response",
+    );
+    this.name = "UpgradeRegistryError";
+  }
+}
+
+function failInspection(reason: UpgradeInspectionFailureReason, message: string): never {
+  throw new UpgradeError(
+    "UPGRADE_INSPECTION_FAILED",
+    message,
+    INSPECTION_CONTINUATIONS[reason],
+    reason,
+  );
 }
 
 function fail(code: UpgradeErrorCode, message: string): never {
@@ -188,7 +221,7 @@ function versionParts(value: string): [number, number, number, string] | undefin
 function updateAvailable(current: string, latest: string): boolean {
   const left = versionParts(current);
   const right = versionParts(latest);
-  if (!left || !right) fail("UPGRADE_INSPECTION_FAILED", "Package version is invalid.");
+  if (!left || !right) failInspection("version_invalid", "Package version is invalid.");
   for (let index = 0; index < 3; index++) {
     if (left[index] !== right[index]) return left[index]! < right[index]!;
   }
@@ -218,8 +251,11 @@ export async function planUpgrade(runtime: UpgradeRuntime): Promise<UpgradePlan>
   let latest: string;
   try {
     latest = await runtime.latestVersion(proof.kind);
-  } catch {
-    fail("UPGRADE_INSPECTION_FAILED", "Latest package version could not be verified.");
+  } catch (error) {
+    failInspection(
+      error instanceof UpgradeRegistryError ? error.reason : "registry_command_failed",
+      "Latest package version could not be verified.",
+    );
   }
   const update = updateAvailable(current.version, latest);
   return {
