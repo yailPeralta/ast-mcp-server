@@ -3,7 +3,7 @@
 //
 // Mandatory evidence against the PINNED Harness revision — never a green-skip:
 //   A. Packed tarball fixture: exact dsh.bundle.patch + deepseekHarness identity, shipped
-//      cordis.patch.yml, exact 0.20.3 candidate version.
+//      cordis.patch.yml, exact 0.20.4 candidate version.
 //   B. Guard matrix against the resolved entrypoint (independent MCP client):
 //      unset/deny/invalid deny ast_apply_operation; only `allow` enables it;
 //      reads + prepare + preview work while apply is denied.
@@ -49,7 +49,7 @@ const packageMetadata = JSON.parse(
   await readFile(path.join(repositoryRoot, "package.json"), "utf8"),
 );
 const PUBLIC_BASELINE_VERSION = "0.13.0";
-const CANDIDATE_PACKAGE_VERSION = "0.20.3";
+const CANDIDATE_PACKAGE_VERSION = "0.20.4";
 const timeoutBudget = validateTimeoutBudget(packageMetadata.deepseekHarness?.timeoutBudget);
 const yarnExecutable = process.platform === "win32" ? "yarn.cmd" : "yarn";
 const PINNED_REVISION = "cd5ef8148158c3a752a658978873241fdf8e2bbc";
@@ -62,7 +62,7 @@ const PUBLIC_PACKAGE_SHASUM = "166f95121a72f0b03c325cef586a211cd9107a24";
 // prettier-ignore
 const PINNED_GUI_IDENTITY = Object.freeze({ webPackageSha256: "d73d37377783372f27971b0518b62c9cd1cbf03177e5ac402bb2c4fe1f42a3ec", webEntrypointSha256: "069851c0c35055baa63fbd8bca9b833f1d05a4e96613c618ff1ff0c0595c7db0", playwrightVersion: "1.61.1", playwrightPackageSha256: "6b840268612656f0639fb7d68782e8353bdf11518589d30ddf66f283c2670ed5", playwrightSourceSha256: "a0f5715ea22354f922791a9c53dc012d5d5c067ff9cc4cd35ffb7cd272071a9f", browserManifestSha256: "ee39bc924bc3d1bd895626c2910f1292d109bbfeeb5abd113acb45e1951cc942", chromiumRevision: "1228", chromiumVersion: "149.0.7827.55", chromiumSha256: "2d18db9d8608b052b6a552ee00ec1e830f93692e928b65ecc67d693bd33fe801" });
 // prettier-ignore
-const PINNED_H05_PROFILE_SHA256 = Object.freeze({ native: "8f3c64f9b9bc7170e4e1f47d47872ab1b87bc7eee54ae4b147f3262939ba297a", web: "13621e87c550821c401b72769d6646f00b6cf3c10671ce3f358f66602d6d2cff", nativeTempRoots: 1, webTempRoots: 2 });
+const PINNED_H05_PROFILE_SHA256 = Object.freeze({ native: "bbad910e09972b48cee2513ea99be87ec5a26b964ae8126d7364cb2cc128b28f", web: "b7c0add8557eb31f5ade83665041e32854d386309453afbc412e7c5ee5516173", nativeTempRoots: 1, webTempRoots: 2 });
 const AST_TOOL_PREFIX = "mcp__ast__";
 const H01_TOOL_NAME = "mcp__ast__ast_get_project_status";
 // prettier-ignore

@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.20.4] — not yet published (2026-11-18)
+
 ### Fixed
 
 - `ast-tool upgrade` no longer hides why the latest version could not be read. `UPGRADE_INSPECTION_FAILED` now carries `details.reason`: `registry_command_failed` when the bound `npm view` command fails, `registry_response_invalid` when its output is not JSON or not a single version string, and `version_invalid` when a version is not valid semver. Each reason has its own continuation instead of the reinstall advice, which was wrong for all three; provenance errors keep it. No host paths or npm output are exposed (#501).
@@ -14,7 +16,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - The public-registry consumer audit in the release `verify-next` step now accepts only the unpatched `picomatch` ReDoS advisory GHSA-fc5q-39xc-vjpf (npm advisory `1247710`), and only until 2027-02-18, so the remaining consumer checks (setup idempotency and the inner MCP runner gates) run again. Every finding in the `npm audit --omit=dev` report must trace back to that advisory on `picomatch`, either directly or through dependents such as `tinyglobby` and `@ts-morph/common`; any other advisory or vulnerable package, an unrecognized report shape, counts that do not match the findings, or a run after the expiry date still fails the audit. The accepted advisory is recorded as `accepted_audit_advisories` in `registry-consumer.json`, and promotion validation rejects any recorded entry that does not match the reviewed exception exactly. The exception has the same runtime exposure as #497 and is to be removed once a patched `picomatch` ships (#503).
 
-## [0.20.3] — not yet published (2026-11-18)
+## [0.20.3] — published to `next`, verification failed, not promoted (2026-11-18)
+
+### Release status
+
+- npm published these immutable bytes under `next` with provenance and the expected Git commit (`ae54350c3764bfb6733b2f0ba62e9e3381c37b40`, integrity `sha512-9nyA/QkEdQYue1jVwoBHwLreTcrwIKpLhBdj0wgrp/IiUDuWb7Pbr6muKknMdEna6HT5o+EBBfx/z0DeyU189w==`, publish run `44233583548`). Public-registry verification (run `44234594705`) then failed at the consumer `npm audit`, which flagged the unpatched `picomatch` ReDoS advisory GHSA-fc5q-39xc-vjpf, before the setup idempotency and consumer runner gates ran (#503). `0.20.4` supersedes `0.20.3` on `next`; `0.20.3` was not promoted to `latest`, tagged in Git, or released on GitHub.
 
 ### Fixed
 
