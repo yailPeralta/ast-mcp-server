@@ -86,19 +86,46 @@ describe("upgrade runtime", () => {
     }
   });
 
-  it.each([["[]"], ['["0.20.2", "0.20.1"]'], ["[20]"], ["null"], ['{"version":"0.20.2"}']])(
-    "rejects ambiguous registry output %s",
-    async (stdout) => {
-      const lease = await leaseWithRegistryOutput(stdout);
-      try {
-        await expect(lease.runtime.latestVersion("npm")).rejects.toThrow(
-          "invalid registry response",
-        );
-      } finally {
-        await lease.dispose();
-      }
-    },
-  );
+  it.each([
+    ["[]"],
+    ['["0.20.2", "0.20.1"]'],
+    ["[20]"],
+    ["null"],
+    ['{"version":"0.20.2"}'],
+    ["not json"],
+  ])("rejects ambiguous registry output %s as registry_response_invalid", async (stdout) => {
+    const lease = await leaseWithRegistryOutput(stdout);
+    try {
+      await expect(lease.runtime.latestVersion("npm")).rejects.toMatchObject({
+        name: "UpgradeRegistryError",
+        reason: "registry_response_invalid",
+      });
+    } finally {
+      await lease.dispose();
+    }
+  });
+
+  it("classifies a failing npm view command as registry_command_failed", async () => {
+    const files = await runtimeFiles("ast-upgrade-registry-", "");
+    const lease = await createUpgradeRuntime(files.cliPath, {
+      nodeExecutable: files.nodePath,
+      environment: { HOME: files.home },
+      temporaryParent: files.root,
+      execute: async () => {
+        throw new Error("npm ERR! code ECONNREFUSED /private/path");
+      },
+    });
+    try {
+      const error = await lease.runtime.latestVersion("npm").catch((caught: unknown) => caught);
+      expect(error).toMatchObject({
+        name: "UpgradeRegistryError",
+        reason: "registry_command_failed",
+      });
+      expect((error as Error).message).not.toMatch(/ECONNREFUSED|private/);
+    } finally {
+      await lease.dispose();
+    }
+  });
 
   it("removes credential bytes after restoring owner access", async () => {
     const files = await runtimeFiles("ast-upgrade-cleanup-", "token=private-token\n");

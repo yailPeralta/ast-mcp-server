@@ -15,7 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
-import type { UpgradeRuntime } from "./upgrade.js";
+import { UpgradeRegistryError, type UpgradeRuntime } from "./upgrade.js";
 
 interface ExecutionResult {
   stdout: string;
@@ -160,27 +160,37 @@ export async function createUpgradeRuntime(
       readPackage: async (root) =>
         JSON.parse(await readFile(path.join(root, "package.json"), "utf8")),
       latestVersion: async (provenance) => {
-        const stdout =
-          provenance === "volta"
-            ? await run(voltaExecutable!, [
-                "run",
-                "npm",
-                "view",
-                "ast-mcp-server@latest",
-                "version",
-                "--json",
-              ])
-            : await run(nodeExecutable, [
-                npmCliExecutable!,
-                "view",
-                "ast-mcp-server@latest",
-                "version",
-                "--json",
-              ]);
-        const parsed: unknown = JSON.parse(stdout);
+        let stdout: string;
+        try {
+          stdout =
+            provenance === "volta"
+              ? await run(voltaExecutable!, [
+                  "run",
+                  "npm",
+                  "view",
+                  "ast-mcp-server@latest",
+                  "version",
+                  "--json",
+                ])
+              : await run(nodeExecutable, [
+                  npmCliExecutable!,
+                  "view",
+                  "ast-mcp-server@latest",
+                  "version",
+                  "--json",
+                ]);
+        } catch {
+          throw new UpgradeRegistryError("registry_command_failed");
+        }
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(stdout);
+        } catch {
+          throw new UpgradeRegistryError("registry_response_invalid");
+        }
         // npm <= 11 prints a JSON string; npm 12 wraps the single version in an array.
         const value = Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed;
-        if (typeof value !== "string") throw new Error("invalid registry response");
+        if (typeof value !== "string") throw new UpgradeRegistryError("registry_response_invalid");
         return value;
       },
       run,

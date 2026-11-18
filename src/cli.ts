@@ -525,6 +525,7 @@ export async function runCli(args: string[]): Promise<unknown> {
           undefined,
           { cause: error },
           {
+            ...(error.reason ? { reason: error.reason } : {}),
             continuation: error.continuation,
           },
         );

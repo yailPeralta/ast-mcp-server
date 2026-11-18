@@ -205,7 +205,7 @@ ast-tool upgrade --check
 ast-tool upgrade
 ```
 
-Upgrade supports only a direct package proven to belong to the active npm global prefix or to Volta. It rejects linked/source and ambiguous installations, never uses `sudo`, guesses from `PATH`, or accepts `--yes`. npm runs its proven `npm-cli.js` through the active Node with lifecycle scripts disabled and a disposable cache/config copy; cleanup is verified and blocks success if absence cannot be proven. Volta uses its native integration. The updated CLI then reconciles managed setup through that Node. Customized skill bytes remain untouched and produce `ast-tool setup --agents all --yes --force-skill`. Restart MCP clients after any package update; an already-running server does not change in place.
+Upgrade supports only a direct package proven to belong to the active npm global prefix or to Volta. It rejects linked/source and ambiguous installations, never uses `sudo`, guesses from `PATH`, or accepts `--yes`. npm runs its proven `npm-cli.js` through the active Node with lifecycle scripts disabled and a disposable cache/config copy; cleanup is verified and blocks success if absence cannot be proven. Volta uses its native integration. The updated CLI then reconciles managed setup through that Node. Customized skill bytes remain untouched and produce `ast-tool setup --agents all --yes --force-skill`. Restart MCP clients after any package update; an already-running server does not change in place. When the latest version cannot be read, `UPGRADE_INSPECTION_FAILED` reports `details.reason` — `registry_command_failed`, `registry_response_invalid` or `version_invalid` — with a continuation for that cause, never host paths or npm output.
 
 ## Guided agent setup
 

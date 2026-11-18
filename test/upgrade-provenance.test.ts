@@ -11,7 +11,13 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { inspectUpgrade, planUpgrade, type UpgradeRuntime } from "../src/services/upgrade.js";
+import {
+  inspectUpgrade,
+  planUpgrade,
+  UpgradeError,
+  UpgradeRegistryError,
+  type UpgradeRuntime,
+} from "../src/services/upgrade.js";
 
 const pkg = "/toolchain/lib/node_modules/ast-mcp-server";
 const cli = `${pkg}/dist/cli.js`;
@@ -69,6 +75,61 @@ describe("upgrade provenance planning", () => {
       ["root", "--global"],
       ["prefix", "--global"],
     ]);
+  });
+
+  it.each<[string, UpgradeRuntime["latestVersion"], string, string]>([
+    [
+      "the npm view command fails",
+      async () => {
+        throw new UpgradeRegistryError("registry_command_failed");
+      },
+      "registry_command_failed",
+      "Check that `npm view ast-mcp-server version` works in this shell, then run: ast-tool upgrade --check",
+    ],
+    [
+      "the registry output has an unexpected shape",
+      async () => {
+        throw new UpgradeRegistryError("registry_response_invalid");
+      },
+      "registry_response_invalid",
+      "Report the output of `npm --version` at https://github.com/yailPeralta/ast-mcp-server/issues, then run: ast-tool upgrade --check",
+    ],
+    [
+      "the latest version is not semver",
+      async () => "latest-garbage",
+      "version_invalid",
+      "Report the output of `npm view ast-mcp-server version` at https://github.com/yailPeralta/ast-mcp-server/issues, then run: ast-tool upgrade --check",
+    ],
+    [
+      "latestVersion throws an untyped error",
+      async () => {
+        throw new Error("/private/path token=secret");
+      },
+      "registry_command_failed",
+      "Check that `npm view ast-mcp-server version` works in this shell, then run: ast-tool upgrade --check",
+    ],
+  ])(
+    "reports a typed reason and matching continuation when %s",
+    async (_case, latestVersion, reason, continuation) => {
+      const { runtime } = fixture({ latestVersion });
+      const error = await inspectUpgrade(runtime).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(UpgradeError);
+      expect(error).toMatchObject({ code: "UPGRADE_INSPECTION_FAILED", reason, continuation });
+      expect(
+        JSON.stringify({ ...(error as object), message: (error as Error).message }),
+      ).not.toMatch(/private|secret/);
+    },
+  );
+
+  it("keeps the reinstall continuation and no reason for provenance failures", async () => {
+    const { runtime } = fixture({ cliExecutable: "/elsewhere/cli.js" });
+    const error = await inspectUpgrade(runtime).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({
+      code: "UPGRADE_PROVENANCE_UNSUPPORTED",
+      continuation:
+        "After reinstalling through its owning toolchain, run: ast-tool upgrade --check",
+    });
+    expect((error as UpgradeError).reason).toBeUndefined();
   });
 
   it("uses Volta only for a separately proven Volta-owned installation", async () => {

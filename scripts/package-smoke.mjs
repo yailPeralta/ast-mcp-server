@@ -594,6 +594,8 @@ try {
     const failure = JSON.parse(error?.stderr ?? "{}");
     if (
       failure.code !== "UPGRADE_INSPECTION_FAILED" ||
+      failure.details?.reason !== "registry_command_failed" ||
+      !String(failure.details?.continuation).startsWith("Check that `npm view") ||
       String(error?.stderr).includes(temporaryRoot)
     ) {
       throw error;

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `ast-tool upgrade` no longer hides why the latest version could not be read. `UPGRADE_INSPECTION_FAILED` now carries `details.reason`: `registry_command_failed` when the bound `npm view` command fails, `registry_response_invalid` when its output is not JSON or not a single version string, and `version_invalid` when a version is not valid semver. Each reason has its own continuation instead of the reinstall advice, which was wrong for all three; provenance errors keep it. No host paths or npm output are exposed (#501).
+
 ## [0.20.3] — not yet published (2026-11-18)
 
 ### Fixed
