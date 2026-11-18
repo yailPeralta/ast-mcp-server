@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.20.3] — not yet published (2026-11-18)
+
+### Fixed
+
+- `ast-tool upgrade` no longer fails with `UPGRADE_INSPECTION_FAILED` on npm 12. npm 12 prints `npm view ast-mcp-server@latest version --json` as a single-element array instead of a JSON string, so the latest-version check always rejected it. A single-element array is now unwrapped before the strict string check; empty, multi-element and non-string output is still rejected (#495).
+
+### Security
+
+- `yarn audit` now ignores only the `picomatch` ReDoS advisory GHSA-fc5q-39xc-vjpf (npm advisory `1247710`, through `npmAuditIgnoreAdvisories` in `.yarnrc.yml`, which matches the numeric npm ID rather than the GHSA ID). `4.0.7`, the latest published `picomatch`, is still affected, so no patched release exists to resolve to. At runtime `picomatch` is reached only through `@ts-morph/common` → `tinyglobby`, which matches the `include` patterns of the analyzed project's tsconfig, and no MCP tool input becomes a glob; the other paths are development-only. Only the advisory is ignored, not the package, and a dependency-policy test pins that exact shape. The ignore is to be removed once a patched release ships (#497).
+
 ## [0.20.2] — published to `latest` and `next`, registry verified (2026-11-17)
 
 ### Release status
