@@ -248,6 +248,32 @@ describe("Angular template type-check matrix workspaces", () => {
     }
   });
 
+  it("ignores only the unpatched picomatch ReDoS advisory, never the whole package", async () => {
+    // GHSA-fc5q-39xc-vjpf affects every picomatch release (<=4.0.7) and has no patched version.
+    // picomatch reaches the runtime only through @ts-morph/common -> tinyglobby, which matches the
+    // analyzed project's tsconfig include patterns; no MCP tool input becomes a glob. Yarn matches
+    // the npm advisory ID (1247710), not the GHSA ID. Remove the ignore (#497) as soon as a patched
+    // picomatch is published.
+    const [manifestBytes, configBytes] = await Promise.all(
+      ["package.json", ".yarnrc.yml"].map((file) =>
+        readFile(path.join(repositoryRoot, file), "utf8"),
+      ),
+    );
+    const manifest = JSON.parse(manifestBytes) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const config = yaml.parse(configBytes) as {
+      npmAuditExcludePackages?: string[];
+      npmAuditIgnoreAdvisories?: string[];
+    };
+
+    expect(config.npmAuditIgnoreAdvisories).toEqual(["1247710"]);
+    expect(config.npmAuditExcludePackages).not.toContain("picomatch");
+    expect(manifest.dependencies?.picomatch).toBeUndefined();
+    expect(manifest.devDependencies?.picomatch).toBeUndefined();
+  });
+
   it("passes the audit through exact descriptor pins, not new advisory exclusions", async () => {
     // Angular 18 and 19 compiler-cli pin @babel/core 7.25.2 and 7.26.9, which carry
     // GHSA-4x5r-pxfx-6jf8 (<=7.29.0). Only those exact descriptors are lifted to the version
