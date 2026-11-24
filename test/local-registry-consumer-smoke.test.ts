@@ -55,6 +55,16 @@ async function javascriptEntry(file: string, version: string, label: string): Pr
   );
 }
 
+function runningRuntimeContract() {
+  if (process.versions.node === "22.13.0") {
+    return { expectedNode: "22.13.0", expectedNpm: "10.9.2" } as const;
+  }
+  const major = process.versions.node.split(".")[0];
+  if (major === "24") return { expectedNode: "24", expectedNpm: "11.13.0" } as const;
+  if (major === "26") return { expectedNode: "26", expectedNpm: "11.20.0" } as const;
+  throw new Error(`Unsupported test runtime: Node ${process.versions.node}.`);
+}
+
 async function authorityFixture(root: string) {
   const sourceNodeExecutable = process.execPath;
   const authorityHome = path.join(root, "authority-home");
@@ -64,8 +74,7 @@ async function authorityFixture(root: string) {
   const transitiveNodeBin = path.join(trustedBin, "node");
   const yarnEntry = path.join(root, "yarn.js");
   const npmEntry = path.join(root, "npm-cli.js");
-  const expectedNode = process.versions.node === "22.13.0" ? "22.13.0" : "24";
-  const expectedNpm = expectedNode === "22.13.0" ? "10.9.2" : "11.13.0";
+  const { expectedNode, expectedNpm } = runningRuntimeContract();
   await Promise.all([
     mkdir(authorityHome, { mode: 0o700 }),
     mkdir(authorityTemp, { mode: 0o700 }),
@@ -124,6 +133,18 @@ describe("local registry consumer smoke contract", () => {
       output: "/tmp/local-registry.json",
     });
     expect(() => parseLocalRegistryArguments([])).toThrow(/--expected-node/u);
+    const withExpectedNode = (expectedNode: string) =>
+      args.map((value, index) => (index === 1 ? expectedNode : value));
+    for (const expectedNode of ["24", "26"]) {
+      expect(parseLocalRegistryArguments(withExpectedNode(expectedNode))).toMatchObject({
+        expectedNode,
+      });
+    }
+    for (const expectedNode of ["22", "25", "26.13.1", "27"]) {
+      expect(() => parseLocalRegistryArguments(withExpectedNode(expectedNode))).toThrow(
+        /--expected-node must be exactly 22\.13\.0, 24, or 26/u,
+      );
+    }
     expect(() => parseLocalRegistryArguments([...args, "--shell", "yes"])).toThrow(
       /Unknown or incomplete argument/u,
     );
@@ -143,13 +164,22 @@ describe("local registry consumer smoke contract", () => {
     ).toThrow(/absolute normalized file/u);
   });
 
-  it("requires exact Node 22.13.0 and the governed Node 24 major", () => {
+  it("requires exact Node 22.13.0 and the governed Node 24 and Node 26 majors", () => {
     expect(() => assertLocalRegistryRuntime("22.13.0", "22.13.0", "")).not.toThrow();
     expect(() => assertLocalRegistryRuntime("24", "24.16.0", "")).not.toThrow();
     expect(() => assertLocalRegistryRuntime("22.13.0", "22.13.1", "")).toThrow(
       /Expected Node 22\.13\.0/u,
     );
     expect(() => assertLocalRegistryRuntime("24", "25.0.0", "")).toThrow(/Expected Node 24/u);
+    expect(() => assertLocalRegistryRuntime("26", "26.13.1", "")).not.toThrow();
+    expect(() => assertLocalRegistryRuntime("26", "26.0.0", "")).not.toThrow();
+    expect(() => assertLocalRegistryRuntime("26", "25.9.0", "")).toThrow(/Expected Node 26/u);
+    expect(() => assertLocalRegistryRuntime("26", "27.0.0", "")).toThrow(/Expected Node 26/u);
+    expect(() => assertLocalRegistryRuntime("26", "24.16.0", "")).toThrow(/Expected Node 26/u);
+    expect(() => assertLocalRegistryRuntime("24", "26.13.1", "")).toThrow(/Expected Node 24/u);
+    expect(() => assertLocalRegistryRuntime("26", "26.13.1", "--inspect")).toThrow(
+      /NODE_OPTIONS must be empty/u,
+    );
     expect(() => assertLocalRegistryRuntime("24", "24.16.0", "--inspect")).toThrow(
       /NODE_OPTIONS must be empty/u,
     );

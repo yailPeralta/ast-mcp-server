@@ -41,6 +41,26 @@ async function exitOutcome(command: string, args: string[]) {
     child.once("exit", (code, signal) => resolve({ code, signal })),
   );
 }
+// Node 22 and 24 bundle Corepack next to the Node binary. Node 25 and later do not, so a
+// separately provisioned Corepack is located through PATH instead.
+async function locateInstalledCorepack(): Promise<string | undefined> {
+  const directories = [
+    path.dirname(process.execPath),
+    ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean),
+  ];
+  for (const directory of directories) {
+    const resolved = await realpath(path.join(directory, "corepack")).catch(() => undefined);
+    if (
+      resolved !== undefined &&
+      path.basename(resolved) === "corepack.js" &&
+      path.basename(path.dirname(resolved)) === "dist"
+    ) {
+      return resolved;
+    }
+  }
+  return undefined;
+}
+
 describe("private pnpm authority", () => {
   it("owns every package-manager path below the disposable root", async () => {
     const hostile = path.join(os.tmpdir(), "hostile-pnpm");
@@ -119,11 +139,15 @@ describe("private pnpm authority", () => {
   });
   it.runIf(process.platform !== "win32")(
     "replaces a real Corepack shim without mutating its fixture-global target",
-    async () => {
+    async ({ skip }) => {
+      const installedCorepack = await locateInstalledCorepack();
+      if (installedCorepack === undefined) {
+        const bundlesCorepack = Number(process.versions.node.split(".")[0]) < 25;
+        if (bundlesCorepack) throw new Error("The bundled Corepack installation was not found.");
+        skip("No Corepack installation is provisioned for this runtime.");
+        return;
+      }
       const { temporaryRoot, authority } = await privateEnvironment();
-      const installedCorepack = await realpath(
-        path.join(path.dirname(process.execPath), "corepack"),
-      );
       const installedCorepackRoot = path.dirname(path.dirname(installedCorepack));
       const fixtureCorepackRoot = path.join(temporaryRoot, "corepack-fixture");
       await cp(installedCorepackRoot, fixtureCorepackRoot, { recursive: true });
