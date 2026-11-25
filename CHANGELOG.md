@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - `ast-tool setup --agents <list> --yes` now probes only the listed agent clients. It used to run `<client> --version` on all six supported clients found on `PATH`, and some of them create files in the home directory when they start. `--agents all` and the interactive prompt still probe every client, because both have to discover what is installed (#516).
+- `ast-tool setup` no longer fails with `AGENT_MCP_CONFLICT` when it runs inside a directory that has its own Claude Code `ast` entry at local or project scope. Claude Code reports the entry of the directory it runs in and hides the user-scoped one, so setup read the wrong entry. Setup now runs Claude Code from an empty temporary directory and removes it afterwards. Other clients keep the working directory of the process (#517).
 
 ## [0.20.4] — not yet published (2026-11-18)
 
