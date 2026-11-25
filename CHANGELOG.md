@@ -16,7 +16,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `ast-tool setup` no longer fails with `AGENT_MCP_CONFLICT` when it runs inside a directory that has its own Claude Code `ast` entry at local or project scope. Claude Code reports the entry of the directory it runs in and hides the user-scoped one, so setup read the wrong entry. Setup now runs Claude Code from an empty temporary directory and removes it afterwards. Other clients keep the working directory of the process (#517).
 - `yarn test:release-candidate` can now pass its `dsh-adapter` gate outside CI. The gate ran with a private, empty `HOME` and a `TMPDIR` nested under the parent of `--output-dir`, so it could not find the installed Playwright Chromium, and Chromium and `tsx` exceeded the 107-byte Unix socket path limit. The matrix now passes the already-installed browser cache to that gate only (`PLAYWRIGHT_BROWSERS_PATH` when set, otherwise `$HOME/.cache/ms-playwright`) and fails in preflight when it is not an absolute path to an existing directory; it never downloads a browser, and the gate's pinned revision, version, and checksum checks are unchanged. The gate also gets its own owner-only `TMPDIR` under `/tmp`, checked against the socket path budget and removed with the candidate worktree. Every other command keeps its previous environment (#514).
 
-## [0.20.4] — not yet published (2026-11-18)
+## [0.20.4] — published to `latest` and `next`, registry verified (2026-11-18)
+
+### Release status
+
+- npm published immutable `0.20.4` bytes with integrity `sha512-gkz3nyQ+hnp/VowOaUw2mOwzNGrYOyZ0UU6yVP8EI2LtuLR/HFqg8mdUHnjXXxYIwRV3+gUYc5ILHt5AzUDmsA==` (publish run `44354345836`). Public-registry verification passed (run `44355310666`) with every consumer gate run, and its evidence records the one accepted consumer audit advisory (`picomatch` GHSA-fc5q-39xc-vjpf, expiring 2027-02-18); `latest` and `next` both resolve to `0.20.4` (promotion run `44355910135`); and npm `gitHead`, the annotated `v0.20.4` tag, and the GitHub Release target exact commit `601b172cda8c1e32d2b7c2e002755a65da24b242`.
 
 ### Fixed
 
