@@ -28,6 +28,7 @@ import {
 import {
   parseAgentsArgument,
   promptForAgentSelection,
+  agentsToProbe,
   resolveAgentSelection,
   type AgentId,
   type AgentSelectionRequest,
@@ -420,7 +421,7 @@ export async function runCli(args: string[]): Promise<unknown> {
   if (command === "setup") {
     const options = parseSetupArgs(commandArgs);
     try {
-      const detections = await detectInstalledAgents();
+      const detections = await detectInstalledAgents({ agents: agentsToProbe(options.agents) });
       let agents: AgentId[];
       if (options.agents === undefined) {
         if (process.stdin.isTTY !== true || process.stderr.isTTY !== true) {
