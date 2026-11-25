@@ -38,8 +38,29 @@ const commandTimeoutMs = 20 * 60 * 1000;
 const outputTailBytes = 64 * 1024;
 const TRUSTED_MV_BINARY = "/usr/bin/mv";
 const trustedMvVersion = "mv (GNU coreutils) 9.7";
+// The Harness gate launches Chromium, which binds `<TMPDIR>/org.chromium.Chromium.XXXXXX/
+// SingletonSocket` (45 bytes after TMPDIR) and aborts beyond the 107-byte Unix socket path limit.
+// Its TMPDIR therefore lives under the fixed system temporary root instead of the output parent.
+const HARNESS_TEMPORARY_BASE = "/tmp";
+const harnessSocketSuffixBytes = 45;
+const unixSocketPathLimitBytes = 107;
+const browserInstallCommand = "yarn dlx playwright@1.61.1 install chromium";
 const candidateTreePattern = /^[0-9a-f]{40}$/u;
 const nodeVersionPattern = /^v(\d+)\.(\d+)\.(\d+)$/u;
+// Single source of truth for the verified runtime lanes, in execution order. A lane with
+// `exactVersion` accepts only that release; the others accept any release of their major.
+const runtimeLanes = Object.freeze([
+  Object.freeze({
+    id: "node22.13",
+    major: 22,
+    exactVersion: "22.13.0",
+    binaryVariable: "AST_NODE_22_13_BIN",
+    expectedNode: "22.13.0",
+  }),
+  Object.freeze({ id: "node24", major: 24, binaryVariable: "AST_NODE_24_BIN", expectedNode: "24" }),
+  Object.freeze({ id: "node26", major: 26, binaryVariable: "AST_NODE_26_BIN", expectedNode: "26" }),
+]);
+const packageManagerRuntimeId = "node24";
 const runtimeEvidenceAuthority = new WeakSet();
 const runtimeReportAuthority = new WeakSet();
 const summaryReportAuthority = new WeakSet();
@@ -89,6 +110,12 @@ function fail(message) {
   throw new Error(`Release candidate matrix failed: ${message}`);
 }
 
+function requireRuntimeLane(runtimeId) {
+  const lane = runtimeLanes.find(({ id }) => id === runtimeId);
+  if (lane === undefined) fail(`Unknown runtime identity: ${runtimeId}`);
+  return lane;
+}
+
 function takeOptionValue(argv, index, option) {
   const value = argv[index + 1];
   if (value === undefined || value.startsWith("--")) fail(`${option} requires a value.`);
@@ -123,6 +150,7 @@ export function parseReleaseCandidateMatrixArgs(argv) {
 }
 
 export function validateRuntimeVersion(runtimeId, rawVersion) {
+  const lane = requireRuntimeLane(runtimeId);
   const match = nodeVersionPattern.exec(rawVersion.trim());
   if (match === null) fail(`${runtimeId} returned an invalid Node version.`);
   const version = {
@@ -130,19 +158,14 @@ export function validateRuntimeVersion(runtimeId, rawVersion) {
     minor: Number(match[2]),
     patch: Number(match[3]),
   };
-  if (runtimeId === "node22.13") {
-    if (version.major !== 22) {
-      fail(`node22.13 requires Node major 22; received ${rawVersion.trim()}.`);
-    }
-    if (version.minor !== 13 || version.patch !== 0) {
-      fail(`node22.13 requires exact Node 22.13.0; received ${rawVersion.trim()}.`);
-    }
-  } else if (runtimeId === "node24") {
-    if (version.major !== 24) {
-      fail(`node24 requires Node major 24; received ${rawVersion.trim()}.`);
-    }
-  } else {
-    fail(`Unknown runtime identity: ${runtimeId}`);
+  if (version.major !== lane.major) {
+    fail(`${lane.id} requires Node major ${lane.major}; received ${rawVersion.trim()}.`);
+  }
+  if (
+    lane.exactVersion !== undefined &&
+    `${version.major}.${version.minor}.${version.patch}` !== lane.exactVersion
+  ) {
+    fail(`${lane.id} requires exact Node ${lane.exactVersion}; received ${rawVersion.trim()}.`);
   }
   return Object.freeze({ raw: rawVersion.trim(), ...version });
 }
@@ -153,9 +176,7 @@ export function createRuntimeEnvironment(runtimeId, nodeBinary, ambientEnvironme
   if (!path.isAbsolute(home ?? "") || !path.isAbsolute(temporaryDirectory)) {
     fail("runtime HOME and TMPDIR must be absolute paths.");
   }
-  if (runtimeId !== "node22.13" && runtimeId !== "node24") {
-    fail(`Unknown runtime identity: ${runtimeId}`);
-  }
+  requireRuntimeLane(runtimeId);
   return Object.freeze({
     CI: "1",
     COREPACK_ENABLE_DOWNLOAD_PROMPT: "0",
@@ -251,13 +272,15 @@ export function createCommandEnvironment(
   commandId,
   packageManagerEnvironment = runtimeEnvironment,
   workTree = undefined,
+  harnessEnvironment = packageManagerEnvironment,
 ) {
   if (commandId === "diff-check") return createGitEnvironment({}, workTree);
   if (commandId !== "install" && commandId !== "dsh-adapter") return runtimeEnvironment;
-  if (packageManagerEnvironment.NODE_OPTIONS !== "") {
+  const environment = commandId === "dsh-adapter" ? harnessEnvironment : packageManagerEnvironment;
+  if (environment.NODE_OPTIONS !== "") {
     fail("package-manager NODE_OPTIONS must be explicitly empty.");
   }
-  return packageManagerEnvironment;
+  return environment;
 }
 
 export function createRuntimeGateEnvironment(
@@ -296,6 +319,79 @@ export function createPackageManagerEnvironment(
     PATH: runtimeEnvironment.PATH,
     TMPDIR: privateTemporaryDirectory,
   });
+}
+
+function assertHarnessTemporaryDirectoryBudget(temporaryDirectory) {
+  const bytes = Buffer.byteLength(temporaryDirectory);
+  const budget = unixSocketPathLimitBytes - harnessSocketSuffixBytes;
+  if (bytes > budget) {
+    fail(
+      `Harness TMPDIR is ${bytes} bytes; at most ${budget} fit the ${unixSocketPathLimitBytes}-byte Unix socket path limit.`,
+    );
+  }
+}
+
+export function createHarnessEnvironment(
+  packageManagerEnvironment,
+  browserCache,
+  temporaryDirectory,
+) {
+  if (!path.isAbsolute(browserCache) || !path.isAbsolute(temporaryDirectory)) {
+    fail("Harness browser cache and TMPDIR must be absolute paths.");
+  }
+  assertHarnessTemporaryDirectoryBudget(temporaryDirectory);
+  return Object.freeze({
+    ...packageManagerEnvironment,
+    PLAYWRIGHT_BROWSERS_PATH: browserCache,
+    TMPDIR: temporaryDirectory,
+  });
+}
+
+export async function createHarnessTemporaryDirectory(base = HARNESS_TEMPORARY_BASE) {
+  const temporaryDirectory = await mkdtemp(path.join(base, "ast-rc-"));
+  try {
+    const metadata = await lstat(temporaryDirectory);
+    if (!metadata.isDirectory() || (metadata.mode & 0o777) !== 0o700) {
+      fail("Harness TMPDIR must be an owner-only directory.");
+    }
+    assertHarnessTemporaryDirectoryBudget(temporaryDirectory);
+  } catch (error) {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+    throw error;
+  }
+  return temporaryDirectory;
+}
+
+export function resolveInstalledBrowserCache(ambientEnvironment = process.env) {
+  const configured = ambientEnvironment.PLAYWRIGHT_BROWSERS_PATH;
+  if (configured !== undefined && configured !== "") {
+    if (!path.isAbsolute(configured)) {
+      fail(
+        `PLAYWRIGHT_BROWSERS_PATH must be an absolute path to the installed Playwright Chromium cache (${browserInstallCommand}).`,
+      );
+    }
+    return path.normalize(configured);
+  }
+  const home = ambientEnvironment.HOME;
+  if (!path.isAbsolute(home ?? "")) {
+    fail(
+      `the installed Playwright Chromium cache needs an absolute HOME or PLAYWRIGHT_BROWSERS_PATH (${browserInstallCommand}).`,
+    );
+  }
+  return path.join(home, ".cache", "ms-playwright");
+}
+
+export async function inspectInstalledBrowserCache(ambientEnvironment = process.env) {
+  const browserCache = resolveInstalledBrowserCache(ambientEnvironment);
+  const resolved = await realpath(browserCache).catch(() => undefined);
+  const metadata =
+    resolved === undefined ? undefined : await lstat(resolved).catch(() => undefined);
+  if (metadata === undefined || !metadata.isDirectory()) {
+    fail(
+      `the installed Playwright Chromium cache must be an existing directory; install it with ${browserInstallCommand} or point PLAYWRIGHT_BROWSERS_PATH at it.`,
+    );
+  }
+  return resolved;
 }
 
 export async function assertFreshCandidateWorkspace(workspaceRoot) {
@@ -507,12 +603,14 @@ export async function createCandidateWorktree(candidateTree, outputDir, options 
     const packageManagerTemporaryDirectory = path.join(temporaryRoot, "package-manager-tmp");
     await mkdir(packageManagerHome, { mode: 0o700 });
     await mkdir(packageManagerTemporaryDirectory, { mode: 0o700 });
+    const harnessTemporaryDirectory = await createHarnessTemporaryDirectory();
     return Object.freeze({
       temporaryRoot,
       workspaceRoot,
       syntheticCommit,
       packageManagerHome,
       packageManagerTemporaryDirectory,
+      harnessTemporaryDirectory,
     });
   } catch (error) {
     let cleanupError;
@@ -556,16 +654,23 @@ async function assertCandidateWorktreeState(workspaceRoot, candidateTree) {
 }
 
 export async function removeCandidateWorktree(materialization) {
-  const result = await runGitProcess(
-    ["worktree", "remove", "--force", materialization.workspaceRoot],
-    {
-      timeoutMs: 2 * 60 * 1000,
-    },
-  );
-  if (result.exitCode !== 0 || result.signal !== null || result.timedOut) {
-    fail("candidate worktree cleanup failed.");
+  try {
+    const result = await runGitProcess(
+      ["worktree", "remove", "--force", materialization.workspaceRoot],
+      {
+        timeoutMs: 2 * 60 * 1000,
+      },
+    );
+    if (result.exitCode !== 0 || result.signal !== null || result.timedOut) {
+      fail("candidate worktree cleanup failed.");
+    }
+    await rm(materialization.temporaryRoot, { recursive: true, force: false });
+  } finally {
+    // The Harness TMPDIR lives outside the worktree root, so it is removed even when that fails.
+    if (materialization.harnessTemporaryDirectory !== undefined) {
+      await rm(materialization.harnessTemporaryDirectory, { recursive: true, force: false });
+    }
   }
-  await rm(materialization.temporaryRoot, { recursive: true, force: false });
 }
 
 export async function assertRepositoryState(candidateTree, root = repositoryRoot) {
@@ -646,7 +751,7 @@ async function prepareLocalRegistryCommand(runtime, materialization) {
   await chmod(transitiveNodeBin, 0o700);
   return Object.freeze({
     output: path.join(materialization.temporaryRoot, `${runtime.id}-local-registry.json`),
-    expectedNode: runtime.id === "node22.13" ? "22.13.0" : "24",
+    expectedNode: requireRuntimeLane(runtime.id).expectedNode,
     npmEntry: runtime.npmEntry,
     transitiveNodeBin,
     expectedNodeSha256: runtime.nodeSha256,
@@ -834,10 +939,7 @@ async function publishReportSet(outputDir, runtimeReports, summary) {
   const runtimeIds = new Set();
   const entries = [];
   for (const report of runtimeReports) {
-    if (
-      (report.runtime !== "node22.13" && report.runtime !== "node24") ||
-      runtimeIds.has(report.runtime)
-    ) {
+    if (!runtimeLanes.some(({ id }) => id === report.runtime) || runtimeIds.has(report.runtime)) {
       fail("runtime report publication set is invalid.");
     }
     runtimeIds.add(report.runtime);
@@ -1122,6 +1224,7 @@ async function runRuntime(
   candidateTree,
   packageVersion,
   identity,
+  browserCache,
 ) {
   const commandReports = [];
   const packageManagerEnvironment = createPackageManagerEnvironment(
@@ -1179,6 +1282,13 @@ async function runRuntime(
           command.id,
           packageManagerEnvironment,
           materialization.workspaceRoot,
+          command.id === "dsh-adapter"
+            ? createHarnessEnvironment(
+                packageManagerEnvironment,
+                browserCache,
+                materialization.harnessTemporaryDirectory,
+              )
+            : undefined,
         ),
       });
       commandReports.push(publicCommandResult(command, result));
@@ -1237,10 +1347,9 @@ async function main() {
     outputDir: options.outputDir,
     candidateTree: options.candidateTree ?? null,
   });
-  const node22Binary = process.env.AST_NODE_22_13_BIN;
-  const node24Binary = process.env.AST_NODE_24_BIN;
-  if (node22Binary === undefined || node24Binary === undefined) {
-    fail("AST_NODE_22_13_BIN and AST_NODE_24_BIN are required.");
+  const laneBinaries = runtimeLanes.map(({ binaryVariable }) => process.env[binaryVariable]);
+  if (laneBinaries.some((binary) => binary === undefined)) {
+    fail(`${runtimeLanes.map(({ binaryVariable }) => binaryVariable).join(", ")} are required.`);
   }
   assertNoAmbientGitControls();
   await mkdir(path.dirname(options.outputDir), { recursive: true });
@@ -1262,12 +1371,13 @@ async function main() {
     git_authority: gitAuthority,
   });
 
-  const runtimes = [
-    await inspectRuntime("node22.13", node22Binary),
-    await inspectRuntime("node24", node24Binary),
-  ];
-  const packageManager = runtimes.find(({ id }) => id === "node24");
+  const runtimes = [];
+  for (const [index, lane] of runtimeLanes.entries()) {
+    runtimes.push(await inspectRuntime(lane.id, laneBinaries[index]));
+  }
+  const packageManager = runtimes.find(({ id }) => id === packageManagerRuntimeId);
   if (packageManager === undefined) fail("the Node 24 package-manager runtime is missing.");
+  const browserCache = await inspectInstalledBrowserCache();
   const materializedTree = options.candidateTree ?? initialIndexTree;
   const reports = [];
   for (const runtime of runtimes) {
@@ -1307,6 +1417,7 @@ async function main() {
         materializedTree,
         packageMetadata.version,
         identity,
+        browserCache,
       );
     } catch (error) {
       runtimeError = error;

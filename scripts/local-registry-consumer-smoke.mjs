@@ -37,7 +37,9 @@ const maxTarballBytes = 50 * 1024 * 1024;
 const commandTimeoutMs = 180_000;
 const proxyTimeoutMs = 30_000;
 const expectedYarnVersion = "4.15.0";
-const expectedNpmVersions = Object.freeze({ "22.13.0": "10.9.2", 24: "11.13.0" });
+// Bundled npm release per governed runtime line. "22.13.0" is an exact Node version; the other
+// keys are Node majors that accept any release of that line.
+const expectedNpmVersions = Object.freeze({ "22.13.0": "10.9.2", 24: "11.13.0", 26: "11.20.0" });
 const authenticatedAuthoritySets = new WeakSet();
 const versionPattern = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u;
 const sha256Pattern = /^[0-9a-f]{64}$/u;
@@ -125,8 +127,8 @@ export function parseLocalRegistryArguments(argv) {
     }
     fail(`Unknown or incomplete argument: ${argument}`);
   }
-  if (options.expectedNode !== "22.13.0" && options.expectedNode !== "24") {
-    fail("--expected-node must be exactly 22.13.0 or 24.");
+  if (options.expectedNode === null || !Object.hasOwn(expectedNpmVersions, options.expectedNode)) {
+    fail("--expected-node must be exactly 22.13.0, 24, or 26.");
   }
   if (options.output === null) fail("--output must identify an absolute new JSON file.");
   if (options.yarnEntry === null) fail("--yarn-entry must identify an absolute normalized file.");
@@ -149,7 +151,10 @@ export function assertLocalRegistryRuntime(
   actual = process.versions.node,
   nodeOptions = process.env.NODE_OPTIONS ?? "",
 ) {
-  if (expectedNode === "22.13.0" ? actual !== expectedNode : actual.split(".")[0] !== "24") {
+  if (
+    !Object.hasOwn(expectedNpmVersions, expectedNode) ||
+    (expectedNode === "22.13.0" ? actual !== expectedNode : actual.split(".")[0] !== expectedNode)
+  ) {
     fail(`Expected Node ${expectedNode}, received ${actual}.`);
   }
   if (nodeOptions !== "") {

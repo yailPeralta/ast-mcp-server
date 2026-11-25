@@ -45,6 +45,11 @@ export interface AgentTargetDefinition {
   readonly command: string;
   readonly skillTarget: SkillTarget;
   readonly mcp: AgentTargetMcpAdapter;
+  /**
+   * True when the client resolves MCP entries from the directory it runs in, so an entry that
+   * belongs to that directory hides the user-scoped one.
+   */
+  readonly scopeFollowsWorkingDirectory?: true;
 }
 
 export type Compatibility =
@@ -460,7 +465,14 @@ const opencodeMcp: AgentTargetMcpAdapter = {
 };
 
 export const AGENT_TARGETS = [
-  { id: "claude", label: "Claude Code", command: "claude", skillTarget: "claude", mcp: claudeMcp },
+  {
+    id: "claude",
+    label: "Claude Code",
+    command: "claude",
+    skillTarget: "claude",
+    mcp: claudeMcp,
+    scopeFollowsWorkingDirectory: true,
+  },
   { id: "hermes", label: "Hermes", command: "hermes", skillTarget: "hermes", mcp: hermesMcp },
   {
     id: "opencode",

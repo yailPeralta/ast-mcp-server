@@ -119,13 +119,13 @@ The included batch benchmark records a 50% reduction in model round-trips and a 
 
 ## Requirements
 
-- Node.js 22.13.0 or newer
-- Corepack with Yarn 4.15.0 (pinned by `packageManager`)
+- Node.js 22.13.0 or newer; exact Node.js 22.13.0, the Node.js 24 line, and the Node.js 26 line are verified in CI
+- Corepack with Yarn 4.15.0 (pinned by `packageManager`); Node.js 26 no longer bundles Corepack, so install it separately there (`npm install -g corepack`)
 - A target project with a `tsconfig.json`
 
 ## Supported environment and trust boundary
 
-Published v0.12.0 requires Node.js `>=22.13.0`; its immutable evidence matrix targets exact Node.js 22.13.0 and the current Node.js 24 line. Structural apply and managed setup-file publication are verified only on Linux x64 with GNU coreutils 9.7 `mv` supporting `--update=none-fail`, `--exchange`, `--no-copy`, and `--no-target-directory`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, `O_DIRECTORY`/`O_NOFOLLOW`, and a destination filesystem that passes the owned link/exchange identity probe. A failed or denied primitive blocks mutation before source effects; there is no rename, copy/delete, or pathname-only fallback. Other Linux architectures or systems without this complete matrix, macOS, and Windows remain unverified.
+Published v0.12.0 requires Node.js `>=22.13.0`; its immutable evidence matrix targets exact Node.js 22.13.0 and the current Node.js 24 line. The Node.js 26 line is supported and CI-verified for development after that release; it has no published release evidence yet. Structural apply and managed setup-file publication are verified only on Linux x64 with GNU coreutils 9.7 `mv` supporting `--update=none-fail`, `--exchange`, `--no-copy`, and `--no-target-directory`, GNU coreutils `ln -L -T`, procfs descriptor paths at `/proc/self/fd`, `O_DIRECTORY`/`O_NOFOLLOW`, and a destination filesystem that passes the owned link/exchange identity probe. A failed or denied primitive blocks mutation before source effects; there is no rename, copy/delete, or pathname-only fallback. Other Linux architectures or systems without this complete matrix, macOS, and Windows remain unverified.
 
 This is a local stdio server. It runs with the invoking user's filesystem permissions, and clients may request any `project_root` that user can access. It does not provide HTTP authentication, sandboxing, tenant isolation, or a remote-service security boundary. Remote, untrusted, and multi-tenant operation is unsupported.
 

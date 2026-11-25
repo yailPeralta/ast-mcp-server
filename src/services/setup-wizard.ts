@@ -55,6 +55,17 @@ function usability(detection: AgentDetection): { usable: boolean; reason?: strin
   return { usable: false, reason: detection.compatibility.reason };
 }
 
+/**
+ * Returns the agents that setup has to probe, or undefined when it has to probe all of them.
+ * Only an explicit list is known before detection; "all" and the interactive prompt both depend
+ * on discovering what is installed.
+ */
+export function agentsToProbe(
+  request: AgentSelectionRequest | undefined,
+): readonly AgentId[] | undefined {
+  return Array.isArray(request) ? request : undefined;
+}
+
 export function resolveAgentSelection(
   request: AgentSelectionRequest,
   detections: readonly AgentDetection[],

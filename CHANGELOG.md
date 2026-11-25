@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Node.js 26 is now a supported and tested runtime line, next to exact Node.js 22.13.0 and the Node.js 24 line. The CI `quality` matrix runs every gate on Node.js 26, and the release-candidate matrix gains a third `node26` lane that accepts any `v26.x` binary from the new required `AST_NODE_26_BIN` variable and publishes `node26.json`; the local-registry consumer smoke accepts `--expected-node 26` with bundled npm `11.20.0`. `engines.node` stays `>=22.13.0`, and the release toolchain stays on Node.js 24. Node.js 26 does not bundle Corepack, so Yarn for that runtime comes from a separately provisioned Corepack (`npm install -g corepack`).
+
+### Fixed
+
+- `ast-tool setup --agents <list> --yes` now probes only the listed agent clients. It used to run `<client> --version` on all six supported clients found on `PATH`, and some of them create files in the home directory when they start. `--agents all` and the interactive prompt still probe every client, because both have to discover what is installed (#516).
+- `ast-tool setup` no longer fails with `AGENT_MCP_CONFLICT` when it runs inside a directory that has its own Claude Code `ast` entry at local or project scope. Claude Code reports the entry of the directory it runs in and hides the user-scoped one, so setup read the wrong entry. Setup now runs Claude Code from an empty temporary directory and removes it afterwards. Other clients keep the working directory of the process (#517).
+- `yarn test:release-candidate` can now pass its `dsh-adapter` gate outside CI. The gate ran with a private, empty `HOME` and a `TMPDIR` nested under the parent of `--output-dir`, so it could not find the installed Playwright Chromium, and Chromium and `tsx` exceeded the 107-byte Unix socket path limit. The matrix now passes the already-installed browser cache to that gate only (`PLAYWRIGHT_BROWSERS_PATH` when set, otherwise `$HOME/.cache/ms-playwright`) and fails in preflight when it is not an absolute path to an existing directory; it never downloads a browser, and the gate's pinned revision, version, and checksum checks are unchanged. The gate also gets its own owner-only `TMPDIR` under `/tmp`, checked against the socket path budget and removed with the candidate worktree. Every other command keeps its previous environment (#514).
+
 ## [0.20.4] — published to `latest` and `next`, registry verified (2026-11-18)
 
 ### Release status

@@ -19,8 +19,11 @@ issue, leave a comment first so work is not duplicated.
 ### Prerequisites
 
 - Linux x64, the supported development and release environment
-- Node.js 22.13.0 or newer; CI verifies exact Node.js 22.13.0 and the Node.js 24 line
-- Corepack with Yarn 4.15.0, pinned by `packageManager` in `package.json`
+- Node.js 22.13.0 or newer; CI verifies exact Node.js 22.13.0, the Node.js 24 line, and the
+  Node.js 26 line
+- Corepack with Yarn 4.15.0, pinned by `packageManager` in `package.json`. Node.js 22 and 24 bundle
+  Corepack; Node.js 26 does not, so provision it for that runtime with `npm install -g corepack`
+  before running `corepack enable`
 - Git
 
 Some filesystem and setup paths require GNU coreutils and procfs. See
@@ -213,9 +216,10 @@ the current slice, and anything intentionally deferred.
 
 ## Automated checks
 
-CI runs on pushes and pull requests for Node.js 22.13.0 and Node.js 24. It verifies formatting,
-linting, types, tests, build output, MCP/CLI/package boundaries, dependency audit, package shape,
-workflow policy, and whitespace.
+CI runs on pushes and pull requests for Node.js 22.13.0, Node.js 24, and Node.js 26. It verifies
+formatting, linting, types, tests, build output, MCP/CLI/package boundaries, dependency audit,
+package shape, workflow policy, and whitespace. Dependencies are always installed with Node.js 24;
+the Corepack from that step stays on `PATH` and provides Yarn for the Node.js 26 lane.
 
 Run the main checks locally before requesting review:
 
@@ -239,6 +243,45 @@ git diff --check
 
 All applicable checks must pass before merge. If a check cannot run locally, explain the reason
 and leave the PR unready until CI provides the missing evidence.
+
+### Release-candidate matrix runtimes
+
+`yarn test:release-candidate` runs the complete gate chain once per runtime lane, in this order,
+and writes one report per lane next to `summary.json`:
+
+| Lane        | Binary variable      | Accepted version   | Report           |
+| ----------- | -------------------- | ------------------ | ---------------- |
+| `node22.13` | `AST_NODE_22_13_BIN` | exactly `v22.13.0` | `node22.13.json` |
+| `node24`    | `AST_NODE_24_BIN`    | any `v24.x`        | `node24.json`    |
+| `node26`    | `AST_NODE_26_BIN`    | any `v26.x`        | `node26.json`    |
+
+All three variables are required and must point at the `node` binary of each runtime. The `node24`
+runtime also performs the immutable dependency installation for every lane.
+
+Each runtime needs a Yarn launcher (`yarn`) and an npm launcher (`npm`) next to its `node` binary.
+Node.js 22 and 24 get the Yarn launcher from their bundled Corepack via `corepack enable`. Node.js
+26 does not bundle Corepack, so provision it under that runtime first:
+
+```bash
+PATH="$(dirname "$AST_NODE_26_BIN"):$PATH" npm install -g corepack
+PATH="$(dirname "$AST_NODE_26_BIN"):$PATH" corepack enable
+```
+
+The `dsh-adapter` gate reuses a Playwright Chromium that is already installed; the matrix never
+downloads or installs a browser. Install it once before running the matrix:
+
+```bash
+yarn dlx playwright@1.61.1 install chromium
+```
+
+The matrix reads the browser cache from `PLAYWRIGHT_BROWSERS_PATH` when that variable is set, and
+from `$HOME/.cache/ms-playwright` otherwise. The value must be an absolute path to an existing
+directory; the matrix fails in preflight, before any lane runs, when it is not. The gate itself
+still verifies the exact pinned Chromium revision, version, and checksum.
+
+The parent directory of `--output-dir` must be owner-only. The candidate worktree and its private
+home are created there, and a group-writable ancestor makes the symbol-index cache tests fail by
+design.
 
 ## Security reports
 

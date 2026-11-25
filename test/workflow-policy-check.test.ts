@@ -939,16 +939,39 @@ describe("workflow policy check", () => {
     expect(documents["ci.yml"]).not.toMatch(/^ {4}env:/mu);
     const matrixDrift = {
       ...documents,
-      "ci.yml": replaceRequired(documents["ci.yml"], 'node: ["22.13.0", "24"]', 'node: ["24"]'),
+      "ci.yml": replaceRequired(
+        documents["ci.yml"],
+        'node: ["22.13.0", "24", "26"]',
+        'node: ["24"]',
+      ),
     };
     expect(() => validateWorkflowPolicyDocuments(matrixDrift)).toThrow(/Node matrix/u);
+
+    for (const driftedMatrix of [
+      'node: ["22.13.0", "24"]',
+      'node: ["22.13.0", "26"]',
+      'node: ["22.13.0", "24", "25"]',
+      'node: ["22.13.0", "24", "26", "27"]',
+    ]) {
+      const droppedOrForeignLine = {
+        ...documents,
+        "ci.yml": replaceRequired(
+          documents["ci.yml"],
+          'node: ["22.13.0", "24", "26"]',
+          driftedMatrix,
+        ),
+      };
+      expect(() => validateWorkflowPolicyDocuments(droppedOrForeignLine)).toThrow(
+        /exact Node matrix 22\.13\.0, 24 and 26/u,
+      );
+    }
 
     const commentedMatrixDecoy = {
       ...documents,
       "ci.yml": replaceRequired(
         documents["ci.yml"],
-        '        node: ["22.13.0", "24"]',
-        '        # node: ["22.13.0", "24"]\n        node: ["24"]',
+        '        node: ["22.13.0", "24", "26"]',
+        '        # node: ["22.13.0", "24", "26"]\n        node: ["24"]',
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(commentedMatrixDecoy)).toThrow(/Node matrix/u);
@@ -1028,8 +1051,8 @@ describe("workflow policy check", () => {
       ...documents,
       "ci.yml": replaceRequired(
         documents["ci.yml"],
-        '        node: ["22.13.0", "24"]\n',
-        '        node: ["22.13.0", "24"]\n        exclude:\n          - node: "22.13.0"\n',
+        '        node: ["22.13.0", "24", "26"]\n',
+        '        node: ["22.13.0", "24", "26"]\n        exclude:\n          - node: "22.13.0"\n',
       ),
     };
     expect(() => validateWorkflowPolicyDocuments(excludedFloor)).toThrow(/gate-bypass control/u);
