@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Node.js 26 is now a supported and tested runtime line, next to exact Node.js 22.13.0 and the Node.js 24 line. The CI `quality` matrix runs every gate on Node.js 26, and the release-candidate matrix gains a third `node26` lane that accepts any `v26.x` binary from the new required `AST_NODE_26_BIN` variable and publishes `node26.json`; the local-registry consumer smoke accepts `--expected-node 26` with bundled npm `11.20.0`. `engines.node` stays `>=22.13.0`, and the release toolchain stays on Node.js 24. Node.js 26 does not bundle Corepack, so Yarn for that runtime comes from a separately provisioned Corepack (`npm install -g corepack`).
+
 ### Fixed
 
 - `ast-tool setup --agents <list> --yes` now probes only the listed agent clients. It used to run `<client> --version` on all six supported clients found on `PATH`, and some of them create files in the home directory when they start. `--agents all` and the interactive prompt still probe every client, because both have to discover what is installed (#516).

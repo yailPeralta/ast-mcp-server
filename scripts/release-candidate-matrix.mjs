@@ -40,6 +40,20 @@ const TRUSTED_MV_BINARY = "/usr/bin/mv";
 const trustedMvVersion = "mv (GNU coreutils) 9.7";
 const candidateTreePattern = /^[0-9a-f]{40}$/u;
 const nodeVersionPattern = /^v(\d+)\.(\d+)\.(\d+)$/u;
+// Single source of truth for the verified runtime lanes, in execution order. A lane with
+// `exactVersion` accepts only that release; the others accept any release of their major.
+const runtimeLanes = Object.freeze([
+  Object.freeze({
+    id: "node22.13",
+    major: 22,
+    exactVersion: "22.13.0",
+    binaryVariable: "AST_NODE_22_13_BIN",
+    expectedNode: "22.13.0",
+  }),
+  Object.freeze({ id: "node24", major: 24, binaryVariable: "AST_NODE_24_BIN", expectedNode: "24" }),
+  Object.freeze({ id: "node26", major: 26, binaryVariable: "AST_NODE_26_BIN", expectedNode: "26" }),
+]);
+const packageManagerRuntimeId = "node24";
 const runtimeEvidenceAuthority = new WeakSet();
 const runtimeReportAuthority = new WeakSet();
 const summaryReportAuthority = new WeakSet();
@@ -89,6 +103,12 @@ function fail(message) {
   throw new Error(`Release candidate matrix failed: ${message}`);
 }
 
+function requireRuntimeLane(runtimeId) {
+  const lane = runtimeLanes.find(({ id }) => id === runtimeId);
+  if (lane === undefined) fail(`Unknown runtime identity: ${runtimeId}`);
+  return lane;
+}
+
 function takeOptionValue(argv, index, option) {
   const value = argv[index + 1];
   if (value === undefined || value.startsWith("--")) fail(`${option} requires a value.`);
@@ -123,6 +143,7 @@ export function parseReleaseCandidateMatrixArgs(argv) {
 }
 
 export function validateRuntimeVersion(runtimeId, rawVersion) {
+  const lane = requireRuntimeLane(runtimeId);
   const match = nodeVersionPattern.exec(rawVersion.trim());
   if (match === null) fail(`${runtimeId} returned an invalid Node version.`);
   const version = {
@@ -130,19 +151,14 @@ export function validateRuntimeVersion(runtimeId, rawVersion) {
     minor: Number(match[2]),
     patch: Number(match[3]),
   };
-  if (runtimeId === "node22.13") {
-    if (version.major !== 22) {
-      fail(`node22.13 requires Node major 22; received ${rawVersion.trim()}.`);
-    }
-    if (version.minor !== 13 || version.patch !== 0) {
-      fail(`node22.13 requires exact Node 22.13.0; received ${rawVersion.trim()}.`);
-    }
-  } else if (runtimeId === "node24") {
-    if (version.major !== 24) {
-      fail(`node24 requires Node major 24; received ${rawVersion.trim()}.`);
-    }
-  } else {
-    fail(`Unknown runtime identity: ${runtimeId}`);
+  if (version.major !== lane.major) {
+    fail(`${lane.id} requires Node major ${lane.major}; received ${rawVersion.trim()}.`);
+  }
+  if (
+    lane.exactVersion !== undefined &&
+    `${version.major}.${version.minor}.${version.patch}` !== lane.exactVersion
+  ) {
+    fail(`${lane.id} requires exact Node ${lane.exactVersion}; received ${rawVersion.trim()}.`);
   }
   return Object.freeze({ raw: rawVersion.trim(), ...version });
 }
@@ -153,9 +169,7 @@ export function createRuntimeEnvironment(runtimeId, nodeBinary, ambientEnvironme
   if (!path.isAbsolute(home ?? "") || !path.isAbsolute(temporaryDirectory)) {
     fail("runtime HOME and TMPDIR must be absolute paths.");
   }
-  if (runtimeId !== "node22.13" && runtimeId !== "node24") {
-    fail(`Unknown runtime identity: ${runtimeId}`);
-  }
+  requireRuntimeLane(runtimeId);
   return Object.freeze({
     CI: "1",
     COREPACK_ENABLE_DOWNLOAD_PROMPT: "0",
@@ -646,7 +660,7 @@ async function prepareLocalRegistryCommand(runtime, materialization) {
   await chmod(transitiveNodeBin, 0o700);
   return Object.freeze({
     output: path.join(materialization.temporaryRoot, `${runtime.id}-local-registry.json`),
-    expectedNode: runtime.id === "node22.13" ? "22.13.0" : "24",
+    expectedNode: requireRuntimeLane(runtime.id).expectedNode,
     npmEntry: runtime.npmEntry,
     transitiveNodeBin,
     expectedNodeSha256: runtime.nodeSha256,
@@ -834,10 +848,7 @@ async function publishReportSet(outputDir, runtimeReports, summary) {
   const runtimeIds = new Set();
   const entries = [];
   for (const report of runtimeReports) {
-    if (
-      (report.runtime !== "node22.13" && report.runtime !== "node24") ||
-      runtimeIds.has(report.runtime)
-    ) {
+    if (!runtimeLanes.some(({ id }) => id === report.runtime) || runtimeIds.has(report.runtime)) {
       fail("runtime report publication set is invalid.");
     }
     runtimeIds.add(report.runtime);
@@ -1237,10 +1248,9 @@ async function main() {
     outputDir: options.outputDir,
     candidateTree: options.candidateTree ?? null,
   });
-  const node22Binary = process.env.AST_NODE_22_13_BIN;
-  const node24Binary = process.env.AST_NODE_24_BIN;
-  if (node22Binary === undefined || node24Binary === undefined) {
-    fail("AST_NODE_22_13_BIN and AST_NODE_24_BIN are required.");
+  const laneBinaries = runtimeLanes.map(({ binaryVariable }) => process.env[binaryVariable]);
+  if (laneBinaries.some((binary) => binary === undefined)) {
+    fail(`${runtimeLanes.map(({ binaryVariable }) => binaryVariable).join(", ")} are required.`);
   }
   assertNoAmbientGitControls();
   await mkdir(path.dirname(options.outputDir), { recursive: true });
@@ -1262,11 +1272,11 @@ async function main() {
     git_authority: gitAuthority,
   });
 
-  const runtimes = [
-    await inspectRuntime("node22.13", node22Binary),
-    await inspectRuntime("node24", node24Binary),
-  ];
-  const packageManager = runtimes.find(({ id }) => id === "node24");
+  const runtimes = [];
+  for (const [index, lane] of runtimeLanes.entries()) {
+    runtimes.push(await inspectRuntime(lane.id, laneBinaries[index]));
+  }
+  const packageManager = runtimes.find(({ id }) => id === packageManagerRuntimeId);
   if (packageManager === undefined) fail("the Node 24 package-manager runtime is missing.");
   const materializedTree = options.candidateTree ?? initialIndexTree;
   const reports = [];

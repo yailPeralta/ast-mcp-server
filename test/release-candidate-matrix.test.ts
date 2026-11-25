@@ -164,6 +164,7 @@ function fakeNodeSource(
     node24StartedFile?: string;
     failDshAdapter?: boolean;
     failLint?: boolean;
+    expectedLocalRegistryNode?: string;
   } = {},
 ): string {
   const installControl =
@@ -197,6 +198,16 @@ function fakeNodeSource(
         "fi",
       ].join("\n")
     : "";
+  const localRegistryRuntimeCheck =
+    options.expectedLocalRegistryNode === undefined
+      ? ""
+      : [
+          'if [ "$2" = "test:local-registry" ]; then',
+          `  if [ "$5" != "--expected-node" ] || [ "$6" != '${options.expectedLocalRegistryNode}' ]; then`,
+          "    exit 25",
+          "  fi",
+          "fi",
+        ].join("\n");
   return [
     "#!/bin/sh",
     'if [ "$1" = "--version" ]; then',
@@ -206,6 +217,7 @@ function fakeNodeSource(
     installControl,
     lintFailure,
     dshAdapterFailure,
+    localRegistryRuntimeCheck,
     'case "$1" in',
     '  */workflow-policy-check.mjs) printf \'{"status":"pass"}\\n\' ;;',
     "esac",
@@ -227,12 +239,14 @@ async function createMatrixFixture(
   const runtimesDirectory = path.join(root, "runtimes");
   const node22Directory = path.join(runtimesDirectory, "node22");
   const node24Directory = path.join(runtimesDirectory, "node24");
+  const node26Directory = path.join(runtimesDirectory, "node26");
   const installCountFile = path.join(root, "install-count");
   const node24StartedFile = path.join(root, "node24-started");
   await Promise.all([
     mkdir(scriptsDirectory, { recursive: true }),
     mkdir(node22Directory, { recursive: true }),
     mkdir(node24Directory, { recursive: true }),
+    mkdir(node26Directory, { recursive: true }),
   ]);
   const scriptPath = path.join(scriptsDirectory, "release-candidate-matrix.mjs");
   await Promise.all([
@@ -250,8 +264,14 @@ async function createMatrixFixture(
 
   const node22Binary = path.join(node22Directory, "node");
   const node24Binary = path.join(node24Directory, "node");
+  const node26Binary = path.join(node26Directory, "node");
   await Promise.all([
-    writeFile(node22Binary, fakeNodeSource("v22.13.0"), { mode: 0o700 }),
+    writeFile(node22Binary, fakeNodeSource("v22.13.0", { expectedLocalRegistryNode: "22.13.0" }), {
+      mode: 0o700,
+    }),
+    writeFile(node26Binary, fakeNodeSource("v26.13.1", { expectedLocalRegistryNode: "26" }), {
+      mode: 0o700,
+    }),
     writeFile(
       node24Binary,
       fakeNodeSource("v24.16.0", {
@@ -259,15 +279,22 @@ async function createMatrixFixture(
         node24StartedFile,
         failDshAdapter: options.failNode24DshAdapter,
         failLint: options.failNode24Lint,
+        expectedLocalRegistryNode: "24",
       }),
       { mode: 0o700 },
     ),
     writeFile(path.join(node22Directory, "yarn"), "fixture yarn entry\n", { mode: 0o600 }),
     writeFile(path.join(node24Directory, "yarn"), "fixture yarn entry\n", { mode: 0o600 }),
+    writeFile(path.join(node26Directory, "yarn"), "fixture yarn entry\n", { mode: 0o600 }),
     writeFile(path.join(node22Directory, "npm"), "fixture npm entry\n", { mode: 0o600 }),
     writeFile(path.join(node24Directory, "npm"), "fixture npm entry\n", { mode: 0o600 }),
+    writeFile(path.join(node26Directory, "npm"), "fixture npm entry\n", { mode: 0o600 }),
   ]);
-  await Promise.all([chmod(node22Binary, 0o700), chmod(node24Binary, 0o700)]);
+  await Promise.all([
+    chmod(node22Binary, 0o700),
+    chmod(node24Binary, 0o700),
+    chmod(node26Binary, 0o700),
+  ]);
 
   await runFixtureGit(repository, ["init"]);
   await runFixtureGit(repository, ["config", "user.name", "Matrix Fixture"]);
@@ -284,6 +311,7 @@ async function createMatrixFixture(
     environment: withoutAmbientGitControls({
       AST_NODE_22_13_BIN: node22Binary,
       AST_NODE_24_BIN: node24Binary,
+      AST_NODE_26_BIN: node26Binary,
     }),
   };
 }
@@ -375,7 +403,7 @@ describe("release candidate matrix", () => {
     expect(RELEASE_CANDIDATE_PACKAGE_VERSION).toBe(packageMetadata.version);
   });
 
-  it("requires exact Node 22.13.0 while retaining the governed Node 24 line", () => {
+  it("requires exact Node 22.13.0 while retaining the governed Node 24 and Node 26 lines", () => {
     expect(validateRuntimeVersion("node22.13", "v22.13.0\n")).toMatchObject({
       raw: "v22.13.0",
       major: 22,
@@ -392,6 +420,17 @@ describe("release candidate matrix", () => {
     expect(() => validateRuntimeVersion("node22.13", "v23.0.0")).toThrow(/major 22/u);
     expect(() => validateRuntimeVersion("node24", "v25.0.0")).toThrow(/major 24/u);
     expect(() => validateRuntimeVersion("node24", "24.16.0")).toThrow(/invalid Node version/u);
+    expect(validateRuntimeVersion("node26", "v26.13.1\n")).toEqual({
+      raw: "v26.13.1",
+      major: 26,
+      minor: 13,
+      patch: 1,
+    });
+    expect(validateRuntimeVersion("node26", "v26.0.0")).toMatchObject({ major: 26, minor: 0 });
+    expect(() => validateRuntimeVersion("node26", "v25.9.0")).toThrow(/major 26/u);
+    expect(() => validateRuntimeVersion("node26", "v27.0.0")).toThrow(/major 26/u);
+    expect(() => validateRuntimeVersion("node24", "v26.13.1")).toThrow(/major 24/u);
+    expect(() => validateRuntimeVersion("node25", "v25.0.0")).toThrow(/Unknown runtime identity/u);
   });
 
   it("builds the closed command order without a shell", () => {
@@ -557,6 +596,7 @@ describe("release candidate matrix", () => {
           env: withoutAmbientGitControls({
             AST_NODE_22_13_BIN: process.execPath,
             AST_NODE_24_BIN: process.execPath,
+            AST_NODE_26_BIN: process.execPath,
             PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
           }),
           timeoutMs: 5000,
@@ -599,6 +639,7 @@ describe("release candidate matrix", () => {
           env: withoutAmbientGitControls({
             AST_NODE_22_13_BIN: process.execPath,
             AST_NODE_24_BIN: process.execPath,
+            AST_NODE_26_BIN: process.execPath,
             GIT_DIR: "/tmp/forged-git-dir",
           }),
           timeoutMs: 5000,
@@ -620,7 +661,7 @@ describe("release candidate matrix", () => {
     }
   });
 
-  it("removes ambient controls and creates no-flag Node 22.13 and Node 24 environments", () => {
+  it("removes ambient controls and creates no-flag Node 22.13, Node 24, and Node 26 environments", () => {
     const ambient = {
       PATH: "/usr/bin",
       NODE_OPTIONS: "--inspect",
@@ -648,6 +689,15 @@ describe("release candidate matrix", () => {
     const node24 = createRuntimeEnvironment("node24", "/opt/node24/bin/node", ambient);
     expect(node24).toHaveProperty("NODE_OPTIONS", "");
     expect(node24).not.toHaveProperty("GIT_INDEX_FILE");
+
+    const node26 = createRuntimeEnvironment("node26", "/opt/node26/bin/node", ambient);
+    expect(node26).toHaveProperty("NODE_OPTIONS", "");
+    expect(node26.PATH).toBe("/opt/node26/bin:/usr/bin:/bin");
+    expect(node26).not.toHaveProperty("GIT_INDEX_FILE");
+    expect(node26).not.toHaveProperty("NPM_TOKEN");
+    expect(() => createRuntimeEnvironment("node25", "/opt/node25/bin/node", ambient)).toThrow(
+      /Unknown runtime identity/u,
+    );
     expect(ambient).toHaveProperty("NODE_OPTIONS", "--inspect");
   });
 
@@ -1037,6 +1087,7 @@ describe("release candidate matrix", () => {
       expect((await readdir(fixture.outputDir)).sort()).toEqual([
         "node22.13.json",
         "node24.json",
+        "node26.json",
         "summary.json",
       ]);
 
@@ -1065,9 +1116,16 @@ describe("release candidate matrix", () => {
           status: "pass",
           command_count: 17,
         },
+        {
+          id: "node26",
+          node_version: "v26.13.1",
+          report: "node26.json",
+          status: "pass",
+          command_count: 17,
+        },
       ]);
 
-      for (const runtimeId of ["node22.13", "node24"]) {
+      for (const runtimeId of ["node22.13", "node24", "node26"]) {
         const reportPath = path.join(fixture.outputDir, `${runtimeId}.json`);
         const metadata = await lstat(reportPath);
         expect(metadata.isFile()).toBe(true);
@@ -1201,6 +1259,34 @@ describe("release candidate matrix", () => {
     }
   }, 20_000);
 
+  it.each(["AST_NODE_22_13_BIN", "AST_NODE_24_BIN", "AST_NODE_26_BIN"])(
+    "fails preflight without running any runtime when %s is missing",
+    async (variable) => {
+      const fixture = await createMatrixFixture();
+      try {
+        const environment = { ...fixture.environment };
+        delete environment[variable];
+        const result = await runMatrixFixture({ ...fixture, environment });
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stderrTail).toBe("Release candidate matrix failed.\n");
+        expect(await readdir(fixture.outputDir)).toEqual(["summary.json"]);
+        const summary = JSON.parse(
+          await readFile(path.join(fixture.outputDir, "summary.json"), "utf8"),
+        );
+        expect(summary).toEqual({
+          schema_version: 1,
+          status: "fail",
+          candidate_tree: null,
+          failed_phase: "preflight",
+          failure_code: "preflight-failed",
+        });
+      } finally {
+        await rm(fixture.root, { recursive: true, force: true });
+      }
+    },
+    20_000,
+  );
+
   it("never replaces an existing destination and removes private staging best-effort", async () => {
     const fixture = await createMatrixFixture();
     const sentinel = path.join(fixture.outputDir, "sentinel.txt");
@@ -1282,6 +1368,7 @@ describe("release candidate matrix", () => {
           env: withoutAmbientGitControls({
             AST_NODE_22_13_BIN: process.execPath,
             AST_NODE_24_BIN: process.execPath,
+            AST_NODE_26_BIN: process.execPath,
           }),
           timeoutMs: 5000,
         },
