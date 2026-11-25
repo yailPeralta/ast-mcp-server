@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `ast-tool setup --agents <list> --yes` now probes only the listed agent clients. It used to run `<client> --version` on all six supported clients found on `PATH`, and some of them create files in the home directory when they start. `--agents all` and the interactive prompt still probe every client, because both have to discover what is installed (#516).
+
 ## [0.20.4] — not yet published (2026-11-18)
 
 ### Fixed

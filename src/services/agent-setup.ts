@@ -67,6 +67,8 @@ interface McpInspection {
 export interface DetectInstalledAgentsOptions {
   environment?: NodeJS.ProcessEnv;
   commandTimeoutMs?: number;
+  /** Limits detection to these agents; every agent is probed when omitted. */
+  agents?: readonly AgentId[];
 }
 
 export interface RunAgentSetupOptions {
@@ -595,8 +597,13 @@ export async function detectInstalledAgents(
   const environment = options.environment ?? process.env;
   const timeoutMs = options.commandTimeoutMs ?? 5000;
 
+  // Probing runs each client, and some clients write to HOME when they start.
+  const requested = options.agents;
+  const agents =
+    requested === undefined ? AGENT_IDS : AGENT_IDS.filter((id) => requested.includes(id));
+
   return Promise.all(
-    AGENT_IDS.map(async (id): Promise<AgentDetection> => {
+    agents.map(async (id): Promise<AgentDetection> => {
       const definition = getAgentTarget(id);
       const executable = await findExecutable(definition.command, environment);
       if (executable === undefined) {
