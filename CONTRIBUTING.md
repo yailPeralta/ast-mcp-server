@@ -267,6 +267,22 @@ PATH="$(dirname "$AST_NODE_26_BIN"):$PATH" npm install -g corepack
 PATH="$(dirname "$AST_NODE_26_BIN"):$PATH" corepack enable
 ```
 
+The `dsh-adapter` gate reuses a Playwright Chromium that is already installed; the matrix never
+downloads or installs a browser. Install it once before running the matrix:
+
+```bash
+yarn dlx playwright@1.61.1 install chromium
+```
+
+The matrix reads the browser cache from `PLAYWRIGHT_BROWSERS_PATH` when that variable is set, and
+from `$HOME/.cache/ms-playwright` otherwise. The value must be an absolute path to an existing
+directory; the matrix fails in preflight, before any lane runs, when it is not. The gate itself
+still verifies the exact pinned Chromium revision, version, and checksum.
+
+The parent directory of `--output-dir` must be owner-only. The candidate worktree and its private
+home are created there, and a group-writable ancestor makes the symbol-index cache tests fail by
+design.
+
 ## Security reports
 
 Do **not** open a public issue for a suspected vulnerability. Follow [SECURITY.md](SECURITY.md)

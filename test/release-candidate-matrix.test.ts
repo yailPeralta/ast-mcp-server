@@ -27,14 +27,18 @@ const {
   createCandidateWorktree,
   createCommandEnvironment,
   createGitEnvironment,
+  createHarnessEnvironment,
+  createHarnessTemporaryDirectory,
   createPackageManagerEnvironment,
   createRuntimeCommandPlan,
   createRuntimeCacheSentinel,
   createRuntimeEnvironment,
   createRuntimeGateEnvironment,
   executeCommandOnce,
+  inspectInstalledBrowserCache,
   parseReleaseCandidateMatrixArgs,
   removeCandidateWorktree,
+  resolveInstalledBrowserCache,
   runBoundedProcess,
   validateRuntimeVersion,
 } = matrixModule;
@@ -122,6 +126,9 @@ type MatrixFixture = {
   scriptPath: string;
   outputDir: string;
   node24StartedFile: string;
+  installCountFile: string;
+  browserCache: string;
+  environmentRecordDirectory: string;
   environment: NodeJS.ProcessEnv;
 };
 
@@ -162,6 +169,7 @@ function fakeNodeSource(
   options: {
     installCountFile?: string;
     node24StartedFile?: string;
+    environmentRecordDirectory?: string;
     failDshAdapter?: boolean;
     failLint?: boolean;
     expectedLocalRegistryNode?: string;
@@ -180,6 +188,14 @@ function fakeNodeSource(
           `    printf 'started\\n' > '${options.node24StartedFile}'`,
           "    /usr/bin/sleep 0.25",
           "  fi",
+          "fi",
+        ].join("\n");
+  const environmentRecord =
+    options.environmentRecordDirectory === undefined
+      ? ""
+      : [
+          'if [ "$2" = "install" ] || [ "$2" = "test:dsh-adapter" ]; then',
+          `  printf '%s\\n' "$HOME" "$TMPDIR" "\${PLAYWRIGHT_BROWSERS_PATH-unset}" "$(/usr/bin/stat -c %a "$TMPDIR")" > '${options.environmentRecordDirectory}'/"$2".env`,
           "fi",
         ].join("\n");
   const lintFailure = options.failLint
@@ -215,6 +231,7 @@ function fakeNodeSource(
     "  exit 0",
     "fi",
     installControl,
+    environmentRecord,
     lintFailure,
     dshAdapterFailure,
     localRegistryRuntimeCheck,
@@ -242,7 +259,11 @@ async function createMatrixFixture(
   const node26Directory = path.join(runtimesDirectory, "node26");
   const installCountFile = path.join(root, "install-count");
   const node24StartedFile = path.join(root, "node24-started");
+  const browserCache = path.join(root, "browser-cache");
+  const environmentRecordDirectory = path.join(root, "environment-records");
   await Promise.all([
+    mkdir(browserCache),
+    mkdir(environmentRecordDirectory),
     mkdir(scriptsDirectory, { recursive: true }),
     mkdir(node22Directory, { recursive: true }),
     mkdir(node24Directory, { recursive: true }),
@@ -277,6 +298,7 @@ async function createMatrixFixture(
       fakeNodeSource("v24.16.0", {
         installCountFile,
         node24StartedFile,
+        environmentRecordDirectory,
         failDshAdapter: options.failNode24DshAdapter,
         failLint: options.failNode24Lint,
         expectedLocalRegistryNode: "24",
@@ -308,10 +330,14 @@ async function createMatrixFixture(
     scriptPath,
     outputDir: path.join(root, "evidence"),
     node24StartedFile,
+    installCountFile,
+    browserCache,
+    environmentRecordDirectory,
     environment: withoutAmbientGitControls({
       AST_NODE_22_13_BIN: node22Binary,
       AST_NODE_24_BIN: node24Binary,
       AST_NODE_26_BIN: node26Binary,
+      PLAYWRIGHT_BROWSERS_PATH: browserCache,
     }),
   };
 }
@@ -334,6 +360,13 @@ function withoutAmbientGitControls(overrides: NodeJS.ProcessEnv = {}): NodeJS.Pr
     if (key.startsWith("GIT_")) delete environment[key];
   }
   return { ...environment, ...overrides };
+}
+
+async function readEnvironmentRecord(fixture: MatrixFixture, yarnScript: string) {
+  const [home, temporaryDirectory, browserCache, temporaryDirectoryMode] = (
+    await readFile(path.join(fixture.environmentRecordDirectory, `${yarnScript}.env`), "utf8")
+  ).split("\n");
+  return { home, temporaryDirectory, browserCache, temporaryDirectoryMode };
 }
 
 async function readPidWhenReady(pidFile: string, timeoutMs: number): Promise<number> {
@@ -749,6 +782,163 @@ describe("release candidate matrix", () => {
     expect(runtimeEnvironment.NODE_OPTIONS).toBe("");
   });
 
+  it("adds the installed browser cache and a short TMPDIR only to the Harness gate", () => {
+    const runtimeEnvironment = { PATH: "/opt/node22/bin:/usr/bin", NODE_OPTIONS: "" };
+    const packageManagerEnvironment = createPackageManagerEnvironment(
+      { PATH: "/opt/node24/bin:/usr/bin" },
+      "/private/home",
+      "/private/tmp",
+    );
+    const harnessEnvironment = createHarnessEnvironment(
+      packageManagerEnvironment,
+      "/ambient/home/.cache/ms-playwright",
+      "/tmp/ast-rc-abc123",
+    );
+    expect(harnessEnvironment).toEqual({
+      ...packageManagerEnvironment,
+      PLAYWRIGHT_BROWSERS_PATH: "/ambient/home/.cache/ms-playwright",
+      TMPDIR: "/tmp/ast-rc-abc123",
+    });
+    expect(Object.isFrozen(harnessEnvironment)).toBe(true);
+    expect(
+      createCommandEnvironment(
+        runtimeEnvironment,
+        "dsh-adapter",
+        packageManagerEnvironment,
+        undefined,
+        harnessEnvironment,
+      ),
+    ).toBe(harnessEnvironment);
+    for (const commandId of ["install", "test", "package", "local-registry", "audit"]) {
+      const environment = createCommandEnvironment(
+        runtimeEnvironment,
+        commandId,
+        packageManagerEnvironment,
+        undefined,
+        harnessEnvironment,
+      );
+      expect(environment).toBe(
+        commandId === "install" ? packageManagerEnvironment : runtimeEnvironment,
+      );
+      expect(environment).not.toHaveProperty("PLAYWRIGHT_BROWSERS_PATH");
+    }
+    expect(packageManagerEnvironment).not.toHaveProperty("PLAYWRIGHT_BROWSERS_PATH");
+    expect(packageManagerEnvironment.TMPDIR).toBe("/private/tmp");
+    expect(() =>
+      createCommandEnvironment(
+        runtimeEnvironment,
+        "dsh-adapter",
+        packageManagerEnvironment,
+        undefined,
+        { ...harnessEnvironment, NODE_OPTIONS: "--inspect" },
+      ),
+    ).toThrow(/NODE_OPTIONS must be explicitly empty/u);
+  });
+
+  it("enforces the Unix socket path budget on the Harness TMPDIR", () => {
+    const packageManagerEnvironment = createPackageManagerEnvironment(
+      { PATH: "/opt/node24/bin:/usr/bin" },
+      "/private/home",
+      "/private/tmp",
+    );
+    const longestAllowed = `/${"a".repeat(61)}`;
+    expect(longestAllowed.length + 45).toBe(107);
+    expect(
+      createHarnessEnvironment(packageManagerEnvironment, "/browsers", longestAllowed).TMPDIR,
+    ).toBe(longestAllowed);
+    expect(() =>
+      createHarnessEnvironment(packageManagerEnvironment, "/browsers", `${longestAllowed}a`),
+    ).toThrow(/Harness TMPDIR is 63 bytes; at most 62 fit the 107-byte Unix socket path limit/u);
+    expect(() =>
+      createHarnessEnvironment(packageManagerEnvironment, "/browsers", `/${"é".repeat(31)}`),
+    ).toThrow(/Harness TMPDIR is 63 bytes/u);
+    expect(() =>
+      createHarnessEnvironment(packageManagerEnvironment, "/browsers", "relative/tmp"),
+    ).toThrow(/must be absolute/u);
+    expect(() =>
+      createHarnessEnvironment(packageManagerEnvironment, "browsers", "/tmp/ast-rc-abc123"),
+    ).toThrow(/must be absolute/u);
+  });
+
+  it("creates the Harness TMPDIR owner-only under a short base independent of the output directory", async () => {
+    const directory = await createHarnessTemporaryDirectory();
+    try {
+      expect(directory).toMatch(/^\/tmp\/ast-rc-[A-Za-z0-9]{6}$/u);
+      const metadata = await lstat(directory);
+      expect(metadata.isDirectory()).toBe(true);
+      expect(metadata.mode & 0o777).toBe(0o700);
+      expect(await readdir(directory)).toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+
+    const longBase = await mkdtemp(path.join(os.tmpdir(), `ast-matrix-${"b".repeat(60)}-`));
+    try {
+      await expect(createHarnessTemporaryDirectory(longBase)).rejects.toThrow(
+        /107-byte Unix socket path limit/u,
+      );
+      expect(await readdir(longBase)).toEqual([]);
+    } finally {
+      await rm(longBase, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves the installed browser cache from the ambient variable or the HOME default", () => {
+    expect(
+      resolveInstalledBrowserCache({ HOME: "/ambient/home", PLAYWRIGHT_BROWSERS_PATH: "/opt/pw" }),
+    ).toBe("/opt/pw");
+    expect(resolveInstalledBrowserCache({ HOME: "/ambient/home" })).toBe(
+      "/ambient/home/.cache/ms-playwright",
+    );
+    expect(
+      resolveInstalledBrowserCache({ HOME: "/ambient/home", PLAYWRIGHT_BROWSERS_PATH: "" }),
+    ).toBe("/ambient/home/.cache/ms-playwright");
+    for (const relative of ["0", "browsers", "./browsers"]) {
+      expect(() =>
+        resolveInstalledBrowserCache({ HOME: "/ambient/home", PLAYWRIGHT_BROWSERS_PATH: relative }),
+      ).toThrow(/PLAYWRIGHT_BROWSERS_PATH must be an absolute path/u);
+    }
+    expect(() => resolveInstalledBrowserCache({})).toThrow(
+      /yarn dlx playwright@1\.61\.1 install chromium/u,
+    );
+    expect(() => resolveInstalledBrowserCache({ HOME: "relative/home" })).toThrow(
+      /yarn dlx playwright@1\.61\.1 install chromium/u,
+    );
+  });
+
+  it("requires the installed browser cache to be an existing real directory", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "ast-matrix-browser-cache-"));
+    const prerequisite =
+      /installed Playwright Chromium cache.*yarn dlx playwright@1\.61\.1 install chromium/u;
+    try {
+      const cache = path.join(root, "home", ".cache", "ms-playwright");
+      await expect(inspectInstalledBrowserCache({ HOME: path.join(root, "home") })).rejects.toThrow(
+        prerequisite,
+      );
+      await mkdir(cache, { recursive: true });
+      await expect(inspectInstalledBrowserCache({ HOME: path.join(root, "home") })).resolves.toBe(
+        cache,
+      );
+      await expect(
+        inspectInstalledBrowserCache({ HOME: "/nonexistent", PLAYWRIGHT_BROWSERS_PATH: cache }),
+      ).resolves.toBe(cache);
+
+      const file = path.join(root, "not-a-directory");
+      await writeFile(file, "file\n");
+      await expect(
+        inspectInstalledBrowserCache({ PLAYWRIGHT_BROWSERS_PATH: file }),
+      ).rejects.toThrow(prerequisite);
+      await expect(
+        inspectInstalledBrowserCache({ PLAYWRIGHT_BROWSERS_PATH: path.join(root, "missing") }),
+      ).rejects.toThrow(prerequisite);
+      await expect(inspectInstalledBrowserCache({ PLAYWRIGHT_BROWSERS_PATH: "0" })).rejects.toThrow(
+        /must be an absolute path/u,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("moves runtime gates into the materialization-private home and temporary directory", () => {
     const runtimeEnvironment = createRuntimeEnvironment("node22.13", "/opt/node22/bin/node", {
       HOME: "/ambient/home",
@@ -832,8 +1022,12 @@ describe("release candidate matrix", () => {
         headTreeResult.stdoutTail.trim(),
         outputDir,
       );
+      expect(materialization.harnessTemporaryDirectory).toMatch(/^\/tmp\/ast-rc-[A-Za-z0-9]{6}$/u);
+      expect((await lstat(materialization.harnessTemporaryDirectory)).mode & 0o777).toBe(0o700);
+      await writeFile(path.join(materialization.harnessTemporaryDirectory, "residue"), "x\n");
       await removeCandidateWorktree(materialization);
       await expect(access(materialization.temporaryRoot)).rejects.toThrow();
+      await expect(access(materialization.harnessTemporaryDirectory)).rejects.toThrow();
     } finally {
       await rm(parent, { recursive: true, force: true });
     }
@@ -924,6 +1118,27 @@ describe("release candidate matrix", () => {
       ).rejects.toThrow(/cleanup failed/u);
     } finally {
       await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a Harness TMPDIR cleanup failure and still removes the worktree root", async () => {
+    const parent = await mkdtemp(path.join(os.tmpdir(), "ast-matrix-harness-cleanup-test-"));
+    const outputDir = path.join(parent, "reports");
+    try {
+      const headTreeResult = await runBoundedProcess("git", ["rev-parse", "HEAD^{tree}"], {
+        cwd: repositoryRoot,
+        timeoutMs: 5000,
+      });
+      expect(headTreeResult.exitCode).toBe(0);
+      const materialization = await createCandidateWorktree(
+        headTreeResult.stdoutTail.trim(),
+        outputDir,
+      );
+      await rm(materialization.harnessTemporaryDirectory, { recursive: true });
+      await expect(removeCandidateWorktree(materialization)).rejects.toThrow(/ENOENT/u);
+      await expect(access(materialization.temporaryRoot)).rejects.toThrow();
+    } finally {
+      await rm(parent, { recursive: true, force: true });
     }
   });
 
@@ -1152,6 +1367,27 @@ describe("release candidate matrix", () => {
       const summaryMetadata = await lstat(path.join(fixture.outputDir, "summary.json"));
       expect(summaryMetadata.nlink).toBe(1);
       expect(summaryMetadata.mode & 0o777).toBe(0o600);
+
+      const installRecord = await readEnvironmentRecord(fixture, "install");
+      const harnessRecord = await readEnvironmentRecord(fixture, "test:dsh-adapter");
+      expect(installRecord.browserCache).toBe("unset");
+      expect(installRecord.home).toMatch(
+        /\/\.ast-release-candidate-worktree-[^/]+\/package-manager-home$/u,
+      );
+      expect(installRecord.temporaryDirectory).toBe(
+        path.join(path.dirname(installRecord.home), "package-manager-tmp"),
+      );
+      expect(harnessRecord.home).toBe(installRecord.home);
+      expect(harnessRecord.browserCache).toBe(fixture.browserCache);
+      expect(harnessRecord.temporaryDirectory).toMatch(/^\/tmp\/ast-rc-[A-Za-z0-9]{6}$/u);
+      expect(harnessRecord.temporaryDirectoryMode).toBe("700");
+      await expect(access(harnessRecord.temporaryDirectory)).rejects.toThrow();
+      for (const fileName of await readdir(fixture.outputDir)) {
+        const bytes = await readFile(path.join(fixture.outputDir, fileName), "utf8");
+        expect(bytes).not.toContain(harnessRecord.temporaryDirectory);
+        expect(bytes).not.toContain("ms-playwright");
+        expect(bytes).not.toContain("PLAYWRIGHT_BROWSERS_PATH");
+      }
     } finally {
       await rm(fixture.root, { recursive: true, force: true });
     }
@@ -1254,6 +1490,10 @@ describe("release candidate matrix", () => {
       });
       expect(failedReport.commands).toHaveLength(12);
       expect(JSON.stringify(failedReport)).not.toContain("DSH adapter failure details");
+      expect(failedReport).toMatchObject({ cleanup_status: "pass", cleanup_failure_code: null });
+      const harnessRecord = await readEnvironmentRecord(fixture, "test:dsh-adapter");
+      expect(harnessRecord.temporaryDirectory).toMatch(/^\/tmp\/ast-rc-[A-Za-z0-9]{6}$/u);
+      await expect(access(harnessRecord.temporaryDirectory)).rejects.toThrow();
     } finally {
       await rm(fixture.root, { recursive: true, force: true });
     }
@@ -1286,6 +1526,60 @@ describe("release candidate matrix", () => {
     },
     20_000,
   );
+
+  it.each([
+    ["relative", () => "0"],
+    ["missing", (fixture: MatrixFixture) => path.join(fixture.root, "missing-browser-cache")],
+    ["non-directory", (fixture: MatrixFixture) => fixture.scriptPath],
+  ])(
+    "fails preflight without running any runtime when the installed browser cache is %s",
+    async (_label, browserCache) => {
+      const fixture = await createMatrixFixture();
+      try {
+        const result = await runMatrixFixture({
+          ...fixture,
+          environment: { ...fixture.environment, PLAYWRIGHT_BROWSERS_PATH: browserCache(fixture) },
+        });
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stderrTail).toBe("Release candidate matrix failed.\n");
+        expect(await readdir(fixture.outputDir)).toEqual(["summary.json"]);
+        const summary = JSON.parse(
+          await readFile(path.join(fixture.outputDir, "summary.json"), "utf8"),
+        );
+        expect(summary).toEqual({
+          schema_version: 1,
+          status: "fail",
+          candidate_tree: null,
+          failed_phase: "preflight",
+          failure_code: "preflight-failed",
+        });
+        await expect(access(fixture.installCountFile)).rejects.toThrow();
+        expect(await readdir(fixture.environmentRecordDirectory)).toEqual([]);
+      } finally {
+        await rm(fixture.root, { recursive: true, force: true });
+      }
+    },
+    20_000,
+  );
+
+  it("uses the HOME default browser cache when PLAYWRIGHT_BROWSERS_PATH is not set", async () => {
+    const fixture = await createMatrixFixture();
+    try {
+      const home = path.join(fixture.root, "ambient-home");
+      const defaultCache = path.join(home, ".cache", "ms-playwright");
+      await mkdir(defaultCache, { recursive: true });
+      const environment: NodeJS.ProcessEnv = { ...fixture.environment, HOME: home };
+      delete environment.PLAYWRIGHT_BROWSERS_PATH;
+      const result = await runMatrixFixture({ ...fixture, environment });
+      expect(result).toMatchObject({ exitCode: 0, signal: null, timedOut: false });
+      expect((await readEnvironmentRecord(fixture, "test:dsh-adapter")).browserCache).toBe(
+        defaultCache,
+      );
+      expect((await readEnvironmentRecord(fixture, "install")).browserCache).toBe("unset");
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  }, 20_000);
 
   it("never replaces an existing destination and removes private staging best-effort", async () => {
     const fixture = await createMatrixFixture();

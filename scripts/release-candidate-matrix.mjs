@@ -38,6 +38,13 @@ const commandTimeoutMs = 20 * 60 * 1000;
 const outputTailBytes = 64 * 1024;
 const TRUSTED_MV_BINARY = "/usr/bin/mv";
 const trustedMvVersion = "mv (GNU coreutils) 9.7";
+// The Harness gate launches Chromium, which binds `<TMPDIR>/org.chromium.Chromium.XXXXXX/
+// SingletonSocket` (45 bytes after TMPDIR) and aborts beyond the 107-byte Unix socket path limit.
+// Its TMPDIR therefore lives under the fixed system temporary root instead of the output parent.
+const HARNESS_TEMPORARY_BASE = "/tmp";
+const harnessSocketSuffixBytes = 45;
+const unixSocketPathLimitBytes = 107;
+const browserInstallCommand = "yarn dlx playwright@1.61.1 install chromium";
 const candidateTreePattern = /^[0-9a-f]{40}$/u;
 const nodeVersionPattern = /^v(\d+)\.(\d+)\.(\d+)$/u;
 // Single source of truth for the verified runtime lanes, in execution order. A lane with
@@ -265,13 +272,15 @@ export function createCommandEnvironment(
   commandId,
   packageManagerEnvironment = runtimeEnvironment,
   workTree = undefined,
+  harnessEnvironment = packageManagerEnvironment,
 ) {
   if (commandId === "diff-check") return createGitEnvironment({}, workTree);
   if (commandId !== "install" && commandId !== "dsh-adapter") return runtimeEnvironment;
-  if (packageManagerEnvironment.NODE_OPTIONS !== "") {
+  const environment = commandId === "dsh-adapter" ? harnessEnvironment : packageManagerEnvironment;
+  if (environment.NODE_OPTIONS !== "") {
     fail("package-manager NODE_OPTIONS must be explicitly empty.");
   }
-  return packageManagerEnvironment;
+  return environment;
 }
 
 export function createRuntimeGateEnvironment(
@@ -310,6 +319,79 @@ export function createPackageManagerEnvironment(
     PATH: runtimeEnvironment.PATH,
     TMPDIR: privateTemporaryDirectory,
   });
+}
+
+function assertHarnessTemporaryDirectoryBudget(temporaryDirectory) {
+  const bytes = Buffer.byteLength(temporaryDirectory);
+  const budget = unixSocketPathLimitBytes - harnessSocketSuffixBytes;
+  if (bytes > budget) {
+    fail(
+      `Harness TMPDIR is ${bytes} bytes; at most ${budget} fit the ${unixSocketPathLimitBytes}-byte Unix socket path limit.`,
+    );
+  }
+}
+
+export function createHarnessEnvironment(
+  packageManagerEnvironment,
+  browserCache,
+  temporaryDirectory,
+) {
+  if (!path.isAbsolute(browserCache) || !path.isAbsolute(temporaryDirectory)) {
+    fail("Harness browser cache and TMPDIR must be absolute paths.");
+  }
+  assertHarnessTemporaryDirectoryBudget(temporaryDirectory);
+  return Object.freeze({
+    ...packageManagerEnvironment,
+    PLAYWRIGHT_BROWSERS_PATH: browserCache,
+    TMPDIR: temporaryDirectory,
+  });
+}
+
+export async function createHarnessTemporaryDirectory(base = HARNESS_TEMPORARY_BASE) {
+  const temporaryDirectory = await mkdtemp(path.join(base, "ast-rc-"));
+  try {
+    const metadata = await lstat(temporaryDirectory);
+    if (!metadata.isDirectory() || (metadata.mode & 0o777) !== 0o700) {
+      fail("Harness TMPDIR must be an owner-only directory.");
+    }
+    assertHarnessTemporaryDirectoryBudget(temporaryDirectory);
+  } catch (error) {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+    throw error;
+  }
+  return temporaryDirectory;
+}
+
+export function resolveInstalledBrowserCache(ambientEnvironment = process.env) {
+  const configured = ambientEnvironment.PLAYWRIGHT_BROWSERS_PATH;
+  if (configured !== undefined && configured !== "") {
+    if (!path.isAbsolute(configured)) {
+      fail(
+        `PLAYWRIGHT_BROWSERS_PATH must be an absolute path to the installed Playwright Chromium cache (${browserInstallCommand}).`,
+      );
+    }
+    return path.normalize(configured);
+  }
+  const home = ambientEnvironment.HOME;
+  if (!path.isAbsolute(home ?? "")) {
+    fail(
+      `the installed Playwright Chromium cache needs an absolute HOME or PLAYWRIGHT_BROWSERS_PATH (${browserInstallCommand}).`,
+    );
+  }
+  return path.join(home, ".cache", "ms-playwright");
+}
+
+export async function inspectInstalledBrowserCache(ambientEnvironment = process.env) {
+  const browserCache = resolveInstalledBrowserCache(ambientEnvironment);
+  const resolved = await realpath(browserCache).catch(() => undefined);
+  const metadata =
+    resolved === undefined ? undefined : await lstat(resolved).catch(() => undefined);
+  if (metadata === undefined || !metadata.isDirectory()) {
+    fail(
+      `the installed Playwright Chromium cache must be an existing directory; install it with ${browserInstallCommand} or point PLAYWRIGHT_BROWSERS_PATH at it.`,
+    );
+  }
+  return resolved;
 }
 
 export async function assertFreshCandidateWorkspace(workspaceRoot) {
@@ -521,12 +603,14 @@ export async function createCandidateWorktree(candidateTree, outputDir, options 
     const packageManagerTemporaryDirectory = path.join(temporaryRoot, "package-manager-tmp");
     await mkdir(packageManagerHome, { mode: 0o700 });
     await mkdir(packageManagerTemporaryDirectory, { mode: 0o700 });
+    const harnessTemporaryDirectory = await createHarnessTemporaryDirectory();
     return Object.freeze({
       temporaryRoot,
       workspaceRoot,
       syntheticCommit,
       packageManagerHome,
       packageManagerTemporaryDirectory,
+      harnessTemporaryDirectory,
     });
   } catch (error) {
     let cleanupError;
@@ -570,16 +654,23 @@ async function assertCandidateWorktreeState(workspaceRoot, candidateTree) {
 }
 
 export async function removeCandidateWorktree(materialization) {
-  const result = await runGitProcess(
-    ["worktree", "remove", "--force", materialization.workspaceRoot],
-    {
-      timeoutMs: 2 * 60 * 1000,
-    },
-  );
-  if (result.exitCode !== 0 || result.signal !== null || result.timedOut) {
-    fail("candidate worktree cleanup failed.");
+  try {
+    const result = await runGitProcess(
+      ["worktree", "remove", "--force", materialization.workspaceRoot],
+      {
+        timeoutMs: 2 * 60 * 1000,
+      },
+    );
+    if (result.exitCode !== 0 || result.signal !== null || result.timedOut) {
+      fail("candidate worktree cleanup failed.");
+    }
+    await rm(materialization.temporaryRoot, { recursive: true, force: false });
+  } finally {
+    // The Harness TMPDIR lives outside the worktree root, so it is removed even when that fails.
+    if (materialization.harnessTemporaryDirectory !== undefined) {
+      await rm(materialization.harnessTemporaryDirectory, { recursive: true, force: false });
+    }
   }
-  await rm(materialization.temporaryRoot, { recursive: true, force: false });
 }
 
 export async function assertRepositoryState(candidateTree, root = repositoryRoot) {
@@ -1133,6 +1224,7 @@ async function runRuntime(
   candidateTree,
   packageVersion,
   identity,
+  browserCache,
 ) {
   const commandReports = [];
   const packageManagerEnvironment = createPackageManagerEnvironment(
@@ -1190,6 +1282,13 @@ async function runRuntime(
           command.id,
           packageManagerEnvironment,
           materialization.workspaceRoot,
+          command.id === "dsh-adapter"
+            ? createHarnessEnvironment(
+                packageManagerEnvironment,
+                browserCache,
+                materialization.harnessTemporaryDirectory,
+              )
+            : undefined,
         ),
       });
       commandReports.push(publicCommandResult(command, result));
@@ -1278,6 +1377,7 @@ async function main() {
   }
   const packageManager = runtimes.find(({ id }) => id === packageManagerRuntimeId);
   if (packageManager === undefined) fail("the Node 24 package-manager runtime is missing.");
+  const browserCache = await inspectInstalledBrowserCache();
   const materializedTree = options.candidateTree ?? initialIndexTree;
   const reports = [];
   for (const runtime of runtimes) {
@@ -1317,6 +1417,7 @@ async function main() {
         materializedTree,
         packageMetadata.version,
         identity,
+        browserCache,
       );
     } catch (error) {
       runtimeError = error;
