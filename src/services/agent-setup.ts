@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
-import { access, realpath, stat } from "node:fs/promises";
+import { access, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -35,6 +35,7 @@ import {
   getAgentTarget,
   MCP_SERVER_NAME,
   type AgentTargetRuntime,
+  type AgentTargetDefinition,
 } from "./agent-targets.js";
 import {
   applyOpenCodeConfigPlan,
@@ -67,6 +68,8 @@ interface McpInspection {
 export interface DetectInstalledAgentsOptions {
   environment?: NodeJS.ProcessEnv;
   commandTimeoutMs?: number;
+  /** Limits detection to these agents; every agent is probed when omitted. */
+  agents?: readonly AgentId[];
 }
 
 export interface RunAgentSetupOptions {
@@ -283,10 +286,12 @@ async function runCommand(
     environment: NodeJS.ProcessEnv;
     timeoutMs: number;
     input?: string;
+    workingDirectory?: string;
   },
 ): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
+      cwd: options.workingDirectory,
       env: options.environment,
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
@@ -365,6 +370,7 @@ function targetRuntime(
   detection: AgentDetection,
   environment: NodeJS.ProcessEnv,
   timeoutMs: number,
+  workingDirectory?: string,
 ): AgentTargetRuntime {
   return {
     run: (args, input) =>
@@ -372,6 +378,7 @@ function targetRuntime(
         environment,
         timeoutMs,
         input,
+        workingDirectory,
       }),
   };
 }
@@ -383,12 +390,13 @@ async function inspectMcp(
   nodeExecutable: string,
   environment: NodeJS.ProcessEnv,
   timeoutMs: number,
+  workingDirectory: string | undefined,
 ): Promise<McpInspection> {
   const target = getAgentTarget(agent);
-  const inspection = await target.mcp.inspect(targetRuntime(detection, environment, timeoutMs), {
-    serverEntryPath,
-    nodeExecutable,
-  });
+  const inspection = await target.mcp.inspect(
+    targetRuntime(detection, environment, timeoutMs, workingDirectory),
+    { serverEntryPath, nodeExecutable },
+  );
   if (inspection.status === "error") {
     throw commandFailure(agent, inspection.operation, inspection.result);
   }
@@ -458,12 +466,13 @@ async function configureMcp(
   nodeExecutable: string,
   environment: NodeJS.ProcessEnv,
   timeoutMs: number,
+  workingDirectory: string | undefined,
 ): Promise<void> {
   const target = getAgentTarget(agent);
-  const added = await target.mcp.register(targetRuntime(detection, environment, timeoutMs), {
-    serverEntryPath,
-    nodeExecutable,
-  });
+  const added = await target.mcp.register(
+    targetRuntime(detection, environment, timeoutMs, workingDirectory),
+    { serverEntryPath, nodeExecutable },
+  );
   if (!target.mcp.registrationAccepted(added)) {
     throw commandFailure(agent, "MCP registration", added);
   }
@@ -474,6 +483,7 @@ async function configureMcp(
     nodeExecutable,
     environment,
     timeoutMs,
+    workingDirectory,
   );
   if (verified.status !== "current") {
     throw new AgentSetupError(
@@ -491,9 +501,10 @@ async function repairMcp(
   nodeExecutable: string,
   environment: NodeJS.ProcessEnv,
   timeoutMs: number,
+  workingDirectory: string | undefined,
 ): Promise<void> {
   const target = getAgentTarget(agent);
-  const runtime = targetRuntime(detection, environment, timeoutMs);
+  const runtime = targetRuntime(detection, environment, timeoutMs, workingDirectory);
   const context = { serverEntryPath, nodeExecutable };
   const authenticated = await target.mcp.inspect(runtime, context);
   if (authenticated.status !== "repairable") {
@@ -595,8 +606,13 @@ export async function detectInstalledAgents(
   const environment = options.environment ?? process.env;
   const timeoutMs = options.commandTimeoutMs ?? 5000;
 
+  // Probing runs each client, and some clients write to HOME when they start.
+  const requested = options.agents;
+  const agents =
+    requested === undefined ? AGENT_IDS : AGENT_IDS.filter((id) => requested.includes(id));
+
   return Promise.all(
-    AGENT_IDS.map(async (id): Promise<AgentDetection> => {
+    agents.map(async (id): Promise<AgentDetection> => {
       const definition = getAgentTarget(id);
       const executable = await findExecutable(definition.command, environment);
       if (executable === undefined) {
@@ -634,6 +650,24 @@ export async function detectInstalledAgents(
 }
 
 export async function runAgentSetup(options: RunAgentSetupOptions): Promise<AgentSetupResult> {
+  // A client that resolves MCP entries from its working directory reports the entry of that
+  // directory and hides the user-scoped one. An empty directory has no entry of its own.
+  const neutralDirectory = await mkdtemp(path.join(os.tmpdir(), "ast-setup-"));
+  try {
+    return await runAgentSetupFrom(options, neutralDirectory);
+  } finally {
+    await rm(neutralDirectory, { recursive: true, force: true });
+  }
+}
+
+async function runAgentSetupFrom(
+  options: RunAgentSetupOptions,
+  neutralDirectory: string,
+): Promise<AgentSetupResult> {
+  const workingDirectoryFor = (agent: AgentId): string | undefined => {
+    const target: AgentTargetDefinition = getAgentTarget(agent);
+    return target.scopeFollowsWorkingDirectory ? neutralDirectory : undefined;
+  };
   const correlationId = randomUUID();
   const environment = options.environment ?? process.env;
   const nodeExecutable = options.nodeExecutable ?? process.execPath;
@@ -737,6 +771,7 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
             nodeExecutable,
             environment,
             timeoutMs,
+            workingDirectoryFor(agent),
           ),
     ),
   );
@@ -847,6 +882,7 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
             nodeExecutable,
             environment,
             timeoutMs,
+            workingDirectoryFor(agent),
           );
         } else {
           await configureMcp(
@@ -856,6 +892,7 @@ export async function runAgentSetup(options: RunAgentSetupOptions): Promise<Agen
             nodeExecutable,
             environment,
             timeoutMs,
+            workingDirectoryFor(agent),
           );
         }
       } else if (agent === "opencode") {
